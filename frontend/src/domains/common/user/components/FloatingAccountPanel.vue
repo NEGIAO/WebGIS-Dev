@@ -23,7 +23,7 @@ import { BASEMAP_OPTIONS } from '@/constants';
 import { useUserPreferencesStore, useThemeStore, isBasemapPreferenceSelectable } from '@/stores';
 import { getUserDisplayName } from '@common/user/composables/useAuthIdentity';
 import { useRealtimeStats } from '@common/user/composables/useRealtimeStats';
-import { useLocale } from '@common/app/useLocale';
+import { useLocale, detectSystemLanguage } from '@common/app/useLocale';
 
 const AdminControlPanel = defineAsyncComponent(() => import('./AdminControlPanel.vue'));
 const ApiManagementPanel = defineAsyncComponent(() => import('./ApiManagementPanel.vue'));
@@ -119,7 +119,8 @@ const securityTabRef = ref(null);
 
 const preferenceDraft = ref({
     default_basemap: '',
-    language: 'zh-CN',
+    // 无偏好时跟随浏览器默认语言（中文 → zh-CN，其它 → en-US）
+    language: detectSystemLanguage(),
     unit_system: 'metric',
     preferred_agent_model: '',
 });
@@ -505,7 +506,9 @@ function normalizePreferences(raw = {}) {
         .trim()
         .toLowerCase()
         .replace('_', '-');
-    const language = languageRaw === 'en-us' ? 'en-US' : 'zh-CN';
+    // 仅支持 zh-CN / en-US；其它（含空值、历史脏数据）= 未设置有效偏好 → 跟随浏览器默认
+    const language =
+        languageRaw === 'en-us' ? 'en-US' : languageRaw === 'zh-cn' ? 'zh-CN' : detectSystemLanguage();
     const unitRaw = String(raw?.unit_system || '')
         .trim()
         .toLowerCase();

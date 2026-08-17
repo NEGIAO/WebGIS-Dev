@@ -46,16 +46,40 @@ const inflightLoads = new Map();
 /** 最新一次请求的语言；异步完成时若不一致则丢弃结果 */
 let loadingLang = null;
 
+/**
+ * 检测系统默认语言：浏览器语言以 zh 开头 → zh-CN，其它一律 en-US。
+ * 无法读取导航器或异常时兜底 en-US。
+ * @returns {'zh-CN'|'en-US'}
+ */
+export function detectSystemLanguage() {
+    try {
+        const raw =
+            typeof navigator !== 'undefined'
+                ? navigator.language || (navigator.languages && navigator.languages[0]) || ''
+                : '';
+        const compact = String(raw).trim().toLowerCase().replace('_', '-');
+        return compact.startsWith('zh') ? 'zh-CN' : 'en-US';
+    } catch {
+        return 'en-US';
+    }
+}
+
 function readInitialLanguage() {
     try {
-        return normalizeLocaleLanguage(localStorage.getItem(LANGUAGE_STORAGE_KEY));
+        const stored = localStorage.getItem(LANGUAGE_STORAGE_KEY);
+        if (stored != null && String(stored).trim() !== '') {
+            return normalizeLocaleLanguage(stored);
+        }
     } catch {
-        return 'zh-CN';
+        /* storage 不可用（隐私模式等），走系统语言检测 */
     }
+    // 无已保存偏好：跟随浏览器默认语言（中文环境 zh-CN，其它 en-US）
+    return detectSystemLanguage();
 }
 
 /**
  * 归一化语言代码，仅支持 zh-CN / en-US。
+ * 空值/缺失或不支持的语言（如历史脏数据 'fr'）= 未设置有效偏好 → 跟随浏览器默认语言。
  * @param {unknown} value
  * @returns {'zh-CN'|'en-US'}
  */
@@ -64,7 +88,9 @@ export function normalizeLocaleLanguage(value) {
         .trim()
         .toLowerCase()
         .replace('_', '-');
-    return compact === 'en-us' ? 'en-US' : 'zh-CN';
+    if (compact === 'en-us') return 'en-US';
+    if (compact === 'zh-cn') return 'zh-CN';
+    return detectSystemLanguage();
 }
 
 /**

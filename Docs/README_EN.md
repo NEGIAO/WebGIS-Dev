@@ -76,7 +76,7 @@
 
 ## 🎯 Project Overview
 
-**NEGIAO's WebGIS** is a full-featured, cleanly architected full-stack WebGIS platform (current version V3.5.9). The frontend is hosted on GitHub Pages, the backend is deployed via Docker on Hugging Face Spaces, and the two communicate through RESTful APIs with support for independent scaling.
+**NEGIAO's WebGIS** is a full-featured, cleanly architected full-stack WebGIS platform (current version V3.5.22). The frontend is hosted on GitHub Pages, the backend is deployed via Docker on Hugging Face Spaces, and the two communicate through RESTful APIs with support for independent scaling.
 
 > 📚 This README retains only the core overview and navigation. Full documentation has been modularized into [`Docs/Guide/`](Docs/Guide/), see "Documentation Navigation" below.
 >
@@ -330,7 +330,7 @@ tiles.negiao.cc.cd"]
 | [Changelog](Docs/Guide/CHANGELOG.md) | Complete version history |
 | [Configuration Guide](Docs/Guide/configuration.md) | Three-tier configuration (root .env / Admin+DB / HF Secrets) |
 | [Configuration Architecture Plan](Docs/Guide/configuration-architecture-plan.md) | Phased roadmap for consolidating configuration |
-| [OAuth Deployment Guide](Docs/Guide/oauth-deployment.md) | Google/GitHub login: console application, HF Secrets config, acceptance & troubleshooting workflow |
+| [OAuth Deployment Guide](Docs/Guide/oauth-deployment.md) | Google/GitHub/Hugging Face login: console application, HF Secrets config, acceptance & troubleshooting workflow |
 
 ### Architecture Docs
 
@@ -355,7 +355,7 @@ Architecture descriptions for eight core features are centralized in [`Docs/Arch
 | Route Planning | [`route-planning.md`](Docs/Architecture/route-planning.md) | Driving/transit dual pipeline, search point selection & route rendering |
 | 3D Effects | [`cesium-3d-effects.md`](Docs/Architecture/cesium-3d-effects.md) | Volumetric clouds, wind field, shallow water overlay & post-processing |
 | Utility Tools | [`utility-tools.md`](Docs/Architecture/utility-tools.md) | Measurement, coordinate picking, compass, sharing, GeoTIFF download |
-| Account System | [`account-system-ai-quota.md`](Docs/Architecture/account-system-ai-quota.md) | Email login, three-tier roles, dual AI quota |
+| Account System | [`account-system-ai-quota.md`](Docs/Architecture/account-system-ai-quota.md) | Email login + Google/GitHub/Hugging Face OAuth, three-tier roles, dual AI quota |
 | Flood Simulation | [`cesium-fluid-flood-simulation.md`](Docs/Architecture/cesium-fluid-flood-simulation.md) | GPU fluid pipeline deep dive (3D effects companion) |
 | Three-Tier Configuration | [`configuration-three-tier.md`](Docs/Architecture/configuration-three-tier.md) | L1/L2/L3 panorama: source → unified entry → business/frontend consumption & gatekeeping |
 | Cesium Unified Layer Management | [`cesium-unified-layer-management.md`](Docs/Architecture/cesium-unified-layer-management.md) | Design review draft: two-step approach for unified 3D data TOC |
@@ -368,11 +368,11 @@ Architecture descriptions for eight core features are centralized in [`Docs/Arch
 
 | Version | Date | Summary |
 |------|------|------|
-| **V3.5.9** | 2026-08-02 | Basemap configuration architecture refactor (SSOT): removed `sourceDescriptors.ts` (887 lines), Cesium descriptors now auto-derived from `basemapConfig.ts` `getDescriptorById()`; `basemapPresets.ts` adds `ALL_BASEMAP_PRESETS` for automatic fallback of unconfigured basemaps (`Other: xxx` prefix); deprecated Google host switching mechanism removed (`GOOGLE_MANUAL_HOST`/`activeGoogleTileHost`/`buildGoogleTileUrl`); `index.ts`/`basemapProviderFactory.ts`/`layerUtils.js` import paths unified to `basemapConfig`. [Details](Docs/LLM_record/26-08/2026-08-02/2026-08-02-basemap-ssot-refactor.md) |
-| **V3.5.8** | 2026-08-02 | Staged review fixes: `client.js` removed `require()` (unavailable in pure ESM browser, reverted to static import `useMessage`); `_read_app_version()` couldn't read root README in container → deploy.yml adds `cp README.md backend/README.md` (version still 100% from root README, no new config keys); removed duplicate action `setSelectedEditLayerId` (reuses `setStyleTarget`); `browserDownload.ts` moved from ol domain to common domain (eliminates common→ol reverse dependency); added `vue-shims.d.ts` to fix .ts import .vue type errors. [Details](Docs/LLM_record/26-08/2026-08-02/2026-08-02-staged-review-fixes.md) |
-| **V3.5.7** | 2026-08-02 | Code Review fixes (SSOT + layered boundaries + backend security): frontend/backend README version numbers desynced (SSOT); API layer `useMessage()` removed (6 files switched to lazy loading or console.warn); backend monitor/location/routes silent except added logger.debug + Pydantic input validation (lng/lat range, Query max_length); publicRuntime.ts adds ASSET_BASE_URL to consolidate scattered BASE_URL (7 files); compass README migrated to Docs/Guide. [Details](Docs/LLM_record/26-08/2026-08-02/2026-08-02-code-review-fixes.md) |
+| **V3.5.22** | 2026-08-17 | Consolidated version: **first-paint language follows the browser default** (`detectSystemLanguage` SSOT: zh environment → zh-CN, otherwise → en-US; empty/dirty language values unified, user preference & explicit switch still take priority) · **Back-home entries on Register & legal pages** (round home button + clickable brand area on `/register`, dual links on `/terms` `/privacy`) · **Hugging Face OAuth login** (full login/bind/unlink chain + emailVerified exception + official color logo) · **L3 status monitoring automated** (catalog-metadata driven, 9 groups auto-generated in startup log & admin panel) · **Trademark icon normalization** (Google official four-color G + HF official color logo). [Details](Docs/LLM_record/26-08/2026-08-16/2026-08-16-v3.5.22-consolidated.md) |
+| **V3.5.21** | 2026-08-16 | Consolidated version: admin panel data table enhancements (**pagination + cross-page search/sort + CSV export + search highlighting + row numbers/range bar**, rows API returns total) · Agent basemap capability unlocked (`switch_basemap` supports **XYZ URL or preset ID** + self-built public sources + **fully derived preset catalog** of 76 items) · new **CyclOSM cycling basemap** · Landing/Register **Lucide icon migration** & OneTap slow-load fix · `.env` OAuth Client ID tier adjustment (production values moved to HF Secrets). [Details](Docs/LLM_record/26-08/2026-08-16/2026-08-16-v3.5.21-consolidated.md) |
+| **V3.5.20** | 2026-08-15 | Landing page completed: zh/en switching, icon.webp brand logo, scroll fix (self-holding scroll container) · Register page Landing-style background (lat-lon grid + glow) · **Official domain integration**: webgis.negiao.cn full-chain landing (UI footer entry + README/config defaults synced). [Details 1](Docs/LLM_record/26-08/2026-08-15/2026-08-15-landing-i18n-scroll-background.md) · [Details 2](Docs/LLM_record/26-08/2026-08-15/2026-08-15-official-domain-webgis-negiao-cn.md) |
 
-Earlier versions (V3.3.21 and before) — see [Full Changelog →](Docs/Guide/CHANGELOG.md)
+Earlier versions (V3.5.19 and before) — see [Full Changelog →](Docs/Guide/CHANGELOG.md)
 
 ---
 
@@ -394,6 +394,6 @@ Earlier versions (V3.3.21 and before) — see [Full Changelog →](Docs/Guide/CH
 |:------:|:--------:|:--------:|
 | [GitHub](https://github.com/NEGIAO/WebGIS-Dev) | [GitHub Pages](https://negiao.github.io/WebGIS-Dev/) | [Hugging Face](https://NEGIAO-WebGIS.hf.space) |
 
-<sub>V3.5.9 · In Development · Last Updated 2026-08-02</sub>
+<sub>V3.5.22 · In Development · Last Updated 2026-08-17</sub>
 
 </div>

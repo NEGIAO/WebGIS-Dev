@@ -64,11 +64,11 @@ SESSION_TOUCH_THROTTLE_SECONDS = 15  # 距上次触活不足 15s 不写库（适
 ONLINE_WINDOW_MINUTES = 5            # 最近 5 分钟内有鉴权请求 = 在线
 
 # ─── OAuth 非密钥常量 ───
-# L3（HF Secrets）：GOOGLE/GITHUB CLIENT_ID+SECRET、OAUTH_STATE_SECRET、SUPER_USER
+# L3（HF Secrets）：GOOGLE/GITHUB/HUGGINGFACE CLIENT_ID+SECRET、OAUTH_STATE_SECRET、SUPER_USER
 OAUTH_STATE_TTL_SECONDS = get_settings().oauth_state_ttl_seconds
 OAUTH_TICKET_TTL_SECONDS = get_settings().oauth_ticket_ttl_seconds
 OAUTH_PASSWORD_MARKER_PREFIX = "oauth-disabled"
-SUPPORTED_OAUTH_PROVIDERS = frozenset({"google", "github"})
+SUPPORTED_OAUTH_PROVIDERS = frozenset({"google", "github", "huggingface"})
 
 
 def is_development_env() -> bool:

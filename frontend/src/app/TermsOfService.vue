@@ -8,6 +8,10 @@
 
             <div class="legal-body">
                 <div class="back-link">
+                    <router-link to="/">
+                        <i class="fas fa-home"></i> 返回首页
+                    </router-link>
+                    <span class="back-link-sep">|</span>
                     <router-link to="/register">
                         <i class="fas fa-arrow-left"></i> 返回登录页面
                     </router-link>
@@ -205,6 +209,14 @@ onMounted(() => {
 
 .back-link {
     margin-bottom: 20px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.back-link-sep {
+    color: var(--border-light, #d6e2d8);
 }
 
 .back-link a {

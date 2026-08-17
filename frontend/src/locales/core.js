@@ -110,6 +110,7 @@ export const coreMessages = {
             register: '注册',
             loginWithGoogle: '使用 Google 继续',
             loginWithGithub: '使用 GitHub 继续',
+            loginWithHuggingface: '使用 Hugging Face 继续',
             orUseEmail: '或使用邮箱账号',
             username: '昵称',
             usernameLogin: '邮箱账号',
@@ -159,6 +160,7 @@ export const coreMessages = {
         // 根路径宣传主页（LandingView）首屏必需键
         landing: {
             navLogin: '登录 / 注册',
+            backHome: '返回首页',
             heroEyebrow: '专业级 WebGIS 平台',
             heroExplore: '探索地理空间数据',
             heroAccent: '可视化与云端管理',
@@ -326,6 +328,7 @@ export const coreMessages = {
             register: 'Sign up',
             loginWithGoogle: 'Continue with Google',
             loginWithGithub: 'Continue with GitHub',
+            loginWithHuggingface: 'Continue with Hugging Face',
             orUseEmail: 'Or use email',
             username: 'Username',
             usernameLogin: 'Email',
@@ -375,6 +378,7 @@ export const coreMessages = {
         // First-paint copy for the root landing page (LandingView)
         landing: {
             navLogin: 'Sign in / Register',
+            backHome: 'Home',
             heroEyebrow: 'Professional WebGIS Platform',
             heroExplore: 'Explore Geospatial Data',
             heroAccent: 'Visualization & Cloud Management',

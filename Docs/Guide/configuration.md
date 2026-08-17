@@ -127,12 +127,14 @@ VITE_TILE_PROXY_MODE=fallback
 # 必配（admin 后台）
 SUPER_USER
 
-# OAuth 登录（Google / GitHub，任一都需要 state 密钥）
+# OAuth 登录（Google / GitHub / Hugging Face，任一都需要 state 密钥）
 OAUTH_STATE_SECRET
 GOOGLE_OAUTH_CLIENT_ID
 GOOGLE_OAUTH_CLIENT_SECRET
 GITHUB_OAUTH_CLIENT_ID
 GITHUB_OAUTH_CLIENT_SECRET
+HUGGINGFACE_OAUTH_CLIENT_ID
+HUGGINGFACE_OAUTH_CLIENT_SECRET
 
 # 邮箱验证码（注册/重置/绑定）—— 账号 SMTP_USER 属 L1（Variables 或代码默认），凭证与回信地址必进 Secrets
 SMTP_PASSWORD
@@ -156,16 +158,17 @@ Variables（非密，可选）：`APP_ENV=production`、`BACKEND_PUBLIC_URL`、`
 2. 公开 URL 用 L1（代码常量或 Space Variables，与 Secrets 分离）：  
    - 后端：`https://<your-space>.hf.space`  
    - 前端 Pages：`https://negiao.github.io/WebGIS-Dev`（按你的仓库路径）  
-3. Google / GitHub 控制台回调必须与后端一致：  
+3. Google / GitHub / Hugging Face 控制台回调必须与后端一致：  
 
 ```text
 https://<your-space>.hf.space/api/auth/oauth/google/callback
 https://<your-space>.hf.space/api/auth/oauth/github/callback
+https://<your-space>.hf.space/api/auth/oauth/huggingface/callback
 ```
 
 4. 不要把 Client Secret 放进前端或 git。
 
-> 📘 OAuth 生产配置的**逐步操作手册**（Google/GitHub 控制台逐字段申请步骤、Secrets 配置、验收自检、排错速查表）见 [oauth-deployment.md](oauth-deployment.md)。
+> 📘 OAuth 生产配置的**逐步操作手册**（Google/GitHub/Hugging Face 控制台逐字段申请步骤、Secrets 配置、验收自检、排错速查表）见 [oauth-deployment.md](oauth-deployment.md)。
 
 ---
 
@@ -190,7 +193,7 @@ https://<your-space>.hf.space/api/auth/oauth/github/callback
 
 **「仅 env」例外（有意不迁面板）**：`RUNTIME_CONFIG_ALLOWED_ORIGINS`、`PROXY_*`、`DOWNLOAD_*`、`HF_RUN_LOGS_URL`、`HF_BUILD_LOGS_URL`、`WEBGIS_LOG_STREAM_MODE` 等运维开关属 L1；`LOG` 监控令牌属 L3。
 
-**L3 状态可见性**：管理员控制台顶部「环境密钥状态」卡片仅显示 SUPER_USER / OAUTH_STATE_SECRET / Google/GitHub OAuth / SMTP / Supabase 的已配置布尔（来自 `GET /api/admin/overview` 的 `l3_env_status`，不回显明文）。Agent/LLM 主密钥与高德 Web 服务 Key 是 L2 项，请在「API 密钥管理」面板查看和维护。
+**L3 状态可见性**：管理员控制台顶部「环境密钥状态」卡片与启动日志 `[L3]` 摘要**自动生成**（V3.5.22）——组定义由 `catalog.py` 元数据驱动（`status_label` 分组 / `layer=L3` 独立 / `status_exclude` 排除历史兼容名），新增 L3 key 只需在 catalog 登记即自动出现在两处监控，无需改任何消费方代码。仅显示 SUPER_USER / OAUTH_STATE_SECRET / Google/GitHub/Hugging Face OAuth / SMTP / SUPABASE 等的已配置布尔（来自 `GET /api/admin/overview` 的 `l3_env_status`，不回显明文）。Agent/LLM 主密钥与高德 Web 服务 Key 是 L2 项，请在「API 密钥管理」面板查看和维护。
 
 ---
 

@@ -107,7 +107,7 @@ Docs/
 │   ├── compass-types-note.md          # compass/svg/types 类型说明（从源码迁入）
 │   ├── configuration.md               # 三层配置指南（L2 管理员配置 Agent/高德 Key，HF Secrets 仅保留平台绝密）
 │   ├── configuration-architecture-plan.md  # 配置架构分阶段执行计划
-│   ├── oauth-deployment.md            # Google/GitHub OAuth 部署配置指南（控制台申请 + HF Secrets + 排错）
+│   ├── oauth-deployment.md            # Google/GitHub/Hugging Face OAuth 部署配置指南（控制台申请 + HF Secrets + 排错）
 │   ├── dev-conventions.md             # 开发约定与提交规范
 │   ├── dev-guide.md                   # 开发指南
 │   └── faq.md                         # 技术栈与 FAQ

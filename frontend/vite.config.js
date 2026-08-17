@@ -181,7 +181,9 @@ export default defineConfig(({ command, mode }) => {
             proxy: {
                 // 1. 添加后端 Docker 服务的代理路径（按需要自定义前缀，如 /api）
                 '/api': {
-                    target: 'http://127.0.0.1:7860', // 转发给电脑本地 Docker 暴露的端口
+                    target: 'http://127.0.0.1:7860',
+                    // 转发给电脑本地 Docker 暴露的端口，适用于内网穿透、局域网调试等场景
+                    // 无需暴露后端端口到公网，避免安全风险
                     changeOrigin: true,
                     rewrite: (path) => path.replace(/^\/api/, ''), // 剥离 /api 前缀，直接传给后端
                 },
@@ -193,6 +195,8 @@ export default defineConfig(({ command, mode }) => {
                     rewrite: (path) => path.replace(/^\/amap-api/, ''),
                 },
             },
+            allowedHosts: ['demo.negiao.cn', 'localhost', '127.0.0.1', 'negiao.cn', 'webgis.negiao.cn'],
+            // 允许局域网、内网穿透访问（如 ngrok、frp、Cf tunnel 等），便于移动端调试
         },
 
         // 排除 Cesium npm 包的预构建，避免与 CDN Cesium 产生双实例

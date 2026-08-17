@@ -13,17 +13,34 @@
         <div class="container fade-in">
             <div class="form-header">
                 <div class="brand-row">
-                    <div class="brand-badge">
-                        <img
-                            :src="resolvePublicAssetPath('images/icon.webp')"
-                            alt="NEGIAO's WebGIS"
-                            loading="eager"
-                        />
-                    </div>
-                    <div class="brand-text">
-                        <h1 class="form-title">NEGIAO's WebGIS</h1>
-                        <p class="app-purpose-title">{{ t('auth.appPurpose') }}</p>
-                    </div>
+                    <!-- 品牌区整体为返回首页入口（点击 logo/标题回 LandingView） -->
+                    <router-link
+                        to="/"
+                        class="brand-link"
+                        :title="t('landing.backHome')"
+                        :aria-label="t('landing.backHome')"
+                    >
+                        <div class="brand-badge">
+                            <img
+                                :src="resolvePublicAssetPath('images/icon.webp')"
+                                alt="NEGIAO's WebGIS"
+                                loading="eager"
+                            />
+                        </div>
+                        <div class="brand-text">
+                            <h1 class="form-title">NEGIAO's WebGIS</h1>
+                            <p class="app-purpose-title">{{ t('auth.appPurpose') }}</p>
+                        </div>
+                    </router-link>
+                    <!-- 返回首页图标按钮：右侧操作区，不占品牌区空间 -->
+                    <router-link
+                        to="/"
+                        class="back-home-icon"
+                        :title="t('landing.backHome')"
+                        :aria-label="t('landing.backHome')"
+                    >
+                        <Home :size="16" />
+                    </router-link>
                     <div
                         class="lang-toggle"
                         role="group"
@@ -77,7 +94,20 @@
                         class="oauth-btn google"
                         @click="handleOAuthLogin('google')"
                     >
-                        <i class="fab fa-google"></i>
+                        <svg class="g-logo" viewBox="0 0 23.5 24" aria-hidden="true">
+                            <clipPath id="rg-a">
+                                <path d="M12 10v4.5h6.47c-.5 2.7-3 4.74-6.47 4.74-3.9 0-7.1-3.3-7.1-7.25S8.1 4.75 12 4.75c1.8 0 3.35.6 4.6 1.8l3.4-3.4C18 1.2 15.24 0 12 0 5.4 0 0 5.4 0 12s5.4 12 12 12c7 0 11.5-4.9 11.5-11.7 0-.8-.1-1.54-.2-2.3z"/>
+                            </clipPath>
+                            <filter id="rg-b">
+                                <feGaussianBlur stdDeviation="1"/>
+                            </filter>
+                            <g style="clip-path:url(#rg-a)">
+                                <foreignObject style="filter:url(#rg-b)" height="28" width="28" transform="translate(-2 -2)">
+                                    <div xmlns="http://www.w3.org/1999/xhtml" style="height:100%;width:100%;background:conic-gradient(#FF4641,#FD5061 40deg,#FD5061 60deg,#3186FF 85deg,#3186FF 117deg,#00A5B7 142deg,#0EBC5F 167deg,#0EBC5F 200deg,#6CC500 226deg,#FC0 253deg,#FFD314 268deg,#FC0 292deg,#FF4641 327deg)"/>
+                                </foreignObject>
+                                <path fill="#3186FF" d="M11 8h16v8H11z"/>
+                            </g>
+                        </svg>
                         {{ t('auth.loginWithGoogle') }}
                     </button>
                     <button
@@ -87,6 +117,18 @@
                     >
                         <i class="fab fa-github"></i>
                         {{ t('auth.loginWithGithub') }}
+                    </button>
+                    <button
+                        type="button"
+                        class="oauth-btn huggingface"
+                        @click="handleOAuthLogin('huggingface')"
+                    >
+                        <img
+                            :src="hfLogoUrl"
+                            class="hf-logo"
+                            alt=""
+                        />
+                        {{ t('auth.loginWithHuggingface') }}
                     </button>
                     <div class="oauth-divider">
                         <span>{{ t('auth.orUseEmail') }}</span>
@@ -650,6 +692,7 @@ import {
     Check,
     CheckCircle2,
     Footprints,
+    Home,
     Info,
     KeyRound,
     Loader2,
@@ -778,6 +821,9 @@ function resolvePublicAssetPath(relativePath) {
     const normalizedPath = String(relativePath || '').replace(/^\/+/, '');
     return `${normalizedBase}${normalizedPath}`;
 }
+
+// Hugging Face 官方 logo（public/images/hf-logo.svg，品牌资产彩色版）
+const hfLogoUrl = resolvePublicAssetPath('images/hf-logo.svg');
 
 function resolveRedirectTarget() {
     const redirect = String(route.query?.redirect || '/home').trim();
@@ -1694,6 +1740,27 @@ onUnmounted(() => {
     gap: 12px;
 }
 
+/* 品牌区即返回首页入口：不额外占位，hover 轻微降透明度提示可点 */
+.brand-link {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-width: 0;
+    text-decoration: none;
+    color: inherit;
+    transition: opacity 0.15s ease;
+}
+
+.brand-link:hover {
+    opacity: 0.85;
+}
+
+.brand-link:focus-visible {
+    outline: 2px solid rgba(255, 255, 255, 0.95);
+    outline-offset: 2px;
+    border-radius: 10px;
+}
+
 .lang-toggle {
     margin-left: auto;
     display: inline-flex;
@@ -1704,6 +1771,31 @@ onUnmounted(() => {
     background: rgba(255, 255, 255, 0.14);
     border: 1px solid rgba(255, 255, 255, 0.28);
     flex-shrink: 0;
+}
+
+/* 返回首页图标按钮：位于语言切换器左侧，与切换器同风格，不占品牌区空间 */
+.back-home-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 34px;
+    height: 34px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.14);
+    border: 1px solid rgba(255, 255, 255, 0.28);
+    color: rgba(255, 255, 255, 0.92);
+    flex-shrink: 0;
+    transition: background 0.15s ease, color 0.15s ease;
+}
+
+.back-home-icon:hover {
+    background: rgba(255, 255, 255, 0.28);
+    color: #fff;
+}
+
+.back-home-icon:focus-visible {
+    outline: 2px solid rgba(255, 255, 255, 0.95);
+    outline-offset: 1px;
 }
 
 .lang-btn {
@@ -1779,14 +1871,18 @@ onUnmounted(() => {
     font-weight: 500;
     letter-spacing: 0.2px;
     opacity: 0.88;
-    white-space: nowrap;
+    /* 完整显示副标题：允许换行（最多 2 行），不再截断省略 */
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
     overflow: hidden;
-    text-overflow: ellipsis;
+    line-height: 1.45;
 }
 
 /* ─── 表单主体 ─── */
 .form-body {
     padding: clamp(18px, 3.2vw, 28px);
+    padding-top: 2%;
     background-color: var(--bg-primary);
     flex: 1;
     /* min-height: 0 解除 flex 子项最小内容高限制，确保空间不足时收缩并触发内部滚动 */
@@ -1864,12 +1960,19 @@ onUnmounted(() => {
     font-size: 16px;
 }
 
-.oauth-btn.google i {
-    color: #4285f4;
+.oauth-btn.google .g-logo {
+    width: 16px;
+    height: 16px;
 }
 
 .oauth-btn.github i {
     color: #24292f;
+}
+
+/* Hugging Face 品牌 logo：官方彩色 SVG（public/images/hf-logo.svg） */
+.oauth-btn .hf-logo {
+    width: 20px;
+    height: 20px;
 }
 
 .oauth-btn:hover {
@@ -2488,6 +2591,10 @@ input:disabled {
         gap: 8px;
     }
 
+    .brand-link {
+        gap: 8px;
+    }
+
     .lang-toggle {
         gap: 1px;
         padding: 1px;
@@ -2505,7 +2612,7 @@ input:disabled {
     }
 
     .form-title {
-        font-size: 17px;
+        font-size: 16px;
     }
 
     .form-footer {

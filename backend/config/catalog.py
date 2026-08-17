@@ -560,6 +560,30 @@ CONFIG_CATALOG: Dict[str, ConfigMeta] = {
         "secret": False,
         "description": "GitHub OAuth 邮箱端点",
     },
+    "HUGGINGFACE_OAUTH_REDIRECT_URI": {
+        "layer": "L1",
+        "default": "",
+        "secret": False,
+        "description": "可选覆盖 Hugging Face 回调",
+    },
+    "HUGGINGFACE_OAUTH_AUTH_URL": {
+        "layer": "L1",
+        "default": "https://huggingface.co/oauth/authorize",
+        "secret": False,
+        "description": "Hugging Face OAuth 授权端点",
+    },
+    "HUGGINGFACE_OAUTH_TOKEN_URL": {
+        "layer": "L1",
+        "default": "https://huggingface.co/oauth/token",
+        "secret": False,
+        "description": "Hugging Face OAuth token 端点",
+    },
+    "HUGGINGFACE_OAUTH_PROFILE_URL": {
+        "layer": "L1",
+        "default": "https://huggingface.co/api/whoami-v2",
+        "secret": False,
+        "description": "Hugging Face OAuth 用户资料端点",
+    },
     "OAUTH_HTTP_TIMEOUT_SECONDS": {
         "layer": "L1",
         "default": 15,
@@ -583,30 +607,49 @@ CONFIG_CATALOG: Dict[str, ConfigMeta] = {
         "layer": "L3",
         "default": "",
         "secret": True,
+        "status_label": "Google OAuth",
         "description": "Google OAuth Client ID",
     },
     "GOOGLE_OAUTH_CLIENT_SECRET": {
         "layer": "L3",
         "default": "",
         "secret": True,
+        "status_label": "Google OAuth",
         "description": "Google OAuth Client Secret",
     },
     "GITHUB_OAUTH_CLIENT_ID": {
         "layer": "L3",
         "default": "",
         "secret": True,
+        "status_label": "GitHub OAuth",
         "description": "GitHub OAuth Client ID",
     },
     "GITHUB_OAUTH_CLIENT_SECRET": {
         "layer": "L3",
         "default": "",
         "secret": True,
+        "status_label": "GitHub OAuth",
         "description": "GitHub OAuth Client Secret",
+    },
+    "HUGGINGFACE_OAUTH_CLIENT_ID": {
+        "layer": "L3",
+        "default": "",
+        "secret": True,
+        "status_label": "Hugging Face OAuth",
+        "description": "Hugging Face OAuth Client ID",
+    },
+    "HUGGINGFACE_OAUTH_CLIENT_SECRET": {
+        "layer": "L3",
+        "default": "",
+        "secret": True,
+        "status_label": "Hugging Face OAuth",
+        "description": "Hugging Face OAuth Client Secret",
     },
     "SMTP_USER": {
         "layer": "L1",
         "default": "",
         "secret": False,
+        "status_label": "SMTP",
         "description": "SMTP 发件账号（半公开；凭证 SMTP_PASSWORD 属 L3）",
     },
     "SMTP_REPLY": {
@@ -615,31 +658,35 @@ CONFIG_CATALOG: Dict[str, ConfigMeta] = {
         "secret": True,
         "description": "SMTP 回信地址 Reply-To（HF Secrets；留空则回信到发件账号）",
     },
-    "SMTP_PASSWORD": {"layer": "L3", "default": "", "secret": True, "description": "SMTP 密码"},
-    "SUPABASE_URL": {"layer": "L3", "default": "", "secret": True, "description": "Supabase URL"},
-    "SUPABASE_KEY": {"layer": "L3", "default": "", "secret": True, "description": "Supabase Key"},
+    "SMTP_PASSWORD": {"layer": "L3", "default": "", "secret": True, "status_label": "SMTP", "description": "SMTP 密码"},
+    "SUPABASE_URL": {"layer": "L3", "default": "", "secret": True, "status_label": "SUPABASE", "description": "Supabase URL"},
+    "SUPABASE_KEY": {"layer": "L3", "default": "", "secret": True, "status_label": "SUPABASE", "description": "Supabase Key"},
     "SUPABASE_SERVICE_ROLE_KEY": {
         "layer": "L3",
         "default": "",
         "secret": True,
+        "status_exclude": True,
         "description": "Supabase service role",
     },
     "SUPABASE_ANON_KEY": {
         "layer": "L3",
         "default": "",
         "secret": True,
+        "status_exclude": True,
         "description": "Supabase anon",
     },
     "NEXT_PUBLIC_SUPABASE_URL": {
         "layer": "L3",
         "default": "",
         "secret": True,
+        "status_exclude": True,
         "description": "Supabase URL 兼容名",
     },
     "SUPABASE_SERVICE_KEY": {
         "layer": "L3",
         "default": "",
         "secret": True,
+        "status_exclude": True,
         "description": "Supabase key 兼容名",
     },
     "AGENT_API_KEY": {
@@ -688,3 +735,23 @@ DEV_OAUTH_STATE_SECRET_FALLBACK = "webgis-oauth-dev-state-secret"
 def get_meta(key: str) -> Optional[ConfigMeta]:
     """返回配置项元数据。"""
     return CONFIG_CATALOG.get(key)
+
+
+def iter_l3_status_groups() -> list[tuple[str, list[str]]]:
+    """按 status_label 聚合参与监控的密钥组（SSOT：管理员面板与启动日志的 L3 状态均由本函数驱动）。
+
+    规则：
+      - 带 status_label 的 key（不限 layer，如 SMTP_USER 为 L1 但参与 SMTP 完整性）按 label 分组；
+      - 无 status_label 且 layer == L3 的 key 以自身 key 名独立成组（如 SUPER_USER）；
+      - status_exclude=True（历史兼容名）不参与监控，仅作登记表项。
+    返回 [(label, [keys...]), ...]，顺序 = catalog 声明顺序；组已配置 = 组内全部 key 非空。
+    """
+    groups: dict[str, list[str]] = {}
+    for key, meta in CONFIG_CATALOG.items():
+        if meta.get("status_exclude"):
+            continue
+        label = meta.get("status_label")
+        if label is None and meta.get("layer") != "L3":
+            continue
+        groups.setdefault(label or key, []).append(key)
+    return [(label, keys) for label, keys in groups.items()]

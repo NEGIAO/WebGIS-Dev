@@ -44,7 +44,7 @@ backend/
 │   │   ├── dependencies.py                        # FastAPI 依赖注入 + EMAIL_BINDING_REQUIRED 拦截
 │   │   ├── email_service.py                       # 阿里云邮件推送 SMTP 代理转发服务
 │   │   ├── models.py                              # Pydantic 请求模型（邮箱账号/绑定/昵称）
-│   │   ├── oauth.py                               # Google/GitHub OAuth 登录、自动注册与账号绑定服务（授权码 + Google OneTap 双通道）
+│   │   ├── oauth.py                               # Google/GitHub/Hugging Face OAuth 登录、自动注册与账号绑定服务（授权码 + Google OneTap 双通道）
 │   │   ├── password.py                            # 密码哈希/验证
 │   │   ├── preferences.py                         # 用户偏好
 │   │   ├── quota.py                               # 配额追踪

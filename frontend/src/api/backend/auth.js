@@ -121,21 +121,21 @@ export async function apiAuthVerifyCode(email, code, purpose) {
 }
 
 /**
- * 跳转到 Google/GitHub OAuth 登录入口。
- * @param {'google'|'github'} provider - 第三方登录提供商
+ * 跳转到 Google/GitHub/Hugging Face OAuth 登录入口。
+ * @param {'google'|'github'|'huggingface'} provider - 第三方登录提供商
  */
 export function redirectToOAuthProvider(provider) {
-    const safeProvider = provider === 'github' ? 'github' : 'google';
+    const safeProvider = provider === 'github' ? 'github' : provider === 'huggingface' ? 'huggingface' : 'google';
     window.location.href = `${BACKEND_BASE_URL}/api/auth/oauth/${safeProvider}/start`;
 }
 
 /**
- * 跳转到当前已登录用户的 Google/GitHub OAuth 绑定入口。
+ * 跳转到当前已登录用户的 Google/GitHub/Hugging Face OAuth 绑定入口。
  * 绑定接口由 axios token 负责提供 Authorization，最终仍通过浏览器跳转完成授权。
- * @param {'google'|'github'} provider - 第三方登录提供商
+ * @param {'google'|'github'|'huggingface'} provider - 第三方登录提供商
  */
 export async function redirectToOAuthBindProvider(provider) {
-    const safeProvider = provider === 'github' ? 'github' : 'google';
+    const safeProvider = provider === 'github' ? 'github' : provider === 'huggingface' ? 'huggingface' : 'google';
     const result = await backendAPI.get(`/api/auth/oauth/${safeProvider}/bind/start`);
     const authUrl = String(result?.auth_url || '').trim();
     if (!authUrl) throw new Error('第三方绑定入口生成失败');
@@ -149,7 +149,7 @@ export async function apiAuthExchangeOAuthLoginTicket(ticket) {
 }
 
 export async function apiAuthCompleteOAuthBind(provider, ticket) {
-    const safeProvider = provider === 'github' ? 'github' : 'google';
+    const safeProvider = provider === 'github' ? 'github' : provider === 'huggingface' ? 'huggingface' : 'google';
     return backendAPI.post(`/api/auth/oauth/${safeProvider}/bind/complete`, {
         ticket: String(ticket || '').trim(),
     });
@@ -160,7 +160,7 @@ export async function apiAuthListOAuthAccounts() {
 }
 
 export async function apiAuthUnlinkOAuthAccount(provider) {
-    const safeProvider = provider === 'github' ? 'github' : 'google';
+    const safeProvider = provider === 'github' ? 'github' : provider === 'huggingface' ? 'huggingface' : 'google';
     return backendAPI.delete(`/api/auth/oauth/${safeProvider}/bind`);
 }
 

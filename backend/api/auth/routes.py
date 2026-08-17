@@ -240,7 +240,7 @@ async def list_oauth_accounts(session: Dict[str, Any] = Depends(require_login)) 
 
 @router.get("/oauth/{provider}/start")
 async def start_oauth_login(provider: str) -> RedirectResponse:
-    """功能：发起 Google/GitHub OAuth 登录或自动注册流程。"""
+    """功能：发起 Google/GitHub/Hugging Face OAuth 登录或自动注册流程。"""
     auth_url = build_authorization_url(provider, mode="login")
     return RedirectResponse(auth_url, status_code=status.HTTP_302_FOUND)
 
@@ -250,7 +250,7 @@ async def start_oauth_bind(
     provider: str,
     session: Dict[str, Any] = Depends(require_login),
 ) -> Dict[str, Any]:
-    """功能：为已登录邮箱注册用户生成 Google/GitHub 账号绑定授权 URL。"""
+    """功能：为已登录邮箱注册用户生成 Google/GitHub/Hugging Face 账号绑定授权 URL。"""
     _reject_binding_required(session)
     auth_url = build_authorization_url(
         provider,
@@ -263,7 +263,7 @@ async def start_oauth_bind(
 @router.get("/oauth/{provider}/callback")
 async def handle_oauth_callback(provider: str, request: Request, code: str = "", state: str = "") -> RedirectResponse:
     """
-    功能：处理 Google/GitHub OAuth 回调。
+    功能：处理 Google/GitHub/Hugging Face OAuth 回调。
 
     登录模式：自动创建/绑定本地用户并签发 WebGIS session。
     绑定模式：将第三方账号绑定到 state 中记录的当前本地用户。
@@ -359,7 +359,7 @@ async def exchange_oauth_login_ticket(payload: OAuthTicketRequest, request: Requ
     ticket_payload = None
     provider = ""
     last_error = None
-    for candidate in ("google", "github"):
+    for candidate in ("google", "github", "huggingface"):
         try:
             ticket_payload = consume_oauth_ticket("login", candidate, payload.ticket)
             provider = candidate
@@ -405,7 +405,7 @@ async def complete_oauth_bind(
 
 @router.delete("/oauth/{provider}/bind")
 async def unlink_oauth_account(provider: str, session: Dict[str, Any] = Depends(require_login)) -> Dict[str, Any]:
-    """功能：解绑当前用户的 Google/GitHub 第三方账号。"""
+    """功能：解绑当前用户的 Google/GitHub/Hugging Face 第三方账号。"""
     _reject_binding_required(session)
     await asyncio.to_thread(unlink_oauth_account_sync, str(session.get("username") or ""), provider)
     return {"status": "success", "message": "第三方账号已解绑"}

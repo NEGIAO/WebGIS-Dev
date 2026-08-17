@@ -193,20 +193,6 @@ const overview = ref({
     l3_env_status: {},
 });
 
-const L3_STATUS_LABELS = [
-    { key: 'super_user', labelKey: 'admin.envKeys.super_user' },
-    { key: 'oauth_state_secret', label: 'OAUTH_STATE_SECRET' },
-    { key: 'google_oauth', label: 'Google OAuth' },
-    { key: 'github_oauth', label: 'GitHub OAuth' },
-    { key: 'smtp', labelKey: 'admin.envKeys.smtp' },
-    { key: 'smtp_reply', labelKey: 'admin.envKeys.smtp_reply' },
-    { key: 'supabase', label: 'Supabase URL/Key' },
-];
-
-function l3StatusLabel(item) {
-    return item.labelKey ? t(item.labelKey) : item.label;
-}
-
 const tables = ref([]);
 const selectedTable = ref('');
 const tableRows = ref([]);
@@ -930,15 +916,15 @@ onMounted(async () => {
 
                     <div class="env-grid">
                         <div
-                            v-for="item in L3_STATUS_LABELS"
-                            :key="item.key"
+                            v-for="(configured, label) in overview.l3_env_status"
+                            :key="label"
                             class="env-item"
                         >
-                            <span class="env-name">{{ l3StatusLabel(item) }}</span>
-                            <span :class="['status-badge', overview.l3_env_status?.[item.key] ? 'is-configured' : 'is-unset']">
+                            <span class="env-name">{{ label }}</span>
+                            <span :class="['status-badge', configured ? 'is-configured' : 'is-unset']">
                                 <span class="dot"></span>
                                 {{
-                                    overview.l3_env_status?.[item.key]
+                                    configured
                                         ? t('admin.configured')
                                         : t('admin.notConfigured')
                                 }}

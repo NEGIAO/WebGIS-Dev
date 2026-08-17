@@ -5,7 +5,7 @@
 -->
 <script setup>
 import { computed } from 'vue';
-import { useLocale } from '@common/app/useLocale';
+import { useLocale, detectSystemLanguage } from '@common/app/useLocale';
 import { ASSET_BASE_URL } from '@/config/publicRuntime';
 
 const LANGUAGE_OPTIONS = Object.freeze([
@@ -45,7 +45,8 @@ const props = defineProps({
         type: Object,
         default: () => ({
             default_basemap: '',
-            language: 'zh-CN',
+            // 无偏好时跟随浏览器默认语言（中文 → zh-CN，其它 → en-US）
+            language: detectSystemLanguage(),
             unit_system: 'metric',
             preferred_agent_model: '',
         }),
@@ -54,7 +55,7 @@ const props = defineProps({
         type: Object,
         default: () => ({
             default_basemap: '',
-            language: 'zh-CN',
+            language: detectSystemLanguage(),
             unit_system: 'metric',
             preferred_agent_model: '',
         }),
@@ -203,7 +204,10 @@ function normalizeLanguage(value) {
         .trim()
         .toLowerCase()
         .replace('_', '-');
-    return compact === 'en-us' ? 'en-US' : 'zh-CN';
+    // 仅支持 zh-CN / en-US；其它（含空值、历史脏数据）= 未设置有效偏好 → 跟随浏览器默认
+    if (compact === 'en-us') return 'en-US';
+    if (compact === 'zh-cn') return 'zh-CN';
+    return detectSystemLanguage();
 }
 
 function normalizeUnitSystem(value) {

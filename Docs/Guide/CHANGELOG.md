@@ -6,6 +6,48 @@
 
 ## 版本记录
 
+### V3.5.22 (2026-08-17) — 综合版本：首屏语言跟随浏览器 · 注册/法务页返回首页 · Hugging Face OAuth 接入 · L3 状态监控自动化 · 商标图标规范化
+
+> 2026-08-16~17 的十个增量（原 V3.5.22–V3.5.31，多次不规范 commit 的暂存结果）按用户指示合并为单一版本 V3.5.22，分日志收敛为一份综合日志。
+
+#### 一、语言体系：首屏跟随浏览器默认（detectSystemLanguage SSOT 三连）
+
+- **首屏语言**：全新访客初始语言由硬编码 `zh-CN` 改为检测浏览器默认语言（`navigator.language` 以 `zh` 开头 → `zh-CN`，其它/异常 → `en-US`）；`useLocale.js` 新增导出 `detectSystemLanguage()`，`readInitialLanguage` 无存储值走检测（兜底 `zh-CN` → `en-US`）；偏好 store `DEFAULT_PREFERENCES.language` 与 `applyRuntimePreferences` 兜底同步改用检测（消除 `main.js` bootstrap 覆盖初始检测）；用户显式切换与登录偏好回写优先级不变；LandingView 零改动（SSOT 统一供给）。
+- **空值/脏值收口**：远端空语言不再归 `zh-CN`；`normalizeLocaleLanguage` 非 `zh-CN`/`en-US`（空/缺失/历史脏数据如 `'fr'`）= 未设置有效偏好 → `detectSystemLanguage()`；偏好表单草稿初始值与 props default 跟随系统；删除冗余 `normalizePreferenceLanguage`，localStorage 脏 key / 远端脏数据 / 表单本地归一三链路行为统一。
+
+#### 二、注册页 / 法务页导航闭环
+
+- **注册页返回首页**：头部右侧操作区（语言切换器左侧）新增 34px 圆形房子图标按钮（lucide `Home` + `landing.backHome` 双语键，core 首屏即命中）；品牌区（logo + 标题）保留可点为隐藏强化入口；设计迭代 V1 独立 pill → V2 仅品牌区可点 → V3 右侧图标按钮（现行）。
+- **品牌区显示修复**：`auth.appPurpose` 副标题单行截断 → 最多 2 行完整显示（`-webkit-line-clamp: 2`）；标题 ≤768px 17→16px。
+- **法务页出口**：`/terms`、`/privacy` 顶部新增「返回首页 → /」+ 分隔符（flex 布局），与既有「返回登录页面」并排。
+
+#### 三、Hugging Face OAuth 登录接入（L3，用户会话内明确指令豁免「先交方案批准」流程）
+
+- **后端 HF provider**：`oauth.py` 新增 `huggingface` 分支——授权端点 `https://huggingface.co/oauth/authorize`、scope `openid profile email`；token 交换走 `Authorization: Basic base64(client_id:client_secret)` 头（HF 官方契约，Google/GitHub 保持 form 传参不变）；资料经 `https://huggingface.co/api/whoami-v2` 获取，`id` 为改名持久标识（存 `oauth_accounts.provider_user_id`）；`routes.py` ticket 试探列表 +huggingface。
+- **配置登记**：catalog 新增 L1 端点（`HUGGINGFACE_OAUTH_REDIRECT_URI/AUTH_URL/TOKEN_URL/PROFILE_URL`）+ L3 `HUGGINGFACE_OAUTH_CLIENT_ID/SECRET`（`.env.example` 留空）；`load.py`/`public.py`/`admin.py` 同步（`features.oauth_huggingface` + 管理员环境密钥状态卡片）。
+- **前端三入口**：注册页「使用 Hugging Face 继续」按钮、账号中心 OAuth 绑定/解绑列表、Landing CTA pill；`api/backend/auth.js` 四个 OAuth 函数 provider 白名单放开；i18n 三文件同步。
+- **HF emailVerified 例外**：HF 注册强制邮箱验证，以「email 存在」作为已验证判据（`emailVerified` 字段仅反映隐私设置，false/缺失不再拦截自动注册/绑定，方向经用户确认）；Google/GitHub 严格规则不变；email 缺失仍走下游统一拦截。
+- **文档**：`oauth-deployment.md` 新增「HF OAuth App 申请」章节（Redirect URI 逐字符一致、scope 必须勾 email）+ Secrets/排错表/安全要点；`configuration.md` / `handover.md` / 三份 structure / `README_EN.md` 特性文案同步。数据库零变更（provider 为 TEXT 无 CHECK 约束）。
+
+#### 四、L3 状态监控自动化（catalog 元数据驱动，零手动维护）
+
+- `catalog.py` L3 key 元数据新增 `status_label`（分组显示名：Google OAuth / GitHub OAuth / Hugging Face OAuth / SMTP / SUPABASE）/ `status_exclude`（Supabase 4 个历史兼容名仅登记不监控）+ `iter_l3_status_groups()`（无 label 且 L3 的 key 独立成组：SUPER_USER / OAUTH_STATE_SECRET / SMTP_REPLY / LOG）；`load.py` 新增 `l3_status_flags()`（组已配置 = 组内全部 key 非空，LOG 无 Settings 字段兜底 `get_str`）。
+- `masked_summary`（启动日志 `[L3]`）与 `admin.py` `_get_l3_env_status`（管理员面板 API）改为自动遍历（9 组，含 Hugging Face OAuth）；前端 `AdminControlPanel.vue` 删除 `L3_STATUS_LABELS` 硬编码（本次 HF 漏加根因），直接遍历后端 `{label: bool}`（Python dict 保序）；zh-CN/en-US 死 i18n 键 `admin.envKeys.*` 清理。
+- 新增 L3 key 只需在 catalog 登记即自动出现在两处监控。
+
+#### 五、商标图标规范化
+
+- **Google 官方四色 G**：FA 6.4.0 的 `fa-google` 为 2015 年前旧版单色字形 → Google 官方四色 SVG（蓝 `#4285F4` / 红 `#EA4335` / 黄 `#FBBC05` / 绿 `#34A853`，2015 起标准版，Wikimedia Commons Google LLC 官方文件）；注册页 OAuth 按钮（16px）与 Landing CTA pill（14px）两处同步，path 自带色值，CSS 只控尺寸。
+- **HF 官方彩色 logo**：Simple Icons 单色笑脸 → 官方品牌资产彩色版——新增 `frontend/public/images/hf-logo.svg`（官方 `huggingface/brand-assets` 数据集，256×256；官方托管域本机访问受限，用户手动下载入库）；三处入口（注册页按钮 16px / 账号中心绑定列表 15px / Landing CTA pill 14px）改 `<img>` 引用（`ASSET_BASE_URL` 解析，与 icon.webp 同策略），CSS 删除 `fill: #ffd21e` 单色染色。
+
+#### 六、顺带
+
+- `frontend/vite.config.js`：dev server `allowedHosts` 白名单加 `demo.negiao.cn / negiao.cn / webgis.negiao.cn / localhost / 127.0.0.1`（内网穿透 ngrok/frp/Cloudflare Tunnel、局域网与移动端调试）。
+
+- 验证：后端 `py_compile` 通过（V3.5.27 7 文件 + V3.5.29 4 文件 + V3.5.28 1 文件）；`tsc --noEmit` 通过（语言四任务）；ESLint 前端改动文件零告警；`l3_status_flags()` 实跑 9 组全 false（空环境）+ 组语义验证（GOOGLE 仅 ID → false，ID+SECRET 齐 → true）；双门禁通过（配置 121 key / 结构树 427 条目 0 漂移）。
+
+详见 [综合变更日志](Docs/LLM_record/26-08/2026-08-16/2026-08-16-v3.5.22-consolidated.md)。
+
 ### V3.5.21 (2026-08-16) — 综合版本：管理面板数据表格增强 · Agent 底图能力开放 · CyclOSM 骑行底图 · Landing/注册页 Lucide 迁移
 
 > 2026-08-15 的九个增量（原 V3.5.21–V3.5.29，多次不规范 commit 的暂存结果）按用户指示合并为单一版本 V3.5.21，分日志收敛为一份综合日志。

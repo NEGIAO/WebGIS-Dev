@@ -10,7 +10,7 @@
 
 前后端分离 WebGIS 平台：**Vue 3 + Vite + OpenLayers(2D) + Cesium(3D)** 前端托管 GitHub Pages；
 **FastAPI + Docker** 后端部署 Hugging Face Space（:7860，SQLite 持久化于 `/data`）。
-2D/3D 双引擎一键切换，账号体系（邮箱 + Google/GitHub OAuth）、AI 助手、空间分析、
+2D/3D 双引擎一键切换，账号体系（邮箱 + Google/GitHub/Hugging Face OAuth）、AI 助手、空间分析、
 体积云/风场/洪水三维特效、统一图层管理为核心能力。
 
 ## 2. 十分钟跑起来

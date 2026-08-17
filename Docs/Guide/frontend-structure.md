@@ -40,9 +40,9 @@ frontend/src/
 │   ├── HomeView.vue  # 首页（由 lazyHomeViewLoader 加载）
 │   ├── LandingView.vue  # 根路径宣传主页（全量 i18n + 语言切换，icon.webp 品牌 logo，自持滚动容器）
 │   ├── NotFoundView.vue  # 404 页面（notFound.* i18n）
-│   ├── OAuthCallbackView.vue  # Google/GitHub OAuth 回调会话落地
+│   ├── OAuthCallbackView.vue  # Google/GitHub/Hugging Face OAuth 回调会话落地
 │   ├── PrivacyPolicy.vue  # 隐私政策
-│   ├── RegisterView.vue  # 注册/登录（邮箱 + Google/GitHub OAuth，全量 i18n + 语言切换）
+│   ├── RegisterView.vue  # 注册/登录（邮箱 + Google/GitHub/Hugging Face OAuth，全量 i18n + 语言切换）
 │   ├── TermsOfService.vue  # 服务条款
 │   └── composables/
 │       └── useLazyModules.ts  # CesiumContainer / SidePanel 懒加载 + 重试逻辑

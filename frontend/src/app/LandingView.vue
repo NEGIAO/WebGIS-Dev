@@ -189,8 +189,13 @@
                     </router-link>
                     <div class="cta-login-methods">
                         <span class="cta-methods-label">{{ t('landing.ctaMethods') }}</span>
-                        <span class="cta-method"><i class="fab fa-google"></i>Google</span>
+                        <span class="cta-method"><svg class="cta-g-logo" viewBox="0 0 23.5 24" aria-hidden="true"><clipPath id="ctg-a"><path d="M12 10v4.5h6.47c-.5 2.7-3 4.74-6.47 4.74-3.9 0-7.1-3.3-7.1-7.25S8.1 4.75 12 4.75c1.8 0 3.35.6 4.6 1.8l3.4-3.4C18 1.2 15.24 0 12 0 5.4 0 0 5.4 0 12s5.4 12 12 12c7 0 11.5-4.9 11.5-11.7 0-.8-.1-1.54-.2-2.3z"/></clipPath><filter id="ctg-b"><feGaussianBlur stdDeviation="1"/></filter><g style="clip-path:url(#ctg-a)"><foreignObject style="filter:url(#ctg-b)" height="28" width="28" transform="translate(-2 -2)"><div xmlns="http://www.w3.org/1999/xhtml" style="height:100%;width:100%;background:conic-gradient(#FF4641,#FD5061 40deg,#FD5061 60deg,#3186FF 85deg,#3186FF 117deg,#00A5B7 142deg,#0EBC5F 167deg,#0EBC5F 200deg,#6CC500 226deg,#FC0 253deg,#FFD314 268deg,#FC0 292deg,#FF4641 327deg)"/></foreignObject><path fill="#3186FF" d="M11 8h16v8H11z"/></g></svg>Google</span>
                         <span class="cta-method"><i class="fab fa-github"></i>GitHub</span>
+                        <span class="cta-method"><img
+                            :src="hfLogoUrl"
+                            class="cta-hf-logo"
+                            alt=""
+                        />Hugging Face</span>
                         <span class="cta-method"><Mail :size="14" />{{ t('landing.methodEmail') }}</span>
                         <span class="cta-method"><UserRound :size="14" />{{ t('landing.methodGuest') }}</span>
                     </div>
@@ -286,6 +291,8 @@ function switchLanguage(nextLanguage) {
 const normalizedBase = ASSET_BASE_URL.endsWith('/') ? ASSET_BASE_URL : `${ASSET_BASE_URL}/`;
 // 品牌 logo（icon.webp），与 TopBar / favicon 同一资源
 const logoUrl = `${normalizedBase}images/icon.webp`;
+// Hugging Face 官方 logo（public/images/hf-logo.svg，品牌资产彩色版）
+const hfLogoUrl = `${normalizedBase}images/hf-logo.svg`;
 
 // 核心功能卡片：图标 + i18n key，避免 9 段近似模板重复
 const FEATURES = Object.freeze([
@@ -979,6 +986,23 @@ const heroStats = computed(() =>
 .cta-method i,
 .cta-method svg {
     color: var(--brand-primary);
+}
+
+/* 商标图标用品牌色（与 RegisterView OAuth 按钮一致） */
+/* Google 官方四色 G（2015 起标准版，FA 6.4.0 仅旧版单色字形） */
+.cta-method .cta-g-logo {
+    width: 14px;
+    height: 14px;
+}
+
+.cta-method i.fa-github {
+    color: #24292f;
+}
+
+/* Hugging Face 品牌 logo：官方彩色 SVG（public/images/hf-logo.svg） */
+.cta-method .cta-hf-logo {
+    width: 14px;
+    height: 14px;
 }
 
 /* ============ 页脚 ============ */

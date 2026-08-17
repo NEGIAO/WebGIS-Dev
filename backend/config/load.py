@@ -36,6 +36,7 @@ from .catalog import (
     FRONTEND_URL_DEV,
     FRONTEND_URL_PROD,
     get_meta,
+    iter_l3_status_groups,
 )
 
 logger = logging.getLogger(__name__)
@@ -284,6 +285,8 @@ class BackendSettings:
     google_oauth_client_secret: str
     github_oauth_client_id: str
     github_oauth_client_secret: str
+    huggingface_oauth_client_id: str
+    huggingface_oauth_client_secret: str
     smtp_host: str
     smtp_port: int
     smtp_user: str
@@ -351,6 +354,8 @@ class BackendSettings:
             return self.google_oauth_client_id
         if normalized == "github":
             return self.github_oauth_client_id
+        if normalized == "huggingface":
+            return self.huggingface_oauth_client_id
         return ""
 
     def get_oauth_client_secret(self, provider: str) -> str:
@@ -360,6 +365,8 @@ class BackendSettings:
             return self.google_oauth_client_secret
         if normalized == "github":
             return self.github_oauth_client_secret
+        if normalized == "huggingface":
+            return self.huggingface_oauth_client_secret
         return ""
 
 
@@ -385,6 +392,8 @@ def _build_settings() -> BackendSettings:
         google_oauth_client_secret=get_str("GOOGLE_OAUTH_CLIENT_SECRET", ""),
         github_oauth_client_id=get_str("GITHUB_OAUTH_CLIENT_ID", ""),
         github_oauth_client_secret=get_str("GITHUB_OAUTH_CLIENT_SECRET", ""),
+        huggingface_oauth_client_id=get_str("HUGGINGFACE_OAUTH_CLIENT_ID", ""),
+        huggingface_oauth_client_secret=get_str("HUGGINGFACE_OAUTH_CLIENT_SECRET", ""),
         smtp_host=get_str("SMTP_HOST", "smtpdm.aliyun.com"),
         smtp_port=get_int("SMTP_PORT", 80, minimum=1, maximum=65535),
         smtp_user=get_str("SMTP_USER", ""),
@@ -422,25 +431,36 @@ def reload_settings() -> BackendSettings:
     return get_settings()
 
 
+def l3_status_flags() -> dict[str, bool]:
+    """L3 密钥组「是否已配置」布尔（SSOT：管理员面板与启动日志共用）。
+
+    组定义与顺序来自 catalog.iter_l3_status_groups()——新增 L3 key 只需在 catalog
+    登记（带 status_label 或 layer=L3）即自动出现在监控中，无需改动任何消费方。
+    组已配置 = 组内全部 key 非空；仅输出布尔，绝不回显明文。
+    """
+    s = get_settings()
+    flags: dict[str, bool] = {}
+    for label, keys in iter_l3_status_groups():
+        ok = True
+        for key in keys:
+            value = getattr(s, key.lower(), None)
+            if value is None:
+                value = get_str(key, "")
+            if not str(value or "").strip():
+                ok = False
+                break
+        flags[label] = ok
+    return flags
+
+
 def masked_summary() -> list[str]:
     """生成启动日志用的脱敏配置摘要（绝不输出 L3 明文）。"""
     s = get_settings()
 
-    def _flag(value: str) -> str:
-        return "已配置" if str(value or "").strip() else "未配置"
+    def _flag(configured: bool) -> str:
+        return "已配置" if configured else "未配置"
 
-    l3_status = ", ".join(
-        f"{name}={_flag(value)}"
-        for name, value in (
-            ("SUPER_USER", s.super_user),
-            ("OAUTH_STATE_SECRET", s.oauth_state_secret),
-            ("GOOGLE_OAUTH", s.google_oauth_client_id and s.google_oauth_client_secret),
-            ("GITHUB_OAUTH", s.github_oauth_client_id and s.github_oauth_client_secret),
-            ("SMTP_PASSWORD", s.smtp_password),
-            ("SMTP_REPLY", s.smtp_reply),
-            ("SUPABASE", s.supabase_url and s.supabase_key),
-        )
-    )
+    l3_status = ", ".join(f"{name}={_flag(configured)}" for name, configured in l3_status_flags().items())
     return [
         f"APP_ENV={s.app_env} LOG_LEVEL={s.log_level}",
         f"BACKEND_PUBLIC_URL={s.backend_public_url}",

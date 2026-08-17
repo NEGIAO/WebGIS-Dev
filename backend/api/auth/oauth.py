@@ -1,5 +1,5 @@
 """
-Google/GitHub OAuth 登录、自动注册与账号绑定服务。
+Google/GitHub/Hugging Face OAuth 登录、自动注册与账号绑定服务。
 
 本模块只在后端保存 provider 配置与签名 state，不向前端暴露 client secret。
 OAuth access token 仅用于换取 profile，不写入数据库。
@@ -102,6 +102,11 @@ def _oauth_config(provider: str) -> Dict[str, str]:
         token_url = get_str("GOOGLE_OAUTH_TOKEN_URL")
         profile_url = get_str("GOOGLE_OAUTH_PROFILE_URL")
         scope = "openid email profile"
+    elif provider == "huggingface":
+        auth_url = get_str("HUGGINGFACE_OAUTH_AUTH_URL")
+        token_url = get_str("HUGGINGFACE_OAUTH_TOKEN_URL")
+        profile_url = get_str("HUGGINGFACE_OAUTH_PROFILE_URL")
+        scope = "openid profile email"
     else:
         auth_url = get_str("GITHUB_OAUTH_AUTH_URL")
         token_url = get_str("GITHUB_OAUTH_TOKEN_URL")
@@ -204,19 +209,32 @@ def build_authorization_url(provider: str, *, mode: str = "login", username: str
 
 
 async def _exchange_code_for_token(provider: str, code: str) -> str:
-    """使用授权码向 provider 换取一次性 access token。"""
+    """使用授权码向 provider 换取一次性 access token。
+
+    Hugging Face 采用 client 凭据 Basic 头认证（官方文档契约），
+    Google/GitHub 保持 form 传参方式不变。
+    """
     config = _oauth_config(provider)
+    form_data = {
+        "client_id": config["client_id"],
+        "code": code,
+        "redirect_uri": config["redirect_uri"],
+        "grant_type": "authorization_code",
+    }
+    headers = {"Accept": "application/json"}
+    if provider == "huggingface":
+        client_auth = base64.b64encode(
+            f"{config['client_id']}:{config['client_secret']}".encode("utf-8")
+        ).decode("ascii")
+        headers["Authorization"] = f"Basic {client_auth}"
+    else:
+        form_data["client_secret"] = config["client_secret"]
+
     async with httpx.AsyncClient(timeout=_oauth_http_timeout()) as client:
         response = await client.post(
             config["token_url"],
-            data={
-                "client_id": config["client_id"],
-                "client_secret": config["client_secret"],
-                "code": code,
-                "redirect_uri": config["redirect_uri"],
-                "grant_type": "authorization_code",
-            },
-            headers={"Accept": "application/json"},
+            data=form_data,
+            headers=headers,
         )
     if response.status_code >= 400:
         logger.warning("OAuth token exchange failed: provider=%s status=%s", provider, response.status_code)
@@ -334,12 +352,55 @@ async def _fetch_github_profile(access_token: str) -> OAuthProfile:
     }
 
 
+async def _fetch_huggingface_profile(access_token: str) -> OAuthProfile:
+    """拉取并规范化 Hugging Face 用户资料（whoami-v2）。
+
+    HF 的 id 为「改名后仍持久」的唯一标识，作为 provider_user_id；
+    email 需在授权 scope 中申请（openid profile email）；email 存在即视为已验证
+    （HF 注册强制邮箱验证，emailVerified 字段仅反映隐私设置，见 _normalize_huggingface_profile）。
+    """
+    config = _oauth_config("huggingface")
+    async with httpx.AsyncClient(timeout=_oauth_http_timeout()) as client:
+        response = await client.get(
+            config["profile_url"],
+            headers={"Authorization": f"Bearer {access_token}", "Accept": "application/json"},
+        )
+    if response.status_code >= 400:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Hugging Face 用户资料获取失败")
+    return _normalize_huggingface_profile(response.json())
+
+
+def _normalize_huggingface_profile(data: Dict[str, Any]) -> OAuthProfile:
+    """将 Hugging Face whoami-v2 响应规范化为 OAuthProfile。
+
+    email_verified 例外（V3.5.22）：HF 平台注册时强制邮箱验证，能拿到 email 即表示
+    该邮箱已通过 HF 验证；whoami-v2 的 emailVerified 字段仅反映用户隐私设置，可能为
+    false 或缺失。故 HF provider 以「email 存在」作为已验证判据（与 Google/GitHub
+    的严格 emailVerified 规则区分）。email 缺失时仍走下游统一拦截，无法自动注册/绑定。
+    """
+    provider_user_id = str(data.get("id") or "").strip()
+    if not provider_user_id:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Hugging Face 用户资料缺少 id")
+    name = str(data.get("fullname") or data.get("name") or "").strip()
+    email = str(data.get("email") or "").strip().lower()
+    return {
+        "provider": "huggingface",
+        "provider_user_id": provider_user_id,
+        "email": email,
+        "email_verified": bool(email),
+        "display_name": _normalize_display_name(name or "Hugging Face User"),
+        "avatar_url": str(data.get("avatarUrl") or "").strip(),
+    }
+
+
 async def fetch_oauth_profile(provider: str, code: str) -> OAuthProfile:
     """完成 code 换 token 并获取规范化 profile。"""
     provider = _ensure_supported_provider(provider)
     access_token = await _exchange_code_for_token(provider, str(code or "").strip())
     if provider == "google":
         return await _fetch_google_profile(access_token)
+    if provider == "huggingface":
+        return await _fetch_huggingface_profile(access_token)
     return await _fetch_github_profile(access_token)
 
 

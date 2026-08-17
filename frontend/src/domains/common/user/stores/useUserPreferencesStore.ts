@@ -2,7 +2,7 @@ import { computed, ref } from 'vue';
 import { defineStore } from 'pinia';
 import { apiAuthGetPreferences, apiAuthUpdatePreferences } from '@/api/backend';
 import { getAuthToken } from '@common/user/services/auth';
-import { normalizeLocaleLanguage, setLocaleLanguage, loadLocaleMessages } from '@common/app/useLocale';
+import { normalizeLocaleLanguage, setLocaleLanguage, loadLocaleMessages, detectSystemLanguage } from '@common/app/useLocale';
 
 const USER_PREFERENCES_STORAGE_KEY = 'webgis_user_preferences_cache';
 export const USER_PREFERENCE_BASEMAP_KEY = 'webgis_pref_default_basemap';
@@ -17,9 +17,10 @@ export type UserPreferences = {
     preferred_agent_model: string;
 };
 
+// 无任何历史偏好时的默认语言：跟随浏览器（中文 → zh-CN，其它 → en-US）
 const DEFAULT_PREFERENCES: UserPreferences = {
     default_basemap: '',
-    language: 'zh-CN',
+    language: detectSystemLanguage(),
     unit_system: 'metric',
     preferred_agent_model: '',
 };
@@ -134,7 +135,7 @@ export const useUserPreferencesStore = defineStore('userPreferencesStore', () =>
 
     function applyRuntimePreferences(): void {
         savePreferenceRuntimeCache(preferences.value);
-        setLocaleLanguage(preferences.value.language || 'zh-CN');
+        setLocaleLanguage(preferences.value.language || detectSystemLanguage());
     }
 
     /**

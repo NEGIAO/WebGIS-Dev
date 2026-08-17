@@ -10,6 +10,7 @@
 import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import { getUserDisplayName, validateDisplayName } from '@common/user/composables/useAuthIdentity';
 import { useLocale } from '@common/app/useLocale';
+import { ASSET_BASE_URL } from '@/config/publicRuntime';
 
 const props = defineProps({
     /** Current user object (used to check role) */
@@ -22,7 +23,7 @@ const props = defineProps({
         type: Boolean,
         default: false,
     },
-    /** Bound Google/GitHub OAuth accounts for the current registered user */
+    /** Bound Google/GitHub/Hugging Face OAuth accounts for the current registered user */
     oauthAccounts: {
         type: Array,
         default: () => [],
@@ -39,16 +40,19 @@ const emit = defineEmits([
     'change-display-name',
     /** Request parent to change password. Payload: { oldPassword, newPassword } */
     'change-password',
-    /** Request parent to start Google/GitHub OAuth binding. Payload: provider */
+    /** Request parent to start Google/GitHub/Hugging Face OAuth binding. Payload: provider */
     'bind-oauth',
-    /** Request parent to unlink Google/GitHub OAuth binding. Payload: provider */
+    /** Request parent to unlink Google/GitHub/Hugging Face OAuth binding. Payload: provider */
     'unlink-oauth',
 ]);
 
 const { t } = useLocale();
 
+/** Hugging Face 官方 logo（public/images/hf-logo.svg，品牌资产彩色版） */
+const hfLogoUrl = `${ASSET_BASE_URL.replace(/\/+$/, '')}/images/hf-logo.svg`;
+
 /** OAuth 提供商品牌名（按钮文案用，避免小写 google/github） */
-const PROVIDER_LABELS = Object.freeze({ google: 'Google', github: 'GitHub' });
+const PROVIDER_LABELS = Object.freeze({ google: 'Google', github: 'GitHub', huggingface: 'Hugging Face' });
 
 // 昵称框预填当前昵称（V3.4.62 A7）；仅在「用户未改动」时跟随外部 user 变化，
 // 防止 30s 轮询 mergeUserPatch 触发的 user 更新覆盖正在输入的内容
@@ -224,7 +228,7 @@ defineExpose({ resetForm });
             <p class="oauth-bind-desc">{{ t('security.oauthDesc') }}</p>
             <div class="oauth-bind-list">
                 <button
-                    v-for="provider in ['google', 'github']"
+                    v-for="provider in ['google', 'github', 'huggingface']"
                     :key="provider"
                     type="button"
                     class="oauth-bind-btn"
@@ -235,7 +239,16 @@ defineExpose({ resetForm });
                         : t('security.bindProvider', { provider: PROVIDER_LABELS[provider] })"
                     @click="handleOAuthAction(provider)"
                 >
-                    <i :class="provider === 'google' ? 'fab fa-google' : 'fab fa-github'"></i>
+                    <i
+                        v-if="provider !== 'huggingface'"
+                        :class="provider === 'google' ? 'fab fa-google' : 'fab fa-github'"
+                    ></i>
+                    <img
+                        v-else
+                        :src="hfLogoUrl"
+                        class="hf-logo"
+                        alt=""
+                    />
                     <span v-if="pendingUnlink === provider">
                         {{ t('security.confirmUnlink', { provider: PROVIDER_LABELS[provider] }) }}
                     </span>
@@ -459,6 +472,12 @@ defineExpose({ resetForm });
 
 .oauth-bind-btn i {
     font-size: 15px;
+}
+
+/* Hugging Face 品牌 logo：官方彩色 SVG（public/images/hf-logo.svg） */
+.oauth-bind-btn .hf-logo {
+    width: 15px;
+    height: 15px;
 }
 
 .oauth-bind-btn.google i {

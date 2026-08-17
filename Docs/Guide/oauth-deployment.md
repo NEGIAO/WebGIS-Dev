@@ -1,4 +1,4 @@
-# Google / GitHub OAuth 登录部署配置指南
+# Google / GitHub / Hugging Face OAuth 登录部署配置指南
 
 > 📌 适用架构：前端 GitHub Pages（`https://negiao.github.io/WebGIS-Dev`）+ 后端 Hugging Face Space Docker（`https://negiao-webgis.hf.space`）。
 > 本文是生产环境 OAuth 配置的完整操作手册；三层配置模型总览见 [configuration.md](configuration.md)，变量全集见根目录 `.env.example`。
@@ -28,6 +28,7 @@
 |----------|--------------------------|------------------|
 | Google | `https://negiao-webgis.hf.space/api/auth/oauth/google/callback` | `http://localhost:7860/api/auth/oauth/google/callback` |
 | GitHub | `https://negiao-webgis.hf.space/api/auth/oauth/github/callback` | `http://localhost:7860/api/auth/oauth/github/callback` |
+| Hugging Face | `https://negiao-webgis.hf.space/api/auth/oauth/huggingface/callback` | `http://localhost:7860/api/auth/oauth/huggingface/callback` |
 
 ---
 
@@ -66,11 +67,29 @@
    - Authorized JavaScript origins 可留空（本项目为后端跳转式，不用 Google JS SDK）。
 4. **Create** 后弹窗显示 **Client ID**（形如 `xxxx.apps.googleusercontent.com`）与 **Client secret**，复制保存。
 
-## 4. Hugging Face Space 配置（生产核心步骤）
+## 4. Hugging Face OAuth App 申请（逐步）
+
+1. 打开 [Hugging Face Settings → Applications](https://huggingface.co/settings/apps/new)。
+2. 按下表填写：
+
+   | 字段 | 填写值 | 说明 |
+   |------|--------|------|
+   | App name | `NEGIAO's WebGIS` | 任意，授权页会展示给用户 |
+   | Website URL | `https://negiao.github.io/WebGIS-Dev` | 前端地址 |
+   | Logo URL | 可选 | 授权页展示的品牌图 |
+   | Description | 可选 | |
+   | **Redirect URI** | `https://negiao-webgis.hf.space/api/auth/oauth/huggingface/callback` | ⚠️ 必须与后端推导值逐字符一致（协议/域名/路径/无尾斜杠） |
+   | **Scopes** | 勾选 `openid`、`profile`、`email` | email 必须勾选，否则后端拿不到邮箱无法自动注册/绑定 |
+
+3. **Save** 后页面显示 **Client ID**，点 **Create client secret** 生成 **Client secret**（⚠️ Secret 只显示一次，立即复制保存；旧 secret 可在该 App 页面轮换）。
+4. 权限说明：后端请求 scope 为 `openid profile email`，whoami-v2 返回持久 `id`（改名不失效）、`fullname`、`email` 与 `emailVerified`。**HF provider 例外（V3.5.22）**：HF 注册强制邮箱验证，故以「能拿到 email」作为已验证判据（`emailVerified` 字段仅反映隐私设置，false/缺失不影响自动注册与绑定，与 Google/GitHub 的严格规则区分）；email 拿不到时仍按既有规则拦截。
+5. ⚠️ 一个 HF OAuth App 支持多条 Redirect URI：可再加一条 `http://localhost:7860/api/auth/oauth/huggingface/callback` 供本地开发共用同一 App（loopback 仅端口可异）。
+
+## 5. Hugging Face Space 配置（生产核心步骤）
 
 进入 Space 页面 → **Settings** → **Variables and secrets**。
 
-### 4.1 Secrets（绝密，L3 层，值不会出现在仓库和日志）
+### 5.1 Secrets（绝密，L3 层，值不会出现在仓库和日志）
 
 逐条 **New secret** 添加：
 
@@ -80,6 +99,8 @@
 | `GOOGLE_OAUTH_CLIENT_SECRET` | Google 控制台的 Client secret |
 | `GITHUB_OAUTH_CLIENT_ID` | GitHub OAuth App 的 Client ID |
 | `GITHUB_OAUTH_CLIENT_SECRET` | GitHub OAuth App 的 Client secret |
+| `HUGGINGFACE_OAUTH_CLIENT_ID` | HF OAuth App 的 Client ID（第 4 节申请） |
+| `HUGGINGFACE_OAUTH_CLIENT_SECRET` | HF OAuth App 的 Client secret |
 | `OAUTH_STATE_SECRET` | 自己生成的随机长字符串（见下） |
 
 生成 `OAUTH_STATE_SECRET`（任选其一，长度 ≥ 32 字节）：
@@ -92,7 +113,7 @@ openssl rand -base64 48
 
 ⚠️ 生产环境 `OAUTH_STATE_SECRET` **必填**：缺失时所有 OAuth 入口直接返回 503（开发环境才有内置兜底）。
 
-### 4.2 Variables（非密，L1 层，可选）
+### 5.2 Variables（非密，L1 层，可选）
 
 以下变量**通常不用配**——`APP_ENV` 缺省即 `production`，两个 URL 有内建默认值（`https://negiao-webgis.hf.space` / `https://negiao.github.io/WebGIS-Dev`）。仅当 Space 改名、换自定义域名或前端迁移时才需要显式设置：
 
@@ -100,18 +121,18 @@ openssl rand -base64 48
 |----------|----------|------|
 | `BACKEND_PUBLIC_URL` | Space 域名变化时 | `https://<user>-<space>.hf.space` |
 | `FRONTEND_PUBLIC_URL` | 前端域名变化时 | `https://<user>.github.io/WebGIS-Dev` |
-| `GOOGLE/GITHUB_OAUTH_REDIRECT_URI` | 极特殊部署需覆盖推导时 | 完整回调 URL |
+| `GOOGLE/GITHUB/HUGGINGFACE_OAUTH_REDIRECT_URI` | 极特殊部署需覆盖推导时 | 完整回调 URL |
 | `FRONTEND_OAUTH_SUCCESS_URL` / `FRONTEND_OAUTH_FAILURE_URL` | 需覆盖前端回跳时 | `https://.../#/oauth/callback` |
 
-改动 URL 后，记得**同步修改** Google/GitHub 控制台里的 redirect URI，两边必须一致。
+改动 URL 后，记得**同步修改** Google/GitHub/Hugging Face 控制台里的 redirect URI，两边必须一致。
 
-### 4.3 重启与生效确认
+### 5.3 重启与生效确认
 
 1. 保存 Secrets 后 Space 会自动重启（未重启可手动 **Restart Space**，无需 Factory rebuild）。
 2. 打开 Space **Logs**，启动时后端会打印脱敏配置摘要，确认这一行：
 
    ```text
-   [L3] ... OAUTH_STATE_SECRET=已配置, GOOGLE_OAUTH=已配置, GITHUB_OAUTH=已配置 ...
+   [L3] ... OAUTH_STATE_SECRET=已配置, GOOGLE_OAUTH=已配置, GITHUB_OAUTH=已配置, HUGGINGFACE_OAUTH=已配置 ...
    ```
 
 3. 命令行快速自检（不依赖前端）：
@@ -122,9 +143,9 @@ openssl rand -base64 48
    # 若 503：响应 detail 会精确指明缺少哪个变量
    ```
 
-4. 浏览器完整验收：打开前端登录页 → 「使用 GitHub 继续」→ 授权 → 应回跳 `/#/oauth/callback` 并自动进入系统；Google 同理。
+4. 浏览器完整验收：打开前端登录页 → 「使用 GitHub 继续」→ 授权 → 应回跳 `/#/oauth/callback` 并自动进入系统；Google / Hugging Face 同理。
 
-## 5. 本地开发环境配置
+## 6. 本地开发环境配置
 
 仓库根目录 `.env`（已被 `.gitignore` 忽略）：
 
@@ -136,33 +157,38 @@ GITHUB_OAUTH_CLIENT_SECRET=本地App的ClientSecret
 # Google：可与生产共用 Client（前提是已添加 localhost 回调 URI）
 GOOGLE_OAUTH_CLIENT_ID=xxxx.apps.googleusercontent.com
 GOOGLE_OAUTH_CLIENT_SECRET=xxxx
+# Hugging Face：可与生产共用 App（前提是已添加 localhost 回调 URI）
+HUGGINGFACE_OAUTH_CLIENT_ID=本地App的ClientID
+HUGGINGFACE_OAUTH_CLIENT_SECRET=本地App的ClientSecret
 ```
 
 无需配置 `OAUTH_STATE_SECRET`（development 有内置兜底）、无需配置任何 REDIRECT_URI（自动推导 `http://localhost:7860/...`）。改完重启后端生效。
 
-## 6. 常见错误速查表
+## 7. 常见错误速查表
 
 | 现象 | 原因 | 处理 |
 |------|------|------|
-| 503 `github OAuth 未配置：HF Secrets 缺少 GITHUB_OAUTH_CLIENT_SECRET` | 对应 Secret 未配或名称拼错 | 按 4.1 补齐，注意变量名精确匹配 |
+| 503 `github OAuth 未配置：HF Secrets 缺少 GITHUB_OAUTH_CLIENT_SECRET` | 对应 Secret 未配或名称拼错 | 按 5.1 补齐，注意变量名精确匹配 |
+| 503 `huggingface OAuth 未配置：HF Secrets 缺少 HUGGINGFACE_OAUTH_CLIENT_SECRET` | 对应 Secret 未配或名称拼错 | 按 5.1 补齐，注意变量名精确匹配 |
 | 503 `OAuth state secret 未配置` | 生产缺 `OAUTH_STATE_SECRET` | 生成并添加 Secret 后重启 |
 | GitHub 页面报 `redirect_uri_mismatch` / `The redirect_uri MUST match...` | 控制台 callback 与后端推导值不一致 | 对照第 1 节表格逐字符核对（含 http/https、尾斜杠） |
 | Google `Error 400: redirect_uri_mismatch` | 同上 | Credentials 里核对 Authorized redirect URIs |
+| HF 授权页报 redirect URI 不匹配 | HF App 的 Redirect URI 与后端推导值不一致 | Settings → Applications 里逐字符核对 |
 | Google `access_denied`（非本人账号） | Consent screen 处于 Testing 状态 | Publish App 到 In production，或把用户加入 Test users |
-| 回跳前端后提示 `第三方账号缺少已验证邮箱，无法自动注册或绑定` | GitHub 账号无 verified 邮箱 | GitHub Settings → Emails 完成邮箱验证后重试 |
+| 回跳前端后提示 `第三方账号缺少已验证邮箱，无法自动注册或绑定` | 第三方账号无 verified 邮箱（HF 场景 = 拿不到 email，V3.5.22 起 HF 不再受 emailVerified 字段影响） | GitHub Settings → Emails 完成邮箱验证后重试；HF 检查 OAuth App 的 email scope 是否已勾选 |
 | `OAuth state 已过期，请重新发起登录` | 授权页停留超 10 分钟（TTL 600s） | 重新点击登录按钮 |
 | `OAuth ticket 无效或已过期` | ticket 为一次性且 TTL 120s（刷新回调页/重复消费） | 重新走一次登录流程 |
-| `该第三方账号已绑定其他 WebGIS 用户` (409) | 此 Google/GitHub 身份已绑定别的本地账号 | 用原账号登录后在账号中心解绑，或直接用第三方一键登录 |
-| 回跳到 `localhost` 而非线上前端 | 旧版本代码或 `FRONTEND_PUBLIC_URL` 配错 | 升级至 V3.4.6+，检查 4.2 变量 |
+| `该第三方账号已绑定其他 WebGIS 用户` (409) | 此 Google/GitHub/HF 身份已绑定别的本地账号 | 用原账号登录后在账号中心解绑，或直接用第三方一键登录 |
+| 回跳到 `localhost` 而非线上前端 | 旧版本代码或 `FRONTEND_PUBLIC_URL` 配错 | 升级至 V3.4.6+，检查 5.2 变量 |
 | Space 重启后仍 503 | Secret 保存在了别的 Space / 大小写不符 | Logs 里看 `[L3]` 摘要逐项核对 |
 
-## 7. 安全要点
+## 8. 安全要点
 
 - Client Secret 与 `OAUTH_STATE_SECRET` 只允许存放于 HF Secrets（L3）或本地未提交的 `.env`，**严禁**写入 git、前端 `VITE_*` 变量或 Admin 面板（L2 对绝密项有硬性拦截）。
 - state 采用 HMAC-SHA256 签名 + 600s TTL 防 CSRF/重放；ticket 一次性消费 + 120s TTL，明文只经前端 URL 传递一次。
 - 后端不存储第三方 access token，仅用于当次拉取 profile；数据库 `oauth_accounts` 只保存 `(provider, provider_user_id)` 映射与公开资料。
-- 仅 verified email 允许自动注册/绑定，防止未验证邮箱账号接管。
+- 仅 verified email 允许自动注册/绑定，防止未验证邮箱账号接管（HF 例外：其邮箱验证由 HF 平台强制完成，见第 4 节）。
 
 ---
 
-*本指南随 V3.4.6 发布；实施细节与验证记录见 `Docs/LLM_record/26-07-26/2026-07-26-oauth-config-derivation-fix-and-verify.md`。*
+*本指南随 V3.4.6 发布；Hugging Face 章节随 V3.5.22 补充。实施细节与验证记录见 `Docs/LLM_record/26-07-26/2026-07-26-oauth-config-derivation-fix-and-verify.md` 与 `Docs/LLM_record/26-08/2026-08-16/2026-08-16-v3.5.22-consolidated.md`。*

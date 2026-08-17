@@ -22,7 +22,7 @@ from api.auth.system_config import (
     _get_system_config_value_sync,
     _set_system_config_value_sync,
 )
-from config import get_settings
+from config import get_settings, l3_status_flags
 
 IDENTIFIER_PATTERN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
@@ -316,19 +316,10 @@ def _get_l3_env_status() -> Dict[str, bool]:
     """
     L3 环境密钥「是否已配置」布尔（供 Admin 面板只读展示）。
 
-    安全约束：仅输出布尔，绝不回显明文；L3 只保留平台侧绝密。
-    Agent/LLM 主密钥与高德 Web 服务 Key 属 L2 管理员配置，走 API 密钥管理面板。
+    自动生成（V3.5.22）：组定义由 catalog 元数据（status_label / layer=L3）驱动，
+    新增 L3 key 无需再改动此处与前端；仅输出布尔，绝不回显明文。
     """
-    s = get_settings()
-    return {
-        "super_user": bool(s.super_user),
-        "oauth_state_secret": bool(s.oauth_state_secret),
-        "google_oauth": bool(s.google_oauth_client_id and s.google_oauth_client_secret),
-        "github_oauth": bool(s.github_oauth_client_id and s.github_oauth_client_secret),
-        "smtp": bool(s.smtp_user and s.smtp_password),
-        "smtp_reply": bool(s.smtp_reply),
-        "supabase": bool(s.supabase_url and s.supabase_key),
-    }
+    return l3_status_flags()
 
 
 def _get_admin_overview_sync() -> Dict[str, Any]:
