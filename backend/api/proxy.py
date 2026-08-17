@@ -15,6 +15,7 @@ from gcj_rectify.url_template import parse_tile_url
 from gcj_rectify.utils import get_cache_dir
 
 from config import get_bool, get_int, get_str
+from utils.http_headers import referer_headers_for
 from utils.net_guard import (
     host_matches_allowlist,
     is_disallowed_host,
@@ -355,12 +356,20 @@ async def _limited_stream(upstream_response: httpx.Response, upstream_url: str) 
         yield chunk
 
 
-def _build_proxy_request_headers(request: Request) -> Dict[str, str]:
+def _build_proxy_request_headers(request: Request, upstream_url: str) -> Dict[str, str]:
     headers = dict(PROXY_DEFAULT_REQUEST_HEADERS)
-    for key in ("Accept", "Accept-Language", "Referer", "Origin", "Range"):
+    for key in ("Accept", "Accept-Language", "Origin", "Range"):
         incoming_value = request.headers.get(key)
         if incoming_value:
             headers[key] = incoming_value
+    referer_headers = referer_headers_for(upstream_url)
+    if referer_headers:
+        # 白名单源（如天地图）：附加防盗链 Referer，不透传客户端 Referer
+        headers.update(referer_headers)
+    else:
+        incoming_referer = request.headers.get("Referer")
+        if incoming_referer:
+            headers["Referer"] = incoming_referer
     return headers
 
 
@@ -531,7 +540,7 @@ async def universal_stream_proxy(target_url: str, request: Request, _: None = De
     """通用流式代理接口"""
     upstream_url = _build_proxy_target_url(target_url, request.url.query)
 
-    proxy_request_headers = _build_proxy_request_headers(request)
+    proxy_request_headers = _build_proxy_request_headers(request, upstream_url)
 
     shared_client = getattr(request.app.state, "http_client", None)
     fallback_client = None

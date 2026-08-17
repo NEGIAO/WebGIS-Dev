@@ -373,10 +373,9 @@
                             {{ t('auth.guestLogin') }}
                         </button>
                         <button
-                            type="button"
+                            type="submit"
                             class="quick-btn confirm-login"
                             :disabled="isSubmitting"
-                            @click="handleSubmit"
                         >
                             <LogIn :size="15" />
                             {{ isSubmitting ? t('auth.submitting') : t('auth.confirmLogin') }}
