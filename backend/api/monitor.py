@@ -311,16 +311,21 @@ async def stream_logs(
                     async for line in response.aiter_lines():
                         if not line:
                             continue
+                        # SSE 帧行带 `data: ` 前缀（HF 日志 API 帧格式），先剥离再尝试 JSON 解析，
+                        # 否则 json.loads 必失败、原样透传 → 前端拿到 `data: {json}` 字符串无法解析
+                        payload = line
+                        if payload.startswith("data:"):
+                            payload = payload[5:].lstrip()
                         # 尝试解析 JSON 并转换顶层 timestamp 为本地时间（Docker 时区）
                         # 注意：仅处理顶层字段，嵌套 timestamp 不转换（当前 HF 日志格式为扁平结构）
                         try:
-                            obj = json.loads(line)
+                            obj = json.loads(payload)
                             if "timestamp" in obj:
                                 obj["timestamp"] = _convert_utc_to_local(obj["timestamp"])
-                            line = json.dumps(obj, ensure_ascii=False)
+                            payload = json.dumps(obj, ensure_ascii=False)
                         except json.JSONDecodeError:
                             pass  # 非 JSON 行保持原样
-                        yield f"data: {_sse_escape_data(line)}\n\n"
+                        yield f"data: {_sse_escape_data(payload)}\n\n"
         except Exception as e:
             yield f"data: [proxy error] {str(e)}\n\n"
 
