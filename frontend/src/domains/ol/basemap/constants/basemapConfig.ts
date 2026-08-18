@@ -1561,6 +1561,20 @@ export const LAYER_SOURCE_DEFINITIONS: LayerSourceDefinition[] = [
             ),
     },
     {
+        id: 'terrain_omap_contour',
+        name: '奥维等高线',
+        category: 'terrain',
+        group: '专题',
+        url: 'https://omap.map-world.com.cn/dgx_w/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=dgx&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles&TILEMATRIX={z}&TILECOL={x}&TILEROW={y}&tdtkey=1VMohDhFD1emI6KVzaD82VQssQEXVSW5',
+        serviceType: 'xyz',
+        createSource: () =>
+            prioritizeTileSourceRequest(
+                new XYZ({
+                    url: 'https://omap.map-world.com.cn/dgx_w/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=dgx&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles&TILEMATRIX={z}&TILECOL={x}&TILEROW={y}&tdtkey=1VMohDhFD1emI6KVzaD82VQssQEXVSW5',
+                }),
+            ),
+    },
+    {
         id: 'terrain_arcgis_elev_hillshade',
         name: 'ESRI世界山体阴影',
         category: 'terrain',

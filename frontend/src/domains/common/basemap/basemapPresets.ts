@@ -135,6 +135,11 @@ export const BASEMAP_PRESETS: BasemapPresetDefinition[] = [
         label: '深色阴影',
         stack: ['terrain_arcgis_elev_hillshade_dark', 'Omap_label'],
     },
+    {
+        id: 'imagery_tianditu_omap_contour_preset',
+        label: '天地图影像+等高线',
+        stack: ['imagery_tianditu', 'terrain_omap_contour', 'Omap_label'],
+    },
     { id: 'terrain_google_preset', label: 'Google山体', stack: ['terrain_google'] },
     { id: 'terrain_opentopomap_preset', label: '开放地形', stack: ['terrain_opentopomap'] },
     { id: 'terrain_esa_preset', label: '欧空局地形', stack: ['terrain_esa'] },
