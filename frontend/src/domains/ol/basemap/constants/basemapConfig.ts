@@ -195,6 +195,22 @@ function buildS2CloudlessDef(year: number): LayerSourceDefinition {
 export const LAYER_SOURCE_DEFINITIONS: LayerSourceDefinition[] = [
     // 1、注记图层
     {
+        id: 'Omap_label',
+        name: '奥维注记',
+        category: 'label',
+        group: '注记',
+        url: 'https://omap.map-world.com.cn/dia_w/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=dia&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles&TILEMATRIX={z}&TILECOL={x}&TILEROW={y}&tdtkey=1VMohDhFD1emI6KVzaD82VQssQEXVSW5 ',
+        serviceType: 'xyz',
+        createSource: () =>
+            withSkipHighResTile(
+                prioritizeTileSourceRequest(
+                    new XYZ({
+                        url: 'https://omap.map-world.com.cn/dia_w/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=dia&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles&TILEMATRIX={z}&TILECOL={x}&TILEROW={y}&tdtkey=1VMohDhFD1emI6KVzaD82VQssQEXVSW5 ',
+                    }),
+                ),
+            ),
+    },
+    {
         id: 'label_tianditu',
         name: '天地图注记',
         category: 'label',

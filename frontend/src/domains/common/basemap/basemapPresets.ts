@@ -28,12 +28,12 @@ export const BASEMAP_PRESETS: BasemapPresetDefinition[] = [
     {
         id: 'imagery_tianditu_preset',
         label: '天地图影像',
-        stack: ['imagery_tianditu', 'label_tianditu'],
+        stack: ['imagery_tianditu', 'Omap_label'],
     },
     {
         id: 'vector_tianditu_preset',
         label: '天地图矢量',
-        stack: ['vector_tianditu', 'label_tianditu_vector'],
+        stack: ['vector_tianditu', 'Omap_label'],
     },
 
     // 图新系列
@@ -41,18 +41,18 @@ export const BASEMAP_PRESETS: BasemapPresetDefinition[] = [
     { id: 'vector_tuxin_preset', label: '图新矢量', stack: ['vector_tuxin', 'label_tuxin'] },
 
     // 互联网商业地图
-    { id: 'imagery_gac_preset', label: 'Google(gac)', stack: ['imagery_gac', 'label_tianditu'] },
+    { id: 'imagery_gac_preset', label: 'Google(gac)', stack: ['imagery_gac', 'Omap_label'] },
     {
         id: 'imagery_google_preset',
         label: 'Google原版',
-        stack: ['imagery_google', 'terrain_google', 'label_tianditu'],
+        stack: ['imagery_google', 'terrain_google', 'Omap_label'],
     },
     { id: 'imagery_amap_preset', label: '高德影像', stack: ['imagery_amap'] },
     { id: 'imagery_yandex_preset', label: 'Yandex卫星', stack: ['imagery_yandex'] },
     {
         id: 'google_Backend_Proxy_preset',
         label: '后端代理谷歌',
-        stack: ['google_Backend_Proxy', 'label_tianditu'],
+        stack: ['google_Backend_Proxy', 'Omap_label'],
     },
     { id: 'imagery_amap_wgs_preset', label: '高德影像(WGS)', stack: ['imagery_amap_wgs'] },
     { id: 'vector_amap_wgs_preset', label: '高德地图(WGS)', stack: ['vector_amap_wgs'] },
@@ -78,7 +78,7 @@ export const BASEMAP_PRESETS: BasemapPresetDefinition[] = [
         label: 'China Blender1',
         stack: ['custom_China_Blender', 'terrain_google'],
     },
-    { id: 'custom_China_Blender_preset_2', label: 'China Blender2', stack: ['custom_China_Blender'] },
+    { id: 'custom_China_Blender_preset_2', label: 'China Blender2', stack: ['custom_China_Blender','Omap_label'] },
     { id: 'vector_carton_light_preset', label: 'Carto浅色', stack: ['vector_carton_light'] },
     { id: 'vector_carton_dark_preset', label: 'Carto深色', stack: ['vector_carton_dark'] },
     { id: 'vector_toner_preset', label: '黑白版画', stack: ['vector_toner'] },
@@ -95,8 +95,8 @@ export const BASEMAP_PRESETS: BasemapPresetDefinition[] = [
     { id: 'label_stamen_toner_labels_preset', label: 'Stamen注记', stack: ['label_stamen_toner_labels'] },
 
     // MapTiler 系列
-    { id: 'imagery_maptiler_satellite_preset', label: 'MapTiler影像', stack: ['imagery_maptiler_satellite', 'label_tianditu'] },
-    { id: 'imagery_maptiler_satellite_hd_preset', label: 'MapTiler影像HD', stack: ['imagery_maptiler_satellite_hd', 'label_tianditu'] },
+    { id: 'imagery_maptiler_satellite_preset', label: 'MapTiler影像', stack: ['imagery_maptiler_satellite', 'Omap_label'] },
+    { id: 'imagery_maptiler_satellite_hd_preset', label: 'MapTiler影像HD', stack: ['imagery_maptiler_satellite_hd', 'Omap_label'] },
     { id: 'vector_maptiler_streets_preset', label: 'MapTiler街道', stack: ['vector_maptiler_streets'] },
     { id: 'terrain_maptiler_landscape_preset', label: 'MapTiler地貌', stack: ['terrain_maptiler_landscape'] },
     { id: 'terrain_maptiler_topo_preset', label: 'MapTiler地形图', stack: ['terrain_maptiler_topo'] },
@@ -107,7 +107,7 @@ export const BASEMAP_PRESETS: BasemapPresetDefinition[] = [
     {
         id: 'arcgis_imagery_preset',
         label: 'ESRI影像',
-        stack: ['theme_arcgis_imagery_root', 'label_tianditu'],
+        stack: ['theme_arcgis_imagery_root', 'Omap_label'],
     },
     {
         id: 'arcgis_canvas_dark_preset',
@@ -128,12 +128,12 @@ export const BASEMAP_PRESETS: BasemapPresetDefinition[] = [
     {
         id: 'arcgis_elev_hillshade_preset',
         label: '山体阴影',
-        stack: ['terrain_arcgis_elev_hillshade', 'label_tianditu'],
+        stack: ['terrain_arcgis_elev_hillshade', 'Omap_label'],
     },
     {
         id: 'arcgis_elev_hillshade_dark_preset',
         label: '深色阴影',
-        stack: ['terrain_arcgis_elev_hillshade_dark', 'label_tianditu'],
+        stack: ['terrain_arcgis_elev_hillshade_dark', 'Omap_label'],
     },
     { id: 'terrain_google_preset', label: 'Google山体', stack: ['terrain_google'] },
     { id: 'terrain_opentopomap_preset', label: '开放地形', stack: ['terrain_opentopomap'] },
@@ -143,17 +143,17 @@ export const BASEMAP_PRESETS: BasemapPresetDefinition[] = [
     {
         id: 'hn_basic_farmland_preset',
         label: '河南基本农田',
-        stack: ['imagery_tianditu', 'theme_hn_basic_farmland_wmts', 'label_tianditu'],
+        stack: ['imagery_tianditu', 'theme_hn_basic_farmland_wmts', 'Omap_label'],
     },
     {
         id: 'hn_farmland_preset',
         label: '河南耕地',
-        stack: ['imagery_tianditu', 'theme_hn_farmland_wmts', 'label_tianditu'],
+        stack: ['imagery_tianditu', 'theme_hn_farmland_wmts', 'Omap_label'],
     },
     {
         id: 'gd_basic_farmland_preset',
         label: '广东基本农田',
-        stack: ['imagery_tianditu', 'theme_gd_basic_farmland_wms', 'label_tianditu'],
+        stack: ['imagery_tianditu', 'theme_gd_basic_farmland_wms', 'Omap_label'],
     },
 
     // Windy 气象系列
@@ -172,7 +172,7 @@ export const BASEMAP_PRESETS: BasemapPresetDefinition[] = [
     {
         id: 'arcgis_terrain_base_preset',
         label: '地形底色',
-        stack: ['theme_arcgis_terrain_base', 'label_tianditu'],
+        stack: ['theme_arcgis_terrain_base', 'Omap_label'],
     },
     { id: 'arcgis_polar_ant_preset', label: '南极影像', stack: ['imagery_arcgis_polar_ant_img'] },
     { id: 'arcgis_polar_arc_preset', label: '北极影像', stack: ['imagery_arcgis_polar_arc_img'] },
@@ -183,26 +183,26 @@ export const BASEMAP_PRESETS: BasemapPresetDefinition[] = [
     },
 
     // Maps For Free (MFF) 浮雕系列
-    { id: 'mff_relief_preset', label: '地形浮雕', stack: ['terrain_relief', 'label_tianditu'] },
+    { id: 'mff_relief_preset', label: '地形浮雕', stack: ['terrain_relief', 'Omap_label'] },
     {
         id: 'mff_water_preset',
         label: 'MFF水体',
-        stack: ['terrain_relief', 'theme_mff_water', 'label_tianditu'],
+        stack: ['terrain_relief', 'theme_mff_water', 'Omap_label'],
     },
     {
         id: 'mff_admin_preset',
         label: 'MFF边界',
-        stack: ['terrain_relief', 'theme_mff_admin', 'label_tianditu'],
+        stack: ['terrain_relief', 'theme_mff_admin', 'Omap_label'],
     },
     {
         id: 'mff_streets_preset',
         label: 'MFF街道',
-        stack: ['terrain_relief', 'theme_mff_streets', 'label_tianditu'],
+        stack: ['terrain_relief', 'theme_mff_streets', 'Omap_label'],
     },
     {
         id: 'mff_forest_preset',
         label: 'MFF森林',
-        stack: ['terrain_relief', 'theme_mff_forest', 'label_tianditu'],
+        stack: ['terrain_relief', 'theme_mff_forest', 'Omap_label'],
     },
 
     // 其他与自定义
@@ -216,16 +216,16 @@ export const BASEMAP_PRESETS: BasemapPresetDefinition[] = [
     },
 
     // Sentinel-2 无云年度影像（EOX，2016~2025）
-    { id: 'imagery_s2_cloudless_2016_preset', label: 'Sentinel无云2016', stack: ['imagery_s2_cloudless_2016', 'label_tianditu'] },
-    { id: 'imagery_s2_cloudless_2017_preset', label: 'Sentinel无云2017', stack: ['imagery_s2_cloudless_2017', 'label_tianditu'] },
-    { id: 'imagery_s2_cloudless_2018_preset', label: 'Sentinel无云2018', stack: ['imagery_s2_cloudless_2018', 'label_tianditu'] },
-    { id: 'imagery_s2_cloudless_2019_preset', label: 'Sentinel无云2019', stack: ['imagery_s2_cloudless_2019', 'label_tianditu'] },
-    { id: 'imagery_s2_cloudless_2020_preset', label: 'Sentinel无云2020', stack: ['imagery_s2_cloudless_2020', 'label_tianditu'] },
-    { id: 'imagery_s2_cloudless_2021_preset', label: 'Sentinel无云2021', stack: ['imagery_s2_cloudless_2021', 'label_tianditu'] },
-    { id: 'imagery_s2_cloudless_2022_preset', label: 'Sentinel无云2022', stack: ['imagery_s2_cloudless_2022', 'label_tianditu'] },
-    { id: 'imagery_s2_cloudless_2023_preset', label: 'Sentinel无云2023', stack: ['imagery_s2_cloudless_2023', 'label_tianditu'] },
-    { id: 'imagery_s2_cloudless_2024_preset', label: 'Sentinel无云2024', stack: ['imagery_s2_cloudless_2024', 'label_tianditu'] },
-    { id: 'imagery_s2_cloudless_2025_preset', label: 'Sentinel无云2025', stack: ['imagery_s2_cloudless_2025', 'label_tianditu'] },
+    { id: 'imagery_s2_cloudless_2016_preset', label: 'Sentinel无云2016', stack: ['imagery_s2_cloudless_2016', 'Omap_label'] },
+    { id: 'imagery_s2_cloudless_2017_preset', label: 'Sentinel无云2017', stack: ['imagery_s2_cloudless_2017', 'Omap_label'] },
+    { id: 'imagery_s2_cloudless_2018_preset', label: 'Sentinel无云2018', stack: ['imagery_s2_cloudless_2018', 'Omap_label'] },
+    { id: 'imagery_s2_cloudless_2019_preset', label: 'Sentinel无云2019', stack: ['imagery_s2_cloudless_2019', 'Omap_label'] },
+    { id: 'imagery_s2_cloudless_2020_preset', label: 'Sentinel无云2020', stack: ['imagery_s2_cloudless_2020', 'Omap_label'] },
+    { id: 'imagery_s2_cloudless_2021_preset', label: 'Sentinel无云2021', stack: ['imagery_s2_cloudless_2021', 'Omap_label'] },
+    { id: 'imagery_s2_cloudless_2022_preset', label: 'Sentinel无云2022', stack: ['imagery_s2_cloudless_2022', 'Omap_label'] },
+    { id: 'imagery_s2_cloudless_2023_preset', label: 'Sentinel无云2023', stack: ['imagery_s2_cloudless_2023', 'Omap_label'] },
+    { id: 'imagery_s2_cloudless_2024_preset', label: 'Sentinel无云2024', stack: ['imagery_s2_cloudless_2024', 'Omap_label'] },
+    { id: 'imagery_s2_cloudless_2025_preset', label: 'Sentinel无云2025', stack: ['imagery_s2_cloudless_2025', 'Omap_label'] },
 ];
 
 /** 完整 preset 列表，label 带序号前缀（与 URL 参数 l 索引一致，从 0 开始） */
