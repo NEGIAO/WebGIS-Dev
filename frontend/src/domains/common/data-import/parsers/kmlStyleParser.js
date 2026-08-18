@@ -345,7 +345,7 @@ export function convertKmlStyleToOlStyle(styleDef, options = {}) {
         let stroke = null;
         let image = null;
 
-        // 处理 PolyStyle（填充与描边）
+        // 处理 PolyStyle（填充色：PolyStyle.color 只定义填充，不定义描边）
         if (styleDef.poly) {
             const polyStyle = styleDef.poly;
 
@@ -357,22 +357,39 @@ export function convertKmlStyleToOlStyle(styleDef, options = {}) {
             } else if (polyStyle.fill && !polyStyle.colorParsed && defaultFill) {
                 fill = new Fill(defaultFill);
             }
+        }
 
-            // 提取描边（alpha=0 时使用默认描边颜色）
-            if (polyStyle.outline) {
-                const outlineAlpha = polyStyle.colorParsed?.a ?? 1;
-                const outlineColor = outlineAlpha > 0
-                    ? (polyStyle.colorParsed?.hex || defaultStroke.color)
-                    : defaultStroke.color;
+        // 面要素描边（KML 规范：描边开关由 PolyStyle.outline 控制，颜色/宽度由
+        // LineStyle 定义；无 LineStyle 时回退 PolyStyle 填充色，兼容仅 PolyStyle
+        // 的导出，保持历史行为）
+        const isPolygonLike = ['Polygon', 'MultiPolygon'].includes(featureGeometry);
+        const outlineOn = styleDef.poly ? styleDef.poly.outline : true;
+
+        if (outlineOn) {
+            const lineStyle = styleDef.line;
+            if (lineStyle?.colorParsed) {
+                // LineStyle 颜色透明（alpha=0）视为无描边，不创建 stroke
+                if (lineStyle.colorParsed.a > 0) {
+                    stroke = new Stroke({
+                        color: lineStyle.colorParsed.css,
+                        width: Math.max(0.5, lineStyle.width || 1),
+                    });
+                }
+            } else if (styleDef.poly?.colorParsed) {
+                const outlineAlpha = styleDef.poly.colorParsed.a;
                 stroke = new Stroke({
-                    color: outlineColor,
+                    color: outlineAlpha > 0
+                        ? (styleDef.poly.colorParsed.hex || defaultStroke.color)
+                        : defaultStroke.color,
                     width: defaultStroke.width || 1,
                 });
+            } else if (isPolygonLike && defaultStroke) {
+                stroke = new Stroke(defaultStroke);
             }
         }
 
-        // 处理 LineStyle（线条）
-        if (styleDef.line && !stroke) {
+        // 处理 LineStyle（线要素描边；面要素描边已在上方按规范处理）
+        if (styleDef.line && !stroke && !isPolygonLike) {
             const lineStyle = styleDef.line;
             const lineColor = lineStyle.colorParsed?.css || lineStyle.color || defaultStroke.color;
             stroke = new Stroke({

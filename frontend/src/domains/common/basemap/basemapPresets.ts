@@ -214,6 +214,18 @@ export const BASEMAP_PRESETS: BasemapPresetDefinition[] = [
         label: 'Google水系',
         stack: ['imagery_tuxin', 'imagery_google_water'],
     },
+
+    // Sentinel-2 无云年度影像（EOX，2016~2025）
+    { id: 'imagery_s2_cloudless_2016_preset', label: 'Sentinel无云2016', stack: ['imagery_s2_cloudless_2016', 'label_tianditu'] },
+    { id: 'imagery_s2_cloudless_2017_preset', label: 'Sentinel无云2017', stack: ['imagery_s2_cloudless_2017', 'label_tianditu'] },
+    { id: 'imagery_s2_cloudless_2018_preset', label: 'Sentinel无云2018', stack: ['imagery_s2_cloudless_2018', 'label_tianditu'] },
+    { id: 'imagery_s2_cloudless_2019_preset', label: 'Sentinel无云2019', stack: ['imagery_s2_cloudless_2019', 'label_tianditu'] },
+    { id: 'imagery_s2_cloudless_2020_preset', label: 'Sentinel无云2020', stack: ['imagery_s2_cloudless_2020', 'label_tianditu'] },
+    { id: 'imagery_s2_cloudless_2021_preset', label: 'Sentinel无云2021', stack: ['imagery_s2_cloudless_2021', 'label_tianditu'] },
+    { id: 'imagery_s2_cloudless_2022_preset', label: 'Sentinel无云2022', stack: ['imagery_s2_cloudless_2022', 'label_tianditu'] },
+    { id: 'imagery_s2_cloudless_2023_preset', label: 'Sentinel无云2023', stack: ['imagery_s2_cloudless_2023', 'label_tianditu'] },
+    { id: 'imagery_s2_cloudless_2024_preset', label: 'Sentinel无云2024', stack: ['imagery_s2_cloudless_2024', 'label_tianditu'] },
+    { id: 'imagery_s2_cloudless_2025_preset', label: 'Sentinel无云2025', stack: ['imagery_s2_cloudless_2025', 'label_tianditu'] },
 ];
 
 /** 完整 preset 列表，label 带序号前缀（与 URL 参数 l 索引一致，从 0 开始） */

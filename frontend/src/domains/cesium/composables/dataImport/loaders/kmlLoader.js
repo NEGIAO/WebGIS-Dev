@@ -1,10 +1,40 @@
 /**
  * kmlLoader.js
  * KML/KMZ 格式加载器
+ *
+ * 设计要点（V3.5.25 重构）：
+ * - KML 是文本格式，直接交给 Cesium.KmlDataSource.load(blobUrl) 有两个致命缺陷：
+ *   ① Cesium 内部固定按 UTF-8 读取文本，GBK 等编码的 KML 必然乱码，符号/样式全部解析失败；
+ *   ② blob URL 无法承载相对路径资源（图标等）。
+ *   因此本加载器统一先自行读取并多编码解码，再以文本 Blob 交给 Cesium。
+ * - KMZ 统一走手动解压管线（extractKmlFromKmz）：doc.kml 智能选择 + 多编码解码 +
+ *   内嵌资源 href 重写为 blob URL，符号完整性不依赖 Cesium 原生 KMZ 支持（其 zip 条目
+ *   名精确匹配策略对 ./ 前缀、大小写差异、URL 编码等变体必然失配）。
+ * - 重写产生的 blob URL 登记到 record.blobUrls，由 useCesiumDataImport 的
+ *   removeDataSource / clearAllDataSources 统一回收。
  */
 
 import { decodeTextContent } from '@common/data-import/vectorUtils.js';
-import { createBlobUrl, revokeBlobUrl, ensureGisParsers, flyToEntity } from './utils.js';
+import { flyToEntity, revokeBlobUrl } from './utils.js';
+
+const KML_MIME = 'application/vnd.google-earth.kml+xml';
+
+/**
+ * 以已解码的 KML 文本加载 KmlDataSource
+ * @param {Cesium} Cesium - Cesium 命名空间
+ * @param {Cesium.Viewer} viewer - 场景
+ * @param {string} kmlText - 已解码的 KML 文本
+ * @returns {Promise<Cesium.KmlDataSource>}
+ */
+async function loadKmlDataSource(Cesium, viewer, kmlText) {
+    return Cesium.KmlDataSource.load(
+        new Blob([kmlText], { type: KML_MIME }),
+        {
+            camera: viewer.scene.camera,
+            canvas: viewer.scene.canvas,
+        },
+    );
+}
 
 /**
  * 加载 KML 文件到 Cesium
@@ -22,32 +52,27 @@ export async function loadKML({ file, getCesium, getViewer, message, loadedDataS
     const viewer = getViewer();
     if (!Cesium || !viewer) throw new Error('Cesium 未初始化');
 
-    const blobUrl = createBlobUrl(file);
-    try {
-        const dataSource = await Cesium.KmlDataSource.load(blobUrl, {
-            camera: viewer.scene.camera,
-            canvas: viewer.scene.canvas,
-        });
+    const buffer = await file.arrayBuffer();
+    const kmlText = decodeTextContent(buffer);
 
-        const id = `kml_${++nextId.current}`;
-        dataSource.name = file.name;
+    const dataSource = await loadKmlDataSource(Cesium, viewer, kmlText);
 
-        await viewer.dataSources.add(dataSource);
-        flyToEntity(viewer, Cesium, dataSource, 'kml');
+    const id = `kml_${++nextId.current}`;
+    dataSource.name = file.name;
 
-        const record = { id, name: file.name, type: 'kml', entity: dataSource, blobUrl };
-        loadedDataSources.value = [...loadedDataSources.value, record];
+    await viewer.dataSources.add(dataSource);
+    flyToEntity(viewer, Cesium, dataSource, 'kml');
 
-        message.success(`KML "${file.name}" 加载成功`);
-        return record;
-    } catch (error) {
-        revokeBlobUrl(blobUrl);
-        throw error;
-    }
+    const record = { id, name: file.name, type: 'kml', entity: dataSource };
+    loadedDataSources.value = [...loadedDataSources.value, record];
+
+    message.success(`KML "${file.name}" 加载成功`);
+    return record;
 }
 
 /**
  * 加载 KMZ 文件到 Cesium
+ * 统一走手动解压管线：doc.kml 智能选择 + 多编码解码 + 内嵌资源 href 重写为 blob URL
  *
  * @param {Object} ctx
  * @param {File} ctx.file
@@ -62,12 +87,13 @@ export async function loadKMZ({ file, getCesium, getViewer, message, loadedDataS
     const viewer = getViewer();
     if (!Cesium || !viewer) throw new Error('Cesium 未初始化');
 
-    const blobUrl = createBlobUrl(file);
+    const { extractKmlFromKmz } = await import('@common/data-import/useKmzLoader.js');
+    const { kmlString, resourceBlobUrls } = await extractKmlFromKmz(file, {
+        rewriteResourceBlobUrls: true,
+    });
+
     try {
-        const dataSource = await Cesium.KmlDataSource.load(blobUrl, {
-            camera: viewer.scene.camera,
-            canvas: viewer.scene.canvas,
-        });
+        const dataSource = await loadKmlDataSource(Cesium, viewer, kmlString);
 
         const id = `kmz_${++nextId.current}`;
         dataSource.name = file.name;
@@ -75,66 +101,19 @@ export async function loadKMZ({ file, getCesium, getViewer, message, loadedDataS
         await viewer.dataSources.add(dataSource);
         flyToEntity(viewer, Cesium, dataSource, 'kmz');
 
-        const record = { id, name: file.name, type: 'kmz', entity: dataSource, blobUrl };
+        const record = {
+            id,
+            name: file.name,
+            type: 'kmz',
+            entity: dataSource,
+            blobUrls: resourceBlobUrls,
+        };
         loadedDataSources.value = [...loadedDataSources.value, record];
 
         message.success(`KMZ "${file.name}" 加载成功`);
         return record;
-    } catch {
-        revokeBlobUrl(blobUrl);
-        return await loadKMZFallback({ file, getCesium, getViewer, message, loadedDataSources, nextId });
-    }
-}
-
-/**
- * KMZ 手动解压回退方案
- */
-async function loadKMZFallback({ file, getCesium, getViewer, message, loadedDataSources, nextId }) {
-    const Cesium = getCesium();
-    const viewer = getViewer();
-
-    const buffer = await file.arrayBuffer();
-    const { decompressBuffer } = await ensureGisParsers();
-    const entries = await decompressBuffer(buffer, file.name);
-
-    const kmlEntry = entries.find(
-        (entry) => entry.ext === 'kml' || entry.name?.toLowerCase().endsWith('.kml'),
-    );
-
-    if (!kmlEntry) {
-        throw new Error('KMZ 压缩包中未找到 KML 文件');
-    }
-
-    let kmlText;
-    if (typeof kmlEntry.content === 'string') {
-        kmlText = kmlEntry.content;
-    } else if (kmlEntry.content instanceof ArrayBuffer || kmlEntry.content instanceof Uint8Array) {
-        kmlText = decodeTextContent(kmlEntry.content);
-    } else {
-        kmlText = String(kmlEntry.content || '');
-    }
-
-    const kmlBlob = new Blob([kmlText], { type: 'application/vnd.google-earth.kml+xml' });
-    const kmlUrl = URL.createObjectURL(kmlBlob);
-
-    try {
-        const dataSource = await Cesium.KmlDataSource.load(kmlUrl, {
-            camera: viewer.scene.camera,
-            canvas: viewer.scene.canvas,
-        });
-
-        const id = `kmz_${++nextId.current}`;
-        dataSource.name = file.name;
-
-        await viewer.dataSources.add(dataSource);
-        flyToEntity(viewer, Cesium, dataSource, 'kmz');
-
-        const record = { id, name: file.name, type: 'kmz', entity: dataSource };
-        loadedDataSources.value = [...loadedDataSources.value, record];
-
-        message.success(`KMZ "${file.name}" 加载成功（手动解压）`);
-        return record;
-    } finally {
-        URL.revokeObjectURL(kmlUrl);
+    } catch (error) {
+        for (const url of resourceBlobUrls) revokeBlobUrl(url);
+        throw error;
     }
 }

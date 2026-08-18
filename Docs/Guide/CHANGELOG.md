@@ -6,6 +6,35 @@
 
 ## 版本记录
 
+### V3.5.26 (2026-08-18) — 新增 Sentinel-2 无云年度影像图层与预设（EOX，2016~2025）
+
+- **新增 10 个 Sentinel-2 无云年度图层**（`imagery_s2_cloudless_2016` ~ `_2025`，EOX tiles.maps.eox.at WMTS 公开服务零 token）：2016 对应官方聚合层 `s2cloudless_3857`（Capabilities 标题即 "Sentinel-2 cloudless layer for 2016"，经实测 2016 无独立年度层，400 验证），2017~2025 对应年度层 `s2cloudless-YYYY_3857`（Capabilities 逐层验证 200）；URL 采用 `{z}/{x}/{y}` 模板直连（GoogleMapsCompatible 矩阵集）。
+- **图层生成器收敛**：10 个年度条目结构相同，`basemapConfig.ts` 新增 `buildS2CloudlessDef(year)` 生成器 + `EOX_WMTS_URL(layer)` 模板函数，url 与 createSource 共用同一模板串，杜绝两字段漂移（文件内已有 buildTiandituUrl 等函数先例）。
+- **新增 10 个底图预设**（`imagery_s2_cloudless_YYYY_preset`，label「Sentinel无云YYYY」，stack = 年度图层 + `label_tianditu` 注记叠加），追加在 `BASEMAP_PRESETS` 尾部，既有 l 索引编号不受影响。
+- 版本号与并行会话（V3.5.25 KML/KMZ 修复）撞车，按规则顺延至 V3.5.26。
+- 详见[日志](Docs/LLM_record/26-08/2026-08-18/2026-08-18-add-sentinel-cloudless-layers.md)。
+
+### V3.5.25 (2026-08-18) — KML/KMZ 符号解析链路修复（编码探测 · KMZ 资源重写 · 回退崩溃）
+
+- **编码探测加固（本轮最大发现）**：`textDecoder.js` 与 `useKmzLoader.js` 的编码判定
+  原为「U+FFFD 替换字符最少」，但**任意字节流按 UTF-16 解码永不产生替换字符**——
+  GBK 中文 KML/KMZ 被系统性误判为 UTF-16LE 而乱码（符号/样式全灭）。改为：
+  BOM 权威判定（UTF-8/UTF-16LE/UTF-16BE）+ 无 BOM 打分制（U+FFFD 重罚 ×10000 +
+  C0 控制字符罚分 + 字节级 0x00 支撑校验——真 UTF-16 的 ASCII 标记必然产生 0x00，
+  LE 在奇位、BE 在偶位，据此排除单字节编码误读并区分无 BOM 字节序）。
+- **KML 加载重构**：`kmlLoader.js` 不再把 blob URL 直接交给 `Cesium.KmlDataSource`
+  （其内部固定 UTF-8 读取），改为 ArrayBuffer → 多编码解码 → 文本 Blob 加载；
+- **KMZ 统一手动管线**：`extractKmlFromKmz(rewriteResourceBlobUrls=true)`——
+  doc.kml 智能选择 + 多编码解码 + 内嵌资源 href **全量**重写为 blob URL
+  （原实现仅重写图片且无容错；新 `lookupZipEntry` 三级容错：精确 → 大小写不敏感 →
+  URL 解码，兼容 `./`、`../`、反斜杠、`%20` 等变体）；删除损坏的 `loadKMZFallback`
+  （其字段名/返回结构全错，触发必崩 TypeError）与「原生优先」双路径；重写产生的
+  blob URL 登记 `record.blobUrls`，由移除/清空数据源时统一回收；
+- **`normalizePath` 修复**：`/^\.\/?/` → `/^\.\//`，`../x` 前缀不再被剥成 `./x`
+  （上跳相对路径解析错位的共享缺陷，2D 管线同受益）；
+- **TOC**：`TYPE_LABELS` 补 `kmz: 'KMZ'`，三维数据分组格式标签正常化。
+- 详见[日志](Docs/LLM_record/26-08/2026-08-18/2026-08-18-fix-kml-kmz-symbol-parsing.md)。
+
 ### V3.5.24 (2026-08-18) — 瓦片解析通用化：路径数字 token 全量扫描（修复 Google pb 风格 URL）
 
 - **Bug 修复**：`/proxy/gcj2wgs/` 与 `/proxy/wgs2gcj/` 无法代理 Google `maps/vt` 瓦片（如 `https://www.google.com/maps/vt/pb=!1m4!1m3!1i10!2i500!3i800!2m1!1e6`），此前一律返回 400。根因：`parse_tile_url` 的 path 模式用「每路径段只取第一个数字 + 取末 3 段」识别 x/y/z，而 pb 格式把 z/x/y 以 `!1i10!2i500!3i800` 前缀式内嵌在**同一个** path 段中——段内首数字是前缀标记（`!1m4` 的 4），解析必然失败。

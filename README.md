@@ -80,7 +80,7 @@
 
 ## 🎯 项目简介
 
-**NEGIAO's WebGIS** 是一个功能完整、架构清晰的前后端分离 WebGIS 平台（当前版本 V3.5.24），前端托管于 GitHub Pages（正式域名 webgis.negiao.cn），后端以 Docker 部署在 Hugging Face Spaces，通过 RESTful API 通信，支持独立扩展。
+**NEGIAO's WebGIS** 是一个功能完整、架构清晰的前后端分离 WebGIS 平台（当前版本 V3.5.26），前端托管于 GitHub Pages（正式域名 webgis.negiao.cn），后端以 Docker 部署在 Hugging Face Spaces，通过 RESTful API 通信，支持独立扩展。
 
 > 📚 本 README 仅保留核心概览与导航。完整文档已模块化至 [`Docs/Guide/`](Docs/Guide/)，详见下方「文档导航」。
 >
@@ -400,9 +400,9 @@ HF Spaces 在 24 小时无访问后自动休眠。本平台通过**双向互保�
 
 | 版本 | 日期 | 概要 |
 |------|------|------|
+| **V3.5.26** | 2026-08-18 | **新增 Sentinel-2 无云年度影像 10 个图层与预设**（EOX s2cloudless 2016~2025，2016 对应官方聚合层 `s2cloudless_3857`，2017~2025 为年度层 `s2cloudless-YYYY_3857`；URL 经 WMTS 模板零 token 直连，图层与预设均由生成器批量产出，含天地图注记叠加）。详见[日志](Docs/LLM_record/26-08/2026-08-18/2026-08-18-add-sentinel-cloudless-layers.md) |
+| **V3.5.25** | 2026-08-18 | **KML/KMZ 符号解析链路修复**：编码探测加固（BOM 权威 + 字节级 0x00 支撑打分，修复 GBK 被误判为 UTF-16 的乱码根因）· KML 改为多编码解码后以文本加载 · KMZ 统一走手动解压管线（doc.kml 智能选择 + 内嵌资源 href 全量重写为 blob URL，兼容 `./`/`../`/大小写/URL 编码变体）· 修复 `normalizePath` 破坏 `../` 前缀 · 修复损坏的 KMZ 回退路径（原触发必崩 TypeError）· TOC 补 KMZ 格式标签。详见[日志](Docs/LLM_record/26-08/2026-08-18/2026-08-18-fix-kml-kmz-symbol-parsing.md) |
 | **V3.5.24** | 2026-08-18 | **后端瓦片代理支持 Google protobuf 风格 URL**（`pb=!1m4!1m3!1i{z}!2i{x}!3i{y}!2m1!1e6`，z/x/y 前缀式内嵌）：`parse_tile_url` 新增 pb 解析分支复用 format 模式零编码重建，gcj2wgs/wgs2gcj 代理不再对 Google maps/vt 地形瓦片抛 400；新增 `tests/test_url_template.py` 单测。详见[日志](Docs/LLM_record/26-08/2026-08-18/2026-08-18-fix-proxy-google-pb-url.md) |
-| **V3.5.23** | 2026-08-18 | **新增 Google 水系图层**（`imagery_google_water`：lyrs=m + apistyle 过滤仅水系，经 gcj2wgs 纠偏代理叠加卫星影像，预设「Google影像水系」= Google原版影像 + 水系叠加层）。详见[日志](Docs/LLM_record/26-08/2026-08-18/2026-08-18-add-google-water-layer.md) |
-| **V3.5.22** | 2026-08-17 | 综合版本：**首屏语言跟随浏览器默认**（`detectSystemLanguage` SSOT：中文环境 zh-CN、其它 en-US，空/脏语言值统一收敛，偏好与显式切换优先级不变）· **注册/法务页返回首页**入口（注册页右侧房子按钮 + 品牌区可点，`/terms` `/privacy` 双链接）· **Hugging Face OAuth 登录接入**（登录/绑定/解绑全链路 + emailVerified 例外 + 官方彩色 logo）· **L3 状态监控自动化**（catalog 元数据驱动，启动日志与管理员面板 9 组自动生成）· **商标图标规范化**（Google 官方四色 G + HF 官方彩色 logo）。详见[综合日志](Docs/LLM_record/26-08/2026-08-16/2026-08-16-v3.5.22-consolidated.md) |
 | **V3.5.21** | 2026-08-16 | 综合版本：管理面板数据表格增强（**分页 + 跨页搜索/排序 + CSV 导出 + 搜索高亮 + 行号/区间条**，rows 接口返回 total）· Agent 底图能力开放（`switch_basemap` 支持 **XYZ URL 二选一** + 自主构造公开源 + 预设目录**全量动态派生** 76 项）· 新增 **CyclOSM 骑行底图** · Landing/注册页 **Lucide 图标迁移**与 OneTap 慢载修复 · `.env` OAuth Client ID 分级调整（生产值转 HF Secrets）。详见[日志](Docs/LLM_record/26-08/2026-08-16/2026-08-16-v3.5.21-consolidated.md) |
 
 
@@ -428,6 +428,6 @@ HF Spaces 在 24 小时无访问后自动休眠。本平台通过**双向互保�
 |:------:|:--------:|:--------:|
 | [GitHub](https://github.com/NEGIAO/WebGIS-Dev) | [webgis.negiao.cn](https://webgis.negiao.cn)（正式域名，GitHub Pages 托管） | [Hugging Face](https://NEGIAO-WebGIS.hf.space) |
 
-<sub>V3.5.24 · 开发中 · 最后更新 2026-08-18</sub>
+<sub>V3.5.26 · 开发中 · 最后更新 2026-08-18</sub>
 
 </div>

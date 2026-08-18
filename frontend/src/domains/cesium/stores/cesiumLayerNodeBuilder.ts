@@ -20,6 +20,7 @@ export const CESIUM_GROUP_NODE_ID = 'cesium-data-group';
 const TYPE_LABELS: Record<string, string> = {
     geojson: 'GeoJSON',
     kml: 'KML',
+    kmz: 'KMZ',
     czml: 'CZML',
     shp: 'SHP',
     tif: 'GeoTIFF',
