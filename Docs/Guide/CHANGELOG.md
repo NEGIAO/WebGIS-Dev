@@ -6,6 +6,21 @@
 
 ## 版本记录
 
+### V3.5.24 (2026-08-18) — 瓦片解析通用化：路径数字 token 全量扫描（修复 Google pb 风格 URL）
+
+- **Bug 修复**：`/proxy/gcj2wgs/` 与 `/proxy/wgs2gcj/` 无法代理 Google `maps/vt` 瓦片（如 `https://www.google.com/maps/vt/pb=!1m4!1m3!1i10!2i500!3i800!2m1!1e6`），此前一律返回 400。根因：`parse_tile_url` 的 path 模式用「每路径段只取第一个数字 + 取末 3 段」识别 x/y/z，而 pb 格式把 z/x/y 以 `!1i10!2i500!3i800` 前缀式内嵌在**同一个** path 段中——段内首数字是前缀标记（`!1m4` 的 4），解析必然失败。
+- **通用化方案**（不针对任何单一服务）：path 模式重写为「**全路径数字 token 扫描**」——`re.finditer` 取整条路径全部数字（含字符区间 spans），枚举全部有序三元组 (i<j<k)，zxy 序优先、其次 xyz 序做合法性校验（z≤30 且 x,y ≤ 2^z-1），合法候选中取 **x+y 最大**者（真实瓦片坐标量级必大于样式/版本等尾随参数数字，可同时兼容 `/z/x/y` 切片、`x{y}` 内嵌与 pb 前缀式）。重建改为按字符区间倒序替换，`! = { }` 等特殊字符零 urlencode 干扰。
+- **注意**：pb 的 `!1i/!2i/!3i` 前缀自带数字 1/2/3 混入 token 流，真实三元组并非相邻 token，故必须枚举全部三元组而非仅连续三连（实现中已踩坑验证）。
+- **测试**：`backend/tests/test_url_template.py` 扩至 9 用例：内嵌多数字（pb 风格）、尾随垃圾数字、内嵌 xyz 序、用户报告 URL 端到端、format/query/path 三模式回归、无 xyz 报错。全量后端 34 个测试通过。
+- 详见[日志](Docs/LLM_record/26-08/2026-08-18/2026-08-18-fix-proxy-google-pb-url.md)。
+
+### V3.5.23 (2026-08-18) — 新增 Google 水系图层（纠偏叠加）
+
+- **图层定义**：`basemapConfig.ts` 新增 `imagery_google_water`（名称「Google水系(WGS)」，category=imagery / group=影像）。上游为 Google `lyrs=m`（道路图）瓦片，经 `apistyle=s.t:0|p.v:off,s.t:6|p.v:on` 过滤——关闭陆地（type 0）、仅保留水系特征（type 6），产出透明底的水系叠加瓦片；URL 通过 `gcj2wgsProxyUrl()` 由 `VITE_TILE_PROXY_BASE_URL` 派生（生产 = `https://negiao-webgis.hf.space/proxy/gcj2wgs/...`），完成 GCJ-02 → WGS-84 纠偏。沿用既有 `vector_Google_clean` 的 `%7C` 编码惯例；用户原始 URL 中的 `&&hl=zh-CN` 归一为单 `&`。
+- **预设**：`basemapPresets.ts` 末尾追加 `imagery_google_water_preset`「Google影像水系」，stack = `['imagery_google', 'imagery_google_water']`（底部 Google 卫星影像 + 顶部水系叠加），末尾追加保证 URL 参数 `l` 的既有索引不变；默认预设（China Blender2）不动。
+- **SSOT 联动**：Cesium 描述符由 `getDescriptorById()` 自动派生，零额外维护；图层管理面板由 `LAYER_SOURCE_DEFINITIONS` 驱动自动出现。
+- 详见[日志](Docs/LLM_record/26-08/2026-08-18/2026-08-18-add-google-water-layer.md)。
+
 ### V3.5.22 (2026-08-17) — 综合版本：首屏语言跟随浏览器 · 注册/法务页返回首页 · Hugging Face OAuth 接入 · L3 状态监控自动化 · 商标图标规范化
 
 > 2026-08-16~17 的十个增量（原 V3.5.22–V3.5.31，多次不规范 commit 的暂存结果）按用户指示合并为单一版本 V3.5.22，分日志收敛为一份综合日志。

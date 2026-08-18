@@ -207,6 +207,13 @@ export const BASEMAP_PRESETS: BasemapPresetDefinition[] = [
 
     // 其他与自定义
     { id: 'vector_geoq_hydro_preset', label: 'GeoQ水', stack: ['vector_geoq_hydro'] },
+
+    // Google 水系叠加（底部影像 + 水系纠偏叠加层）
+    {
+        id: 'imagery_google_water_preset',
+        label: 'Google水系',
+        stack: ['imagery_tuxin', 'imagery_google_water'],
+    },
 ];
 
 /** 完整 preset 列表，label 带序号前缀（与 URL 参数 l 索引一致，从 0 开始） */

@@ -422,6 +422,20 @@ export const LAYER_SOURCE_DEFINITIONS: LayerSourceDefinition[] = [
             ),
     },
     {
+        id: 'imagery_google_water',
+        name: 'Google水系(WGS)',
+        category: 'imagery',
+        group: '影像',
+        url: gcj2wgsProxyUrl('https://mt0.google.com/vt/lyrs=m&x={x}&y={y}&z={z}&hl=zh-CN&apistyle=s.t:0%7Cp.v:off,s.t:6%7Cp.v:on'),
+        serviceType: 'xyz',
+        createSource: () =>
+            prioritizeTileSourceRequest(
+                new XYZ({
+                    url: gcj2wgsProxyUrl('https://mt0.google.com/vt/lyrs=m&x={x}&y={y}&z={z}&hl=zh-CN&apistyle=s.t:0%7Cp.v:off,s.t:6%7Cp.v:on'),
+                }),
+            ),
+    },
+    {
         id: 'imagery_mapbox',
         name: 'Mapbox影像',
         category: 'imagery',
