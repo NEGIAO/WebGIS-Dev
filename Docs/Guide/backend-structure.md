@@ -102,10 +102,12 @@ backend/
 ├── tests/                                         # 单元测试
 │   ├── test_agent_map_context.py                  # AgentMapContextV1 Schema 与 prompt 格式测试
 │   ├── test_config_env_loading.py                 # 配置与环境变量加载测试
-│   └── test_sqlite_recovery.py                    # SQL 清理、维护事件、恢复成功/失败与激活回滚测试
+│   ├── test_sqlite_recovery.py                    # SQL 清理、维护事件、恢复成功/失败与激活回滚测试
+│   └── test_url_template.py                       # 瓦片 URL 模板解析/重建测试（通用 token 扫描 + 三常规模式回归）
 │
 └── utils/                                         # 通用工具模块
     ├── __init__.py                                # 包初始化
+    ├── http_headers.py                            # 出站浏览器特征头共享单点（UA 常量 + Referer 域名白名单），download_xyz+gcj_rectify+proxy 三瓦片面共用
     ├── net_guard.py                               # 出站 SSRF 护栏单点（IP 字面量归一/私网判定/DNS 复判/host 白名单），proxy+agent+download_xyz 三面共用
     ├── sqlite_maintenance.py                      # database_maintenance_events 表与恢复 JSON manifest 同步
     ├── sqlite_recovery.py                         # 时间戳损坏备份、临时重建、校验、staging 激活、回滚与空库降级

@@ -167,9 +167,49 @@ function withSkipHighResTile<T extends XYZ>(src: T): T & { skipHighResTile: true
     return src as T & { skipHighResTile: true };
 }
 
+// ========== EOX Sentinel-2 无云年度镶嵌（2016~2025） ==========
+// 年度图层命名：2016 对应聚合层 s2cloudless_3857（EOX 官方 WMTS 标题即 "Sentinel-2 cloudless layer for 2016"），
+// 其余年份为 s2cloudless-{year}_3857；10 个年度条目结构相同，用生成器收敛，避免 10 份重复字面量。
+const EOX_WMTS_URL = (layer: string): string =>
+    `https://tiles.maps.eox.at/wmts?layer=${layer}&style=default&tilematrixset=GoogleMapsCompatible&Service=WMTS&Request=GetTile&Version=1.0.0&Format=image%2Fjpeg&TileMatrix={z}&TileCol={x}&TileRow={y}`;
+
+/** 生成单个 Sentinel 无云年度图层定义（url 与 createSource 共用同一模板串，杜绝两字段漂移） */
+function buildS2CloudlessDef(year: number): LayerSourceDefinition {
+    const layerParam = year === 2016 ? 's2cloudless_3857' : `s2cloudless-${year}_3857`;
+    const url = EOX_WMTS_URL(layerParam);
+    return {
+        id: `imagery_s2_cloudless_${year}`,
+        name: `Sentinel无云${year}`,
+        category: 'imagery',
+        group: '影像',
+        url,
+        serviceType: 'xyz',
+        createSource: () =>
+            prioritizeTileSourceRequest(
+                new XYZ({ url }),
+            ),
+    };
+}
+
 // ========== 配置1：图层源定义 ==========
 export const LAYER_SOURCE_DEFINITIONS: LayerSourceDefinition[] = [
     // 1、注记图层
+    {
+        id: 'Omap_label',
+        name: '奥维注记',
+        category: 'label',
+        group: '注记',
+        url: 'https://omap.map-world.com.cn/dia_w/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=dia&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles&TILEMATRIX={z}&TILECOL={x}&TILEROW={y}&tdtkey=1VMohDhFD1emI6KVzaD82VQssQEXVSW5 ',
+        serviceType: 'xyz',
+        createSource: () =>
+            withSkipHighResTile(
+                prioritizeTileSourceRequest(
+                    new XYZ({
+                        url: 'https://omap.map-world.com.cn/dia_w/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=dia&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles&TILEMATRIX={z}&TILECOL={x}&TILEROW={y}&tdtkey=1VMohDhFD1emI6KVzaD82VQssQEXVSW5 ',
+                    }),
+                ),
+            ),
+    },
     {
         id: 'label_tianditu',
         name: '天地图注记',
@@ -422,6 +462,20 @@ export const LAYER_SOURCE_DEFINITIONS: LayerSourceDefinition[] = [
             ),
     },
     {
+        id: 'imagery_google_water',
+        name: 'Google水系(WGS)',
+        category: 'imagery',
+        group: '影像',
+        url: gcj2wgsProxyUrl('https://mt0.google.com/vt/lyrs=m&x={x}&y={y}&z={z}&hl=zh-CN&apistyle=s.t:0%7Cp.v:off,s.t:6%7Cp.v:on'),
+        serviceType: 'xyz',
+        createSource: () =>
+            prioritizeTileSourceRequest(
+                new XYZ({
+                    url: gcj2wgsProxyUrl('https://mt0.google.com/vt/lyrs=m&x={x}&y={y}&z={z}&hl=zh-CN&apistyle=s.t:0%7Cp.v:off,s.t:6%7Cp.v:on'),
+                }),
+            ),
+    },
+    {
         id: 'imagery_mapbox',
         name: 'Mapbox影像',
         category: 'imagery',
@@ -493,6 +547,9 @@ export const LAYER_SOURCE_DEFINITIONS: LayerSourceDefinition[] = [
                 }),
             ),
     },
+
+    // Sentinel-2 无云年度镶嵌（EOX，2016~2025；公开服务无需 token）
+    ...Array.from({ length: 10 }, (_, i) => buildS2CloudlessDef(2016 + i)),
 
     // 4、专题图层 - WMS/WMTS
     {
@@ -1501,6 +1558,20 @@ export const LAYER_SOURCE_DEFINITIONS: LayerSourceDefinition[] = [
         createSource: () =>
             prioritizeTileSourceRequest(
                 new XYZ({ url: 'https://tile.opentopomap.org/{z}/{x}/{y}.png' }),
+            ),
+    },
+    {
+        id: 'terrain_omap_contour',
+        name: '奥维等高线',
+        category: 'terrain',
+        group: '专题',
+        url: 'https://omap.map-world.com.cn/dgx_w/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=dgx&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles&TILEMATRIX={z}&TILECOL={x}&TILEROW={y}&tdtkey=1VMohDhFD1emI6KVzaD82VQssQEXVSW5',
+        serviceType: 'xyz',
+        createSource: () =>
+            prioritizeTileSourceRequest(
+                new XYZ({
+                    url: 'https://omap.map-world.com.cn/dgx_w/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=dgx&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles&TILEMATRIX={z}&TILECOL={x}&TILEROW={y}&tdtkey=1VMohDhFD1emI6KVzaD82VQssQEXVSW5',
+                }),
             ),
     },
     {

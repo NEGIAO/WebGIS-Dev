@@ -6,6 +6,70 @@
 
 ## 版本记录
 
+### V3.5.23 (2026-08-17~19) — 综合版本：Google 水系图层 · 瓦片解析通用化 · KML/KMZ 符号链路修复 · Sentinel-2 无云影像 · 管理后台移动端适配 · 出站浏览器特征头共享化
+
+> 2026-08-17~19 的六个增量（原 V3.5.23–V3.5.28，多次不规范 commit 的暂存结果）按用户指示合并为单一版本 V3.5.23，分日志收敛为一份综合日志。
+
+#### 一、Google 水系图层（纠偏叠加，原 V3.5.23）
+
+- **图层定义**：`basemapConfig.ts` 新增 `imagery_google_water`（名称「Google水系(WGS)」，category=imagery / group=影像）。上游为 Google `lyrs=m`（道路图）瓦片，经 `apistyle=s.t:0|p.v:off,s.t:6|p.v:on` 过滤——关闭陆地（type 0）、仅保留水系特征（type 6），产出透明底的水系叠加瓦片；URL 通过 `gcj2wgsProxyUrl()` 由 `VITE_TILE_PROXY_BASE_URL` 派生（生产 = `https://negiao-webgis.hf.space/proxy/gcj2wgs/...`），完成 GCJ-02 → WGS-84 纠偏。沿用既有 `vector_Google_clean` 的 `%7C` 编码惯例；用户原始 URL 中的 `&&hl=zh-CN` 归一为单 `&`。
+- **预设**：`basemapPresets.ts` 末尾追加 `imagery_google_water_preset`「Google影像水系」，stack = `['imagery_google', 'imagery_google_water']`（底部 Google 卫星影像 + 顶部水系叠加），末尾追加保证 URL 参数 `l` 的既有索引不变；默认预设（China Blender2）不动。
+- **SSOT 联动**：Cesium 描述符由 `getDescriptorById()` 自动派生，零额外维护；图层管理面板由 `LAYER_SOURCE_DEFINITIONS` 驱动自动出现。
+- 详见[日志](Docs/LLM_record/26-08/2026-08-18/2026-08-18-add-google-water-layer.md)。
+
+#### 二、瓦片解析通用化 + 出站浏览器特征头共享化（原 V3.5.24 / V3.5.25）
+
+- **Google pb 风格 URL 修复**：`/proxy/gcj2wgs/` 与 `/proxy/wgs2gcj/` 无法代理 Google `maps/vt` 瓦片（如 `https://www.google.com/maps/vt/pb=!1m4!1m3!1i10!2i500!3i800!2m1!1e6`），此前一律返回 400。根因：`parse_tile_url` 的 path 模式用「每路径段只取第一个数字 + 取末 3 段」识别 x/y/z，而 pb 格式把 z/x/y 以 `!1i10!2i500!3i800` 前缀式内嵌在**同一个** path 段中——段内首数字是前缀标记（`!1m4` 的 4），解析必然失败。
+- **通用化方案**（不针对任何单一服务）：path 模式重写为「**全路径数字 token 扫描**」——`re.finditer` 取整条路径全部数字（含字符区间 spans），枚举全部有序三元组 (i<j<k)，zxy 序优先、其次 xyz 序做合法性校验（z≤30 且 x,y ≤ 2^z-1），合法候选中取 **x+y 最大**者（真实瓦片坐标量级必大于样式/版本等尾随参数数字，可同时兼容 `/z/x/y` 切片、`x{y}` 内嵌与 pb 前缀式）。重建改为按字符区间倒序替换，`! = { }` 等特殊字符零 urlencode 干扰。
+- **注意**：pb 的 `!1i/!2i/!3i` 前缀自带数字 1/2/3 混入 token 流，真实三元组并非相邻 token，故必须枚举全部三元组而非仅连续三连（实现中已踩坑验证）。
+- **测试**：`backend/tests/test_url_template.py` 扩至 9 用例：内嵌多数字（pb 风格）、尾随垃圾数字、内嵌 xyz 序、用户报告 URL 端到端、format/query/path 三模式回归、无 xyz 报错。全量后端 34 个测试通过。
+- **天地图 418 修复**：`download_xyz/tile_engine.py` 注入浏览器 UA + 天地图 Referer 防盗链头，418 反爬拦截不再重试直接放弃。
+- **出站浏览器特征头共享化**：新增 `backend/utils/http_headers.py`（`BROWSER_USER_AGENT` 常量 + `REFERER_BY_DOMAIN` 白名单 + `referer_headers_for()`），`download_xyz` / `gcj_rectify` / `api.proxy` 三瓦片出站面共用；`api/proxy.py` 的 `_build_proxy_request_headers` 改为按上游域名白名单附加 Referer（白名单源不透传客户端 Referer）。
+- **download_xyz 内网放行开关**：新增 `DOWNLOAD_ALLOW_PRIVATE_HOSTS` 配置（默认 false），与 `/proxy` 面的 `PROXY_ALLOW_PRIVATE_HOSTS` 解耦，避免共用配置互相影响。
+- 详见[日志1](Docs/LLM_record/26-08/2026-08-18/2026-08-18-fix-proxy-google-pb-url.md) · [日志2](Docs/LLM_record/26-08/2026-08-17/2026-08-17-tianditu-418-download-fix.md) · [日志3](Docs/LLM_record/26-08/2026-08-17/2026-08-17-shared-outbound-browser-headers.md) · [日志4](Docs/LLM_record/26-08/2026-08-17/2026-08-17-download-xyz-private-host-allowlist.md)。
+
+#### 三、KML/KMZ 符号解析链路修复（原 V3.5.25）
+
+- **编码探测加固（本轮最大发现）**：`textDecoder.js` 与 `useKmzLoader.js` 的编码判定
+  原为「U+FFFD 替换字符最少」，但**任意字节流按 UTF-16 解码永不产生替换字符**——
+  GBK 中文 KML/KMZ 被系统性误判为 UTF-16LE 而乱码（符号/样式全灭）。改为：
+  BOM 权威判定（UTF-8/UTF-16LE/UTF-16BE）+ 无 BOM 打分制（U+FFFD 重罚 ×10000 +
+  C0 控制字符罚分 + 字节级 0x00 支撑校验——真 UTF-16 的 ASCII 标记必然产生 0x00，
+  LE 在奇位、BE 在偶位，据此排除单字节编码误读并区分无 BOM 字节序）。
+- **KML 加载重构**：`kmlLoader.js` 不再把 blob URL 直接交给 `Cesium.KmlDataSource`
+  （其内部固定 UTF-8 读取），改为 ArrayBuffer → 多编码解码 → 文本 Blob 加载；
+- **KMZ 统一手动管线**：`extractKmlFromKmz(rewriteResourceBlobUrls=true)`——
+  doc.kml 智能选择 + 多编码解码 + 内嵌资源 href **全量**重写为 blob URL
+  （原实现仅重写图片且无容错；新 `lookupZipEntry` 三级容错：精确 → 大小写不敏感 →
+  URL 解码，兼容 `./`、`../`、反斜杠、`%20` 等变体）；删除损坏的 `loadKMZFallback`
+  （其字段名/返回结构全错，触发必崩 TypeError）与「原生优先」双路径；重写产生的
+  blob URL 登记 `record.blobUrls`，由移除/清空数据源时统一回收；
+- **`normalizePath` 修复**：`/^\.\/?/` → `/^\.\//`，`../x` 前缀不再被剥成 `./x`
+  （上跳相对路径解析错位的共享缺陷，2D 管线同受益）；
+- **TOC**：`TYPE_LABELS` 补 `kmz: 'KMZ'`，三维数据分组格式标签正常化。
+- 详见[日志](Docs/LLM_record/26-08/2026-08-18/2026-08-18-fix-kml-kmz-symbol-parsing.md)。
+
+#### 四、Sentinel-2 无云年度影像图层与预设（原 V3.5.26）
+
+- **新增 10 个 Sentinel-2 无云年度图层**（`imagery_s2_cloudless_2016` ~ `_2025`，EOX tiles.maps.eox.at WMTS 公开服务零 token）：2016 对应官方聚合层 `s2cloudless_3857`（Capabilities 标题即 "Sentinel-2 cloudless layer for 2016"，经实测 2016 无独立年度层，400 验证），2017~2025 对应年度层 `s2cloudless-YYYY_3857`（Capabilities 逐层验证 200）；URL 采用 `{z}/{x}/{y}` 模板直连（GoogleMapsCompatible 矩阵集）。
+- **图层生成器收敛**：10 个年度条目结构相同，`basemapConfig.ts` 新增 `buildS2CloudlessDef(year)` 生成器 + `EOX_WMTS_URL(layer)` 模板函数，url 与 createSource 共用同一模板串，杜绝两字段漂移（文件内已有 buildTiandituUrl 等函数先例）。
+- **新增 10 个底图预设**（`imagery_s2_cloudless_YYYY_preset`，label「Sentinel无云YYYY」，stack = 年度图层 + `label_tianditu` 注记叠加），追加在 `BASEMAP_PRESETS` 尾部，既有 l 索引编号不受影响。
+- 详见[日志](Docs/LLM_record/26-08/2026-08-18/2026-08-18-add-sentinel-cloudless-layers.md)。
+
+#### 五、管理后台移动端适配（原 V3.5.27 / V3.5.28）
+
+- **顶部 Tab 移动端点按无效修复**：`AdminControlPanel.vue` 的 `onTabsNavDragStart` 在 `touchstart` 上无条件 `e.preventDefault()`——移动端浏览器在 touchstart 被阻止后不再派发合成 click，按钮 `@click` 永远不触发（桌面端 mousedown 的 preventDefault 不吞 click，故仅移动端中招）。改为位移阈值（10px）判定 + 捕获阶段 click 处理器吞掉拖拽残留 click；`.tab-btn` 由 `flex: 1 1 0; min-width: 0` 改为 `flex: 1 1 auto; min-width: 180px`（移动端 ≤768px 为 150px），窄屏可横向滑动、文字不再截断。
+- **「数据管理」子页移动端 UI 适配**：`.db-toolbar` 的 `flex-wrap` 对「单组自身即超宽」的子分组无效——切表/统计/分页三个分组各自单行排布（如分页组 select+上一页+页码+下一页+导出 ≈ 320px+），375px 手机扣外层 padding 后可用宽度仅约 287px，必然横向溢出被裁切。`@media (max-width: 768px)` 内新增：工具栏改竖排堆叠；切表下拉弹性撑满行宽；搜索框独占一行；页码信息居中成行；导出按钮独占一行靠右；卡片头（标题+刷新表）改纵向堆叠；表格容器 `max-height` 改 60vh（原固定 480px）。`#admin-panel-database` 前缀限定 card-header 规则只作用于本子页；桌面端样式零改动。
+- 详见[日志1](Docs/LLM_record/26-08/2026-08-19/2026-08-19-fix-admin-tabs-mobile.md) · [日志2](Docs/LLM_record/26-08/2026-08-19/2026-08-19-fix-admin-database-tab-mobile.md)。
+
+#### 六、顺带
+
+- **HF 日志流 SSE 双重 data 前缀修复**：`backend/api/monitor.py` 的 `stream_logs` 在 SSE 帧行带 `data: ` 前缀时先剥离再尝试 JSON 解析，否则 `json.loads` 必失败、原样透传导致前端拿到 `data: {json}` 字符串无法解析。
+- **注册页确认登录按钮**：`RegisterView.vue` 的「确认登录」按钮由 `type="button"` + `@click="handleSubmit"` 改为 `type="submit"`（表单原生提交，消除重复触发风险）。
+- **图层管理面板下拉高度**：`LayerControlPanel.vue` 下拉菜单 `max-height` 450px → 480px（适配新增底图预设数量）。
+- **底图注记切换**：`basemapPresets.ts` 多个预设的注记图层由 `label_tianditu` 切换为 `Omap_label`（奥维注记，`basemapConfig.ts` 新增 `Omap_label` 图层定义 + `terrain_omap_contour` 奥维等高线图层 + `imagery_tianditu_omap_contour_preset` 天地图影像+等高线预设）。
+- 详见[日志](Docs/LLM_record/26-08/2026-08-17/2026-08-17-hf-log-stream-double-data-prefix.md)。
+
 ### V3.5.22 (2026-08-17) — 综合版本：首屏语言跟随浏览器 · 注册/法务页返回首页 · Hugging Face OAuth 接入 · L3 状态监控自动化 · 商标图标规范化
 
 > 2026-08-16~17 的十个增量（原 V3.5.22–V3.5.31，多次不规范 commit 的暂存结果）按用户指示合并为单一版本 V3.5.22，分日志收敛为一份综合日志。

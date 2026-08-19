@@ -49,19 +49,26 @@ function selectTab(tabId) {
 }
 
 // ── 横向拖拽滚动 tabs-nav ──
+// 注意：touchstart 上不能无条件 preventDefault——那会吞掉移动端浏览器派发的合成
+// click，导致点按 tab 完全失效（桌面端 mousedown 不吞 click，所以只有移动端中招）。
+// 正确做法：仅当位移超过阈值、确认是拖拽后才 preventDefault 阻止页面滚动。
 const tabsNavRef = ref(null);
 let isDragging = false;
+let dragMoved = false;
 let dragStartX = 0;
 let scrollStartLeft = 0;
+const DRAG_MOVE_THRESHOLD = 10;
 
 function onTabsNavDragStart(e) {
     const el = tabsNavRef.value;
     if (!el) return;
     isDragging = true;
+    dragMoved = false;
     dragStartX = (e.touches ? e.touches[0].clientX : e.clientX);
     scrollStartLeft = el.scrollLeft;
     el.style.scrollBehavior = 'auto';
-    e.preventDefault();
+    // 仅桌面端 preventDefault：防止拖拽时选中文本；移动端 touchstart 不能阻止
+    if (e.type === 'mousedown') e.preventDefault();
 }
 
 function onTabsNavDragMove(e) {
@@ -69,13 +76,31 @@ function onTabsNavDragMove(e) {
     const el = tabsNavRef.value;
     if (!el) return;
     const x = e.touches ? e.touches[0].clientX : e.clientX;
-    el.scrollLeft = scrollStartLeft - (x - dragStartX);
+    if (!dragMoved && Math.abs(x - dragStartX) > DRAG_MOVE_THRESHOLD) {
+        dragMoved = true;
+        e.preventDefault(); // 确认是拖拽：阻止页面随手指纵向滚动
+    }
+    if (dragMoved) {
+        el.scrollLeft = scrollStartLeft - (x - dragStartX);
+    }
 }
 
 function onTabsNavDragEnd() {
     isDragging = false;
     const el = tabsNavRef.value;
     if (el) el.style.scrollBehavior = '';
+    if (dragMoved) {
+        // 拖拽后的合成 click 会在同帧派发，由捕获阶段 click 吞掉；宏任务后再复位
+        setTimeout(() => { dragMoved = false; }, 0);
+    }
+}
+
+/** 拖拽结束后吞掉浏览器补发的合成 click，避免误切 tab */
+function onTabsNavClickCapture(e) {
+    if (dragMoved) {
+        e.preventDefault();
+        e.stopPropagation();
+    }
 }
 
 // 点击 tab 时自动滚动使该 tab 居中可见
@@ -822,6 +847,7 @@ onMounted(async () => {
             @touchstart="onTabsNavDragStart"
             @touchmove="onTabsNavDragMove"
             @touchend="onTabsNavDragEnd"
+            @click.capture="onTabsNavClickCapture"
         >
             <button
                 v-for="tab in tabs"
@@ -1599,8 +1625,8 @@ onMounted(async () => {
     display: flex;
     align-items: center;
     gap: 10px;
-    flex: 1 1 0;
-    min-width: 0;
+    flex: 1 1 auto;
+    min-width: 180px;
     min-height: 60px;
     padding: 10px 14px;
     border: 1px solid rgba(0, 0, 0, 0.06);
@@ -2287,7 +2313,54 @@ onMounted(async () => {
    ========================================================================== */
 @media (max-width: 768px) {
     .tabs-nav { gap: 6px; padding: 8px; }
-    .tab-btn { min-height: 48px; padding: 8px 10px; }
+    .tab-btn { min-height: 48px; min-width: 150px; padding: 8px 10px; }
     .tab-btn__desc { display: none; }
+
+    /* ── 数据管理子页移动端适配 ── */
+    #admin-panel-database .card-header {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 8px;
+    }
+    #admin-panel-database .header-actions {
+        display: flex;
+        justify-content: flex-end;
+    }
+    /* 工具栏三组（表选择 / 统计 / 分页）竖排堆叠，避免窄屏横向截断 */
+    .db-toolbar {
+        flex-direction: column;
+        align-items: stretch;
+    }
+    .select-wrapper {
+        flex-wrap: wrap;
+    }
+    .select-wrapper .inline-select {
+        flex: 1 1 auto;
+        min-width: 0;
+    }
+    .toolbar-stats {
+        flex-wrap: wrap;
+    }
+    .toolbar-search {
+        flex: 1 1 100%;
+        width: auto;
+    }
+    .toolbar-pager {
+        flex-wrap: wrap;
+    }
+    .toolbar-pager .pager-info {
+        flex: 1 1 100%;
+        order: 10;
+        display: flex;
+        justify-content: center;
+    }
+    /* 导出按钮独占一行靠右，与上一页/下一页分开 */
+    .toolbar-pager .btn:last-child {
+        order: 20;
+        margin-left: auto;
+    }
+    .rows-container {
+        max-height: 60vh;
+    }
 }
 </style>

@@ -4,6 +4,8 @@ from typing import Optional
 import httpx
 from httpx import AsyncClient
 
+from utils.http_headers import BROWSER_USER_AGENT, referer_headers_for
+
 logger = logging.getLogger(__name__)
 
 _async_client: Optional[AsyncClient] = None
@@ -23,7 +25,8 @@ def get_async_client() -> AsyncClient:
         # - pool=5s: 连接池等待超时
         _async_client = AsyncClient(
             timeout=httpx.Timeout(connect=8.0, read=12.0, write=10.0, pool=5.0),
-            limits=httpx.Limits(max_connections=80, max_keepalive_connections=15)
+            limits=httpx.Limits(max_connections=80, max_keepalive_connections=15),
+            headers={"User-Agent": BROWSER_USER_AGENT},
         )
     return _async_client
 
@@ -86,7 +89,7 @@ async def fetch_tile(url: str, client: Optional[AsyncClient] = None) -> bytes:
     for attempt in range(MAX_RETRIES + 1):
         active_client = client or get_async_client()
         try:
-            async with active_client.stream("GET", url) as response:
+            async with active_client.stream("GET", url, headers=referer_headers_for(url)) as response:
                 if response.status_code != 200:
                     raise RuntimeError(
                         f"upstream returned {response.status_code} for {url}"

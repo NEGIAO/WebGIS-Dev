@@ -13,6 +13,8 @@ from rasterio.io import MemoryFile
 from rasterio.transform import Affine
 from rasterio.windows import Window
 
+from utils.http_headers import BROWSER_USER_AGENT, referer_headers_for
+
 WEB_MERCATOR_EXTENT = 20037508.342789244
 MAX_LATITUDE = 85.05112878
 TILE_SIZE = 256
@@ -120,7 +122,7 @@ async def build_geotiff_from_tiles(
         if inspect.isawaitable(result):
             await result
 
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(headers={"User-Agent": BROWSER_USER_AGENT}) as client:
         seed_url = tile_url_template.format(z=zoom, x=min_x, y=min_y)
         seed_bytes = await _fetch_tile_bytes(
             client,
@@ -382,10 +384,23 @@ async def _fetch_tile_bytes(
     for attempt in range(retries):
         try:
             async with semaphore:
-                response = await client.get(url, timeout=timeout)
+                response = await client.get(
+                    url,
+                    timeout=timeout,
+                    headers=referer_headers_for(url),
+                )
             if response.status_code == 200 and response.content:
                 return response.content
             if response.status_code in {204, 404}:
+                return None
+            if response.status_code == 418:
+                # 418 为瓦片源服务端反爬策略拦截（如天地图对非浏览器出站），重试无意义，直接放弃
+                logger.warning(
+                    "Tile download rejected (418, anti-crawler block) attempt %s/%s: %s",
+                    attempt + 1,
+                    retries,
+                    url,
+                )
                 return None
             logger.warning(
                 "Tile download failed (%s) attempt %s/%s: %s",

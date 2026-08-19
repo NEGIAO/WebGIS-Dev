@@ -27,12 +27,16 @@ from api.auth.quota import (
     get_user_quota_snapshot_sync,
 )
 from api.auth.system_config import _get_system_config_value_sync
-from config import get_int, get_str
+from config import get_bool, get_int, get_str
 from utils.net_guard import is_disallowed_host
 from .download_task import DownloadTask, create_task, get_task, update_task, list_active_tasks_by_user
 from .tile_engine import MAX_CONCURRENCY, MAX_LATITUDE, WEB_MERCATOR_EXTENT, bbox4326_to_tile_range, build_geotiff_from_tiles, clip_geotiff_to_bbox, resolution_to_zoom
 
 logger = logging.getLogger(__name__)
+
+# 下载器内网放行独立开关（V3.5.26）：与 /proxy 面的 PROXY_ALLOW_PRIVATE_HOSTS 解耦，
+# 避免共用配置互相影响（proxy 的白名单是收紧语义）。默认关闭=拒绝内网/本机目标。
+_DOWNLOAD_ALLOW_PRIVATE_HOSTS = get_bool("DOWNLOAD_ALLOW_PRIVATE_HOSTS", False)
 
 
 def _format_file_size(size_bytes: int) -> str:
@@ -600,7 +604,8 @@ def _validate_tile_template(template: str) -> None:
 
     # P1-4 SSRF S1：补协议与内网目标校验——此前只校验占位符，已登录用户可让服务器
     # 抓取任意内网 URL 并把响应写进 GeoTIFF 回传（信息回传型 SSRF）。
-    # host 判定走 utils/net_guard 单点（与 /proxy/** 及 agent override 同一实现）。
+    # host 判定走 utils/net_guard 单点（与 /proxy/** 及 agent override 同一实现）；
+    # V3.5.26：DOWNLOAD_ALLOW_PRIVATE_HOSTS=true 时放行内网/本机目标（自建内网瓦片源场景）。
     probe_url = template.replace("{z}", "0").replace("{x}", "0").replace("{y}", "0")
     probe_url = probe_url.replace("{s}", "a").replace("{-y}", "0")
     # 无协议前缀（`tile.example.com/...`）与协议相对（`//host/...`）按 https 兜底解析，
@@ -615,8 +620,8 @@ def _validate_tile_template(template: str) -> None:
             status_code=400,
             detail="tile_url_template must use http:// or https:// (other schemes are not allowed)",
         )
-    if is_disallowed_host(parsed_template.hostname or ""):
-        logger.warning("底图下载模板指向内网/本机，已拒绝：%s", template[:80])
+    if not _DOWNLOAD_ALLOW_PRIVATE_HOSTS and is_disallowed_host(parsed_template.hostname or ""):
+        logger.warning("底图下载模板指向内网/本机（未开启 DOWNLOAD_ALLOW_PRIVATE_HOSTS），已拒绝：%s", template[:80])
         raise HTTPException(
             status_code=400,
             detail="tile_url_template 指向内网或本机地址，已拒绝。",

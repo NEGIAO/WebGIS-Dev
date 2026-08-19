@@ -899,7 +899,7 @@ onBeforeUnmount(() => {
     left: 0;
     width: max-content;
     min-width: 100%;
-    max-height: 450px;
+    max-height: 480px;
     background: rgba(255, 255, 255, 0.98);
     border: 1px solid var(--border-brand-light);
     border-radius: 6px;

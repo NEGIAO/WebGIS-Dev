@@ -180,6 +180,12 @@ CONFIG_CATALOG: Dict[str, ConfigMeta] = {
         "secret": False,
         "description": "代理允许内网主机（默认关闭）",
     },
+    "DOWNLOAD_ALLOW_PRIVATE_HOSTS": {
+        "layer": "L1",
+        "default": False,
+        "secret": False,
+        "description": "底图下载器允许内网主机（默认关闭）",
+    },
     "PROXY_VERIFY_SSL": {
         "layer": "L1",
         "default": True,

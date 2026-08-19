@@ -201,3 +201,8 @@ Sprint 3（穿插）：P3-1 容器二轮（O1/O2 交替）→ P2-1 bundle 分析
   - [ ] (需设计) **模型升降级语义不清**：`/api/agent/chat/completions` + `user_metrics.tier` 既当限额级别又当模型档位,探测时会切换模型(涉数据库结构,L3)
   - [ ] (清理项) **freeQuota 后 balanceData 语义失效**：默认 AI 免费化后 `quotaData` 恒 null,`ChatPanelContent` 余额展示逻辑失去意义(数据已不返回,展示未清,仅观感问题)
 - [ ] **管理面板 SQL dump 导出**（2026-08-15 · V3.5.21 分页/CSV 会话遗留）：管理员「看整表」主线诉求已由分页 + CSV 满足；如需数据库备份格式（CREATE TABLE + INSERT），需后端新增 schema 导出端点（与 SQLite 方言耦合），待用户决策是否立项。
+- [ ] **KML/KMZ 符号链路顺带发现**（2026-08-18 · V3.5.25 会话，按 Force_command §2.5 只记不改）：
+  - [ ] **`kmlParser.ts` 死代码仍含旧式编码判定**：零引用（GBK 误判缺陷与 textDecoder 同源），清理或同步新启发式
+  - [ ] **`decompressor.ts` 自带独立 `normalizePath` 副本**：与 `pathUtils.js` 不同步，若未来参与 KMZ 处理需复核 `../` 语义
+  - [ ] **`kmz` 类型未列入 `OPACITY_SUPPORTED_TYPES`**：TOC 中 KMZ 数据源无透明度滑杆（2026-08-08 已登记，待产品确认）
+- [ ] **AdminControlPanel Globe 图标未导入**（2026-08-19 · V3.5.27 移动端 Tab 修复会话，按 Force_command §2.5 只记不改）：模板第 1250 行 `<Globe :size="16" />`（底图配置卡片标题），但 script 导入清单（3-14 行）无 `Globe`，运行时会警告 "Failed to resolve component: Globe" 且图标渲染为空。修复仅需在 `@lucide/vue` 导入中补 `Globe` 一行，属 L1。

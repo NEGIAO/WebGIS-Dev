@@ -588,6 +588,7 @@ onUnmounted(() => {
     box-shadow: var(--glass-shadow);
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
+    padding:4px;
 }
 
 .coordinate-display {
@@ -919,10 +920,8 @@ onUnmounted(() => {
 
 @media (max-width: 768px) {
     .map-controls-group {
-        left: 12px;
         right: 12px;
         bottom: 35px;
-        padding: 8px;
         gap: 8px;
     }
 

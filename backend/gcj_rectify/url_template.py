@@ -28,6 +28,8 @@ class TileUrlTemplate:
     query_keys: Dict[str, str]
     params: str
     fragment: str
+    path: str  # 原始路径字符串（path 模式按字符区间重建用）
+    spans: Dict[str, Tuple[int, int]]  # key(x/y/z) → 路径内数字字符区间 (start, end)
     cache_key: str
     template_id: str
 
@@ -72,6 +74,8 @@ def parse_tile_url(url: str) -> Tuple[TileUrlTemplate, TileXYZ]:
                     query_keys={},
                     params="",
                     fragment="",
+                    path=parsed.path,
+                    spans={},
                     cache_key=_hash_template(template_id),
                     template_id=template_id,
                 ),
@@ -107,62 +111,72 @@ def parse_tile_url(url: str) -> Tuple[TileUrlTemplate, TileXYZ]:
                 query_keys={"x": x_key, "y": y_key, "z": z_key},
                 params=parsed.params,
                 fragment=parsed.fragment,
+                path=parsed.path,
+                spans={},
                 cache_key=_hash_template(template_id),
                 template_id=template_id,
             ),
             TileXYZ(x=x_val, y=y_val, z=z_val),
         )
 
-    # 备选方案2：标准路径切片解析
-    path_segments = _split_path(parsed.path)
-    numeric_segments = _extract_numeric_segments(path_segments)
-    if len(numeric_segments) < 3:
+    # 备选方案2：路径数字 token 全量扫描（通用解析，不针对任何特定服务）
+    # 对整条路径做全量数字扫描（不再只取每段第一个数字），枚举全部有序三元组
+    # (i<j<k)，zxy 序优先、其次 xyz 序做合法性校验（z≤30 且 x,y ≤ 2^z-1），
+    # 在合法候选中取 x+y 最大者——真实瓦片坐标的数值量级必然大于样式/版本等
+    # 尾随参数数字。该判据可同时兼容常规 /z/x/y 切片与单路径段内嵌多坐标的
+    # URL（如 Google maps/vt 的 pb=!1m4!1m3!1i10!2i500!3i800!2m1!1e6：
+    # 其 !1i/!2i/!3i 前缀自带数字 1/2/3 混入 token 流，真实三元组
+    # (10,500,800) 并非相邻 token，故必须枚举全部三元组而非仅连续三连）。
+    path_tokens = [
+        (match.start(), match.end(), int(match.group(0)))
+        for match in re.finditer(r"\d+", parsed.path)
+    ]
+    if len(path_tokens) < 3:
         raise ValueError("unable to locate x/y/z in tile path")
 
-    candidates = numeric_segments[-3:]
-    (idx_a, val_a, pre_a, suf_a) = candidates[0]
-    (idx_b, val_b, pre_b, suf_b) = candidates[1]
-    (idx_c, val_c, pre_c, suf_c) = candidates[2]
-
-    zxy_valid = _is_valid_xyz(val_a, val_b, val_c)
-    xyz_valid = _is_valid_xyz(val_c, val_a, val_b)
-
-    if zxy_valid:
-        indices = {"z": idx_a, "x": idx_b, "y": idx_c}
-        affixes = {
-            "z": (pre_a, suf_a),
-            "x": (pre_b, suf_b),
-            "y": (pre_c, suf_c),
-        }
-        xyz = TileXYZ(x=val_b, y=val_c, z=val_a)
-    elif xyz_valid:
-        indices = {"x": idx_a, "y": idx_b, "z": idx_c}
-        affixes = {
-            "x": (pre_a, suf_a),
-            "y": (pre_b, suf_b),
-            "z": (pre_c, suf_c),
-        }
-        xyz = TileXYZ(x=val_a, y=val_b, z=val_c)
-    else:
+    best_xyz = None
+    best_spans: Dict[str, Tuple[int, int]] = {}
+    best_sum = -1
+    for k in range(2, len(path_tokens)):
+        (start_c, end_c, val_c) = path_tokens[k]
+        for j in range(1, k):
+            (start_b, end_b, val_b) = path_tokens[j]
+            for i in range(0, j):
+                (start_a, end_a, val_a) = path_tokens[i]
+                if _is_valid_xyz(val_a, val_b, val_c):      # zxy 序
+                    candidate_sum = val_b + val_c
+                    if candidate_sum > best_sum:
+                        best_sum = candidate_sum
+                        best_xyz = TileXYZ(x=val_b, y=val_c, z=val_a)
+                        best_spans = {"z": (start_a, end_a), "x": (start_b, end_b), "y": (start_c, end_c)}
+                if _is_valid_xyz(val_c, val_a, val_b):      # xyz 序
+                    candidate_sum = val_a + val_b
+                    if candidate_sum > best_sum:
+                        best_sum = candidate_sum
+                        best_xyz = TileXYZ(x=val_a, y=val_b, z=val_c)
+                        best_spans = {"x": (start_a, end_a), "y": (start_b, end_b), "z": (start_c, end_c)}
+    if best_xyz is None:
         raise ValueError("unable to infer tile xyz order from path")
 
-    template_id = _build_path_template_id(parsed, path_segments, indices, affixes)
+    template_id = _build_path_template_id(parsed, best_spans)
     return (
         TileUrlTemplate(
             scheme=parsed.scheme,
             netloc=parsed.netloc,
-            path_segments=tuple(path_segments),
+            path_segments=tuple(_split_path(parsed.path)),
             query_pairs=query_pairs,
             mode="path",
-            indices=indices,
-            affixes=affixes,
+            indices={},
+            affixes={},
             query_keys={},
             params=parsed.params,
             fragment=parsed.fragment,
+            path=parsed.path,
+            spans=best_spans,
             cache_key=_hash_template(template_id),
             template_id=template_id,
         ),
-        xyz,
+        best_xyz,
     )
 
 
@@ -185,12 +199,15 @@ def build_tile_url(template: TileUrlTemplate, x: int, y: int, z: int) -> str:
         query = urlencode(pairs, doseq=True)
         path = _join_path(list(template.path_segments))
     else:
-        segments = list(template.path_segments)
-        for key, value in (("x", x), ("y", y), ("z", z)):
-            idx = template.indices[key]
-            prefix, suffix = template.affixes[key]
-            segments[idx] = f"{prefix}{value}{suffix}"
-        path = _join_path(segments)
+        # path 模式：按字符区间倒序替换（先替换靠后的区间，防止长度变化导致偏移错位）
+        path = template.path
+        for key, value in sorted(
+            (("x", x), ("y", y), ("z", z)),
+            key=lambda kv: template.spans[kv[0]][0],
+            reverse=True,
+        ):
+            start, end = template.spans[key]
+            path = path[:start] + str(value) + path[end:]
         query = urlencode(template.query_pairs, doseq=True)
 
     return urlunparse(
@@ -213,19 +230,6 @@ def _join_path(segments: List[str]) -> str:
     if not segments:
         return "/"
     return "/" + "/".join(segments)
-
-
-def _extract_numeric_segments(segments: List[str]) -> List[Tuple[int, int, str, str]]:
-    numeric_segments =[]
-    for idx, segment in enumerate(segments):
-        match = re.search(r"(\d+)", segment)
-        if not match:
-            continue
-        value = int(match.group(1))
-        prefix = segment[: match.start(1)]
-        suffix = segment[match.end(1) :]
-        numeric_segments.append((idx, value, prefix, suffix))
-    return numeric_segments
 
 
 def _is_valid_xyz(z: int, x: int, y: int) -> bool:
@@ -297,23 +301,16 @@ def _build_query_template_id(
     )
 
 
-def _build_path_template_id(
-    parsed,
-    path_segments: List[str],
-    indices: Dict[str, int],
-    affixes: Dict[str, Tuple[str, str]],
-) -> str:
-    segments = list(path_segments)
-    for key in ("x", "y", "z"):
-        idx = indices[key]
-        prefix, suffix = affixes[key]
-        segments[idx] = f"{prefix}{{{key}}}{suffix}"
-    template_path = _join_path(segments)
+def _build_path_template_id(parsed, spans: Dict[str, Tuple[int, int]]) -> str:
+    """按字符区间把路径中的 x/y/z 数字替换为占位符（倒序替换防止区间偏移）"""
+    path = parsed.path
+    for key, (start, end) in sorted(spans.items(), key=lambda item: item[1][0], reverse=True):
+        path = path[:start] + "{" + key + "}" + path[end:]
     return urlunparse(
         (
             parsed.scheme,
             parsed.netloc,
-            template_path,
+            path,
             parsed.params,
             parsed.query,
             parsed.fragment,
