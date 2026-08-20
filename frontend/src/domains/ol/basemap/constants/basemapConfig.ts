@@ -9,8 +9,8 @@
  *   3. BASEMAP_PRESETS (re-export) — 预设目录（实际定义在 basemapPresets.ts）
  *
  * ⚠️ URL 二字段的分工（不可合并）：
- *   - url        → 静态模板，Cesium 直接消费；占位符（{tiandituTk}/{customUrl}）由 Cesium 侧替换
- *   - createSource → OL 工厂函数；运行时会注入 tiandituTk/customUrl，且可能叠加代理/适配器逻辑
+ *   - url        → 静态模板，Cesium 直接消费；占位符（{tiandituTk}/{ovitalTdtkey}/{customUrl}）由 Cesium 侧替换
+ *   - createSource → OL 工厂函数；运行时会注入 tiandituTk/ovitalTdtkey/customUrl，且可能叠加代理/适配器逻辑
  *   二者结构不同（如天地图 url 含 &tk={tiandituTk}，createSource 用 buildTiandituUrl 拼 tk），
  *   JS 对象字面量无法自引用（无法在 createSource 内写 def.url），故接受"写两次"的现实。
  *
@@ -77,6 +77,7 @@ export type TileSourceInstance = TileSourceLike | OSM | null;
 
 export type LayerFactoryContext = {
     tiandituTk: string;
+    ovitalTdtkey: string;
     customUrl: string;
 };
 
@@ -98,7 +99,7 @@ export type LayerSourceDefinition = {
     /** 子域名列表，用于负载均衡 */
     subdomains?: string[];
     /** 运行时需要替换的占位符列表 */
-    needsContext?: ('tiandituTk' | 'customUrl')[];
+    needsContext?: ('tiandituTk' | 'ovitalTdtkey' | 'customUrl')[];
     /** 非标准适配器 ID（如 maps-for-free） */
     nonStandardAdapter?: string;
     /** WMS 专属参数 */
@@ -159,6 +160,18 @@ export const buildTiandituUrl = (pathAndQuery: string, tiandituTk: string): stri
 };
 
 /**
+ * 拼接奥维瓦片服务 URL（tdtkey 为 L2 密钥，由管理员写入数据库，运行时注入）
+ * @param pathAndQuery 奥维服务路径与查询串（如 /dia_w/wmts?...&TILECOL={x}）
+ * @param tdtkey 奥维 TDT Key（来自运行时 token 池 ovital_tdtkey）
+ * @returns 带 tdtkey 参数的完整 URL
+ */
+export const buildOvitalUrl = (pathAndQuery: string, tdtkey: string): string => {
+    const hasQuery = pathAndQuery.includes('?');
+    const separator = hasQuery ? '&' : '?';
+    return `https://omap.map-world.com.cn${pathAndQuery}${separator}tdtkey=${tdtkey}`;
+};
+
+/**
  * 为 source 标记 skipHighResTile 标志，用于注记图层跳过 zDirection 高清瓦片优化
  * （避免注记文字在非整数 zoom 时因取上层瓦片而显示过小）
  */
@@ -199,13 +212,17 @@ export const LAYER_SOURCE_DEFINITIONS: LayerSourceDefinition[] = [
         name: '奥维注记',
         category: 'label',
         group: '注记',
-        url: 'https://omap.map-world.com.cn/dia_w/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=dia&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles&TILEMATRIX={z}&TILECOL={x}&TILEROW={y}&tdtkey=1VMohDhFD1emI6KVzaD82VQssQEXVSW5 ',
+        url: 'https://omap.map-world.com.cn/dia_w/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=dia&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles&TILEMATRIX={z}&TILECOL={x}&TILEROW={y}&tdtkey={ovitalTdtkey}',
         serviceType: 'xyz',
-        createSource: () =>
+        needsContext: ['ovitalTdtkey'],
+        createSource: ({ ovitalTdtkey }) =>
             withSkipHighResTile(
                 prioritizeTileSourceRequest(
                     new XYZ({
-                        url: 'https://omap.map-world.com.cn/dia_w/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=dia&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles&TILEMATRIX={z}&TILECOL={x}&TILEROW={y}&tdtkey=1VMohDhFD1emI6KVzaD82VQssQEXVSW5 ',
+                        url: buildOvitalUrl(
+                            '/dia_w/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=dia&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles&TILEMATRIX={z}&TILECOL={x}&TILEROW={y}',
+                            ovitalTdtkey,
+                        ),
                     }),
                 ),
             ),
@@ -1565,12 +1582,16 @@ export const LAYER_SOURCE_DEFINITIONS: LayerSourceDefinition[] = [
         name: '奥维等高线',
         category: 'terrain',
         group: '专题',
-        url: 'https://omap.map-world.com.cn/dgx_w/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=dgx&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles&TILEMATRIX={z}&TILECOL={x}&TILEROW={y}&tdtkey=1VMohDhFD1emI6KVzaD82VQssQEXVSW5',
+        url: 'https://omap.map-world.com.cn/dgx_w/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=dgx&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles&TILEMATRIX={z}&TILECOL={x}&TILEROW={y}&tdtkey={ovitalTdtkey}',
         serviceType: 'xyz',
-        createSource: () =>
+        needsContext: ['ovitalTdtkey'],
+        createSource: ({ ovitalTdtkey }) =>
             prioritizeTileSourceRequest(
                 new XYZ({
-                    url: 'https://omap.map-world.com.cn/dgx_w/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=dgx&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles&TILEMATRIX={z}&TILECOL={x}&TILEROW={y}&tdtkey=1VMohDhFD1emI6KVzaD82VQssQEXVSW5',
+                    url: buildOvitalUrl(
+                        '/dgx_w/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=dgx&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles&TILEMATRIX={z}&TILECOL={x}&TILEROW={y}',
+                        ovitalTdtkey,
+                    ),
                 }),
             ),
     },
@@ -1717,7 +1738,7 @@ export type TileSourceDescriptor = {
     tilePixelRatio?: number;
     subdomains?: string[];
     nonStandardAdapter?: string;
-    needsContext?: ('tiandituTk' | 'customUrl')[];
+    needsContext?: ('tiandituTk' | 'ovitalTdtkey' | 'customUrl')[];
     wms?: {
         layers: string;
         version?: string;
@@ -1737,6 +1758,23 @@ export type TileSourceDescriptor = {
 
 /** 内部索引：id → LayerSourceDefinition 映射，供 getDescriptorById 查表用 */
 const LAYER_SOURCE_MAP = new Map(LAYER_SOURCE_DEFINITIONS.map((d) => [d.id, d]));
+
+/** 运行时密钥池类型：与后端 api_keys 表 key_name 一一对应 */
+export type RuntimeTokenPoolKey = 'tianditu_tk' | 'ovital_tdtkey';
+
+/**
+ * 根据图层 ID 解析其运行时密钥池（SSOT：依据 needsContext 声明判定，杜绝字符串猜测）
+ * 供容灾轮换使用：图层失败 → 判定所属密钥池 → 轮换该池备用 key
+ * @param layerId 图层源 ID
+ * @returns 密钥池 key；非 token 依赖图层返回 null
+ */
+export function resolveRuntimeTokenPoolKey(layerId: string): RuntimeTokenPoolKey | null {
+    const def = LAYER_SOURCE_MAP.get(String(layerId || '').trim());
+    if (!def?.needsContext?.length) return null;
+    if (def.needsContext.includes('tiandituTk')) return 'tianditu_tk';
+    if (def.needsContext.includes('ovitalTdtkey')) return 'ovital_tdtkey';
+    return null;
+}
 
 /**
  * 根据 id 获取 Cesium 兼容的图层描述符

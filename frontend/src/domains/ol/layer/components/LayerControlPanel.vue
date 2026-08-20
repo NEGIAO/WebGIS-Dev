@@ -48,7 +48,7 @@
             v-if="engine === 'ol'"
             ref="layerManageButtonRef"
             class="layer-manage-btn"
-            title="图层管理"
+            title="底图管理"
             @click="toggleLayerManager"
         >
             <svg
@@ -136,7 +136,7 @@
                 :style="layerManagerPanelStyle"
             >
                 <div class="panel-header">
-                    <span>图层排序与显示</span>
+                    <span>底图排序与显示</span>
                     <span
                         class="close-panel-btn"
                         @click="showLayerManager = false"

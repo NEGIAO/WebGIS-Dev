@@ -4,9 +4,11 @@ const EMPTY_RUNTIME_TOKENS = {
     tiandituTk: '',
     cesiumIonToken: '',
     amapKey: '',
+    ovitalTdtkey: '',
     tiandituTokens: [],
     cesiumIonTokens: [],
     amapKeys: [],
+    ovitalTdtkeys: [],
 };
 
 let cachedTokens = { ...EMPTY_RUNTIME_TOKENS };
@@ -14,6 +16,7 @@ let activeTokenIndexes = {
     tianditu_tk: 0,
     cesium_ion_token: 0,
     amap_key: 0,
+    ovital_tdtkey: 0,
 };
 let hasLoadedRuntimeTokens = false;
 let loadPromise = null;
@@ -26,6 +29,7 @@ function normalizeRuntimeKeyName(keyName) {
     if (normalized === 'cesium_ion_token' || normalized === 'cesium') return 'cesium_ion_token';
     if (normalized === 'tianditu_tk' || normalized === 'tianditu') return 'tianditu_tk';
     if (normalized === 'amap_key' || normalized === 'amap' || normalized === 'gaode') return 'amap_key';
+    if (normalized === 'ovital_tdtkey' || normalized === 'ovital') return 'ovital_tdtkey';
     return '';
 }
 
@@ -68,6 +72,12 @@ function normalizeRuntimeTokenPayload(payload = {}) {
         ...toTokenArray(pools.amap_key || pools.amapKey),
         ...cachedTokens.amapKeys,
     ]);
+    const ovitalTdtkeys = normalizeTokenList([
+        data.ovital_tdtkey,
+        data.ovitalTdtkey,
+        ...toTokenArray(pools.ovital_tdtkey || pools.ovitalTdtkey),
+        ...cachedTokens.ovitalTdtkeys,
+    ]);
     activeTokenIndexes = {
         tianditu_tk: Math.min(
             activeTokenIndexes.tianditu_tk || 0,
@@ -81,6 +91,10 @@ function normalizeRuntimeTokenPayload(payload = {}) {
             activeTokenIndexes.amap_key || 0,
             Math.max(amapKeys.length - 1, 0),
         ),
+        ovital_tdtkey: Math.min(
+            activeTokenIndexes.ovital_tdtkey || 0,
+            Math.max(ovitalTdtkeys.length - 1, 0),
+        ),
     };
 
     return {
@@ -88,9 +102,11 @@ function normalizeRuntimeTokenPayload(payload = {}) {
         cesiumIonToken:
             cesiumIonTokens[activeTokenIndexes.cesium_ion_token] || cesiumIonTokens[0] || '',
         amapKey: amapKeys[activeTokenIndexes.amap_key] || amapKeys[0] || '',
+        ovitalTdtkey: ovitalTdtkeys[activeTokenIndexes.ovital_tdtkey] || ovitalTdtkeys[0] || '',
         tiandituTokens,
         cesiumIonTokens,
         amapKeys,
+        ovitalTdtkeys,
     };
 }
 
@@ -106,9 +122,11 @@ export function markRuntimeMapTokenFailed(keyName) {
 
     const poolKey = normalizedKey === 'cesium_ion_token' ? 'cesiumIonTokens'
         : normalizedKey === 'amap_key' ? 'amapKeys'
+        : normalizedKey === 'ovital_tdtkey' ? 'ovitalTdtkeys'
         : 'tiandituTokens';
     const activeKey = normalizedKey === 'cesium_ion_token' ? 'cesiumIonToken'
         : normalizedKey === 'amap_key' ? 'amapKey'
+        : normalizedKey === 'ovital_tdtkey' ? 'ovitalTdtkey'
         : 'tiandituTk';
     const tokens = cachedTokens[poolKey] || [];
     if (tokens.length <= 1) {
@@ -163,6 +181,7 @@ export function clearRuntimeMapTokensCache() {
         tianditu_tk: 0,
         cesium_ion_token: 0,
         amap_key: 0,
+        ovital_tdtkey: 0,
     };
     hasLoadedRuntimeTokens = false;
     loadPromise = null;

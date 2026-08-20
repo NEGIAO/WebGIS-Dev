@@ -87,7 +87,7 @@ export function useLayerOperations({ mapContainerRef, emit }) {
 
     /** 切换图层标注可见性 */
     function handleToggleLayerLabelVisibility(payload) {
-        mapContainerRef.value?.toggleLayerLabelVisibility?.(payload);
+        mapContainerRef.value?.setUserLayerLabelVisibility?.(payload);
     }
 
     /** 绘制坐标点 */

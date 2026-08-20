@@ -1,7 +1,7 @@
 /**
  * Agent 底图预设目录（全量动态派生，无黑名单）
  *
- * 直接派生自 basemapPresets.ts 的 BASEMAP_PRESETS 全量清单（V3.5.28，user 决策）：
+ * 直接派生自 basemapPresets.ts 的 BASEMAP_PRESETS 全量清单（V3.5.24，user 决策）：
  *   - 新增 / 删除 / 改名 preset 自动同步，零漂移；
  *   - 不移除任何条目（含 custom 槽位、local_tiles 本地瓦片、google_Backend_Proxy、
  *     custom_China_Blender 等），切换失败 / 无瓦片由结构化错误与运行时兜底；

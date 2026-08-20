@@ -80,7 +80,7 @@
 
 ## 🎯 项目简介
 
-**NEGIAO's WebGIS** 是一个功能完整、架构清晰的前后端分离 WebGIS 平台（当前版本 V3.5.23），前端托管于 GitHub Pages（正式域名 webgis.negiao.cn），后端以 Docker 部署在 Hugging Face Spaces，通过 RESTful API 通信，支持独立扩展。
+**NEGIAO's WebGIS** 是一个功能完整、架构清晰的前后端分离 WebGIS 平台（当前版本 V3.5.24），前端托管于 GitHub Pages（正式域名 webgis.negiao.cn），后端以 Docker 部署在 Hugging Face Spaces，通过 RESTful API 通信，支持独立扩展。
 
 > 📚 本 README 仅保留核心概览与导航。完整文档已模块化至 [`Docs/Guide/`](Docs/Guide/)，详见下方「文档导航」。
 >
@@ -400,11 +400,9 @@ HF Spaces 在 24 小时无访问后自动休眠。本平台通过**双向互保�
 
 | 版本 | 日期 | 概要 |
 |------|------|------|
-| **V3.5.23** | 2026-08-17~19 | 综合版本：**Google 水系图层**（纠偏叠加）· **瓦片解析通用化**（Google pb 风格 URL + 出站浏览器特征头共享化 + 天地图 418 修复 + 下载器内网放行开关）· **KML/KMZ 符号解析链路修复**（编码探测加固 + KMZ 资源重写 + 回退崩溃）· **Sentinel-2 无云年度影像 10 个图层与预设**（EOX 2016~2025）· **管理后台移动端适配**（顶部 Tab 点按修复 + 数据管理子页 UI 重排）· **HF 日志流 SSE 双重 data 前缀修复**。详见[综合日志](Docs/LLM_record/26-08/2026-08-17/2026-08-17-v3.5.23-consolidated.md) |
-| **V3.5.21** | 2026-08-16 | 综合版本：管理面板数据表格增强（**分页 + 跨页搜索/排序 + CSV 导出 + 搜索高亮 + 行号/区间条**，rows 接口返回 total）· Agent 底图能力开放（`switch_basemap` 支持 **XYZ URL 二选一** + 自主构造公开源 + 预设目录**全量动态派生** 76 项）· 新增 **CyclOSM 骑行底图** · Landing/注册页 **Lucide 图标迁移**与 OneTap 慢载修复 · `.env` OAuth Client ID 分级调整（生产值转 HF Secrets）。详见[日志](Docs/LLM_record/26-08/2026-08-16/2026-08-16-v3.5.21-consolidated.md) |
+| **V3.5.24** | 2026-08-20 | **综合版本**：暂存区 V3.5.24–V3.5.31 八轮增量（多次不规范 commit 的暂存结果）合并为单一版本。覆盖——①瓦片代理三出站口浏览器特征头泛化（`SEC_CH_UA`/`DEFAULT_BROWSER_HEADERS` 10 项 + 天地图企业域名防盗链）；②图层 zIndex 分带治理（`zIndexBands.js` SSOT 八带常量，标注>数据>底图系统级不变量）；③TOC 拖拽顺序覆写图层 zIndex（统一数据带 DATA=200，跨类型排序生效）；④修复 TOC 标注开关失效（图层名校验闸门移除）；⑤修复 KMZ/KML 标注 + 数据层标注层级上移；⑥导入数据统一贴地（新 `loaders/clampToGround.js`，KML/KMZ/CZML/GeoJSON/SHP 五加载器接入）；⑦奥维 tdtkey L2 密钥池化（`ovital_tdtkey` L2 密钥池 + 管理员面板卡片）；⑧运行时密钥池失败自动轮换（备用 key 闭环，OL/Cesium 双引擎）。详见[完整更新日志](Docs/Guide/CHANGELOG.md) |
 
-
-更早版本（V3.5.19 及以前）请查阅 [完整更新日志 →](Docs/Guide/CHANGELOG.md)
+更早版本（V3.5.23 及以前）请查阅 [完整更新日志 →](Docs/Guide/CHANGELOG.md)
 
 ---
 
@@ -426,6 +424,6 @@ HF Spaces 在 24 小时无访问后自动休眠。本平台通过**双向互保�
 |:------:|:--------:|:--------:|
 | [GitHub](https://github.com/NEGIAO/WebGIS-Dev) | [webgis.negiao.cn](https://webgis.negiao.cn)（正式域名，GitHub Pages 托管） | [Hugging Face](https://NEGIAO-WebGIS.hf.space) |
 
-<sub>V3.5.23 · 开发中 · 最后更新 2026-08-19</sub>
+<sub>V3.5.24 · 开发中 · 最后更新 2026-08-20</sub>
 
 </div>

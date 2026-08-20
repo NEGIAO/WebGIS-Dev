@@ -1,6 +1,7 @@
 import { prioritizeTileSourceRequest } from '@ol/tile-source';
 import { createBasemapLayerFromSource } from './basemapLayerFactory';
 import { resolvePresetLayerIds } from '../constants/basemapResolver';
+import { Z_BAND } from '@ol/layer/zIndexBands';
 
 /**
  * Basemap layer bootstrap feature
@@ -40,9 +41,11 @@ export function createBasemapLayerBootstrap({
             const config = layerConfigs.find((cfg) => cfg.id === item.id);
             const rawSource = config && item.visible ? config.createSource() : null;
             const source = rawSource ? prioritizeTileSourceRequest(rawSource) : null;
+            // zIndex 按显示带分配（与 refreshLayerInstances 同构）：标注类底图归标注带，其余归底图带
+            const zBand = config?.category === 'label' ? Z_BAND.LABEL : Z_BAND.BASEMAP;
             const layer = createBasemapLayerFromSource(source, {
                 visible: item.visible,
-                zIndex: index,
+                zIndex: zBand + index,
                 opacity: typeof item.opacity === 'number' ? item.opacity : 1,
             });
 

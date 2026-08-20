@@ -14,6 +14,29 @@ const DEFAULT_STYLE_TEMPLATE = {
 };
 
 /**
+ * 标签候选回退时应排除的元数据字段。
+ * KML/KMZ 解析的要素属性包含 styleUrl('#样式ID')、description(超长 HTML) 等
+ * 非业务字段，若被当作标签内容会显示 '#LineStyle00' 之类的垃圾文字
+ * （HENU 系列 KMZ 实测：name 为 NULL 的要素回退到 styleUrl 显示为 '#LineStyle00'）。
+ */
+const IGNORED_LABEL_KEYS = new Set([
+    'geometry',
+    'style',
+    '_style',
+    'ol_uid',
+    'styleUrl',
+    'description',
+    'address',
+    'snippet',
+    'phoneNumber',
+    'open',
+    'visibility',
+    'extrude',
+    'tessellate',
+    'altitudeMode',
+]);
+
+/**
  * 托管图层样式功能库
  * 职责：样式归一化、标签生成、样式函数构建与应用。
  */
@@ -82,7 +105,13 @@ export function createManagedLayerStyleFeature({ styleTemplates, maxLabelLength 
         if (!layerItem?.autoLabel) return '';
         if (!layerItem?.labelVisible) return '';
 
-        const labelText = String(layerItem.name || '').trim();
+        let labelText = String(layerItem.name || '').trim();
+        // URL 编码的图层名（共享链接/压缩包内部名等）先解码再校验
+        try {
+            labelText = decodeURIComponent(labelText);
+        } catch {
+            // 非编码名保持原样
+        }
         if (!isLabelValid(labelText, maxLabelLength)) return '';
         return labelText;
     };
@@ -125,8 +154,7 @@ export function createManagedLayerStyleFeature({ styleTemplates, maxLabelLength 
 
         const firstUsableEntry = Object.entries(props).find(
             ([key, value]) =>
-                key !== 'geometry' &&
-                key !== 'style' &&
+                !IGNORED_LABEL_KEYS.has(key) &&
                 !String(key).startsWith('_') &&
                 value !== null &&
                 value !== undefined &&
@@ -184,13 +212,17 @@ export function createManagedLayerStyleFeature({ styleTemplates, maxLabelLength 
                     : [existingStyle, labelOnly];
             }
 
-            const cacheKey = labelText || '__empty__';
-            if (layerItem.labelStyleCache.has(cacheKey)) {
-                return layerItem.labelStyleCache.get(cacheKey);
+            // 空标签不缓存：首个无效要素若污染 '__empty__'，后续要素将全部命中
+            // 空样式导致整个图层无标注（历史 bug：HENU 系列 KMZ 全图层无标签）
+            if (!labelText) {
+                return createStyleFromConfig(baseStyleConfig, { labelText: '' });
+            }
+            if (layerItem.labelStyleCache.has(labelText)) {
+                return layerItem.labelStyleCache.get(labelText);
             }
 
             const style = createStyleFromConfig(baseStyleConfig, { labelText });
-            layerItem.labelStyleCache.set(cacheKey, style);
+            layerItem.labelStyleCache.set(labelText, style);
             return style;
         };
     };

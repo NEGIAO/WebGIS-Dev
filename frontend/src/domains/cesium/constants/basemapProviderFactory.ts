@@ -10,6 +10,7 @@ import { useMessage } from '@common/shell/useMessage';
 /** 创建 Provider 所需的运行时上下文 */
 export type CesiumProviderContext = {
     tiandituTk: string;
+    ovitalTdtkey: string;
     customUrl: string;
     normBase: string;
 };
@@ -132,7 +133,7 @@ function toCesiumUrlTemplate(url: string): string {
 }
 
 /**
- * 解析上下文占位符，替换 URL 中的 {tiandituTk}、{customUrl}、{normBase}
+ * 解析上下文占位符，替换 URL 中的 {tiandituTk}、{ovitalTdtkey}、{customUrl}、{normBase}
  * @param url URL 模板
  * @param ctx 运行时上下文
  * @returns 解析后的 URL
@@ -141,6 +142,9 @@ function resolveContextPlaceholders(url: string, ctx: CesiumProviderContext): st
     let resolved = url;
     if (ctx.tiandituTk) {
         resolved = resolved.replace(/\{tiandituTk\}/g, ctx.tiandituTk);
+    }
+    if (ctx.ovitalTdtkey) {
+        resolved = resolved.replace(/\{ovitalTdtkey\}/g, ctx.ovitalTdtkey);
     }
     if (ctx.customUrl) {
         resolved = resolved.replace(/\{customUrl\}/g, ctx.customUrl);

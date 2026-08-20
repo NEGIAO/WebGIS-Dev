@@ -88,6 +88,7 @@ frontend/src/
 │   │   │   │   ├── useCesiumDataImport.js  # 数据导入主逻辑
 │   │   │   │   ├── useCesiumDataOpsHandlers.js  # 数据操作事件转发层（面板/拖拽/GLTF 弹窗 → dataImport，自容器抽离）
 │   │   │   │   └── loaders/
+│   │   │   │       ├── clampToGround.js  # 导入数据统一贴地工具（地形判断 + 点/线/面贴地属性，借鉴 drawPolygon）
 │   │   │   │       ├── czmlLoader.js  # CZML 时序数据加载器
 │   │   │   │       ├── geojsonLoader.js  # GeoJSON 流式加载器
 │   │   │   │       ├── geotiffLoader.js  # GeoTIFF 影像加载器
@@ -525,6 +526,7 @@ frontend/src/
 │       │       └── drawingToolRegistry.js  # 绘制工具注册表
 │       ├── layer/
 │       │   ├── layerManager.js
+│       │   ├── zIndexBands.js  # zIndex 显示带 SSOT 常量（底图/数据统一带/区划/标注/系统，TOC 顺序覆写）
 │       │   ├── components/
 │       │   │   ├── AttributeTable.vue
 │       │   │   └── LayerControlPanel.vue

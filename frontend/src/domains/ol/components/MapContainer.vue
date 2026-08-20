@@ -229,6 +229,7 @@ import { useLocale } from '@common/app/useLocale';
 import { useGisDropZone } from '@common/data-import/useGisDropZone';
 import { useUserLocation } from '@common/map-view/useUserLocation';
 import { useManagedLayerRegistry } from '@ol/layer/composables/useManagedLayerRegistry';
+import { Z_BAND } from '@ol/layer/zIndexBands';
 import { useMapState } from '@ol/composables/useMapState';
 import { createBasemapLayerFromSource, buildRasterBasemapSource } from '@ol/basemap/composables/basemapLayerFactory';
 
@@ -304,17 +305,21 @@ const INITIAL_VIEW = { center: [114.302, 34.8146], zoom: 4 }; // 初始视图位
 const CRITICAL_TILE_READY_TIMEOUT_MS = 3000; // 首屏关键瓦片加载超时时间（毫秒）
 const APP_DISPLAY_VERSION = __APP_VERSION__; // 应用显示版本号（构建时从 README.md 自动提取，无需手动维护）
 
-// 图层 z-index 分层方案（值越大越在上层）
+// 图层 z-index 分层方案（SSOT：@ol/layer/zIndexBands，值越大越在上层）
+// 固定系统层从数据带（Z_BAND.DATA = 200）中部以上派生，避免被 TOC 顶层数据图层盖住：
+// 绘制临时层 400 > 路线 500 > 起终点 510 > 搜索点 350（数据带容量 600 层内恒高于 TOC 数据图层）
 const Z_INDEX = {
-    DRAW: 999,        // 绘图图层
-    USER_LOCATION: 1000, // 用户定位图层
-    BUS_ROUTE: 1080,  // 公交/驾车路线图层
-    BUS_PICK: 1085,   // 公交选点图层
-    SEARCH: 1100,     // 搜索结果图层
+    DRAW: Z_BAND.DATA + 200, // 绘制中的临时图形（高于全部已托管数据图层，容量 200 层内）
+    USER_LOCATION: Z_BAND.SYSTEM + 20, // 用户定位图层（系统叠加带）
+    BUS_ROUTE: Z_BAND.DATA + 300, // 公交/驾车路线图层（初始值，托管后由 refreshUserLayerZIndex 接管）
+    BUS_PICK: Z_BAND.DATA + 310, // 公交选点图层（略高于路线层）
+    SEARCH: Z_BAND.DATA + 150, // 搜索结果图层（瞬态 UI，高于一般数据、低于绘制临时层）
 };
 
 let TIANDITU_TK = getRuntimeMapTokensSync().tiandituTk;
 const tiandituTk = ref(TIANDITU_TK);
+let OVITAL_TDTKEY = getRuntimeMapTokensSync().ovitalTdtkey;
+const ovitalTdtkey = ref(OVITAL_TDTKEY);
 
 // --- Refs ---
 const mapContainerRef = ref(null);
@@ -349,7 +354,7 @@ let searchSource, searchLayer;
 
 // ========== 图层配置初始化 ==========
 // 使用 composable 提供的工厂函数而不是直接定义 LAYER_CONFIGS
-const LAYER_CONFIGS = createLayerConfigs(TIANDITU_TK);
+const LAYER_CONFIGS = createLayerConfigs(TIANDITU_TK, OVITAL_TDTKEY);
 
 // 初始化图层列表状态 (从配置生成)
 const layerList = ref(
@@ -366,12 +371,17 @@ const layerInstances = {}; // ⚠️ 非响应式共享可变状态：存储所�
 // ========== 运行时地图 Token 池（via composable：useRuntimeMapTokenPool） ==========
 // monitorLayerTimeout / switchLayerById / emitBaseLayersChangeBatched 声明晚于此处，
 // 以 getter 延迟解析（与原实现的运行时晚绑定语义一致）。
-const { hydrateRuntimeMapTokens, retryTiandituLayersWithNextToken } = createRuntimeMapTokenPool({
+const { hydrateRuntimeMapTokens, retryRuntimeTokenLayersWithNextToken } = createRuntimeMapTokenPool({
     getTiandituTk: () => TIANDITU_TK,
     setTiandituTk: (value) => {
         TIANDITU_TK = value;
     },
     tiandituTkRef: tiandituTk,
+    getOvitalTdtkey: () => OVITAL_TDTKEY,
+    setOvitalTdtkey: (value) => {
+        OVITAL_TDTKEY = value;
+    },
+    ovitalTdtkeyRef: ovitalTdtkey,
     layerListRef: layerList,
     customMapUrlRef: customMapUrl,
     selectedLayerRef: selectedLayer,
@@ -428,7 +438,7 @@ const { handleLayerContextAction } = useLayerContextMenuActions({
 const { validateBaseLayerSwitch, monitorLayerTimeout, disposeAllMonitors } =
     createBasemapResilience({
         message,
-        onRuntimeTokenFailure: retryTiandituLayersWithNextToken,
+        onRuntimeTokenFailure: retryRuntimeTokenLayersWithNextToken,
     });
 
 const { initializeBasemapLayers } = createBasemapLayerBootstrap({
@@ -1070,7 +1080,7 @@ const { bindBasemapSelectionWatcher, resetBasemapChain, dispose: disposeSelectio
     layerInstances,
     syncUrlFromMap: syncUrlFromActiveMap,
     validateBaseLayerSwitch,
-    onRuntimeTokenFailure: retryTiandituLayersWithNextToken,
+    onRuntimeTokenFailure: retryRuntimeTokenLayersWithNextToken,
     getBasemapOptionLabel,
     message,
     defaultLayerId: DEFAULT_BASEMAP_PRESET_ID,

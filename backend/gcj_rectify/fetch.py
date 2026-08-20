@@ -4,7 +4,7 @@ from typing import Optional
 import httpx
 from httpx import AsyncClient
 
-from utils.http_headers import BROWSER_USER_AGENT, referer_headers_for
+from utils.http_headers import BROWSER_USER_AGENT, build_browser_headers_no_br, referer_headers_for
 
 logger = logging.getLogger(__name__)
 
@@ -89,7 +89,14 @@ async def fetch_tile(url: str, client: Optional[AsyncClient] = None) -> bytes:
     for attempt in range(MAX_RETRIES + 1):
         active_client = client or get_async_client()
         try:
-            async with active_client.stream("GET", url, headers=referer_headers_for(url)) as response:
+            # 完整浏览器特征头（本面需 httpx 解压响应体 → 不广告 br/zstd，
+            # 见 utils/http_headers.build_browser_headers_no_br 注释）
+            # + 白名单防盗链 Referer（非白名单源不附加）
+            headers = build_browser_headers_no_br()
+            referer_headers = referer_headers_for(url)
+            if referer_headers:
+                headers.update(referer_headers)
+            async with active_client.stream("GET", url, headers=headers) as response:
                 if response.status_code != 200:
                     raise RuntimeError(
                         f"upstream returned {response.status_code} for {url}"

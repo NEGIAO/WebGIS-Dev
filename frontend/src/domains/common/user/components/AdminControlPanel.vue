@@ -4,6 +4,7 @@ import {
     Bot,
     Check,
     Database,
+    Globe,
     LayoutDashboard,
     Megaphone,
     MonitorDot,

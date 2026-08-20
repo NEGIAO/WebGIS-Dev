@@ -4,6 +4,7 @@
  */
 
 import { createBlobUrl, revokeBlobUrl, flyToEntity } from './utils.js';
+import { clampDataSourceToGround } from './clampToGround.js';
 
 /**
  * 加载 CZML 文件到 Cesium
@@ -29,6 +30,11 @@ export async function loadCZML({ file, getCesium, getViewer, message, loadedData
         dataSource.name = file.name;
 
         await viewer.dataSources.add(dataSource);
+        // 统一贴地（地形开启时生效）：点/线/面实体贴地，时间动态实体（采样轨迹）自动跳过
+        const clampResult = clampDataSourceToGround(viewer, Cesium, dataSource);
+        if (clampResult.clamped > 0) {
+            console.warn(`[贴地] CZML "${file.name}": 地形已开启，${clampResult.clamped}/${clampResult.total} 个实体已贴地`);
+        }
         flyToEntity(viewer, Cesium, dataSource, 'czml');
 
         const record = { id, name: file.name, type: 'czml', entity: dataSource, blobUrl };

@@ -8,6 +8,7 @@
 
 import { ref, toRaw } from 'vue';
 import { getExtension, flyToEntity, revokeBlobUrl } from './loaders/utils.js';
+import { clampDataSourceToGround } from './loaders/clampToGround.js';
 import { loadGeoJSON } from './loaders/geojsonLoader.js';
 import { loadKML, loadKMZ } from './loaders/kmlLoader.js';
 import { loadSHP } from './loaders/shpLoader.js';
@@ -18,6 +19,9 @@ import { loadTilesetJSON, loadTilesetFromZip, importTilesetFromDirectory, TILESE
 
 /** 最大高程网格尺寸（超过此尺寸自动降采样） */
 const MAX_MESH_SIZE = 200;
+
+/** 支持统一贴地的矢量数据源类型（点/线/面实体可施加 heightReference/clampToGround） */
+const VECTOR_GROUND_TYPES = new Set(['geojson', 'kml', 'kmz', 'shp', 'czml']);
 
 /**
  * @param {Object} options
@@ -79,10 +83,9 @@ export function useCesiumDataImport({ getViewer, getCesium, message, heightSampl
             const v = getViewer();
             if (!Cesium || !v) return;
 
-            const tilesets = loadedDataSources.value.filter((r) => r.type === '3dtiles');
-            if (!tilesets.length) return;
-
+            // 1) 3D Tiles 基底采样重配准
             let refitted = 0;
+            const tilesets = loadedDataSources.value.filter((r) => r.type === '3dtiles');
             for (const record of tilesets) {
                 const ok = await refitTilesetToTerrain({
                     record, tileset: toRaw(record.entity), viewer: v, Cesium,
@@ -91,9 +94,24 @@ export function useCesiumDataImport({ getViewer, getCesium, message, heightSampl
                 if (epoch !== refitEpoch) return;
                 if (ok) refitted++;
             }
-            if (refitted) {
+
+            // 2) 矢量数据源统一贴地：地形关闭时导入的数据保持绝对高度，
+            //    开启/切换地形后由本监听补贴地（贴地幂等，重复执行无副作用；
+            //    时间动态实体在 clampDataSourceToGround 内部自动跳过）
+            let vectorClamped = 0;
+            for (const record of loadedDataSources.value) {
+                if (!VECTOR_GROUND_TYPES.has(record.type)) continue;
+                const ds = toRaw(record.entity);
+                if (!ds?.entities) continue;
+                vectorClamped += clampDataSourceToGround(v, Cesium, ds).clamped;
+            }
+
+            if (refitted || vectorClamped) {
                 loadedDataSources.value = [...loadedDataSources.value];
-                message?.info?.(`地形已切换，${refitted} 个 3D Tiles 已重新贴地`);
+                const parts = [];
+                if (refitted) parts.push(`${refitted} 个 3D Tiles 已重新贴地`);
+                if (vectorClamped) parts.push(`${vectorClamped} 个矢量实体已贴地`);
+                message?.info?.(`地形已切换，${parts.join('，')}`);
             }
         });
         terrainWatcherInstalled = true;

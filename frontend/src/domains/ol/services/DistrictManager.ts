@@ -13,6 +13,7 @@ import Feature from 'ol/Feature';
 
 import { gcj02ToWgs84 as convertGCJ02ToWGS84 } from '@common/data-import/crs/coordTransform';
 import type { useTOCStore } from '@common/layer-tree/stores/useTOCStore';
+import { Z_BAND } from '@ol/layer/zIndexBands';
 
 type TOCStore = ReturnType<typeof useTOCStore>;
 
@@ -167,7 +168,7 @@ export class DistrictManager {
         const source = new VectorSource();
         const _layer = new VectorLayer({
             source,
-            zIndex: 1180,
+            zIndex: Z_BAND.DISTRICT,
             style: (feature) => {
                 const districtName = resolveFeatureName(feature as Feature);
                 const boundaryStyle = new Style({

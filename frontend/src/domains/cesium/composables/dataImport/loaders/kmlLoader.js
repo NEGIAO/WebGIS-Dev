@@ -1,40 +1,187 @@
-/**
+﻿/**
  * kmlLoader.js
  * KML/KMZ 格式加载器
- *
- * 设计要点（V3.5.25 重构）：
- * - KML 是文本格式，直接交给 Cesium.KmlDataSource.load(blobUrl) 有两个致命缺陷：
- *   ① Cesium 内部固定按 UTF-8 读取文本，GBK 等编码的 KML 必然乱码，符号/样式全部解析失败；
- *   ② blob URL 无法承载相对路径资源（图标等）。
+ * 设计要点(V3.5.24 重构):
+ * - KML 是文本格式，直接交给 Cesium.KmlDataSource.load(blobUrl) 存在两个致命缺陷：
+ *   ① Cesium内部固定按 UTF‑8 读取文本，GBK等编码的KML必然乱码、符号格式全部解析失败；
+ *   ② blob URL无法加载相对路径资源(图标等)。
  *   因此本加载器统一先自行读取并多编码解码，再以文本 Blob 交给 Cesium。
- * - KMZ 统一走手动解压管线（extractKmlFromKmz）：doc.kml 智能选择 + 多编码解码 +
- *   内嵌资源 href 重写为 blob URL，符号完整性不依赖 Cesium 原生 KMZ 支持（其 zip 条目
- *   名精确匹配策略对 ./ 前缀、大小写差异、URL 编码等变体必然失配）。
- * - 重写产生的 blob URL 登记到 record.blobUrls，由 useCesiumDataImport 的
+ * - KMZ 统一手动解压流程(extractKmlFromKmz):doc.kml智能选择 + 多编码解码 +
+ *   内嵌资源 href 重写为 blob URL，符号完整性不依赖 Cesium 原生 KMZ支持(其zip目录
+ *   名称精确匹配策略对 ./ 前缀、大小写差异、URL编码等变体必然失配)。
+ * - 重写产生的 blob URL记录到 record.blobUrls，由 useCesiumDataImport 的
  *   removeDataSource / clearAllDataSources 统一回收。
+ *
+ * 投影与命名空间(V3.5.24 修复):
+ * - Cesium.KmlDataSource 只支持 WGS84(EPSG:4326)经纬度坐标；如果KML实际使用
+ *   3857(Web Mercator)等其它投影，坐标会被误当成经纬度导致位置错误。
+ *   本加载器复用 ol 管线同源的 crsAware 检测逻辑(detectKmlProjectionHint /
+ *   resolveProjectionOrDefault)，对非 EPSG:4326 的KML 在XML层面把所有
+ *   <coordinates> 重投影为 WGS84 之后再交给 Cesium。
+ * - 部分KML使用 <kml:Placemark> 等带前缀标签，先统一归一化命名空间(移除 kml: 前缀)，
+ *   再传给Cesium，保证要素格式可以被解析。
  */
 
 import { decodeTextContent } from '@common/data-import/vectorUtils.js';
+import {
+    detectKmlProjectionHint,
+    resolveProjectionOrDefault,
+} from '@common/data-import/crsAware.js';
+import { transform } from 'ol/proj';
 import { flyToEntity, revokeBlobUrl } from './utils.js';
+import { clampDataSourceToGround } from './clampToGround.js';
+
 
 const KML_MIME = 'application/vnd.google-earth.kml+xml';
+const WGS84 = 'EPSG:4326';
+
+
+function parseKmlDocument(kmlText) {
+    return new Blob([kmlText], { type: KML_MIME });
+}
+
 
 /**
- * 以已解码的 KML 文本加载 KmlDataSource
+ * 归一化 KML 文本中的 kml: 前缀命名空间
+ * 部分 KML 文件使用 <kml:Placemark> 等带前缀的标签，需要移除前缀
+ * 以保证 DOMParser / Cesium 能够正确匹配元素。
+ *
+ * @param {string} kmlText - 原始 KML 文本
+ * @returns {string} 归一化后的 KML 文本
+ */
+function normalizeKmlNamespace(kmlText) {
+    if (/<\s*\/?\s*kml:/i.test(kmlText)) {
+        return String(kmlText)
+            .replace(/<(\/?)(\s*)kml:/gi, '<$1$2')
+            .replace(/\s+xmlns:kml\s*=\s*(['"]).*?\1/gi, '');
+    }
+    return kmlText;
+}
+
+
+/**
+ * 将 KML 文本中全部 <coordinates> 的坐标从源投影重投影到 WGS84(EPSG:4326)。
+ * KML规范要求坐标为 WGS84 经纬度，但是现实中很多KML直接使用投影坐标
+ * (3857、CGCS2000 等)。Cesium.KmlDataSource 只按经纬度解析，
+ * 因此需要先在 XML 层面完成重投影。
+ *
+ * @param {string} kmlText - KML 文本
+ * @param {string} sourceProjection - 源投影编码(例如 EPSG:3857)
+ * @returns {Promise<string>} 重投影后的KML文本(解析失败原样返回)
+ */
+async function reprojectKmlToWgs84(kmlText, sourceProjection) {
+    if (!sourceProjection || sourceProjection.toUpperCase() === WGS84) {
+        return kmlText;
+    }
+
+    const xml = new DOMParser().parseFromString(kmlText, 'text/xml');
+    if (xml.documentElement.tagName === 'parsererror') return kmlText;
+
+    const coordinateNodes = Array.from(xml.getElementsByTagName('coordinates'));
+    if (!coordinateNodes.length) return kmlText;
+
+    for (const node of coordinateNodes) {
+        const raw = String(node.textContent || '').trim();
+        if (!raw) continue;
+
+        const lines = raw.split('\n');
+        const converted = lines.map((line) => {
+            const trimmed = line.trim();
+            if (!trimmed) return line;
+
+            // KML coordinates 格式: lon,lat[,alt]，可用空格分隔多个点
+            return trimmed
+                .split(/\s+/)
+                .map((chunk) => {
+                    const parts = chunk.split(',').map((v) => Number(v.trim()));
+                    if (parts.length < 2 || !Number.isFinite(parts[0]) || !Number.isFinite(parts[1])) {
+                        return chunk;
+                    }
+                    try {
+                        const [lon, lat] = transform(
+                            [parts[0], parts[1]],
+                            sourceProjection,
+                            WGS84,
+                        );
+                        const out = [Number(lon.toFixed(10)), Number(lat.toFixed(10))];
+                        if (Number.isFinite(parts[2])) out.push(parts[2]);
+                        return out.join(',');
+                    } catch {
+                        return chunk; // 投影不可用或者转换失败，原样保留
+                    }
+                })
+                .join(' ');
+        });
+
+        node.textContent = converted.join('\n');
+    }
+
+    return new XMLSerializer().serializeToString(xml);
+}
+
+
+/**
+ * 准备 KML 文本:命名空间归一化 + 投影检测与重投影。
+ * 复用 ol 管线同源的 crsAware 检测逻辑，保证与 ol 行为一致。
+ *
+ * @param {string} kmlText - 已经解码的 KML 文本
+ * @param {string} label - 日志标签(KML / KMZ)
+ * @returns {Promise<{ kmlText: string, projection: string|null }>}
+ */
+async function prepareKmlText(kmlText, label = 'KML') {
+    // 1. 归一化 kml: 前缀命名空间(就算不需要重投影也要做，保证要素可解析)
+    const normalized = normalizeKmlNamespace(kmlText);
+
+    // 2. 检测投影(与 ol 管线同源)
+    const hint = detectKmlProjectionHint(normalized);
+    const resolved = await resolveProjectionOrDefault(hint, label);
+    if (resolved.warning) {
+        console.warn(`[${label}] ${resolved.warning}`);
+    }
+
+    // 3. 非 WGS84 时在XML层面重投影坐标
+    const finalText = await reprojectKmlToWgs84(normalized, resolved.projection);
+
+    return {
+        kmlText: finalText,
+        projection: resolved.projection,
+    };
+}
+
+
+/**
+ * 用已经解码的KML文本加载 KmlDataSource
  * @param {Cesium} Cesium - Cesium 命名空间
  * @param {Cesium.Viewer} viewer - 场景
- * @param {string} kmlText - 已解码的 KML 文本
+ * @param {string} kmlText - 已经解码并且归一化的 KML 文本
  * @returns {Promise<Cesium.KmlDataSource>}
  */
 async function loadKmlDataSource(Cesium, viewer, kmlText) {
-    return Cesium.KmlDataSource.load(
-        new Blob([kmlText], { type: KML_MIME }),
-        {
-            camera: viewer.scene.camera,
-            canvas: viewer.scene.canvas,
-        },
-    );
+    const kmlDocument = parseKmlDocument(kmlText);
+
+    return Cesium.KmlDataSource.load(kmlDocument, {
+        camera: viewer.scene.camera,
+        canvas: viewer.scene.canvas,
+    });
 }
+
+/**
+ * 统一贴地入口（地形开启时生效）：KML/KMZ 的点/线/面/标注实体施加贴地属性，
+ * 避免开启地形后数据被埋没。贴地属性组合与 drawPolygon.ts 对齐。
+ * @param {Cesium.Viewer} viewer
+ * @param {Cesium} Cesium - Cesium 命名空间
+ * @param {Cesium.KmlDataSource} dataSource - 已加载的数据源
+ * @param {string} label - 日志标签（含文件名）
+ */
+function applyGroundClamping(viewer, Cesium, dataSource, label) {
+    const result = clampDataSourceToGround(viewer, Cesium, dataSource);
+    if (result.clamped > 0) {
+        console.warn(`[贴地] ${label}: 地形已开启，${result.clamped}/${result.total} 个实体已贴地`);
+    } else if (result.total > 0) {
+        console.warn(`[贴地] ${label}: 地形未开启或全部实体已贴地，跳过（${result.total} 个实体）`);
+    }
+}
+
 
 /**
  * 加载 KML 文件到 Cesium
@@ -55,12 +202,16 @@ export async function loadKML({ file, getCesium, getViewer, message, loadedDataS
     const buffer = await file.arrayBuffer();
     const kmlText = decodeTextContent(buffer);
 
-    const dataSource = await loadKmlDataSource(Cesium, viewer, kmlText);
+    // 投影检测 + 命名空间归一化 + 坐标重投影(和ol行为保持一致)
+    const { kmlText: preparedText } = await prepareKmlText(kmlText, 'KML');
+
+    const dataSource = await loadKmlDataSource(Cesium, viewer, preparedText);
 
     const id = `kml_${++nextId.current}`;
     dataSource.name = file.name;
 
     await viewer.dataSources.add(dataSource);
+    applyGroundClamping(viewer, Cesium, dataSource, `KML "${file.name}"`);
     flyToEntity(viewer, Cesium, dataSource, 'kml');
 
     const record = { id, name: file.name, type: 'kml', entity: dataSource };
@@ -70,9 +221,11 @@ export async function loadKML({ file, getCesium, getViewer, message, loadedDataS
     return record;
 }
 
+
 /**
  * 加载 KMZ 文件到 Cesium
- * 统一走手动解压管线：doc.kml 智能选择 + 多编码解码 + 内嵌资源 href 重写为 blob URL
+ * 统一手动解压流程:doc.kml 智能选择 + 多编码解码 + 内嵌资源 href 重写为 blob URL
+ * 解压之后再走和KML相同的投影检测 / 命名空间归一化 / 坐标重投影。
  *
  * @param {Object} ctx
  * @param {File} ctx.file
@@ -93,12 +246,16 @@ export async function loadKMZ({ file, getCesium, getViewer, message, loadedDataS
     });
 
     try {
-        const dataSource = await loadKmlDataSource(Cesium, viewer, kmlString);
+        // 投影检测 + 命名空间归一化 + 坐标重投影
+        const { kmlText: preparedText } = await prepareKmlText(kmlString, 'KMZ');
+
+        const dataSource = await loadKmlDataSource(Cesium, viewer, preparedText);
 
         const id = `kmz_${++nextId.current}`;
         dataSource.name = file.name;
 
         await viewer.dataSources.add(dataSource);
+        applyGroundClamping(viewer, Cesium, dataSource, `KMZ "${file.name}"`);
         flyToEntity(viewer, Cesium, dataSource, 'kmz');
 
         const record = {

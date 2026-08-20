@@ -28,6 +28,7 @@ import {
 import { decodePos, encodePos } from '@ol/utils/biz/index';
 import { DEFAULT_BASEMAP_LAYER_INDEX, URL_LAYER_OPTIONS } from '@ol/basemap/constants';
 import { buildRasterBasemapSource } from '@ol/basemap/composables/basemapLayerFactory';
+import { Z_BAND } from '@ol/layer/zIndexBands';
 import { normalizeBinaryFlag, normalizeLocationFlag, normalizeText } from '@common/utils/normalize';
 import { getCurrentQuerySnapshot as getSnapshot, readQueryValue as readQueryFromSnapshot } from '@common/url-state/urlQueryReader';
 // 新增：中心点标记所需导入
@@ -752,7 +753,11 @@ export function useMapState(mapInstance, options = {}) {
                 layer.setVisible(targetVisible);
             }
 
-            const targetZIndex = layerList.length - index;
+            // zIndex 按显示带分配（见 @ol/layer/zIndexBands）：标注类底图恒置顶于数据带，
+            // 其余底图瓦片落最低带。带基准固定、与底图数量无关 → 底图源增加不会压过数据层。
+            const category = configs.find((cfg) => cfg?.id === item.id)?.category;
+            const zBand = category === 'label' ? Z_BAND.LABEL : Z_BAND.BASEMAP;
+            const targetZIndex = zBand + index;
             if (layer.getZIndex() !== targetZIndex) {
                 layer.setZIndex(targetZIndex);
             }
@@ -886,13 +891,15 @@ export function useMapState(mapInstance, options = {}) {
 
         refreshLayerInstances({ layerList, instanceMap, configs });
 
-        // 组合图层模式下，按配置顺序（从下到上）强制设置层级。
+        // 组合图层模式下，按显示带与配置顺序（从下到上）强制设置层级：
+        // 标注类底图归标注带（数据之上），其余底图瓦片归底图带（数据之下）。
         if (Array.isArray(normalizedResolvedIds) && normalizedResolvedIds.length && instanceMap) {
-            const zIndexBase = layerList.length + 10;
             normalizedResolvedIds.forEach((id, index) => {
                 const layer = instanceMap[id];
                 if (!layer || typeof layer.setZIndex !== 'function') return;
-                layer.setZIndex(zIndexBase + index);
+                const category = configs.find((cfg) => cfg?.id === id)?.category;
+                const zBand = category === 'label' ? Z_BAND.LABEL : Z_BAND.BASEMAP;
+                layer.setZIndex(zBand + index);
             });
         }
 
@@ -939,7 +946,7 @@ export function useMapState(mapInstance, options = {}) {
                 offsetX: -75,
                 textAlign: 'center',
             }),
-            zIndex: 1080,
+            zIndex: Z_BAND.SYSTEM, // 系统叠加带：经纬网恒在标注带之上
         });
         map.addLayer(graticuleLayer);
         return graticuleLayer;
@@ -980,7 +987,7 @@ export function useMapState(mapInstance, options = {}) {
 
         centerPointLayer = new VectorLayer({
             source: source,
-            zIndex: 1090,      // 高于经纬网，确保显示在地图元素之上
+            zIndex: Z_BAND.SYSTEM + 10, // 高于经纬网，确保显示在地图元素之上
             visible: graticuleActive, // 初始可见性与经纬网保持一致
         });
         map.addLayer(centerPointLayer);

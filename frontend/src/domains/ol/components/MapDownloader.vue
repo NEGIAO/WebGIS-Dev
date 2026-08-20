@@ -416,16 +416,21 @@ function handleClearExtent() {
 }
 
 let TIANDITU_TK = getRuntimeMapTokensSync().tiandituTk;
+let OVITAL_TDTKEY = getRuntimeMapTokensSync().ovitalTdtkey;
 const layerConfigVersion = ref(0);
-const layerConfigs = createLayerConfigs(TIANDITU_TK, '');
+const layerConfigs = createLayerConfigs(TIANDITU_TK, OVITAL_TDTKEY);
 let layerConfigMap = new Map(layerConfigs.map((item) => [item.id, item]));
 
-function refreshLayerConfigs(tiandituTk) {
+function refreshLayerConfigs(tiandituTk, ovitalTdtkey) {
     const nextTiandituTk = String(tiandituTk || '').trim();
-    if (!nextTiandituTk || nextTiandituTk === TIANDITU_TK) return;
+    const nextOvitalTdtkey = String(ovitalTdtkey || '').trim();
+    const tiandituChanged = nextTiandituTk && nextTiandituTk !== TIANDITU_TK;
+    const ovitalChanged = nextOvitalTdtkey && nextOvitalTdtkey !== OVITAL_TDTKEY;
+    if (!tiandituChanged && !ovitalChanged) return;
 
-    TIANDITU_TK = nextTiandituTk;
-    const nextLayerConfigs = createLayerConfigs(nextTiandituTk, '');
+    if (tiandituChanged) TIANDITU_TK = nextTiandituTk;
+    if (ovitalChanged) OVITAL_TDTKEY = nextOvitalTdtkey;
+    const nextLayerConfigs = createLayerConfigs(TIANDITU_TK, OVITAL_TDTKEY);
     layerConfigs.splice(0, layerConfigs.length, ...nextLayerConfigs);
     layerConfigMap = new Map(layerConfigs.map((item) => [item.id, item]));
     layerConfigVersion.value += 1;
@@ -670,7 +675,7 @@ const tilePresets = computed(() => {
 
 onMounted(async () => {
     const tokens = await loadRuntimeMapTokens();
-    refreshLayerConfigs(tokens?.tiandituTk);
+    refreshLayerConfigs(tokens?.tiandituTk, tokens?.ovitalTdtkey);
     store.fetchMyTasks();
     store.updateEstimatedTileCount(0);
 });

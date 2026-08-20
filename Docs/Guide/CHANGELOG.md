@@ -6,6 +6,140 @@
 
 ## 版本记录
 
+### V3.5.24 (2026-08-19~20) — 综合版本：出站浏览器特征头泛化 · 图层 zIndex 分带治理 · 数据导入统一贴地 · 密钥池化增强 · 瓦片代理泛化
+
+> 2026-08-19~20 的八个增量（原 V3.5.24–V3.5.31，多次不规范 commit 的暂存结果）按用户指示合并为单一版本 V3.5.24。下列小节以原版本号标注，供追溯。
+
+#### 一、运行时密钥池失败自动轮换（备用 key 闭环，原 V3.5.31）
+
+- **背景**：V3.5.30 奥维 tdtkey 池化交付时，失败自动轮换列为后续增强（原方案决策 2）——备用 key
+  只能面板手动维护/切换，与「设置备用 key 就是为了主 key 挂了自动顶上」的意图不符。
+- **方案**：把天地图专用的容灾轮换泛化为通用密钥池轮换：
+  - `basemapConfig.ts` 新增 SSOT 判定函数 `resolveRuntimeTokenPoolKey`——依据图层 `needsContext`
+    声明解析所属密钥池（`tianditu_tk` / `ovital_tdtkey`），杜绝字符串猜测（`opentopomap` 等
+    含 `omap` 子串的图源不会误判为奥维）；
+  - `useRuntimeMapTokenPool.js`：`retryTiandituLayersWithNextToken` → 泛化
+    `retryRuntimeTokenLayersWithNextToken`。先解析失败图层/预设涉及的全部密钥池（直接图层命中
+    优先，预设展开栈内去重；`useBasemapSelectionWatcher` 传的是预设 ID），逐池 `markRuntimeMapTokenFailed`
+    轮换备用 key，任一切换成功即重置受影响图层 source → 重建当前底图 → 恢复超时监控并 toast 提示；
+    池内仅 1 个 key 时返回未切换，不产生死循环；
+  - 覆盖两条失败路径：`monitorLayerTimeout` 连续 3 错/服务无响应，以及手动切换底图验证失败；
+  - Cesium boot 失败重试：`maxRetryCount` 纳入 `ovitalTdtkeys` 长度；底图栈含奥维图层且底图加载失败时
+    依次轮换天地图 → 奥维 → Cesium Ion token；
+  - MapContainer 两处引用同步改名。
+- 详见[日志](Docs/LLM_record/26-08/2026-08-20/2026-08-20-ovital-tdtkey-failover.md)。
+
+#### 二、奥维 tdtkey L2 密钥池化（原 V3.5.30）
+
+- **根因**：奥维注记（`Omap_label`）与奥维等高线（`terrain_omap_contour`）的 `tdtkey` 硬编码在
+  `basemapConfig.ts`（同一 key 4 处字面量）；奥维服务防范性强、key 频繁失效变更，每次变更需改代码
+  重新部署，期间被 30+ 预设栈引用的奥维注记全部失效。
+- **方案**：新增 `ovital_tdtkey` L2 密钥池，完整复用天地图 `tianditu_tk` 既有链路
+  （api_keys 表 + 备用池 → `/api/runtime-config/map-tokens` → 前端运行时 token 池）：
+  - 后端：`ALLOWED_API_KEYS` / `FRONTEND_RUNTIME_KEYS` 增加 `ovital_tdtkey`，map-tokens 下发
+    主 key + 备用池 + is_set；
+  - 前端运行时池：`runtimeMapTokens.js` 增加 `ovitalTdtkey` 归一化 / 轮换 / 清缓存；
+  - 底图配置：新增 `buildOvitalUrl` 帮助函数，两图源 url 模板改 `{ovitalTdtkey}` 占位符（Cesium
+    消费），createSource 运行时注入（OL 消费），**删除全部硬编码 key**；
+  - 注入链：`createLayerConfigs(tiandituTk, ovitalTdtkey, customUrl)` 签名扩展，
+    MapContainer / useRuntimeMapTokenPool / MapDownloader / CesiumContainer / useCesiumLayers /
+    basemapProviderFactory 同步携带；
+  - 管理员面板：天地图密钥卡片之后新增「奥维 TDT Key」卡片（含备用池、状态、删除），保存后自动
+    清缓存、全站生效；
+  - i18n zh-CN/en-US 文案 + `.env.example` [L2] 段登记说明。
+- 详见[日志](Docs/LLM_record/26-08/2026-08-20/2026-08-20-ovital-tdtkey-l2.md)。
+
+#### 三、导入数据统一贴地（借鉴 drawPolygon 贴地方案，原 V3.5.29）
+
+- **根因**：KML/KMZ/CZML 加载器未对点/线/面实体施加任何贴地属性；Cesium 域代码无一处
+  `heightReference`——开启地形后数据高度 0 落在椭球面，被地形埋没不可见。GeoJSON/SHP
+  虽有 `clampToGround: true`，但未补 `disableDepthTestDistance`，地形/3D Tiles 起伏下
+  点与标注仍可能被深度测试遮蔽；地形切换监听只处理 3D Tiles，不管矢量数据源。
+- **修复**：新增 `loaders/clampToGround.js` 统一贴地工具（借鉴 `drawPolygon.ts` 属性组合）：
+  - 先判断地形是否开启（terrainProvider 非 EllipsoidTerrainProvider）；开启才贴地，
+    关闭保持数据原始绝对高度；
+  - 点/标注 → `heightReference: CLAMP_TO_GROUND` + `disableDepthTestDistance: Infinity`；
+    线 → `polyline.clampToGround: true`；面 → `perPositionHeight: false` +
+    `heightReference: CLAMP_TO_GROUND`；billboard/corridor/rectangle/ellipse/model 同类处理；
+  - 幂等（已贴地不重复改）、已设置非 NONE 高度引用（自带海拔语义）不覆盖、
+    时间动态实体（CZML 采样轨迹）自动跳过；
+  - KML/KMZ/CZML/GeoJSON/SHP 五个加载器统一接入；
+  - `useCesiumDataImport` 地形切换监听扩展：开启/切换地形后矢量数据源自动补贴地。
+- 详见[日志](Docs/LLM_record/26-08/2026-08-20/2026-08-20-unify-data-clamp-to-ground.md)。
+
+#### 四、修复 KMZ/KML 标注不显示 + 数据层标注层级上移（原 V3.5.28）
+
+- **根因**（node + esbuild 打包真实模块实证）：KMZ 数据（HENU 系列等 OSM 导出）的
+  Placemark `<name>` 大量为 "NULL"（HENU道路 108/108、HENU建筑 58/116），回退链缺陷：
+  - `styleUrl` 等元数据字段被当标签 → 显示 `#LineStyle00` 垃圾 ID；
+  - 首个要素标签为空时污染 `__empty__` 样式缓存 → 后续要素全部无标注；
+  - URL 编码图层名未解码即校验 → 回退链最后一环失效。
+- **修复**（`useManagedLayerStyle.js`）：标签回退排除元数据字段（新增
+  `IGNORED_LABEL_KEYS`）、空标签不写缓存、图层名先 `decodeURIComponent` 再校验。
+- **标注层级**（`zIndexBands.js`）：`Z_BAND.LABEL 800 → 100`（标注瓦片带 100~149，
+  底图之上、数据之下；底图带收敛 0~99，卷帘对比带 150~199 不变）——数据层标注文字
+  不再被标注瓦片遮挡。
+- 详见[日志](Docs/LLM_record/26-08/2026-08-19/2026-08-19-fix-kmz-label-render-and-zindex.md)。
+
+#### 五、修复 TOC 标注开关失效（图层名误判闸门移除，原 V3.5.27）
+
+- **根因**：`TOCTreeItem.vue` 用 `isValidLabel(图层名, 100)` 作为标注菜单显示闸门——
+  URL 编码名（%XX>60%）、"无/未知"开头名被误判无效 → 标注菜单项消失；而标注内容实际
+  来自要素属性字段，与图层名无关（渲染侧已有校验）。
+- **修复**：`canToggleLabel` 改为仅 `!!actions.label`（只看图层能力），移除误加的
+  图层名校验与不再使用的 import。
+- **连带**：`useLayerOperations.ts` 标注方法名 `toggleLayerLabelVisibility` →
+  `setUserLayerLabelVisibility`（对齐 MapContainer 暴露面，消除潜在静默失效）。
+- 详见[日志](Docs/LLM_record/26-08/2026-08-19/2026-08-19-fix-toc-label-toggle.md)。
+
+#### 六、TOC 拖拽顺序覆写图层 zIndex（统一数据带 + 跨类型排序生效，原 V3.5.26）
+
+- **统一数据带**（`zIndexBands.js`）：删除 RASTER/VECTOR/DRAW/ROUTE 类型带与
+  `Z_BAND_SIZE`，新增 `Z_BAND.DATA = 200`（容量 600，200~799）；保留
+  BASEMAP / DISTRICT / LABEL / SYSTEM。
+- **TOC 全序覆写**（`useManagedLayerRegistry.js`）：删除 `resolveUserLayerZBand` 与
+  `isRasterUploadLayer` 依赖；`refreshUserLayerZIndex` 改为
+  `zIndex = DATA + (N - 1 - index)`——TOC 顶部图层（index 0）zIndex 最高、最先显示，
+  跨类型拖拽（TIF/矢量/KML）完全生效。
+- **创建值与固定层接入**：`useLayerDataImport.js` / `useCreateManagedVectorLayer.js`
+  创建 zIndex 接入 `Z_BAND.DATA`；`MapContainer.vue` Z_INDEX 常量从 DATA 带派生
+  （搜索点 +150 / 绘制临时 +200 / 路线 +300 / 起终点 +310，数值不变）。
+- **根治遗留风险**：跨带溢出（同类型 >100 层）与未知 sourceType 兜底——随类型带
+  删除一并消除。
+- 详见[日志](Docs/LLM_record/26-08/2026-08-19/2026-08-19-fix-toc-reorder-override-zindex.md)。
+
+#### 七、图层 zIndex 分带治理（标注 > 数据 > 底图 系统级不变量，原 V3.5.25）
+
+- **SSOT 常量**（新增 `frontend/src/domains/ol/layer/zIndexBands.js`）：`Z_BAND` 八显示带
+  （底图 0~199 / 栅格 200 / 矢量 300 / 绘制 400 / 路线 500 / 区划 600 / 标注 800 / 系统 900+）、
+  `Z_BAND_SIZE=100`、`Z_BASEMAP_SWIPE_OFFSET=150`（卷帘对比层预留带）。
+- **统一分散赋值**：底图刷新/组合切换（`useMapState.js`，两条路径同一公式，label 感知）、
+  初始化 bootstrap（与刷新同构）、卷帘（`useBasemapSwipe.js`）、工厂默认值
+  （`basemapLayerFactory.js`）→ 一律由带常量派生。
+- **数据图层按类型分带**：`useManagedLayerRegistry.js` 新增 `resolveUserLayerZBand`
+  （区划→DISTRICT、路线→ROUTE、绘制→DRAW、TIF 上传→RASTER、其余→VECTOR）；
+  TIF（`useLayerDataImport.js`）与托管矢量（`useCreateManagedVectorLayer.js`）删除本地裸常量。
+- **系统层接入**：`MapContainer.vue` Z_INDEX 常量、`DistrictManager.ts` 区划层、经纬网/中心点。
+- **修复**：切换底图组合遮挡数据、打开图层管理后数据置顶的不一致；标注瓦片图层恒顶于数据层、
+  数据层恒顶于底图瓦片。
+- 详见[日志](Docs/LLM_record/26-08/2026-08-19/2026-08-19-fix-layer-zindex-bands.md)。
+
+#### 八、瓦片代理三接口出站请求头泛化（浏览器特征对齐 + 天地图企业域名防盗链，原 V3.5.24）
+
+- **泛化核心**（`backend/utils/http_headers.py`）：新增 `SEC_CH_UA`（与
+  `BROWSER_USER_AGENT` 的 Chrome/126 版本号严格一致，反爬交叉校验 UA 与 sec-ch-ua）、
+  `DEFAULT_BROWSER_HEADERS` 完整浏览器特征集（`Accept: */*`、`Accept-Encoding` 含
+  br/zstd、`sec-ch-ua*`、`Sec-Fetch-*` 共 10 项）、`build_browser_headers()` 与
+  `build_browser_headers_no_br()` 两版本；`REFERER_BY_DOMAIN` 新增天地图企业域名
+  `map-world.com.cn`（`omap.map-world.com.cn` 等子域全覆盖）。
+- **通用代理**（`backend/api/proxy.py`）：默认头换浏览器特征集（`PROXY_USER_AGENT`
+  保留为 UA 可配置覆盖）；透传集合扩展 Accept-Encoding / Sec-Fetch-* / sec-ch-ua*，
+  **UA 仅 `Mozilla/` 前缀（真浏览器）透传**，脚本强制浏览器 UA。
+- **纠偏代理**（`backend/gcj_rectify/fetch.py`）：`fetch_tile` 显式合并浏览器特征头
+  （no_br 版，本面需 httpx 解压响应体，广告 br/zstd 而无 brotli/zstandard 解码库会
+  抛 DecodingError）+ 白名单 Referer。
+- 详见[日志](Docs/LLM_record/26-08/2026-08-19/2026-08-19-enhance-proxy-browser-headers.md)。
+
 ### V3.5.23 (2026-08-17~19) — 综合版本：Google 水系图层 · 瓦片解析通用化 · KML/KMZ 符号链路修复 · Sentinel-2 无云影像 · 管理后台移动端适配 · 出站浏览器特征头共享化
 
 > 2026-08-17~19 的六个增量（原 V3.5.23–V3.5.28，多次不规范 commit 的暂存结果）按用户指示合并为单一版本 V3.5.23，分日志收敛为一份综合日志。

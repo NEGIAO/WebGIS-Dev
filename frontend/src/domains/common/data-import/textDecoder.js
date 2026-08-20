@@ -15,7 +15,7 @@
  * - string 输入直接返回
  * - ArrayBuffer 输入尝试多种编码，选择最合理的解码结果
  *
- * 编码判定策略（V3.5.25 加固，修复 GBK 误判为 UTF-16 的缺陷）：
+ * 编码判定策略（V3.5.24 加固，修复 GBK 误判为 UTF-16 的缺陷）：
  * 1. BOM 权威判定：EF BB BF → UTF-8；FF FE → UTF-16LE；FE FF → UTF-16BE；
  * 2. 无 BOM 时按打分挑选：替换字符（U+FFFD）重罚；C0 控制字符（XML 合法集外的）
  *    计罚分；UTF-16 候选须有字节级 0x00 支撑——真 UTF-16 的 ASCII 标记在原始

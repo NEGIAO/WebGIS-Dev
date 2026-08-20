@@ -3,6 +3,7 @@ import VectorTileLayer from 'ol/layer/VectorTile';
 import VectorTileSource from 'ol/source/VectorTile';
 import { Circle as CircleStyle, Fill, Stroke, Style } from 'ol/style';
 import { tileHDRendering } from '@ol/layer/composables/useTileHDRendering';
+import { Z_BAND } from '@ol/layer/zIndexBands';
 
 // Basemap layer factory helpers for raster vs vector tile sources.
 const VECTOR_TILE_LAYER_KIND = 'vector-tile';
@@ -63,7 +64,7 @@ export function isVectorTileLayer(layer) {
 export function createVectorTileBasemapLayer(source, options = {}) {
     const {
         visible = true,
-        zIndex = 0,
+        zIndex = Z_BAND.BASEMAP,
         opacity = 1,
     } = options;
 
@@ -126,7 +127,7 @@ export function buildRasterBasemapSource(rawSource) {
 export function createRasterBasemapLayer(source, options = {}) {
     const {
         visible = true,
-        zIndex = 0,
+        zIndex = Z_BAND.BASEMAP,
         opacity = 1,
     } = options;
 

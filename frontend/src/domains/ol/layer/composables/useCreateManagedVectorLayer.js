@@ -1,5 +1,6 @@
 import VectorLayer from 'ol/layer/Vector';
 import VectorSource from 'ol/source/Vector';
+import { Z_BAND } from '../zIndexBands';
 import { useFeatureStyleStore } from '@ol/stores/useFeatureStyleStore';
 import { getFeatureIdFromFeature } from '@common/data-protocol/featureKey';
 
@@ -151,7 +152,7 @@ export function useCreateManagedVectorLayer({
             const { default: WebGLVectorLayer } = await import('ol/layer/WebGLVector');
             layer = new WebGLVectorLayer({
                 source: new VectorSource({ features }),
-                zIndex: 120,
+                zIndex: Z_BAND.DATA,
                 style: WEBGL_DEFAULT_STYLE,
                 properties: { name, _useWebGL: true },
             });
@@ -159,7 +160,7 @@ export function useCreateManagedVectorLayer({
             // Canvas 渲染：功能完整，适合小数据量
             layer = new VectorLayer({
                 source: new VectorSource({ features }),
-                zIndex: 120,
+                zIndex: Z_BAND.DATA,
                 style: buildManagedLayerStyle(managedLayerState),
                 properties: { name },
             });

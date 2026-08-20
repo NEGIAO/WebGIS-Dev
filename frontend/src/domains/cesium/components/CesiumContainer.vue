@@ -127,7 +127,8 @@ import {
     watch,
 } from 'vue';
 import { BACKEND_BASE_URL, apiGetRuntimeDefaults } from '@/api/backend';
-import { URL_LAYER_OPTIONS } from '@ol/basemap/constants/basemapResolver';
+import { URL_LAYER_OPTIONS, resolvePresetLayerIds } from '@ol/basemap/constants/basemapResolver';
+import { resolveRuntimeTokenPoolKey } from '@ol/basemap/constants/basemapConfig';
 import { useMessage } from '@common/shell/useMessage';
 import { showLoading, hideLoading } from '@common/ui/loading';
 import { translate as t } from '@common/app/useLocale';
@@ -195,6 +196,7 @@ const runtimeMapTokens = ref(getRuntimeMapTokensSync());
 const getViewer = () => viewer;
 const getCesium = () => Cesium || window.Cesium;
 const getTiandituToken = () => runtimeMapTokens.value.tiandituTk;
+const getOvitalTdtkey = () => runtimeMapTokens.value.ovitalTdtkey;
 const getCesiumIonToken = () => runtimeMapTokens.value.cesiumIonToken;
 
 // heightSampler 必须在 dataImport 之前声明（useCesiumDataImport 依赖它）
@@ -214,6 +216,7 @@ const layers = useCesiumLayers({
     message,
     backendBaseUrl: BACKEND_BASE_URL,
     tiandituToken: getTiandituToken,
+    ovitalTdtkeyToken: getOvitalTdtkey,
     cesiumIonToken: getCesiumIonToken,
     dataImport,
 });
@@ -999,6 +1002,9 @@ async function bootCesium() {
                     Array.isArray(runtimeMapTokens.value.tiandituTokens)
                         ? runtimeMapTokens.value.tiandituTokens.length
                         : 1,
+                    Array.isArray(runtimeMapTokens.value.ovitalTdtkeys)
+                        ? runtimeMapTokens.value.ovitalTdtkeys.length
+                        : 1,
                     Array.isArray(runtimeMapTokens.value.cesiumIonTokens)
                         ? runtimeMapTokens.value.cesiumIonTokens.length
                         : 1,
@@ -1006,6 +1012,7 @@ async function bootCesium() {
                 ));
                 console.warn('[Cesium][boot] runtime tokens loaded', {
                     td: !!runtimeMapTokens.value.tiandituTk,
+                    ovital: !!runtimeMapTokens.value.ovitalTdtkey,
                     ion: !!runtimeMapTokens.value.cesiumIonToken,
                 });
                 Cesium = await loadCesiumRuntime({ ionToken: getCesiumIonToken() });
@@ -1068,13 +1075,20 @@ async function bootCesium() {
                     return;
                 }
 
+                // 当前底图栈是否包含奥维（token 依赖）图层
+                const activeStackHasOvital = resolvePresetLayerIds(activeBasemap.value)
+                    .some((id) => resolveRuntimeTokenPoolKey(id) === 'ovital_tdtkey');
+
                 const switchedTianditu = !basemapReady
                     ? markRuntimeMapTokenFailed('tianditu_tk')
+                    : { switched: false };
+                const switchedOvital = !basemapReady && activeStackHasOvital
+                    ? markRuntimeMapTokenFailed('ovital_tdtkey')
                     : { switched: false };
                 const switchedCesium = !terrainReady
                     ? markRuntimeMapTokenFailed('cesium_ion_token')
                     : { switched: false };
-                const switched = switchedTianditu.switched || switchedCesium.switched;
+                const switched = switchedTianditu.switched || switchedOvital.switched || switchedCesium.switched;
                 if (!switched) {
                     bootError = new Error('Cesium basemap or terrain failed to initialize');
                     message.error(t('cesium.toast.basemapTerrainFail'), { closable: true });
@@ -1083,12 +1097,15 @@ async function bootCesium() {
 
                 runtimeMapTokens.value = switchedCesium.switched
                     ? switchedCesium.tokens
-                    : switchedTianditu.tokens;
+                    : switchedOvital.switched
+                        ? switchedOvital.tokens
+                        : switchedTianditu.tokens;
                 resetCesiumViewerForRetry();
                 retryCount += 1;
                 console.warn('[Cesium][boot] token switch retry', {
                     retryCount,
                     tdSwitched: !!switchedTianditu.switched,
+                    ovitalSwitched: !!switchedOvital.switched,
                     ionSwitched: !!switchedCesium.switched,
                 });
                 message.warning(t('cesium.toast.primaryTokenFailRetry'), { closable: true });

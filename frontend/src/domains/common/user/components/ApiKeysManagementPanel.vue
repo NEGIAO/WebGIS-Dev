@@ -148,6 +148,48 @@
 
                 <div class="key-card">
                     <div class="key-header">
+                        <h3>{{ t('apiKeys.ovitalKey') }}</h3>
+                        <span :class="['status-badge', keysStatus.ovital_tdtkey?.is_set ? 'set' : 'unset']">
+                            {{ keysStatus.ovital_tdtkey?.is_set ? t('apiKeys.configured') : t('apiKeys.notConfigured') }}
+                        </span>
+                    </div>
+                    <div class="key-body">
+                        <div v-if="editingKey === 'ovital_tdtkey'" class="edit-form">
+                            <textarea
+                                v-model="editValues.ovital_tdtkey"
+                                :placeholder="t('apiKeys.ovitalKeyPlaceholder')"
+                                rows="3"
+                                class="key-input"
+                            ></textarea>
+                            <div class="button-group">
+                                <button class="btn btn-save" @click="saveKey('ovital_tdtkey')">{{ t('apiKeys.save') }}</button>
+                                <button class="btn btn-cancel" @click="cancelEdit">{{ t('apiKeys.cancel') }}</button>
+                            </div>
+                        </div>
+                        <div v-else class="key-display">
+                            <p class="key-value">
+                                {{ keysStatus.ovital_tdtkey?.is_set ? t('apiKeys.masked') : t('apiKeys.notConfigured') }}
+                            </p>
+                            <div class="key-actions">
+                                <button class="btn btn-edit" @click="startEdit('ovital_tdtkey')">{{ t('apiKeys.edit') }}</button>
+                                <button
+                                    v-if="keysStatus.ovital_tdtkey?.is_set"
+                                    class="btn btn-delete"
+                                    @click="deleteKey('ovital_tdtkey')"
+                                >
+                                    {{ t('apiKeys.delete') }}
+                                </button>
+                            </div>
+                            <p class="key-hint">{{ t('apiKeys.ovitalKeyHint') }}</p>
+                        </div>
+                    </div>
+                    <div class="key-footer">
+                        {{ t('apiKeys.lastUpdated', { time: formatTime(keysStatus.ovital_tdtkey?.updated_at) }) }}
+                    </div>
+                </div>
+
+                <div class="key-card">
+                    <div class="key-header">
                         <h3>{{ t('apiKeys.cesiumKey') }}</h3>
                         <span :class="['status-badge', keysStatus.cesium_ion_token?.is_set ? 'set' : 'unset']">
                             {{ keysStatus.cesium_ion_token?.is_set ? t('apiKeys.configured') : t('apiKeys.notConfigured') }}
@@ -543,12 +585,13 @@ import { clearRuntimeMapTokensCache } from '@common/services/runtimeMapTokens';
 
 const message = useMessage();
 const { t, language } = useLocale();
-const frontendRuntimeKeyNames = new Set(['tianditu_tk', 'cesium_ion_token', 'amap_key']);
+const frontendRuntimeKeyNames = new Set(['tianditu_tk', 'cesium_ion_token', 'amap_key', 'ovital_tdtkey']);
 
 const managedApiKeys = computed(() => [
     { key: 'amap_key', label: t('apiKeys.amapKey') },
     { key: 'agent_api_key', label: t('apiKeys.agentKey') },
     { key: 'tianditu_tk', label: t('apiKeys.tiandituKey') },
+    { key: 'ovital_tdtkey', label: t('apiKeys.ovitalKey') },
     { key: 'cesium_ion_token', label: t('apiKeys.cesiumKey') },
 ]);
 
@@ -557,6 +600,7 @@ const keysStatus = ref({
     amap_key: { is_set: false, updated_at: null },
     agent_api_key: { is_set: false, updated_at: null },
     tianditu_tk: { is_set: false, updated_at: null },
+    ovital_tdtkey: { is_set: false, updated_at: null },
     cesium_ion_token: { is_set: false, updated_at: null },
 });
 
@@ -565,6 +609,7 @@ const editValues = ref({
     amap_key: '',
     agent_api_key: '',
     tianditu_tk: '',
+    ovital_tdtkey: '',
     cesium_ion_token: '',
 });
 const editingBackupKey = ref(null);
@@ -572,6 +617,7 @@ const backupEditValues = ref({
     amap_key: '',
     agent_api_key: '',
     tianditu_tk: '',
+    ovital_tdtkey: '',
     cesium_ion_token: '',
 });
 
@@ -660,6 +706,7 @@ async function loadKeysStatus() {
             amap_key: normalizeKeyStatus(data.amap_key),
             agent_api_key: normalizeKeyStatus(data.agent_api_key),
             tianditu_tk: normalizeKeyStatus(data.tianditu_tk),
+            ovital_tdtkey: normalizeKeyStatus(data.ovital_tdtkey),
             cesium_ion_token: normalizeKeyStatus(data.cesium_ion_token),
         };
     } catch (error) {
@@ -680,6 +727,7 @@ function cancelEdit() {
         amap_key: '',
         agent_api_key: '',
         tianditu_tk: '',
+        ovital_tdtkey: '',
         cesium_ion_token: '',
     };
 }
@@ -729,6 +777,7 @@ function cancelBackupEdit() {
         amap_key: '',
         agent_api_key: '',
         tianditu_tk: '',
+        ovital_tdtkey: '',
         cesium_ion_token: '',
     };
 }

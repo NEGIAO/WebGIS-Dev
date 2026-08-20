@@ -364,6 +364,8 @@ export class CompassManager {
             style: this.style,
             updateWhileAnimating: true,
             updateWhileInteracting: true,
+            // 系统叠加层（风水罗盘）：恒高于 @ol/layer/zIndexBands 全部显示带，保持最顶
+            // （common 域不反向依赖 ol 域，故不直接引用 Z_BAND 常量）
             zIndex: 1205,
             visible: Boolean(this.store.enabled && this.store.mode === 'vector'),
         });

@@ -13,7 +13,11 @@ from rasterio.io import MemoryFile
 from rasterio.transform import Affine
 from rasterio.windows import Window
 
-from utils.http_headers import BROWSER_USER_AGENT, referer_headers_for
+from utils.http_headers import (
+    BROWSER_USER_AGENT,
+    build_browser_headers_no_br,
+    referer_headers_for,
+)
 
 WEB_MERCATOR_EXTENT = 20037508.342789244
 MAX_LATITUDE = 85.05112878
@@ -384,10 +388,17 @@ async def _fetch_tile_bytes(
     for attempt in range(retries):
         try:
             async with semaphore:
+                # 完整浏览器特征头（本面需 httpx 解压响应体 → 不广告 br/zstd，
+                # 见 utils/http_headers.build_browser_headers_no_br 注释）
+                # + 白名单防盗链 Referer（非白名单源不附加）
+                headers = build_browser_headers_no_br()
+                referer_headers = referer_headers_for(url)
+                if referer_headers:
+                    headers.update(referer_headers)
                 response = await client.get(
                     url,
                     timeout=timeout,
-                    headers=referer_headers_for(url),
+                    headers=headers,
                 )
             if response.status_code == 200 and response.content:
                 return response.content

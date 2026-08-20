@@ -34,7 +34,7 @@ from .tile_engine import MAX_CONCURRENCY, MAX_LATITUDE, WEB_MERCATOR_EXTENT, bbo
 
 logger = logging.getLogger(__name__)
 
-# 下载器内网放行独立开关（V3.5.26）：与 /proxy 面的 PROXY_ALLOW_PRIVATE_HOSTS 解耦，
+# 下载器内网放行独立开关（V3.5.24）：与 /proxy 面的 PROXY_ALLOW_PRIVATE_HOSTS 解耦，
 # 避免共用配置互相影响（proxy 的白名单是收紧语义）。默认关闭=拒绝内网/本机目标。
 _DOWNLOAD_ALLOW_PRIVATE_HOSTS = get_bool("DOWNLOAD_ALLOW_PRIVATE_HOSTS", False)
 
@@ -605,7 +605,7 @@ def _validate_tile_template(template: str) -> None:
     # P1-4 SSRF S1：补协议与内网目标校验——此前只校验占位符，已登录用户可让服务器
     # 抓取任意内网 URL 并把响应写进 GeoTIFF 回传（信息回传型 SSRF）。
     # host 判定走 utils/net_guard 单点（与 /proxy/** 及 agent override 同一实现）；
-    # V3.5.26：DOWNLOAD_ALLOW_PRIVATE_HOSTS=true 时放行内网/本机目标（自建内网瓦片源场景）。
+    # V3.5.24：DOWNLOAD_ALLOW_PRIVATE_HOSTS=true 时放行内网/本机目标（自建内网瓦片源场景）。
     probe_url = template.replace("{z}", "0").replace("{x}", "0").replace("{y}", "0")
     probe_url = probe_url.replace("{s}", "a").replace("{-y}", "0")
     # 无协议前缀（`tile.example.com/...`）与协议相对（`//host/...`）按 https 兜底解析，

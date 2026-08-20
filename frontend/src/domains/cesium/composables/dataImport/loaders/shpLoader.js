@@ -4,6 +4,7 @@
  */
 
 import { ensureGisParsers, getExtension, flyToEntity } from './utils.js';
+import { clampDataSourceToGround } from './clampToGround.js';
 
 /**
  * 加载 Shapefile 到 Cesium
@@ -59,6 +60,11 @@ export async function loadSHP({ file, sidecarFiles = [], getCesium, getViewer, m
     dataSource.name = file.name;
 
     await viewer.dataSources.add(dataSource);
+    // 统一贴地（地形开启时生效）：加载时已 clampToGround，此处补 disableDepthTestDistance 硬化
+    const clampResult = clampDataSourceToGround(viewer, Cesium, dataSource);
+    if (clampResult.clamped > 0) {
+        console.warn(`[贴地] SHP "${file.name}": 地形已开启，${clampResult.clamped}/${clampResult.total} 个实体已贴地`);
+    }
     flyToEntity(viewer, Cesium, dataSource, 'shp');
 
     const record = { id, name: file.name, type: 'shp', entity: dataSource };

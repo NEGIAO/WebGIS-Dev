@@ -40,9 +40,7 @@ import {
 } from '@common/data-import/vectorUtils';
 import { renderBandsToCanvas } from '@common/data-import/webglRasterRenderer';
 import { loadTifInWorker, isLargeFile } from '@common/data-import/tifUtils';
-
-/** 栅格图层默认 z-index，确保栅格在矢量之下 */
-const RASTER_LAYER_Z_INDEX = 120;
+import { Z_BAND } from '@ol/layer/zIndexBands';
 
 /** 地图 fit 动画时的边距（像素） */
 const FIT_PADDING = [50, 50, 50, 50];
@@ -685,7 +683,7 @@ export function useLayerDataImport({
 
         const layer = new ImageLayer({
             source: imageSource,
-            zIndex: RASTER_LAYER_Z_INDEX,
+            zIndex: Z_BAND.DATA,
             properties: { name },
         });
 
@@ -884,7 +882,7 @@ export function useLayerDataImport({
 
         const layerOptions = {
             source,
-            zIndex: RASTER_LAYER_Z_INDEX,
+            zIndex: Z_BAND.DATA,
             properties: { name },
         };
         if (sampleBandCount === 1) {

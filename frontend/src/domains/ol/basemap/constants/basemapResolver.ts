@@ -80,15 +80,18 @@ export function getLayerGroup(layerId: string): LayerGroup {
 /**
  * 创建底图配置列表（由配置文件集中驱动）
  * @param tiandituTk 天地图 Token
+ * @param ovitalTdtkey 奥维 TDT Key（L2 密钥，管理员写入数据库后运行时注入）
  * @param customUrl 自定义 URL
  * @returns 图层配置列表
  */
 export function createLayerConfigs(
     tiandituTk: string = '',
+    ovitalTdtkey: string = '',
     customUrl: string = '',
 ) {
     const context: LayerFactoryContext = {
         tiandituTk,
+        ovitalTdtkey,
         customUrl,
     };
 

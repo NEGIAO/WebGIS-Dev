@@ -5,6 +5,7 @@
 
 import { ref } from 'vue';
 import { useMapSwipe } from '@ol/composables/useMapSwipe';
+import { Z_BAND, Z_BASEMAP_SWIPE_OFFSET } from '@ol/layer/zIndexBands';
 
 const SWIPE_COMPARE_LAYER_PREFIX = '__swipe_compare_layer__';
 const SWIPE_UNSUPPORTED_PRESETS = new Set(['custom']);
@@ -180,7 +181,7 @@ export function createBasemapSwipe({
 
                 const compareLayer = createBasemapLayerFromSource(source, {
                     visible: true,
-                    zIndex: 100 + index,
+                    zIndex: Z_BAND.BASEMAP + Z_BASEMAP_SWIPE_OFFSET + index,
                 });
 
                 compareLayer.setProperties({
@@ -287,7 +288,7 @@ export function createBasemapSwipe({
                 if (!source) return;
                 const compareLayer = createBasemapLayerFromSource(source, {
                     visible: true,
-                    zIndex: 100 + index,
+                    zIndex: Z_BAND.BASEMAP + Z_BASEMAP_SWIPE_OFFSET + index,
                 });
                 compareLayer.setProperties({
                     name: `${SWIPE_COMPARE_LAYER_PREFIX}_${index}_${layerId}`,

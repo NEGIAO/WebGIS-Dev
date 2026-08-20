@@ -34,14 +34,15 @@ ALLOWED_API_KEYS = {
     "agent_api_key",
     "tianditu_tk",
     "cesium_ion_token",
+    "ovital_tdtkey",
 }
 
-FRONTEND_RUNTIME_KEYS = ("tianditu_tk", "cesium_ion_token", "amap_key")
+FRONTEND_RUNTIME_KEYS = ("tianditu_tk", "cesium_ion_token", "amap_key", "ovital_tdtkey")
 RUNTIME_CONFIG_ALLOWED_ORIGINS_ENV = "RUNTIME_CONFIG_ALLOWED_ORIGINS"
 
 
 class ApiKeyConfig(BaseModel):
-    key_name: str = Field(..., description="密钥名称: amap_key, agent_api_key, tianditu_tk, cesium_ion_token")
+    key_name: str = Field(..., description="密钥名称: amap_key, agent_api_key, tianditu_tk, cesium_ion_token, ovital_tdtkey")
     key_value: str = Field(..., min_length=1, max_length=5000, description="密钥值")
 
 
@@ -680,13 +681,15 @@ async def get_runtime_map_tokens(
             "tianditu_tk": token_map.get("tianditu_tk", ""),
             "cesium_ion_token": token_map.get("cesium_ion_token", ""),
             "amap_key": token_map.get("amap_key", ""),
+            "ovital_tdtkey": token_map.get("ovital_tdtkey", ""),
             "token_pools": token_pools,
             "is_set": {
                 "tianditu_tk": bool(token_pools.get("tianditu_tk")),
                 "cesium_ion_token": bool(token_pools.get("cesium_ion_token")),
                 "amap_key": bool(token_pools.get("amap_key")),
+                "ovital_tdtkey": bool(token_pools.get("ovital_tdtkey")),
             },
-            "note": "These browser runtime tokens are returned once so the frontend can call Tianditu, Cesium, and Amap directly.",
+            "note": "These browser runtime tokens are returned once so the frontend can call Tianditu, Cesium, Amap, and Ovital directly.",
         },
     }
 

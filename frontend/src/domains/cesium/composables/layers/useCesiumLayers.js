@@ -48,6 +48,7 @@ export function useCesiumLayers({
     message,
     backendBaseUrl,
     tiandituToken,
+    ovitalTdtkeyToken,
     cesiumIonToken,
     dataImport,
 }) {
@@ -73,6 +74,7 @@ export function useCesiumLayers({
     let layerPickerSubscriptions = [];
 
     const getTiandituToken = () => readRuntimeValue(tiandituToken);
+    const getOvitalTdtkey = () => readRuntimeValue(ovitalTdtkeyToken);
     const getCesiumIonToken = () => readRuntimeValue(cesiumIonToken);
 
     const imageryLayerHandles = [];
@@ -357,10 +359,12 @@ export function useCesiumLayers({
 
         // 获取运行时 token
         const tiandituTk = getTiandituToken();
+        const ovitalTdtkey = getOvitalTdtkey();
         const customUrl = customXyzBasemapUrl.value;
 
         const ctx = {
             tiandituTk,
+            ovitalTdtkey,
             customUrl: customUrl,
             normBase: '',
         };

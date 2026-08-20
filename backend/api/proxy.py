@@ -15,7 +15,7 @@ from gcj_rectify.url_template import parse_tile_url
 from gcj_rectify.utils import get_cache_dir
 
 from config import get_bool, get_int, get_str
-from utils.http_headers import referer_headers_for
+from utils.http_headers import build_browser_headers, build_sec_ch_ua, referer_headers_for
 from utils.net_guard import (
     host_matches_allowlist,
     is_disallowed_host,
@@ -235,12 +235,15 @@ PROXY_PASSTHROUGH_HEADERS = {
     "vary",
 }
 
-PROXY_DEFAULT_REQUEST_HEADERS = {
-    "User-Agent": PROXY_USER_AGENT,
-    "Accept": "image/png,image/*,*/*;q=0.8",
-    "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
-    "Accept-Encoding": "gzip, deflate, br",
-}
+# 通用代理出站默认头：完整浏览器特征集（Accept: */*、sec-ch-ua、Sec-Fetch-* 等），
+# 追求对任意瓦片源的普适性；客户端带了对应头则优先透传客户端的真实值（见
+# _build_proxy_request_headers）。PROXY_USER_AGENT 仍作为 UA 可配置覆盖项保留。
+PROXY_DEFAULT_REQUEST_HEADERS = build_browser_headers()
+if PROXY_USER_AGENT:
+    PROXY_DEFAULT_REQUEST_HEADERS["User-Agent"] = PROXY_USER_AGENT
+    # UA 被配置覆盖后，sec-ch-ua 必须同步推导为同一 Chrome 版本，
+    # 否则反爬服务交叉校验 UA 与 sec-ch-ua 版本号不一致，暴露非浏览器特征
+    PROXY_DEFAULT_REQUEST_HEADERS["sec-ch-ua"] = build_sec_ch_ua(PROXY_USER_AGENT)
 
 
 def _is_private_host(hostname: str) -> bool:
@@ -358,7 +361,26 @@ async def _limited_stream(upstream_response: httpx.Response, upstream_url: str) 
 
 def _build_proxy_request_headers(request: Request, upstream_url: str) -> Dict[str, str]:
     headers = dict(PROXY_DEFAULT_REQUEST_HEADERS)
-    for key in ("Accept", "Accept-Language", "Origin", "Range"):
+    # 透传集合：浏览器客户端发起的请求携带真实浏览器头（最接近原生请求），
+    # 透传之；非浏览器客户端（curl/脚本）未携带的字段由默认浏览器特征兜底。
+    # UA 仅当客户端表现为浏览器（Mozilla/ 前缀）时才透传，否则用默认浏览器 UA，
+    # 防止脚本 UA 暴露给反爬源。
+    incoming_ua = request.headers.get("User-Agent")
+    if incoming_ua and incoming_ua.startswith("Mozilla/"):
+        headers["User-Agent"] = incoming_ua
+    for key in (
+        "Accept",
+        "Accept-Language",
+        "Accept-Encoding",
+        "Origin",
+        "Range",
+        "Sec-Fetch-Dest",
+        "Sec-Fetch-Mode",
+        "Sec-Fetch-Site",
+        "sec-ch-ua",
+        "sec-ch-ua-mobile",
+        "sec-ch-ua-platform",
+    ):
         incoming_value = request.headers.get(key)
         if incoming_value:
             headers[key] = incoming_value

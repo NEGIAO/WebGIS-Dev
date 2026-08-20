@@ -2,17 +2,29 @@
  * 运行时地图 Token 池特性（自 MapContainer 抽离，行为保持一致）。
  *
  * 职责：
- * - applyRuntimeMapTokens：应用后端下发的天地图 token（重建 LAYER_CONFIGS 并保留图层可见性/透明度状态）
+ * - applyRuntimeMapTokens：应用后端下发的运行时 token（重建 LAYER_CONFIGS 并保留图层可见性/透明度状态）
  * - hydrateRuntimeMapTokens：启动时拉取运行时 token 并应用
- * - retryTiandituLayersWithNextToken：主 token 失效时切换备用 token 并重试受影响天地图图层
+ * - retryRuntimeTokenLayersWithNextToken：图层失败时按所属密钥池切换备用 token 并重试受影响图层
+ *   （密钥池判定走 basemapConfig.resolveRuntimeTokenPoolKey 的 needsContext 声明，天地图/奥维通用）
  *
  * 依赖全部注入（factory 模式）；monitorLayerTimeout / switchLayerById /
  * emitBaseLayersChangeBatched 在宿主组件中晚于本工厂创建，故以 getter 形式传入延迟解析。
  */
+import { resolveRuntimeTokenPoolKey } from '@ol/basemap/constants/basemapConfig';
+
+/** 密钥池显示名（toast 提示用） */
+const TOKEN_POOL_LABELS = {
+    tianditu_tk: '天地图',
+    ovital_tdtkey: '奥维',
+};
+
 export function createRuntimeMapTokenPool({
     getTiandituTk,
     setTiandituTk,
     tiandituTkRef,
+    getOvitalTdtkey,
+    setOvitalTdtkey,
+    ovitalTdtkeyRef,
     layerListRef,
     customMapUrlRef,
     selectedLayerRef,
@@ -33,7 +45,10 @@ export function createRuntimeMapTokenPool({
     /** 应用运行时 token：token 变化时重建底图配置，并迁移既有可见性/透明度状态 */
     function applyRuntimeMapTokens(tokens = {}) {
         const nextTiandituTk = String(tokens.tiandituTk || '').trim();
-        if (!nextTiandituTk || nextTiandituTk === getTiandituTk()) return;
+        const nextOvitalTdtkey = String(tokens.ovitalTdtkey || '').trim();
+        const tiandituChanged = nextTiandituTk && nextTiandituTk !== getTiandituTk();
+        const ovitalChanged = nextOvitalTdtkey && nextOvitalTdtkey !== getOvitalTdtkey();
+        if (!tiandituChanged && !ovitalChanged) return;
 
         const previousLayerState = new globalThis.Map(
             (Array.isArray(layerListRef.value) ? layerListRef.value : []).map((item) => [
@@ -45,11 +60,18 @@ export function createRuntimeMapTokenPool({
             ]),
         );
 
-        setTiandituTk(nextTiandituTk);
-        tiandituTkRef.value = nextTiandituTk;
+        if (tiandituChanged) {
+            setTiandituTk(nextTiandituTk);
+            tiandituTkRef.value = nextTiandituTk;
+        }
+        if (ovitalChanged) {
+            setOvitalTdtkey(nextOvitalTdtkey);
+            ovitalTdtkeyRef.value = nextOvitalTdtkey;
+        }
 
         const nextLayerConfigs = createLayerConfigs(
-            nextTiandituTk,
+            getTiandituTk(),
+            getOvitalTdtkey(),
             customMapUrlRef.value,
         );
         LAYER_CONFIGS.splice(0, LAYER_CONFIGS.length, ...nextLayerConfigs);
@@ -69,15 +91,27 @@ export function createRuntimeMapTokenPool({
         applyRuntimeMapTokens(tokens);
     }
 
-    function isTiandituLayerId(layerId) {
-        return String(layerId || '')
-            .trim()
-            .toLowerCase()
-            .includes('tianditu');
+    /**
+     * 判定失败图层/预设涉及的全部运行时密钥池。
+     * 直接图层 ID 命中 needsContext 优先；否则按预设展开栈内图层去重取池
+     * （useBasemapSelectionWatcher 回调传入的是预设 ID，如 'tianditu'）。
+     */
+    function resolveLayerTokenPools(layerId) {
+        const failedLayerId = String(layerId || '').trim();
+        const direct = resolveRuntimeTokenPoolKey(failedLayerId);
+        if (direct) return [direct];
+        const expanded = resolvePresetLayerIds(failedLayerId);
+        if (!expanded.length) return [];
+        const pools = [];
+        expanded.forEach((id) => {
+            const poolKey = resolveRuntimeTokenPoolKey(id);
+            if (poolKey && !pools.includes(poolKey)) pools.push(poolKey);
+        });
+        return pools;
     }
 
-    /** 解析本次失败应重试的天地图图层集合（优先当前选中底图栈） */
-    function resolveRuntimeTiandituLayerIds(layerId) {
+    /** 解析本次失败应重试的图层集合（同一密钥池，优先当前选中底图栈） */
+    function resolveAffectedLayerIds(layerId, poolKey) {
         const selectedStack = resolvePresetLayerIds(selectedLayerRef.value);
         const failedLayerId = String(layerId || '').trim();
         const failedStack = resolvePresetLayerIds(failedLayerId);
@@ -91,7 +125,7 @@ export function createRuntimeMapTokenPool({
 
         candidates.forEach((id) => {
             const normalized = String(id || '').trim();
-            if (!normalized || seen.has(normalized) || !isTiandituLayerId(normalized)) return;
+            if (!normalized || seen.has(normalized) || resolveRuntimeTokenPoolKey(normalized) !== poolKey) return;
             seen.add(normalized);
             result.push(normalized);
         });
@@ -129,16 +163,27 @@ export function createRuntimeMapTokenPool({
         );
     }
 
-    /** 主 token 失效：切换备用 token → 重置受影响图层 source → 重建当前底图并恢复监控 */
-    function retryTiandituLayersWithNextToken({ layerId, reason, releaseMonitor } = {}) {
-        const affectedLayerIds = resolveRuntimeTiandituLayerIds(layerId);
-        if (!affectedLayerIds.length) return false;
+    /**
+     * 主 token 失效：判定涉及密钥池 → 轮换各池备用 token → 重置受影响图层 source → 重建当前底图并恢复监控。
+     * 天地图 / 奥维等所有带备用 key 的密钥池通用；预设栈含多个密钥池时逐池轮换（任一成功即视为已处理）。
+     */
+    function retryRuntimeTokenLayersWithNextToken({ layerId, reason, releaseMonitor } = {}) {
+        const poolKeys = resolveLayerTokenPools(layerId);
+        if (!poolKeys.length) return false;
 
-        const tokenSwitch = markRuntimeMapTokenFailed('tianditu_tk');
-        if (!tokenSwitch.switched) return false;
+        const switchedPools = [];
+        poolKeys.forEach((poolKey) => {
+            const tokenSwitch = markRuntimeMapTokenFailed(poolKey);
+            if (!tokenSwitch.switched) return;
+            switchedPools.push(poolKey);
+            applyRuntimeMapTokens(tokenSwitch.tokens);
+        });
+        if (!switchedPools.length) return false;
 
         releaseMonitor?.();
-        applyRuntimeMapTokens(tokenSwitch.tokens);
+        const affectedLayerIds = [...new Set(
+            switchedPools.flatMap((poolKey) => resolveAffectedLayerIds(layerId, poolKey)),
+        )];
         affectedLayerIds.forEach(resetLayerSourceForRuntimeToken);
 
         getSwitchLayerById()?.(selectedLayerRef.value, {
@@ -149,8 +194,9 @@ export function createRuntimeMapTokenPool({
         });
         affectedLayerIds.forEach(attachRuntimeTokenMonitor);
 
+        const label = switchedPools.map((poolKey) => TOKEN_POOL_LABELS[poolKey] || poolKey).join(' / ');
         message?.warning?.(
-            `天地图 token 已切换到备用项，正在重试 ${affectedLayerIds.join(' + ')}${
+            `${label} token 已切换到备用项，正在重试 ${affectedLayerIds.join(' + ') || selectedLayerRef.value}${
                 reason ? `：${reason}` : ''
             }`,
         );
@@ -160,6 +206,6 @@ export function createRuntimeMapTokenPool({
     return {
         applyRuntimeMapTokens,
         hydrateRuntimeMapTokens,
-        retryTiandituLayersWithNextToken,
+        retryRuntimeTokenLayersWithNextToken,
     };
 }
