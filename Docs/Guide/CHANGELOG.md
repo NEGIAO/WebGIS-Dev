@@ -6,6 +6,78 @@
 
 ## 版本记录
 
+### V3.5.27 (2026-08-21) — `l=2` 固定 custom · 双引擎共享运行时 URL
+
+- **公开 `l` 统一为 1-based 数字**：OL、Cesium、分享链接、快捷位置与 Agent 上下文使用同一套映射；`l=1` 为本地瓦片，`l=2` 固定为 custom/Wayback，拒绝 `l=custom` 等字符值。
+- **实际 URL 独立于路由**：新增 `useSharedCustomBasemapUrl.ts` 作为 OL/Cesium 共用的运行时唯一状态源；用户输入与系统选择的 Wayback URL 都写入同一 `ref`，并通过 `webgis_custom_basemap_url` 在本机持久化。
+- **删除 prop/event/route 中转**：`HomeView`、`MapContainer` 与 `CesiumContainer` 不再通过 `customUrl` 查询参数或组件双向绑定传递实际图源地址；两个引擎直接读取共享 store。
+- **热更新闭环**：共享 URL 变化时，当前处于 custom 的 OL 会重建 source，Cesium 会强制重建 imagery provider；重复提交同一 Cesium URL 仍可主动刷新。
+- **历史字段清理**：合法数字 `l` 优先于旧 `layerId`；后续 URL 写回与分享链接都会删除历史 `layerId/customUrl`，相机 `moveEnd` 不再重新生成它们。
+- **内部索引边界保持**：管理员 `default_basemap_index` 与数组访问继续使用 0-based，不受公开 URL 编号迁移影响。
+- 详见[维护日志](../LLM_record/26-08/2026-08-21/2026-08-21-v3.5.27-cesium-numeric-layer-param.md)与[架构说明](../Architecture/2026-08-20-unified-basemap-selection.md)。
+
+### V3.5.26 (2026-08-21) — 暂存区审查问题修复：在线信号隔离 · Wayback 可恢复加载 · 北京时间展示
+
+- **在线追踪信号隔离**：普通鉴权活跃仅在身份没有 SSE 连接时刷新兜底记录；`/statistics/heartbeat` 改为显式写入断线心跳，避免健康 SSE 期间的普通 API 请求在连接断开后继续保活 90 秒。
+- **在线 tracker 回归测试**：新增健康 SSE + 普通鉴权 + 断开即时下线、显式降级心跳保活及公共活跃入口路由测试。
+- **Wayback 目录可恢复加载**：首次请求失败或启动同步尚未完成返回空目录时不再永久标记为已加载，重新进入 ESRI 页签即可重试。
+- **Wayback 北京时间展示**：更新时间固定按 `Asia/Shanghai` 格式化，避免凌晨 03:15 同步记录经 UTC 转换后显示为前一天。
+- **文档一致性**：V3.5.25 首屏关键瓦片超时说明由 10 秒修正为与代码一致的 15 秒。
+- 详见[维护日志](../LLM_record/26-08/2026-08-21/2026-08-21-v3.5.26-review-bugfixes.md)。
+
+### V3.5.25 (2026-08-21) — 综合版本：双引擎底图共享 customUrl + 实时在线零轮询重构 + 首屏调度优化 + 历史影像后端
+
+> 2026-08-20~21 的暂存区改动合并为单一版本。覆盖以下四个主题：
+> 综合审查与收敛过程见 [V3.5.25 暂存区整合与代码审查](../LLM_record/26-08/2026-08-21/2026-08-21-v3.5.25-consolidated-code-review.md)。
+
+#### 一、双引擎底图共享 customUrl · Wayback 固定 custom · 卷帘 custom 对比
+
+- **统一底图身份**：ESRI Wayback 快照不再动态注册 ID，统一使用 `layerId=custom`，具体快照通过 `customUrl` 表示；兼容旧 `l=1` 与 `l=1&customUrl=...` 链接。
+- **双向共享 URL**：`HomeView` 持有唯一 `sharedCustomBasemapUrl`，OL 与 Cesium 各自以本地 `ref` 镜像配合 prop/event 同步；子组件提交后可在当前调用栈立即读取新 URL，父级更新时也会重载当前 custom 图层。
+- **URL 与跨会话恢复**：仅 custom 选择向分享链接写入 `customUrl`；普通预设不写该参数，也不销毁最近一次有效 custom URL。最近一次有效值通过 `localStorage` 持久化，无 URL 的 `layerId=custom` 不再被反序列化为可恢复选择。
+- **历史影像 UI**：Sentinel/Wayback 按年份折叠，Wayback 条目只显示 `YYYY-MM-DD`，不再将每个快照加入底图注册表。
+- **卷帘对比**：允许 `custom`，左右比较项可分别携带 URL，并持久化恢复。
+- 详见[维护日志](../LLM_record/26-08/2026-08-20/2026-08-20-shared-custom-basemap.md)与[架构说明](../Architecture/2026-08-20-unified-basemap-selection.md)。
+
+#### 二、实时在线统计零轮询重构（SSE 连接计数 + 心跳兜底 + 快照缓存）
+
+- **在线判定改由后端基于 SSE 连接（引用计数）统计**：`OnlineUserTracker` 新增 `mark_connection` / `drop_connection`（按身份 refcount），`StatsBroadcaster.register(username)` 记录连接归属；在线 = 有存活连接 ∪ 窗口内有心跳 的并集。
+- **心跳降级为兜底**：前端心跳间隔 5s → 30s，且仅在 SSE 断开时启用（`onopen` 即停）；后端判活窗口同步扩为 90s，SSE 存活期间前端零轮询。
+- **DB 快照查询加单层缓存**：仅由 `backend/api/statistics.py` 的 `_get_realtime_global_stats_sync` 维护 10s 缓存；SSE 广播通过 `asyncio.to_thread` 调用，避免双层缓存叠加陈旧时间，内存在线人数仍实时计算。
+- **SSE 客户端兼容与竞态修复**：ticket/heartbeat 兼容 Axios 已解包与原始响应结构，EventSource 使用后端绝对基址；稳定复用 `visibilitychange` 监听器，并用连接 generation 隔离过期 ticket 与旧连接回调。
+- **SSE 生命周期闭环**：在线登记移动到响应生成器内部，与 `finally` 撤销处于同一生命周期，避免客户端在响应体开始前断开时留下幽灵连接。
+- **去除"5 次失败永久断连"**：`es.onerror` 改为永久指数退避重试（上限 30s），避免统计模块半残需刷新页面。
+- **回前台 SSE 消息积压合并**：`online_stats` 经 `requestAnimationFrame` 合并为单次更新。
+- 详见[维护日志](../LLM_record/26-08/2026-08-21/2026-08-21-realtime-online-zero-polling.md)。
+
+#### 三、首屏调度优化与特性增强
+
+- **`useStartupTaskScheduler.js`**：`waitForCriticalTileReady` 改版为 tileloadend + rendercomplete + 双帧 rAF 确认，超时 15s（原 3s 不够），确保首屏关键瓦片真正渲染完成才隐藏 loading。
+- **`useBasemapSwipe.js`**：移除 `custom` 拒绝硬编码，支持左右 custom URL 分别加载对比。
+- **`useMapState.js`**：URL 参数新增 `layerId` + `customUrl` 序列化，保留 `l` 兼容。
+- **`useCesiumUrlTracking.js`**：适配统一 `deserializeBasemapSelection` / `serializeBasemapSelection` 契约，`syncCameraViewToUrl` 写入 `customUrl`。
+- **`ControlsPanel.vue`**：二次点击收起侧边栏 + 卷帘 custom URL 输入框 + `toggle-tab` 事件。
+- **`SidePanel.vue`**：工具箱预加载 10s 延迟。
+- **`FloatingAccountPanel.vue`**：轮询启停绑定面板开合（`setOpen` 联动 `startCenterPolling`/`stopCenterPolling`）。
+- **`PersistentAnnouncementBar.vue`**：页面可见性变化启停轮询。
+- **`CesiumContainer.vue`**：`sharedCustomBasemapUrl` 双向绑定 + `customXyzBasemapUrl` watch 重建 source。
+- **`HomeView.vue`**：`sharedCustomBasemapUrl` 单一状态 + `handleControlsToggleTab`/`handleControlsToggleToolboxTab` 二次点击收起 + `buildCesiumQueryPatchFromOl`/`buildOlQueryPatchFromCesium` 同步 `layerId`/`customUrl`。
+- **`basemapConfig.ts`**：ESRI 影像图 URL 换为 `wayback-a.maptiles.arcgis.com` 域名（arcgisonline 被墙）。
+- **`basemapRegistry.ts`**：新增双引擎底图选择规范化/URL 序列化/年份分组纯函数。
+- **`useLayerControlHandlers.js`**：`handleLayerChange` 支持 `source: 'catalog'` + 处理 custom URL 切换。
+- **`LayerControlPanel.vue`**：历史影像年份折叠 UI（Sentinel + ESRI Wayback 双页签）+ 懒加载目录。
+- **`useSwipeConfigStore.ts`**：扩展 `leftCustomUrl`/`rightCustomUrl` 持久化。
+
+#### 四、历史影像后端（ESRI Wayback 同步/调度/API）
+
+- **`services/historical_imagery.py`**：元数据表创建、ESRI 目录拉取与原子替换、调度器（03:15 北京时每日 + 启动即时同步）；SQLite 连接均显式关闭，公开同步状态仅返回脱敏错误文案。
+- **`api/historical_imagery.py`**：`/api/historical-imagery/esri-wayback/layers` 使用同步路由读取缓存，由 FastAPI 在线程池执行，避免同步 SQLite 阻塞事件循环。
+- **`api/statistics.py`**：`_get_realtime_global_stats_sync` 加 10s 缓存。
+- **`scripts/fetch_wayback_layers.py`**：ESRI 目录拉取 CLI 工具（`--json`/`--code`/`--urls`）。
+- **`scripts/fetch_wayback_layers.js`**：Node.js 版 CLI 工具。
+- **`tests/test_historical_imagery.py`**：`_normalize_entries` 单元测试。
+- **`app.py`**：启动时初始化历史影像存储 + 调度器 + 路由注册。
+
 ### V3.5.24 (2026-08-19~20) — 综合版本：出站浏览器特征头泛化 · 图层 zIndex 分带治理 · 数据导入统一贴地 · 密钥池化增强 · 瓦片代理泛化
 
 > 2026-08-19~20 的八个增量（原 V3.5.24–V3.5.31，多次不规范 commit 的暂存结果）按用户指示合并为单一版本 V3.5.24。下列小节以原版本号标注，供追溯。

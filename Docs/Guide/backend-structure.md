@@ -28,7 +28,8 @@ backend/
 │   ├── monitor.py                                 # 日志监控接口
 │   ├── proxy.py                                   # 通用代理 + GCJ-02 纠偏
 │   ├── statistics.py                              # 访问统计接口
-│   ├── realtime_stats.py                          # 实时在线统计 SSE 推送（内存 tracker + ticket 鉴权 + 定时/即时广播）
+│   ├── realtime_stats.py                          # 实时在线统计 SSE 推送（内存 tracker + SSE 连接计数 + 心跳兜底 + ticket 鉴权 + 定时/即时广播 + 快照缓存）
+│   ├── historical_imagery.py                      # 历史影像公开目录接口（ESRI Wayback 只读缓存目录）
 │   ├── agent_chat/                                # AI 对话代理（模块化拆分）
 │   │   ├── __init__.py                            # 门面 re-export
 │   │   ├── constants.py                           # 常量、环境变量
@@ -97,11 +98,18 @@ backend/
 │
 ├── services/                                      # 共享业务服务
 │   ├── __init__.py
+│   ├── historical_imagery.py                      # ESRI Wayback 历史影像元数据同步与持久化（表创建 + 原子替换 + 每日/启动调度）
 │   └── ip_geo.py                                  # IP 地理定位统一服务
+│
+├── scripts/                                       # 运维/辅助脚本
+│   ├── fetch_wayback_layers.py                    # ESRI Wayback 目录拉取 CLI（--json/--code/--urls/--pure-urls）
+│   └── fetch_wayback_layers.js                    # 同上（Node.js 版）
 │
 ├── tests/                                         # 单元测试
 │   ├── test_agent_map_context.py                  # AgentMapContextV1 Schema 与 prompt 格式测试
 │   ├── test_config_env_loading.py                 # 配置与环境变量加载测试
+│   ├── test_historical_imagery.py                 # 历史影像 _normalize_entries 排序/去重/XYZ URL 生成测试
+│   ├── test_realtime_stats.py                     # SSE 主信号/普通鉴权活跃/显式兜底心跳回归测试
 │   ├── test_sqlite_recovery.py                    # SQL 清理、维护事件、恢复成功/失败与激活回滚测试
 │   └── test_url_template.py                       # 瓦片 URL 模板解析/重建测试（通用 token 扫描 + 三常规模式回归）
 │

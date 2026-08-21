@@ -2,8 +2,7 @@
  * useRealtimeStats — 实时在线统计 composable（模块级单例）
  *
  * 封装 EventSource 连接 /api/statistics/stream，监听 online_stats 事件，
- * 自动解析数据并通过回调推送；断线后自动重连（指数退避，最大 10s，
- * 连续 5 次失败后停止自动重连，等待 reconnect() 手动恢复）。
+ * 自动解析数据并通过回调推送；断线后自动重连（指数退避，最大 30s，永久重试）。
  *
  * 单例化：
  * 此前 SSE 连接绑定在账号面板开合上——面板没开时无连接信号，断网/关页
@@ -11,15 +10,21 @@
  * 全局（HomeView）挂载时建立连接，连接存续 = 在线；断连/offline 上报 =
  * 立即下线。账号面板等组件只注册 onStats 回调消费数据，不再控制连接。
  *
- * 心跳模型（在线判定唯一信号源）：
- * 在线 = 前端每 5s POST /api/statistics/heartbeat（经 client.js 拦截器
- * 自动携带 token 或 X-Guest-Device-Id）；停心跳（下线/断网/关页）→ 后端
- * 15s 窗口过期自动剔除。心跳响应携带 online 数，作为无 SSE 时的兜底展示
- * 数据（心跳 = 信号通道 + 数据通道）。SSE 仅承担每 15s 的推送通道，连接
- * 断开不影响在线判定（无需 offline 上报、无需连接保活语义）。
+ * 在线判定（V3.5.25 重构，后端为主、前端零轮询）：
+ * - 主信号 = SSE 长连接本身。后端以"连接是否存活"计数在线（引用计数，
+ *   同身份多标签页不误杀），见 backend/api/realtime_stats.py。前端正常态
+ *   只维持这一条 SSE 连接，不发送任何心跳请求。
+ * - 兜底信号 = 低频心跳（仅当 SSE 断开时启用，30s 一次）。SSE 不可达期间
+ *   仍以心跳维持在线计数与人数展示；SSE 恢复即停心跳。
+ * 动机：原模型每 5s POST 一次心跳（穿透 require_login 做一次会话 DB 查询），
+ * 长期运行 + 后台标签节流回前台后高频轮询，在受限后端上形成持续读取压力
+ * 并拖垮响应（表现为前端卡顿、需刷新页面）。改为连接为主后前端常态零轮询。
  *
- * 后台标签页说明：浏览器对后台标签定时器节流（≥1min），后台页心跳可能
- * 中断而被窗口剔除；切换到前台时立即补发一次心跳恢复在线。
+ * 后台标签页与回前台积压（V3.5.25）：
+ * - SSE 连接常驻（10s keep-alive 保活），后台页仍计入在线。
+ * - 浏览器可能在后台暂存连续到达的 online_stats；回前台时通过 rAF 合并
+ *   同一渲染帧内的更新，降低响应式更新集中触发造成的卡顿风险。
+ * - 切回前台若 SSE 已断（代理杀连接），立即重置退避重连而非等待。
  *
  * 鉴权说明（V3.5.19）：
  * EventSource 不支持自定义 header，且完整会话 token 不应出现在 URL。
@@ -36,15 +41,15 @@
  *   const { stats, connected } = useRealtimeStats({ onStats: (data) => {...} });
  */
 import { onBeforeUnmount, ref } from 'vue';
-import backendAPI from '@/api/backend/client';
+import backendAPI, { BACKEND_BASE_URL } from '@/api/backend/client';
 
 const SSE_ENDPOINT = '/api/statistics/stream';
 const TICKET_ENDPOINT = '/api/statistics/ticket';
 const HEARTBEAT_ENDPOINT = '/api/statistics/heartbeat';
-const HEARTBEAT_INTERVAL_MS = 5000;//每隔 5 秒发送一次心跳
+// 心跳仅作 SSE 断开时的兜底，低频即可（30s）；SSE 存活期间不发送。
+const HEARTBEAT_INTERVAL_MS = 30000;
 const INITIAL_RETRY_MS = 2000;
-const MAX_RETRY_MS = 10000;
-const MAX_CONSECUTIVE_FAILURES = 5;
+const MAX_RETRY_MS = 30000;
 
 // ─── 模块级单例状态（所有调用方共享同一连接）───
 const stats = ref(null);
@@ -52,12 +57,28 @@ const connected = ref(false);
 let _eventSource = null;
 let _retryTimer = null;
 let _retryMs = INITIAL_RETRY_MS;
-let _consecutiveFailures = 0;
 let _dead = false;
+let _connecting = false;
+let _connectionGeneration = 0;
 /** 已注册的 onStats 回调集合（多消费者共享同一连接） */
 const _callbacks = new Set();
 
-/** 广播数据到所有已注册回调 */
+// ─── 回前台消息积压合并（rAF 合并同一渲染帧内的连续更新）───
+let _pendingData = null;
+let _notifyScheduled = false;
+let _notifyHandle = null;
+let _notifyUsesAnimationFrame = false;
+
+function _flushNotify() {
+    _notifyScheduled = false;
+    _notifyHandle = null;
+    if (_pendingData) {
+        const d = _pendingData;
+        _pendingData = null;
+        _notify(d);
+    }
+}
+
 function _notify(data) {
     stats.value = data;
     _callbacks.forEach((cb) => {
@@ -69,34 +90,50 @@ function _notify(data) {
     });
 }
 
+/** 合并多次同步到达的 online_stats 为下一帧一次更新（回前台积压防护） */
+function _scheduleNotify(data) {
+    _pendingData = data;
+    if (_notifyScheduled) return;
+    _notifyScheduled = true;
+    if (typeof requestAnimationFrame === 'function') {
+        _notifyUsesAnimationFrame = true;
+        _notifyHandle = requestAnimationFrame(_flushNotify);
+    } else {
+        _notifyUsesAnimationFrame = false;
+        _notifyHandle = setTimeout(_flushNotify, 0);
+    }
+}
+
 async function _fetchTicket() {
     const resp = await backendAPI.get(TICKET_ENDPOINT);
-    const ticket = resp?.data?.ticket;
+    const ticket = resp?.ticket ?? resp?.data?.ticket;
     return typeof ticket === 'string' && ticket ? ticket : '';
 }
 
 function _buildUrl() {
     // 登录用户与游客（携带 X-Guest-Device-Id 的访客）都建立 SSE 推送通道；
-    // 在线判定与连接无关（心跳模型），这里的连接只保证收到 15s 定时推送。
-    return SSE_ENDPOINT;
+    // 在线判定以连接存活为准，连接只保证收到 15s 定时推送。
+    return `${String(BACKEND_BASE_URL || '').replace(/\/$/, '')}${SSE_ENDPOINT}`;
 }
 
 /**
- * 发送一次活跃心跳。
+ * 发送一次活跃心跳（仅 SSE 断开时的兜底）。
  *
  * 经 backendAPI 拦截器自动携带 Authorization token 或 X-Guest-Device-Id。
- * 失败静默（断网/后端暂不可达时自然停发 → 后端窗口过期自动剔除，正是
- * "下线即不发送"的语义）。响应携带 online 当前在线数：无 SSE 推送通道
- * 时（SSE 不可用/未连接）以该字段兜底展示实时人数。
+ * 失败静默（断网/后端暂不可达时自然停发 → 后端窗口过期自动剔除）。
+ * 响应携带 online 当前在线数，作为无 SSE 时的兜底展示数据。
  */
 function _sendHeartbeat() {
     try {
         backendAPI
             .post(HEARTBEAT_ENDPOINT, {})
             .then((resp) => {
-                const online = resp?.data?.online;
+                const online = resp?.online ?? resp?.data?.online;
                 if (typeof online === 'number' && stats.value?.realtime_online_users !== online) {
-                    stats.value = { ...(stats.value || {}), realtime_online_users: online };
+                    _scheduleNotify({
+                        ...(stats.value || {}),
+                        realtime_online_users: online,
+                    });
                 }
             })
             .catch(() => {
@@ -107,30 +144,41 @@ function _sendHeartbeat() {
     }
 }
 
-/** 后台标签页定时器节流时心跳中断，切换回前台立即补发一次恢复在线 */
+/** 切回前台：SSE 已断时立即心跳并重置退避重连。 */
+function _handleVisibilityChange() {
+    if (document.hidden) return;
+    if (!connected.value) {
+        _sendHeartbeat();
+        if (!_eventSource && !_connecting) {
+            _retryMs = INITIAL_RETRY_MS;
+            if (_retryTimer) {
+                clearTimeout(_retryTimer);
+                _retryTimer = null;
+            }
+            void connect();
+        }
+    }
+}
+
+let _visibilityListenerBound = false;
+
 function _bindVisibilityListener() {
-    document.addEventListener(
-        'visibilitychange',
-        () => {
-            if (!document.hidden) _sendHeartbeat();
-        },
-        { passive: true },
-    );
+    if (_visibilityListenerBound || typeof document === 'undefined') return;
+    document.addEventListener('visibilitychange', _handleVisibilityChange, { passive: true });
+    _visibilityListenerBound = true;
 }
 
 function _unbindVisibilityListener() {
-    document.removeEventListener('visibilitychange', _bindVisibilityListener);
+    if (!_visibilityListenerBound || typeof document === 'undefined') return;
+    document.removeEventListener('visibilitychange', _handleVisibilityChange);
+    _visibilityListenerBound = false;
 }
 
 let _heartbeatTimer = null;
 
 function _startHeartbeat() {
-    // 幂等：重连路径会反复调用 connect() → _startHeartbeat()，
-    // 必须先清旧 interval，避免心跳定时器随重连/重连次数累积
-    if (_heartbeatTimer) {
-        clearInterval(_heartbeatTimer);
-        _heartbeatTimer = null;
-    }
+    // 幂等：仅当 SSE 不可用才需要心跳兜底；SSE 存活时由 onopen 停掉。
+    if (_heartbeatTimer) return;
     _sendHeartbeat();
     _heartbeatTimer = setInterval(_sendHeartbeat, HEARTBEAT_INTERVAL_MS);
 }
@@ -143,11 +191,11 @@ function _stopHeartbeat() {
 }
 
 async function connect() {
-    if (_dead) return;
+    if (_dead || _connecting || _eventSource) return;
+    const generation = ++_connectionGeneration;
+    _connecting = true;
 
-    _disconnect();
-
-    // 心跳与 SSE 相互独立：心跳先启动，保证在线判定与展示兜底
+    // 默认启用兜底心跳；SSE 成功建立后由 onopen 停掉（常态零轮询）。
     _startHeartbeat();
     _bindVisibilityListener();
 
@@ -162,39 +210,51 @@ async function connect() {
     } catch {
         url = '';
     }
+    if (_dead || generation !== _connectionGeneration) return;
     if (!url) {
+        _connecting = false;
         _scheduleRetry();
         return;
     }
 
-    const es = new EventSource(url, { withCredentials: true });
+    let es;
+    try {
+        es = new EventSource(url, { withCredentials: true });
+    } catch {
+        _connecting = false;
+        _startHeartbeat();
+        _scheduleRetry();
+        return;
+    }
     _eventSource = es;
+    _connecting = false;
 
     es.onopen = () => {
+        if (_dead || generation !== _connectionGeneration || _eventSource !== es) {
+            es.close();
+            return;
+        }
         connected.value = true;
         _retryMs = INITIAL_RETRY_MS; // 连接成功后重置退避
-        _consecutiveFailures = 0;
+        _stopHeartbeat(); // SSE 已接管在线信号，停掉兜底心跳（常态零轮询）
     };
 
     es.addEventListener('online_stats', (event) => {
         try {
             const data = JSON.parse(event.data);
-            _notify(data);
+            _scheduleNotify(data); // rAF 合并，防护回前台积压爆发
         } catch (_e) {
             // 解析失败静默跳过
         }
     });
 
     es.onerror = () => {
+        if (generation !== _connectionGeneration || _eventSource !== es) return;
         connected.value = false;
         es.close();
         _eventSource = null;
-
-        // 连续失败达上限后停止自动重连（网络恢复后由 reconnect 手动恢复）
-        _consecutiveFailures += 1;
-        if (_consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
-            return;
-        }
+        // SSE 断开 → 启用心跳兜底，并永久重试（不再 5 次后放弃，避免需刷新页）。
+        _startHeartbeat();
         _scheduleRetry();
     };
 }
@@ -210,6 +270,9 @@ function _scheduleRetry() {
 }
 
 function _disconnect() {
+    _connectionGeneration += 1;
+    _connecting = false;
+    connected.value = false;
     if (_eventSource) {
         _eventSource.close();
         _eventSource = null;
@@ -225,13 +288,23 @@ function disconnect() {
     _disconnect();
     _stopHeartbeat();
     _unbindVisibilityListener();
+    if (_notifyScheduled && _notifyHandle !== null) {
+        if (_notifyUsesAnimationFrame && typeof cancelAnimationFrame === 'function') {
+            cancelAnimationFrame(_notifyHandle);
+        } else {
+            clearTimeout(_notifyHandle);
+        }
+    }
+    _notifyScheduled = false;
+    _notifyHandle = null;
+    _pendingData = null;
 }
 
 function reconnect() {
     _dead = false;
     _retryMs = INITIAL_RETRY_MS;
-    _consecutiveFailures = 0;
-    connect();
+    _disconnect();
+    void connect();
 }
 
 /**

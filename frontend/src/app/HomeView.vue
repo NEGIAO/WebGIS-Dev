@@ -22,6 +22,7 @@ import { URL_LAYER_OPTIONS } from '@ol/basemap/constants/basemapResolver';
 import { getLayerCategory, getLayerGroup } from '@ol/basemap/constants/basemapResolver';
 import { createMapCommandBus } from '@common/chat/agent/MapCommandBus';
 import { createCesiumMapCommandAdapter, createOlMapCommandAdapter } from '@common/chat/agent/mapCommandAdapters';
+import { useSharedCustomBasemapUrl } from '@common/basemap/useSharedCustomBasemapUrl';
 import { importCesiumContainerWithRetry, loadSidePanelModule } from './composables/useLazyModules';
 
 const { getLayerIdByIndex, getLayerIndexById } = createBasemapUrlMappingFeature({
@@ -112,6 +113,9 @@ const isWeatherBoardMode = ref(false);
 // 路由快照：用于在视图切换时把 URL 中的 l 参数同步到 OL/Cesium
 const route = useRoute();
 const readQueryValue = (key) => readQueryFromSnapshot(key, route.query);
+
+// Single runtime SSOT shared by OL and Cesium; never hydrated from route customUrl.
+const { customBasemapUrl: sharedCustomBasemapUrl } = useSharedCustomBasemapUrl();
 
 function parseFiniteNumber(value) {
     if (value === null || value === undefined) return null;
@@ -255,6 +259,9 @@ provide('agentMapRuntimeBridge', agentMapRuntimeBridge);
 
 // 向子组件提供自定义 XYZ 底图切换能力（供 Chat GISCommander 调用）
 const setCustomBasemapByUrl = (url) => {
+    if (is3DMode.value) {
+        return cesiumContainerRef.value?.handleCustomBasemapSubmit?.({ url });
+    }
     const handler = mapContainerRef.value?.setCustomBasemapByUrl;
     if (typeof handler !== 'function') {
         return {
@@ -274,6 +281,7 @@ const isMarkModeActive = computed(() => {
     return !!mapContainerRef.value?.isReverseGeocodePickMode?.value;
 });
 provide('isMarkModeActive', isMarkModeActive);
+provide('isSidePanelCollapsed', isSidePanelCollapsed);
 const mapCoreLoadingSettled = ref(false);
 
 // ========== 访问记录延迟执行标志 ==========
@@ -423,6 +431,25 @@ function handleControlsOpenTab(tab) {
 }
 
 /**
+ * 侧栏按钮「二次点击隐藏」：open-tab 的切换版本。
+ * 目标 tab 对应的右侧 SidePanel 若已展开且正处该 tab → 收起；
+ * 否则按 open-tab 打开并切换到该 tab。
+ * @param {string} tab - 目标 tab 名（'toolbox' / 'info' 等）
+ */
+function handleControlsToggleTab(tab) {
+    const next = String(tab || '').trim();
+    if (!next) return;
+
+    // 已展开且正处于该 tab → 二次点击收起（与本地浮式子面板的 toggle 行为一致）
+    if (!isSidePanelCollapsed.value && activeSidePanelTab.value === next) {
+        isSidePanelCollapsed.value = true;
+        compassStore.setPlacementMode(false);
+        return;
+    }
+    handleControlsOpenTab(next);
+}
+
+/**
  * 打开工具箱并切换到指定子标签。
  * 若目标子标签已激活，先重置为 'layers' 再下一帧切回，触发 SidePanel 内部 watch 重新响应。
  * @param {string} tab - 工具箱子标签名
@@ -440,6 +467,20 @@ function handleControlsOpenToolboxTab(tab) {
         toolboxTab.value = next;
     }
     handleControlsOpenTab('toolbox');
+}
+
+/**
+ * 打开工具箱并切换到指定子标签，支持二次点击收起。
+ * 已展开 toolbox 时再次点击 → 收起；否则展开并切到子标签。
+ * @param {string} tab - 工具箱子标签名
+ */
+function handleControlsToggleToolboxTab(tab) {
+    if (!isSidePanelCollapsed.value && activeSidePanelTab.value === 'toolbox') {
+        isSidePanelCollapsed.value = true;
+        compassStore.setPlacementMode(false);
+        return;
+    }
+    handleControlsOpenToolboxTab(tab);
 }
 
 function handleControlsMapInteraction(type) {
@@ -548,7 +589,7 @@ async function handleControlsDistrictSelect(payload) {
  * @param {string} [payload.mode='horizontal'] - 卷帘方向
  */
 async function handleEnableBasemapSwipe(payload) {
-    const { leftBasemap, rightBasemap, mode } = payload || {};
+    const { leftBasemap, rightBasemap, leftCustomUrl, rightCustomUrl, mode } = payload || {};
 
     if (!mapContainerRef.value) {
         message.error(t('home.mapContainerNotReady'));
@@ -559,6 +600,8 @@ async function handleEnableBasemapSwipe(payload) {
         await mapContainerRef.value?.enableBasemapSwipe?.({
             leftBasemapId: leftBasemap,
             rightBasemapId: rightBasemap,
+            leftCustomUrl: leftCustomUrl || '',
+            rightCustomUrl: rightCustomUrl || '',
             mode: mode || 'horizontal',
         });
     } catch (error) {
@@ -835,10 +878,12 @@ function buildCesiumQueryPatchFromOl() {
         z: formatZParam(height ?? 6000000),
         cv: poseCode && poseCode !== '0' ? poseCode : undefined,
     };
-    // 显式写入 l：OL 当前 selectedLayer 对应的预设索引，避免 Cesium 拿不到 l 而落到默认底图
-    if (Number.isFinite(state.layerIndex)) {
+    // Both engines write numeric l only; the empty value removes legacy character layerId.
+    patch.layerId = '';
+    if (Number.isInteger(state.layerIndex)) {
         patch.l = String(state.layerIndex);
     }
+    patch.customUrl = '';
     return patch;
 }
 
@@ -873,17 +918,18 @@ function syncOlFromCesiumPayload(payload = {}) {
  * 从 Cesium 当前 activeBasemap 计算底图预设索引。
  * @returns {number|null}
  */
-function getCesiumActiveLayerIndex() {
-    const presetId = cesiumContainerRef.value?.activeBasemap;
+function getCesiumActiveSelection() {
+    const presetId = String(cesiumContainerRef.value?.activeBasemap || '').trim();
     if (!presetId) return null;
-    const idx = getLayerIndexById(presetId);
-    return Number.isInteger(idx) ? idx : null;
+    return { id: presetId };
 }
 
-/**
- * 将最近一次 Cesium 等效视图转换为 OL URL 参数，切回 2D 时一次性写入。
- * @returns {Record<string,string>|null}
- */
+function getCesiumActiveLayerIndex() {
+    const selection = getCesiumActiveSelection();
+    if (!selection) return null;
+    const idx = getLayerIndexById(selection.id);
+    return Number.isInteger(idx) ? idx : null;
+}
 function buildOlQueryPatchFromCesium() {
     const equivalent = latestCesiumOlEquivalent.value;
     const patch = {};
@@ -892,8 +938,9 @@ function buildOlQueryPatchFromCesium() {
         patch.lat = Number(equivalent.lat).toFixed(6);
         patch.z = formatZParam(equivalent.zoom);
     }
-    // 同步底图 l：从 Cesium 当前 activeBasemap 重新计算索引，
-    // 而非透传 URL 旧值——避免 Cesium 熔断降级后 activeBasemap 已变但 URL l 尚未写回的场景。
+    // Sync numeric l and remove legacy route fields; the custom URL stays in shared runtime state.
+    patch.layerId = '';
+    patch.customUrl = '';
     const cesiumLayerIndex = getCesiumActiveLayerIndex();
     if (cesiumLayerIndex !== null) {
         patch.l = String(cesiumLayerIndex);
@@ -925,7 +972,7 @@ async function setMapView(view, { writeUrl = true } = {}) {
     // - Cesium -> OL：先把 URL z 从 Cesium camera height 转为 OL zoom。
     // 这样 Cesium/OL 初始化时读取到的 z 已经是目标引擎对应的语义。
     if (writeUrl) {
-        replaceMapView(normalizedView, queryPatch ? { queryPatch } : undefined);
+        await replaceMapView(normalizedView, queryPatch ? { queryPatch } : undefined);
     }
 
     if (normalizedView === MAP_VIEW_CESIUM) {
@@ -934,7 +981,7 @@ async function setMapView(view, { writeUrl = true } = {}) {
         const loaded = await ensureCesiumLoaded();
         if (!loaded) {
             // Cesium 加载失败，回滚 URL 为 OL 视图
-            if (writeUrl) replaceMapView(MAP_VIEW_OL);
+            if (writeUrl) await replaceMapView(MAP_VIEW_OL);
             return false;
         }
         is3DMode.value = true;
@@ -943,12 +990,15 @@ async function setMapView(view, { writeUrl = true } = {}) {
             mapContainerRef.value?.syncViewFromCesium?.(latestCesiumOlEquivalent.value);
         }
         // Cesium → OL 切换：把当前 URL 中的 l 同步到底图，确保 2D 视图继承 Cesium 选中的底图
-        const incomingLayerIndex = parseFiniteNumber(readQueryValue('l'));
-        if (incomingLayerIndex !== null) {
+        const incomingLayerIndex = getCesiumActiveLayerIndex()
+            ?? parseFiniteNumber(queryPatch?.l || readQueryValue('l'));
+        if (Number.isInteger(incomingLayerIndex)) {
             const targetLayerId = getLayerIdByIndex(incomingLayerIndex);
-            if (targetLayerId) {
-                // await 异步切换：setBaseLayerActive 内部 lazy-load useUserLayerActions，
-                // 不 await 会导致 selectedLayer 已变但 switchLayerById 尚未执行的竞态。
+            if (targetLayerId === 'custom' && sharedCustomBasemapUrl.value) {
+                await mapContainerRef.value?.setCustomBasemapByUrl?.(
+                    sharedCustomBasemapUrl.value,
+                );
+            } else if (targetLayerId) {
                 await mapContainerRef.value?.setBaseLayerActive?.(targetLayerId);
             }
         }
@@ -1435,8 +1485,10 @@ onMounted(async () => {
             <div class="Control-panel">
                 <ControlsPanel
                     :user-layers="userLayers"
+                    :custom-basemap-url="sharedCustomBasemapUrl"
                     @open-tab="handleControlsOpenTab"
-                    @open-toolbox-tab="handleControlsOpenToolboxTab"
+                    @toggle-tab="handleControlsToggleTab"
+                    @open-toolbox-tab="handleControlsToggleToolboxTab"
                     @map-interaction="handleControlsMapInteraction"
                     @draw-style-change="handleControlsDrawStyleChange"
                     @draw-edit-action="handleControlsDrawEditAction"
@@ -1597,6 +1649,7 @@ onMounted(async () => {
                     :toolbox-tab="toolboxTab"
                     :active-feature="activeFeature"
                     :user-layers="userLayers"
+                    :custom-basemap-url="sharedCustomBasemapUrl"
                     :base-layers="baseLayers"
                     :toolbox-overview="toolboxOverview"
                     :upload-progress="uploadProgress"

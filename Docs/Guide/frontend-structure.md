@@ -35,6 +35,7 @@ frontend/src/
 │       ├── runtime.js  # 前端运行时地图 token 配置接口
 │       ├── spatial.js  # 空间分析接口
 │       ├── statistics.js  # 统计/消息/公告
+│       ├── historicalImagery.js  # 历史影像（Wayback 等）接口封装
 │       └── weather.js  # 高德天气业务封装（前端直连；与 backend/weather.js 后端代理同名不同义）
 ├── app/
 │   ├── HomeView.vue  # 首页（由 lazyHomeViewLoader 加载）
@@ -258,7 +259,9 @@ frontend/src/
 │   │   │       └── useThemeStore.ts  # 主题状态
 │   │   ├── basemap/
 │   │   │   ├── basemapPresets.ts  # 底图预设纯数据（BASEMAP_PRESETS + ALL_BASEMAP_PRESETS + URL_LAYER_OPTIONS，零 ol/cesium 依赖，自 ol 域迁入）
-│   │   │   └── basemapOptions.ts  # 底图选项派生常量（DEFAULT_BASEMAP_LAYER_INDEX / BASEMAP_OPTIONS，自 ol 域 basemapResolver 迁入）
+│   │   │   ├── basemapOptions.ts  # 底图选项常量 + 公开 1-based URL 图层编号双向 helper
+│   │   │   ├── basemapRegistry.ts  # 双引擎底图选择规范化、旧路由兼容与历史年份分组
+│   │   │   └── useSharedCustomBasemapUrl.ts  # OL/Cesium 共用的 custom/Wayback URL 运行时 SSOT 与本机持久化
 │   │   ├── chat/
 │   │   │   ├── agent/
 │   │   │   │   ├── AgentExecutor.js  # Agent 响应拦截与工具调用

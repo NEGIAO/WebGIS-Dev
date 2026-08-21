@@ -298,9 +298,16 @@ import { BACKEND_BASE_URL } from '@/config/publicRuntime';
 const ChatPanelContent = defineAsyncComponent(() =>
     import('@common/chat/components/ChatPanelContent.vue'),
 );
-const ToolboxPanel = defineAsyncComponent(() =>
-    import('@common/layer-tree/components/TOCPanel.vue'),
-);
+// ToolboxPanel 预加载：与 defineAsyncComponent 共享同一个模块 Promise。
+// 首屏就绪后延迟预取资源（不打开面板），用户点击工具箱时无需再等待动态分块加载。
+let toolboxModulePromise = null;
+function preloadToolboxPanel() {
+    if (!toolboxModulePromise) {
+        toolboxModulePromise = import('@common/layer-tree/components/TOCPanel.vue');
+    }
+    return toolboxModulePromise;
+}
+const ToolboxPanel = defineAsyncComponent(() => preloadToolboxPanel());
 const BusPlannerPanel = defineAsyncComponent(() =>
     import('@ol/routing/components/BusPlannerPanel.vue'),
 );
@@ -433,6 +440,26 @@ watch(
 
 const tiandituToken = ref(getRuntimeMapTokensSync().tiandituTk);
 
+// ========== 工具箱资源延迟预加载 ==========
+// SidePanel 的挂载时机 = ol 首屏就绪（HomeView.handleMapCoreReady 触发）。
+// 挂载后再延迟 10s 异步预取 ToolboxPanel 模块：
+// - 不占用首屏 / 底图加载的带宽与主线程
+// - 用户点击工具箱时立即渲染，无动态分块等待
+const TOOLBOX_PRELOAD_DELAY_MS = 10000;
+let toolboxPreloadTimer = null;
+
+function scheduleToolboxPreload() {
+    if (toolboxPreloadTimer) return;
+    toolboxPreloadTimer = window.setTimeout(() => {
+        toolboxPreloadTimer = null;
+        preloadToolboxPanel().catch((error) => {
+            // 预加载失败不影响用户后续点击（defineAsyncComponent 会按需重试）
+            console.warn('ToolboxPanel 预加载失败，用户点击时自动重试', error);
+            toolboxModulePromise = null;
+        });
+    }, TOOLBOX_PRELOAD_DELAY_MS);
+}
+
 function formatScore(raw) {
     const n = Number(raw);
     if (!Number.isFinite(n)) return '';
@@ -551,10 +578,18 @@ onMounted(() => {
     });
     fetchNews(currentPlatform.value);
     newsTimer = setInterval(() => fetchNews(currentPlatform.value), NEWS_REFRESH_INTERVAL);
+
+    // 挂载时即安排工具箱资源预加载（10s 后异步执行）
+    scheduleToolboxPreload();
 });
 
 onUnmounted(() => {
     if (newsTimer) clearInterval(newsTimer);
+    // 组件卸载时取消未执行的预加载定时器，防止内存泄漏
+    if (toolboxPreloadTimer) {
+        clearTimeout(toolboxPreloadTimer);
+        toolboxPreloadTimer = null;
+    }
 });
 </script>
 

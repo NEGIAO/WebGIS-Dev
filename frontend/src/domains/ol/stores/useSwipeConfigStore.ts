@@ -22,6 +22,8 @@ type SwipeConfig = {
     targetLayerIds: string[];
     leftLayerIds: string[];
     rightLayerIds: string[];
+    leftCustomUrl: string;
+    rightCustomUrl: string;
 };
 
 function normalizeLayerIdList(value: unknown): string[] {
@@ -64,6 +66,8 @@ export const useSwipeConfigStore = defineStore('swipeConfigStore', () => {
         targetLayerIds: normalizeLayerIdList(persisted?.targetLayerIds),
         leftLayerIds: normalizeLayerIdList(persisted?.leftLayerIds),
         rightLayerIds: normalizeLayerIdList(persisted?.rightLayerIds),
+        leftCustomUrl: typeof persisted?.leftCustomUrl === 'string' ? persisted.leftCustomUrl : '',
+        rightCustomUrl: typeof persisted?.rightCustomUrl === 'string' ? persisted.rightCustomUrl : '',
     });
 
     /**
@@ -82,6 +86,12 @@ export const useSwipeConfigStore = defineStore('swipeConfigStore', () => {
         }
         if (config.rightLayerIds !== undefined) {
             swipeConfig.value.rightLayerIds = normalizeLayerIdList(config.rightLayerIds);
+        }
+        if (config.leftCustomUrl !== undefined) {
+            swipeConfig.value.leftCustomUrl = String(config.leftCustomUrl || '').trim();
+        }
+        if (config.rightCustomUrl !== undefined) {
+            swipeConfig.value.rightCustomUrl = String(config.rightCustomUrl || '').trim();
         }
         if (
             config.targetLayerIds === undefined &&
@@ -126,6 +136,8 @@ export const useSwipeConfigStore = defineStore('swipeConfigStore', () => {
         swipeConfig.value.targetLayerIds = normalizeLayerIdList(layerIds);
         swipeConfig.value.leftLayerIds = [];
         swipeConfig.value.rightLayerIds = [];
+        swipeConfig.value.leftCustomUrl = '';
+        swipeConfig.value.rightCustomUrl = '';
         persistConfig(swipeConfig.value);
     }
 

@@ -846,12 +846,26 @@ def _get_self_stats_sync(username: str, token: str) -> Dict[str, Any]:
     }
 
 
+# 全站实时统计快照缓存：_get_realtime_global_stats_sync 为 7 表聚合查询，
+# 被 /statistics/center（15s 轮询）与 /statistics/realtime 高频调用。缓存
+# STATS_DB_CACHE_TTL_SECONDS 秒内的快照，避免每次轮询都重查拖垮受限后端。
+# 注意：在线人数（online_users/online_sessions）由 sessions.last_seen_at 判定，
+# 缓存会引入最多 TTL 秒的延迟，可接受（实时在线另有内存 tracker 口径）。
+STATS_DB_CACHE_TTL_SECONDS = 10
+_stats_db_cache: Dict[str, Any] = {"data": None, "ts": 0.0}
+
+
 def _get_realtime_global_stats_sync() -> Dict[str, Any]:
     now = _utc_now()
     now_iso = _iso(now)
     # 在线 = 未过期 且 最近 ONLINE_WINDOW_MINUTES 内有鉴权请求（V3.4.60）。
     # 原判定仅看 expires_at（TTL 72h），导致 3 天内登录未退出者恒被计为在线。
     online_cutoff_iso = _iso(now - timedelta(minutes=ONLINE_WINDOW_MINUTES))
+
+    # 命中缓存直接返回（复制防下游修改共享对象）
+    cache_ts = _stats_db_cache.get("ts") or 0.0
+    if _stats_db_cache.get("data") is not None and (now.timestamp() - cache_ts) < STATS_DB_CACHE_TTL_SECONDS:
+        return dict(_stats_db_cache["data"])
 
     with _db_connection() as conn:
         online_users = conn.execute(
@@ -899,7 +913,7 @@ def _get_realtime_global_stats_sync() -> Dict[str, Any]:
         normalized = normalize_role(row_data.get("role"), row_data.get("username"))
         role_online[normalized] = int(role_online.get(normalized, 0) + int(row_data.get("cnt") or 0))
 
-    return {
+    result = {
         "online_users": int((dict(online_users).get("cnt") if online_users else 0) or 0),
         "online_sessions": int((dict(online_sessions).get("cnt") if online_sessions else 0) or 0),
         "total_registered_users": int((dict(total_registered_users).get("cnt") if total_registered_users else 0) or 0),
@@ -909,6 +923,12 @@ def _get_realtime_global_stats_sync() -> Dict[str, Any]:
         "online_by_role": role_online,
         "snapshot_at": now_iso,
     }
+
+    # 写入缓存（供后续 TTL 内命中）
+    _stats_db_cache["data"] = result
+    _stats_db_cache["ts"] = now.timestamp()
+
+    return result
 
 
 def _merge_online_tracker(stats: Dict[str, Any]) -> Dict[str, Any]:

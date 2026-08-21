@@ -285,13 +285,12 @@ function validateViewZ(value: unknown, view: 'ol' | 'cesium'): number | null {
  * @description 图层索引校验
  * @param value 原始url图层编号
  * @returns 合法索引数字 | null
- * @range 0 ~ URL_LAYER_OPTIONS.length-1，随预设数组动态变化，避免越界写入与未来扩展时校验过宽
+ * @range 1 ~ URL_LAYER_OPTIONS.length (public URL layer numbers are 1-based)
  */
 function validateLayerIndex(value: unknown): number | null {
-    const num = parseInt(value as string, 10);
-    if (!Number.isFinite(num)) return null;
-    const maxIndex = Math.max(0, URL_LAYER_OPTIONS.length - 1);
-    if (num < 0 || num > maxIndex) return null;
+    const num = Number(String(value ?? '').trim());
+    if (!Number.isInteger(num)) return null;
+    if (num < 1 || num > URL_LAYER_OPTIONS.length) return null;
     return num;
 }
 

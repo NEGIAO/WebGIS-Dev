@@ -11,6 +11,31 @@ let msgId = null;
 
 let pollTimer = null;
 
+/** 启动/停止公告 20s 轮询：仅页面可见时轮询，后台挂起即停（避免积压拖垮后端） */
+function startPolling() {
+    if (pollTimer || typeof window === 'undefined') return;
+    pollTimer = window.setInterval(() => {
+        refreshAnnouncement({ silent: true });
+    }, 20000);
+}
+
+function stopPolling() {
+    if (pollTimer && typeof window !== 'undefined') {
+        window.clearInterval(pollTimer);
+        pollTimer = null;
+    }
+}
+
+/** 页面可见性变化：切回前台立即刷新一次并恢复轮询；后台挂起停止轮询 */
+function handleVisibilityChange() {
+    if (document.hidden) {
+        stopPolling();
+    } else {
+        refreshAnnouncement({ silent: true });
+        startPolling();
+    }
+}
+
 function normalizeAnnouncement(payload) {
     if (!payload || typeof payload !== 'object') return null;
 
@@ -123,16 +148,15 @@ onMounted(async () => {
     await refreshAnnouncement({ silent: true });
 
     if (typeof window !== 'undefined') {
-        pollTimer = window.setInterval(() => {
-            refreshAnnouncement({ silent: true });
-        }, 20000);
+        startPolling();
+        document.addEventListener('visibilitychange', handleVisibilityChange);
     }
 });
 
 onBeforeUnmount(() => {
-    if (pollTimer && typeof window !== 'undefined') {
-        window.clearInterval(pollTimer);
-        pollTimer = null;
+    stopPolling();
+    if (typeof window !== 'undefined') {
+        document.removeEventListener('visibilitychange', handleVisibilityChange);
     }
     if (msgId) {
         message.remove(msgId);

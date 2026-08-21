@@ -32,7 +32,7 @@
             </div>
             <div v-show="isSelectDropdownOpen" class="custom-select-dropdown">
                 <div
-                    v-for="option in BASEMAP_OPTIONS"
+                    v-for="option in regularBasemapOptions"
                     :key="option.value"
                     class="custom-select-option"
                     :class="{ 'selected': option.value === selectedLayer }"
@@ -41,6 +41,71 @@
                     <span class="preset-index">{{ option.label.split(' ')[0] }}</span>
                     <span class="preset-name">{{ option.label.slice(option.label.indexOf(' ') + 1) }}</span>
                 </div>
+
+                <div class="history-section-divider" aria-hidden="true"></div>
+                <div class="history-section-title">历史影像</div>
+                <div class="history-tabs">
+                    <button
+                        type="button"
+                        class="history-tab"
+                        :class="{ active: historicalProviderTab === 'sentinel' }"
+                        @click.stop="historicalProviderTab = 'sentinel'"
+                    >
+                        Sentinel
+                    </button>
+                    <button
+                        type="button"
+                        class="history-tab"
+                        :class="{ active: historicalProviderTab === 'esri' }"
+                        @click.stop="selectHistoricalProviderTab('esri')"
+                    >
+                        ESRI Wayback
+                    </button>
+                </div>
+                <template v-if="historicalProviderTab === 'sentinel'">
+                    <div v-for="group in sentinelYearGroups" :key="group.year" class="history-year-group">
+                        <button type="button" class="history-year-toggle" @click.stop="toggleHistoryYear('sentinel', group.year)">
+                            <span>{{ group.year }}年</span><span>{{ isHistoryYearOpen('sentinel', group.year) ? '▾' : '▸' }}</span>
+                        </button>
+                        <template v-if="isHistoryYearOpen('sentinel', group.year)">
+                            <div
+                                v-for="option in group.items"
+                                :key="option.value"
+                                class="custom-select-option history-option"
+                                :class="{ selected: option.value === selectedLayer }"
+                                @click.stop="selectOption(option)"
+                            >
+                                <span class="preset-name">{{ String(option.label).replace(/^\d+\s+/, '') }}</span>
+                            </div>
+                        </template>
+                    </div>
+                </template>
+                <template v-else>
+                    <div v-if="historicalImageryLoading" class="history-empty">正在读取快照目录…</div>
+                    <div v-else-if="!esriWaybackLayers.length" class="history-empty">
+                        暂无数据，后端将在启动后自动同步
+                    </div>
+                    <div v-for="group in esriYearGroups" :key="group.year" class="history-year-group">
+                        <button type="button" class="history-year-toggle" @click.stop="toggleHistoryYear('esri', group.year)">
+                            <span>{{ group.year }}年</span><span>{{ isHistoryYearOpen('esri', group.year) ? '▾' : '▸' }}</span>
+                        </button>
+                        <template v-if="isHistoryYearOpen('esri', group.year)">
+                            <div
+                                v-for="snapshot in group.items"
+                                :key="snapshot.id"
+                                class="custom-select-option history-option"
+                                :class="{ selected: selectedLayer === 'custom' && snapshot.xyz_url === customMapUrl }"
+                                :title="snapshot.name || snapshot.id"
+                                @click.stop="selectHistoricalSnapshot(snapshot)"
+                            >
+                                <span class="preset-name">{{ snapshot.date }}</span>
+                            </div>
+                        </template>
+                    </div>
+                    <div v-if="historicalImageryUpdatedAt" class="history-updated">
+                        更新于 {{ formatHistoryDate(historicalImageryUpdatedAt) }}
+                    </div>
+                </template>
             </div>
         </div>
 
@@ -267,10 +332,11 @@ import {
     watch,
 } from 'vue';
 import { toLonLat } from 'ol/proj';
-import { apiSearchLocations } from '@/api';
+import { apiGetHistoricalImageryLayers, apiSearchLocations } from '@/api';
 import { BASEMAP_OPTIONS } from '@/constants';
 import { detectCustomTileServiceKind } from '@ol/tile-source/index';
 import { tileHDRendering, toggleTileHDRendering } from '@ol/basemap/basemapSystem';
+import { groupBasemapsByYear } from '@common/basemap/basemapRegistry';
 
 // ========== 异步导入子组件 ==========
 /** 地名搜索组件，支持多个服务源（天地图、国际、高德） */
@@ -400,8 +466,38 @@ const layerManagerPanelStyle = computed(() => ({
 // 自定义 Select 状态
 const isSelectDropdownOpen = ref(false);
 const customSelectRef = ref(null);
+const historicalProviderTab = ref('sentinel');
+const historicalImageryLoading = ref(false);
+const historicalCatalogLoaded = ref(false);
+const esriWaybackLayers = ref([]);
+const historicalImageryUpdatedAt = ref('');
+const openHistoryYears = ref(new Set());
+
+const sentinelBasemapOptions = computed(() =>
+    BASEMAP_OPTIONS.filter((option) => String(option.value).startsWith('imagery_s2_cloudless_')),
+);
+const regularBasemapOptions = computed(() =>
+    BASEMAP_OPTIONS.filter((option) => !String(option.value).startsWith('imagery_s2_cloudless_')),
+);
+const sentinelYearGroups = computed(() => Array.from(groupBasemapsByYear(sentinelBasemapOptions.value.map((item) => ({ ...item, date: String(item.value).match(/(\d{4})/)?.[1] })))).map(([year, items]) => ({ year, items })));
+const esriYearGroups = computed(() => Array.from(groupBasemapsByYear(esriWaybackLayers.value)).map(([year, items]) => ({ year, items })));
+
+function historyYearKey(provider, year) { return `${provider}:${year}`; }
+function isHistoryYearOpen(provider, year) { return openHistoryYears.value.has(historyYearKey(provider, year)); }
+function toggleHistoryYear(provider, year) {
+    const key = historyYearKey(provider, year);
+    const next = new Set(openHistoryYears.value);
+    if (next.has(key)) next.delete(key); else next.add(key);
+    openHistoryYears.value = next;
+}
 
 const currentLayerLabel = computed(() => {
+    if (props.selectedLayer === 'custom' && props.customMapUrl) {
+        const snapshot = esriWaybackLayers.value.find(
+            (item) => item.xyz_url === props.customMapUrl,
+        );
+        if (snapshot) return `历史 ${snapshot.date}`;
+    }
     const found = BASEMAP_OPTIONS.find(opt => opt.value === props.selectedLayer);
     return found ? found.label : '底图';
 });
@@ -421,6 +517,63 @@ function selectOption(option) {
         source: 'dropdown',
     });
     isSelectDropdownOpen.value = false;
+}
+
+function selectHistoricalSnapshot(snapshot) {
+    if (!snapshot?.xyz_url) return;
+    historicalProviderTab.value = 'esri';
+    isSelectDropdownOpen.value = false;
+    emit('change-layer', {
+        layerId: 'custom',
+        source: 'custom-url',
+        customUrl: snapshot.xyz_url,
+    });
+}
+
+const historyDateFormatter = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'Asia/Shanghai',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+});
+
+function formatHistoryDate(value) {
+    if (!value) return '';
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return String(value).slice(0, 10);
+
+    const dateParts = Object.fromEntries(
+        historyDateFormatter.formatToParts(date).map(({ type, value: partValue }) => [type, partValue]),
+    );
+    return `${dateParts.year}-${dateParts.month}-${dateParts.day}`;
+}
+
+async function loadHistoricalImageryCatalog() {
+    if (historicalCatalogLoaded.value || historicalImageryLoading.value) return;
+    historicalImageryLoading.value = true;
+    try {
+        const data = await apiGetHistoricalImageryLayers();
+        const layers = Array.isArray(data?.layers) ? data.layers : [];
+        esriWaybackLayers.value = layers;
+        historicalImageryUpdatedAt.value = data?.updated_at || data?.sync?.last_success_at || '';
+        // 启动同步未完成时可能暂时返回空目录；保持可重试，避免 SQLite
+        // 稍后写入快照后仍要求用户刷新整个页面。
+        historicalCatalogLoaded.value = layers.length > 0;
+    } catch {
+        // 次要目录失败不阻断地图启动，并允许下次进入页签时重试。
+        esriWaybackLayers.value = [];
+        historicalCatalogLoaded.value = false;
+    } finally {
+        historicalImageryLoading.value = false;
+    }
+}
+
+// Wayback 目录保持懒加载，仅在用户进入对应来源页签时请求。
+function selectHistoricalProviderTab(tab) {
+    historicalProviderTab.value = tab;
+    if (tab === 'esri' && !historicalCatalogLoaded.value && !historicalImageryLoading.value) {
+        void loadHistoricalImageryCatalog();
+    }
 }
 
 const layerContextMenuStyle = computed(() => ({
@@ -951,6 +1104,79 @@ onBeforeUnmount(() => {
     background: var(--brand-primary);
     color: #fff;
     font-weight: 600;
+}
+
+.history-section-divider {
+    height: 1px;
+    margin: 5px 8px;
+    background: var(--border-brand-light);
+}
+
+.history-section-title {
+    padding: 5px 12px 3px;
+    color: var(--brand-accent-dark);
+    font-size: 12px;
+    font-weight: 700;
+}
+
+.history-tabs {
+    display: flex;
+    gap: 4px;
+    padding: 3px 8px 5px;
+}
+
+.history-tab {
+    flex: 1;
+    padding: 4px 6px;
+    border: 1px solid var(--border-brand-light);
+    border-radius: 4px;
+    background: rgba(255, 255, 255, 0.65);
+    color: #334155;
+    cursor: pointer;
+    font-size: 11px;
+}
+
+.history-tab.active {
+    border-color: var(--brand-primary);
+    background: var(--brand-primary);
+    color: #fff;
+}
+
+.history-option .preset-name {
+    white-space: nowrap;
+}
+
+.history-year-group {
+    border-bottom: 1px solid rgba(148, 163, 184, 0.2);
+}
+
+.history-year-toggle {
+    width: 100%;
+    display: flex;
+    justify-content: space-between;
+    padding: 6px 12px;
+    border: 0;
+    background: rgba(241, 245, 249, 0.8);
+    color: #334155;
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: 700;
+}
+
+.history-year-toggle:hover {
+    background: var(--bg-brand-light);
+}
+
+.history-empty,
+.history-updated {
+    padding: 6px 12px;
+    color: #64748b;
+    font-size: 11px;
+}
+
+.history-updated {
+    border-top: 1px solid var(--border-brand-light);
+    color: #94a3b8;
 }
 
 @keyframes fadeIn {

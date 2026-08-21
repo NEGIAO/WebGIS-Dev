@@ -85,6 +85,14 @@
                                 {{ option.label }}
                             </option>
                         </select>
+                        <input
+                            v-if="leftBasemap === 'custom'"
+                            v-model="leftCustomUrl"
+                            class="basemap-url-input"
+                            type="url"
+                            placeholder="XYZ / WMTS URL"
+                            autocomplete="off"
+                        >
                     </div>
 
                     <div class="form-group">
@@ -101,6 +109,14 @@
                                 {{ option.label }}
                             </option>
                         </select>
+                        <input
+                            v-if="rightBasemap === 'custom'"
+                            v-model="rightCustomUrl"
+                            class="basemap-url-input"
+                            type="url"
+                            placeholder="XYZ / WMTS URL"
+                            autocomplete="off"
+                        >
                     </div>
 
                     <div class="form-group">
@@ -144,7 +160,7 @@
 </template>
 
 <script setup>
-import { computed, defineAsyncComponent, inject, ref } from 'vue';
+import { computed, defineAsyncComponent, inject, ref, watch } from 'vue';
 import { useMessage } from '@common/shell/useMessage';
 import { useLocale } from '@common/app/useLocale';
 import AdministrativeDivisionPanel from './AdministrativeDivisionPanel.vue';
@@ -176,29 +192,45 @@ const { logMonitorVisible } = storeToRefs(appStore);
 
 // 从 HomeView inject 标注模式状态（反映 MapContainer 的 isReverseGeocodePickMode）
 const isMarkModeActive = inject('isMarkModeActive', computed(() => false));
+// 从 HomeView inject 侧边栏收起状态（用于二次点击关闭时重置 activeId）
+const isSidePanelCollapsed = inject('isSidePanelCollapsed', ref(true));
 
 // ========== Props ==========
-defineProps({
+const props = defineProps({
     userLayers: {
         type: Array,
         default: () => [],
     },
+    customBasemapUrl: {
+        type: String,
+        default: '',
+    },
 });
 
 // ========== 卷帘分析支持的底图 ==========
-// 排除不支持的底图：'custom'（需要customUrl）
-const SWIPE_SUPPORTED_BASEMAPS = BASEMAP_OPTIONS.filter(
-    (option) => option.value !== 'custom',
-);
+const SWIPE_SUPPORTED_BASEMAPS = BASEMAP_OPTIONS;
 
 // ========== Map Swipe 对话框状态 ==========
 const showSwipeDialog = ref(false);
 const leftBasemap = ref(SWIPE_SUPPORTED_BASEMAPS[0]?.value || '');
 const rightBasemap = ref(SWIPE_SUPPORTED_BASEMAPS[1]?.value || '');
+const leftCustomUrl = ref('');
+const rightCustomUrl = ref('');
 const swipeMode = ref('horizontal');
+
+watch(
+    () => props.customBasemapUrl,
+    (value) => {
+        const normalized = String(value || '').trim();
+        if (!leftCustomUrl.value) leftCustomUrl.value = normalized;
+        if (!rightCustomUrl.value) rightCustomUrl.value = normalized;
+    },
+    { immediate: true },
+);
 
 const emit = defineEmits([
     'open-tab',
+    'toggle-tab',
     'open-toolbox-tab',
     'map-interaction',
     'draw-style-change',
@@ -263,7 +295,10 @@ const handleSelect = (id) => {
     }
 
     // 1. 更新 UI 选中状态
-    activeId.value = id;
+    // layers/news/download 的高亮由 emit 的结果决定（二次点击收起时取消高亮）
+    if (!['toggleLayers', 'toggleNews', 'toggleDownload'].includes(currentItem.action)) {
+        activeId.value = id;
+    }
 
     // 关闭不相关的子面板
     closeIrrelevantPanels(id);
@@ -271,12 +306,15 @@ const handleSelect = (id) => {
     // 2. 执行对应业务逻辑（与现有 HomeView/MapContainer 能力打通）
     switch (currentItem.action) {
         case 'toggleNews':
-            emit('open-tab', 'info');
-            message.info(t('controls.newsPanelSwitched'));
+            emit('toggle-tab', 'info');
+            // emit 同步执行父组件 handleControlsToggleTab（决定展开/收起），据此同步高亮
+            activeId.value = isSidePanelCollapsed.value ? 'layers' : 'news';
             break;
 
         case 'toggleLayers':
-            emit('open-tab', 'toolbox');
+            emit('toggle-tab', 'toolbox');
+            // layers 为默认选中项；展开/收起时高亮始终落在 layers
+            activeId.value = 'layers';
             break;
 
         case 'toggleDraw':
@@ -335,14 +373,17 @@ const handleSelect = (id) => {
                 message.success(t('controls.swipeClosed'));
             } else {
                 // 未启用，打开对话框让用户选择左右底图
+                const sharedUrl = String(props.customBasemapUrl || '').trim();
+                if (!leftCustomUrl.value) leftCustomUrl.value = sharedUrl;
+                if (!rightCustomUrl.value) rightCustomUrl.value = sharedUrl;
                 showSwipeDialog.value = true;
             }
             break;
 
         case 'toggleDownload':
-            emit('open-tab', 'toolbox');
+            // 展开 toolbox 子标签并切换侧边栏（由父组件 handleControlsToggleToolboxTab 处理二次点击收起）
             emit('open-toolbox-tab', 'download');
-            message.info(t('controls.downloadPanelOpened'));
+            activeId.value = isSidePanelCollapsed.value ? 'layers' : 'download';
             break;
 
         default:
@@ -445,8 +486,23 @@ const confirmSwipeConfig = () => {
         return;
     }
 
-    if (leftBasemap.value === rightBasemap.value) {
+    if (
+        leftBasemap.value === 'custom' &&
+        rightBasemap.value === 'custom' &&
+        leftCustomUrl.value.trim() !== rightCustomUrl.value.trim()
+    ) {
+        // 两个 custom URL 不同，允许比较两张动态影像。
+    } else if (leftBasemap.value === rightBasemap.value) {
         message.warning(t('controls.swipeSameBasemap'));
+        return;
+    }
+
+    if (leftBasemap.value === 'custom' && !leftCustomUrl.value.trim()) {
+        message.warning('请输入左侧自定义底图 URL');
+        return;
+    }
+    if (rightBasemap.value === 'custom' && !rightCustomUrl.value.trim()) {
+        message.warning('请输入右侧自定义底图 URL');
         return;
     }
 
@@ -454,6 +510,8 @@ const confirmSwipeConfig = () => {
     emit('enable-basemap-swipe', {
         leftBasemap: leftBasemap.value,
         rightBasemap: rightBasemap.value,
+        leftCustomUrl: leftBasemap.value === 'custom' ? leftCustomUrl.value.trim() : '',
+        rightCustomUrl: rightBasemap.value === 'custom' ? rightCustomUrl.value.trim() : '',
         mode: swipeMode.value,
     });
 
@@ -473,6 +531,8 @@ const cancelSwipeDialog = () => {
     showSwipeDialog.value = false;
     leftBasemap.value = SWIPE_SUPPORTED_BASEMAPS[0]?.value || '';
     rightBasemap.value = SWIPE_SUPPORTED_BASEMAPS[1]?.value || '';
+    leftCustomUrl.value = String(props.customBasemapUrl || '').trim();
+    rightCustomUrl.value = String(props.customBasemapUrl || '').trim();
     swipeMode.value = 'horizontal';
 };
 
@@ -697,6 +757,21 @@ const getBasemapLabel = (id) => {
     outline: none;
     border-color: var(--brand-accent);
     box-shadow: 0 2px 8px rgba(var(--brand-accent-rgb), 0.25);
+}
+
+.basemap-url-input {
+    width: 100%;
+    box-sizing: border-box;
+    margin-top: 8px;
+    padding: 8px 10px;
+    border: 1px solid var(--bg-brand-light);
+    border-radius: 6px;
+    font-size: 12px;
+}
+
+.basemap-url-input:focus {
+    outline: none;
+    border-color: var(--brand-accent);
 }
 
 .mode-selector {

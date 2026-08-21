@@ -64,6 +64,7 @@ Docs/
 │   ├── cicd-pipeline.md               # CI/CD 流水线详解（五 Job 部署时序）
 │   ├── deployment-relationship.md     # 部署关系与域名映射（域名清单+部署来源矩阵）
 │   ├── ol-cesium-dual-engine.md       # 2D/3D 双引擎：一键切换、视图同步与 URL 分享还原
+│   ├── 2026-08-20-unified-basemap-selection.md # l=2 固定 custom 身份 + 双引擎共享运行时 URL
 │   ├── basemap-source-system.md       # 丰富底图源：20+ 图源、熔断回退、GCJ-02 纠偏
 │   ├── multi-format-data-import.md    # 多格式数据导入：拖拽加载，2D/3D 双管线
 │   ├── spatial-analysis-backend.md    # 空间分析：单端点分发，Shapely 后端 8 算子
@@ -104,6 +105,7 @@ Docs/
 │   ├── frontend-structure.md          # 前端完整文件树（唯一权威）
 │   ├── backend-structure.md           # 后端完整文件树（唯一权威）
 │   ├── CHANGELOG.md                   # 更新日志（版本记录唯一权威）
+│   ├── ESRI_Wayback_Layers_List.md    # ESRI Wayback 196 个历史影像快照清单（按年份分组）
 │   ├── compass-types-note.md          # compass/svg/types 类型说明（从源码迁入）
 │   ├── configuration.md               # 三层配置指南（L2 管理员配置 Agent/高德 Key，HF Secrets 仅保留平台绝密）
 │   ├── configuration-architecture-plan.md  # 配置架构分阶段执行计划

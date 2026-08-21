@@ -80,7 +80,7 @@
 
 ## 🎯 项目简介
 
-**NEGIAO's WebGIS** 是一个功能完整、架构清晰的前后端分离 WebGIS 平台（当前版本 V3.5.24），前端托管于 GitHub Pages（正式域名 webgis.negiao.cn），后端以 Docker 部署在 Hugging Face Spaces，通过 RESTful API 通信，支持独立扩展。
+**NEGIAO's WebGIS** 是一个功能完整、架构清晰的前后端分离 WebGIS 平台（当前版本 V3.5.27），前端托管于 GitHub Pages（正式域名 webgis.negiao.cn），后端以 Docker 部署在 Hugging Face Spaces，通过 RESTful API 通信，支持独立扩展。
 
 > 📚 本 README 仅保留核心概览与导航。完整文档已模块化至 [`Docs/Guide/`](Docs/Guide/)，详见下方「文档导航」。
 >
@@ -400,9 +400,11 @@ HF Spaces 在 24 小时无访问后自动休眠。本平台通过**双向互保�
 
 | 版本 | 日期 | 概要 |
 |------|------|------|
-| **V3.5.24** | 2026-08-20 | **综合版本**：暂存区 V3.5.24–V3.5.31 八轮增量（多次不规范 commit 的暂存结果）合并为单一版本。覆盖——①瓦片代理三出站口浏览器特征头泛化（`SEC_CH_UA`/`DEFAULT_BROWSER_HEADERS` 10 项 + 天地图企业域名防盗链）；②图层 zIndex 分带治理（`zIndexBands.js` SSOT 八带常量，标注>数据>底图系统级不变量）；③TOC 拖拽顺序覆写图层 zIndex（统一数据带 DATA=200，跨类型排序生效）；④修复 TOC 标注开关失效（图层名校验闸门移除）；⑤修复 KMZ/KML 标注 + 数据层标注层级上移；⑥导入数据统一贴地（新 `loaders/clampToGround.js`，KML/KMZ/CZML/GeoJSON/SHP 五加载器接入）；⑦奥维 tdtkey L2 密钥池化（`ovital_tdtkey` L2 密钥池 + 管理员面板卡片）；⑧运行时密钥池失败自动轮换（备用 key 闭环，OL/Cesium 双引擎）。详见[完整更新日志](Docs/Guide/CHANGELOG.md) |
+| **V3.5.27** | 2026-08-21 | **双引擎底图 URL 契约修复**：公开 `l` 改为 1-based 数字，`l=2` 固定表示 custom/Wayback；实际图源 URL 由共享运行时 store 持有，不再进入路由；旧 `layerId/customUrl` 在下一次同步时自动清理。详见[完整更新日志](Docs/Guide/CHANGELOG.md) |
+| **V3.5.26** | 2026-08-21 | **审查问题修复**：区分普通鉴权活跃与显式断线心跳，消除 SSE 断开后的 90 秒在线残留；Wayback 空目录/失败可重试；更新时间固定按北京时间显示；同步首屏 15 秒超时文档。详见[完整更新日志](Docs/Guide/CHANGELOG.md) |
+| **V3.5.25** | 2026-08-21 | **综合版本**：双引擎底图共享 customUrl（Wayback 固定 custom，OL/Cesium 双向共享）+ 实时在线统计零轮询重构（SSE 连接计数 + 心跳 30s 兜底 + DB 快照缓存）+ 卷帘 custom 对比 + 首屏调度优化（tileloadend + rendercomplete + 双 rAF）+ 历史影像后端（ESRI Wayback 同步/调度/API）。详见[完整更新日志](Docs/Guide/CHANGELOG.md) |
 
-更早版本（V3.5.23 及以前）请查阅 [完整更新日志 →](Docs/Guide/CHANGELOG.md)
+更早版本（V3.5.24 及以前）请查阅 [完整更新日志 →](Docs/Guide/CHANGELOG.md)
 
 ---
 
@@ -424,6 +426,6 @@ HF Spaces 在 24 小时无访问后自动休眠。本平台通过**双向互保�
 |:------:|:--------:|:--------:|
 | [GitHub](https://github.com/NEGIAO/WebGIS-Dev) | [webgis.negiao.cn](https://webgis.negiao.cn)（正式域名，GitHub Pages 托管） | [Hugging Face](https://NEGIAO-WebGIS.hf.space) |
 
-<sub>V3.5.24 · 开发中 · 最后更新 2026-08-20</sub>
+<sub>V3.5.27 · 开发中 · 最后更新 2026-08-21</sub>
 
 </div>

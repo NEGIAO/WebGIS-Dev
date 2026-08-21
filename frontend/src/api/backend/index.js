@@ -16,3 +16,4 @@ export * from './statistics';
 export * from './admin';
 export * from './spatial';
 export * from './runtime';
+export * from './historicalImagery';

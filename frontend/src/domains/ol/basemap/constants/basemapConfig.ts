@@ -455,12 +455,17 @@ export const LAYER_SOURCE_DEFINITIONS: LayerSourceDefinition[] = [
         name: 'ESRI影像图',
         category: 'imagery',
         group: 'World',
-        url: 'https://services.arcgisonline.com/arcgis/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+        // url: 'https://services.arcgisonline.com/arcgis/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+        // arcgisonline的域名被墙；但是wayback的arcgis域名可以访问；所以使用wayback的arcgis域名
+        url:'https://wayback-a.maptiles.arcgis.com/arcgis/rest/services/World_Imagery/WMTS/1.0.0/default028mm/MapServer/tile/26334/{z}/{y}/{x}',
+        // id：26334是wayback的arcgis域名的服务id，对应的时间戳为最新的2026-08-05（仅部分地区，中国大陆部分的影像不会同步更新，但与大陆arcgisonline的影像相同，wayback的arcgis域名的服务更新更快，且可以访问）
+        // 后续如果wayback的arcgis域名的服务id更新了，需要修改id为最新的服务id（参见后端api：/api/historical-imagery/esri-wayback/layers 为二次封装好的接口，可获取最新的服务id）
         serviceType: 'xyz',
         createSource: () =>
             prioritizeTileSourceRequest(
                 new XYZ({
-                    url: 'https://services.arcgisonline.com/arcgis/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+                    // url: 'https://services.arcgisonline.com/arcgis/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+                    url:'https://wayback-a.maptiles.arcgis.com/arcgis/rest/services/World_Imagery/WMTS/1.0.0/default028mm/MapServer/tile/26334/{z}/{y}/{x}',
                 }),
             ),
     },

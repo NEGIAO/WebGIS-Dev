@@ -30,8 +30,8 @@ export function createBasemapUrlMappingFeature({
     function getLayerIdByIndex(index) {
         const normalizedIndex = Number(index);
         if (!Number.isInteger(normalizedIndex)) return null;
-        if (normalizedIndex < 0 || normalizedIndex >= urlLayerOptions.length) return null;
-        return urlLayerOptions[normalizedIndex] || null;
+        if (normalizedIndex < 1 || normalizedIndex > urlLayerOptions.length) return null;
+        return urlLayerOptions[normalizedIndex - 1] || null;
     }
 
     /**
@@ -42,7 +42,7 @@ export function createBasemapUrlMappingFeature({
      */
     function getLayerIndexById(layerId) {
         const idx = urlLayerOptions.indexOf(String(layerId || ''));
-        return idx >= 0 ? idx : null;
+        return idx >= 0 ? idx + 1 : null;
     }
 
     /**

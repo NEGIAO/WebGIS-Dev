@@ -42,6 +42,12 @@ from api.monitor import init_monitor_log_streaming, router as monitor_router
 from api.spatial import router as spatial_router
 from api.keepalive import router as keepalive_router, start_keepalive_sender
 from api.realtime_stats import init_broadcaster, router as realtime_stats_router, start_periodic_broadcast, stop_periodic_broadcast
+from api.historical_imagery import router as historical_imagery_router
+from services.historical_imagery import (
+    init_historical_imagery_storage,
+    shutdown_historical_imagery_scheduler,
+    start_historical_imagery_scheduler,
+)
 
 # ==================== 日志配置 ====================
 
@@ -159,6 +165,12 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.error("任务调度器启动失败: %s", str(e), exc_info=True)
 
+    try:
+        init_historical_imagery_storage()
+        app.state.historical_imagery_scheduler = start_historical_imagery_scheduler()
+    except Exception as e:
+        logger.error("历史影像同步服务启动失败: %s", str(e), exc_info=True)
+
     app.state.http_client = build_http_client()
     logger.info("HTTP 客户端初始化完成")
 
@@ -203,6 +215,13 @@ async def lifespan(app: FastAPI):
         except Exception as e:
             logger.warning("任务调度器关闭异常: %s", e)
         logger.info("任务调度器已停止")
+
+    historical_scheduler = getattr(app.state, "historical_imagery_scheduler", None)
+    if historical_scheduler is not None:
+        try:
+            shutdown_historical_imagery_scheduler(historical_scheduler)
+        except Exception as e:
+            logger.warning("历史影像同步调度器关闭异常: %s", e)
 
     # 关闭 IP 定位服务（释放连接池，打印缓存统计）
     try:
@@ -423,6 +442,10 @@ logger.info("已注册空间分析路由")
 # 挂载实时统计 SSE 路由
 app.include_router(realtime_stats_router)
 logger.info("已注册实时统计 SSE 路由")
+
+# 挂载历史影像元数据目录路由
+app.include_router(historical_imagery_router)
+logger.info("已注册历史影像目录路由")
 
 # --- 功能：健康检查 ---
 @app.get("/")

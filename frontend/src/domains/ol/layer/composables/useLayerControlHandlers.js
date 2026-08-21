@@ -181,10 +181,14 @@ export function createLayerControlHandlers({
      */
     async function handleLayerChange(payload = {}) {
         const nextLayerId = String(payload.layerId || '').trim();
+        const normalizedCustomUrl = String(payload.customUrl || '').trim();
         let customLoadResult = null;
 
-        if (payload.source === 'custom-url' && customMapUrlRef) {
-            customMapUrlRef.value = String(payload.customUrl || '').trim();
+        const isCustomUrlSelection =
+            payload.source === 'custom-url' || payload.source === 'catalog';
+
+        if (isCustomUrlSelection && customMapUrlRef) {
+            customMapUrlRef.value = normalizedCustomUrl;
             if (customMapUrlRef.value) {
                 customLoadResult = await loadCustomMap();
             } else {
@@ -199,28 +203,26 @@ export function createLayerControlHandlers({
                 return {
                     success: false,
                     message: customLoadResult.message,
-                    layerId: nextLayerId || selectedLayerRef?.value || '',
+                    layerId: 'custom',
                     customLoadResult,
                 };
             }
         }
 
-        if (nextLayerId) {
-            applyBasemapSelection(nextLayerId);
+        const resolvedLayerId = isCustomUrlSelection ? 'custom' : nextLayerId;
+        if (resolvedLayerId) {
+            applyBasemapSelection(resolvedLayerId);
         }
 
-        if (
-            nextLayerId === 'custom' &&
-            customMapUrlRef?.value &&
-            payload.source !== 'custom-url'
-        ) {
+        if (resolvedLayerId === 'custom' && customMapUrlRef?.value && !isCustomUrlSelection) {
             customLoadResult = await loadCustomMap();
         }
 
         return {
             success: customLoadResult?.success ?? true,
             message: customLoadResult?.message || '图层状态已更新',
-            layerId: nextLayerId || selectedLayerRef?.value || '',
+            layerId: resolvedLayerId || selectedLayerRef?.value || '',
+            customUrl: resolvedLayerId === 'custom' ? String(customMapUrlRef?.value || '').trim() : '',
             customLoadResult,
         };
     }
