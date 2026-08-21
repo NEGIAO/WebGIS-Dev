@@ -1,4 +1,5 @@
 import { BASEMAP_PRESETS, URL_LAYER_OPTIONS } from '@common/basemap/basemapPresets';
+import { getBasemapIdByUrlLayerNumber } from '@common/basemap/basemapOptions';
 import { decodeCesiumCameraState, decodeCesiumPoseState } from '@common/url-state/crypto';
 import { MAP_VIEW_CESIUM, MAP_VIEW_OL, normalizeMapView } from '@common/url-state/urlConstants';
 import { getCurrentQuerySnapshot } from '@common/url-state/urlQueryReader';
@@ -154,7 +155,7 @@ function resolveBasemapContext(runtimeBasemap, urlLayerIndex) {
     const normalizedRuntime = normalizeBasemap(runtimeBasemap);
     const runtimeIndex = parseLayerIndex(normalizedRuntime?.index);
     const index = runtimeIndex ?? parseLayerIndex(urlLayerIndex);
-    const idFromIndex = Number.isInteger(index) ? URL_LAYER_OPTIONS[index] : null;
+    const idFromIndex = getBasemapIdByUrlLayerNumber(index);
     const id = clipText(normalizedRuntime?.id || idFromIndex, MAX_BASEMAP_TEXT_LENGTH) || null;
     const preset = id ? BASEMAP_PRESETS.find((item) => item.id === id) : null;
     const label = clipText(normalizedRuntime?.label || preset?.label || id, MAX_BASEMAP_TEXT_LENGTH) || null;
@@ -231,7 +232,7 @@ function parsePositiveInteger(value) {
 function parseLayerIndex(value) {
     if (value === null || value === undefined || value === '') return null;
     const number = Number(value);
-    return Number.isInteger(number) && number >= 0 && number < URL_LAYER_OPTIONS.length
+    return Number.isInteger(number) && number >= 1 && number <= URL_LAYER_OPTIONS.length
         ? number
         : null;
 }

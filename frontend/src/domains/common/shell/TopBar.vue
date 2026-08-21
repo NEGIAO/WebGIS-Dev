@@ -314,7 +314,10 @@ import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import { useMessage } from '@common/shell/useMessage';
 import { useLocale } from '@common/app/useLocale';
 import { ASSET_BASE_URL } from '@/config/publicRuntime';
-import { DEFAULT_BASEMAP_LAYER_INDEX } from '@/constants';
+import {
+    DEFAULT_BASEMAP_URL_LAYER_NUMBER,
+    getBasemapIdByUrlLayerNumber,
+} from '@common/basemap/basemapOptions';
 // import { hideLoading, showLoading } from '@/utils';
 import {
     List as ListIcon,
@@ -385,11 +388,11 @@ const message = useMessage();
 
 /** 常用地点坐标常量；label 经 i18n 计算，随语言切换更新 */
 const QUICK_LOCATION_COORDS = Object.freeze([
-    { key: 'dengzhou', labelKey: 'topbar.locations.dengzhou', lng: 112.089596, lat: 32.690537, z: 12.01, layer: 0 },
-    { key: 'hedu', labelKey: 'topbar.locations.hedu', lng: 114.30796, lat: 34.813566, z: 11.83, layer: 0 },
-    { key: 'home', labelKey: 'topbar.locations.home', lng: 111.843768, lat: 32.723897, z: 14.67, layer: 0 },
-    { key: '51Area', labelKey: 'topbar.locations.area51', lng: -115.808771, lat: 37.238119, z: 14.98, layer: 6 },
-    { key: 'China', labelKey: 'topbar.locations.china', lng: 116.397451, lat: 39.908722, z: 4.5, layer: 21 },
+    { key: 'dengzhou', labelKey: 'topbar.locations.dengzhou', lng: 112.089596, lat: 32.690537, z: 12.01, layer: 1 },
+    { key: 'hedu', labelKey: 'topbar.locations.hedu', lng: 114.30796, lat: 34.813566, z: 11.83, layer: 1 },
+    { key: 'home', labelKey: 'topbar.locations.home', lng: 111.843768, lat: 32.723897, z: 14.67, layer: 1 },
+    { key: '51Area', labelKey: 'topbar.locations.area51', lng: -115.808771, lat: 37.238119, z: 14.98, layer: 7 },
+    { key: 'China', labelKey: 'topbar.locations.china', lng: 116.397451, lat: 39.908722, z: 4.5, layer: 22 },
 ]);
 
 const quickLocations = computed(() =>
@@ -475,7 +478,7 @@ function handleJump(location) {
     const layerIndexRaw = Number(location.layer);
     const layerIndex = Number.isInteger(layerIndexRaw)
         ? layerIndexRaw
-        : DEFAULT_BASEMAP_LAYER_INDEX;
+        : DEFAULT_BASEMAP_URL_LAYER_NUMBER;
 
     if (!Number.isFinite(lng) || !Number.isFinite(lat) || !Number.isFinite(z)) return;
 
@@ -547,13 +550,13 @@ function fallbackCopyViaExecCommand(text) {
     }
 }
 
-function normalizeLayerIndex(value, fallback = DEFAULT_BASEMAP_LAYER_INDEX) {
+function normalizeLayerIndex(value, fallback = DEFAULT_BASEMAP_URL_LAYER_NUMBER) {
     const parsed = Number(String(value ?? '').trim());
-    if (Number.isInteger(parsed) && parsed >= 0) return String(parsed);
+    if (getBasemapIdByUrlLayerNumber(parsed)) return String(parsed);
 
     const fallbackParsed = Number(fallback);
-    if (Number.isInteger(fallbackParsed) && fallbackParsed >= 0) return String(fallbackParsed);
-    return String(DEFAULT_BASEMAP_LAYER_INDEX);
+    if (getBasemapIdByUrlLayerNumber(fallbackParsed)) return String(fallbackParsed);
+    return String(DEFAULT_BASEMAP_URL_LAYER_NUMBER);
 }
 
 /**
@@ -563,7 +566,7 @@ function normalizeLayerIndex(value, fallback = DEFAULT_BASEMAP_LAYER_INDEX) {
  * p   = 编码后的 GPS 精准位置
  * 其余参数（lng、lat、z、l、view、cv、cs 等）全部保留，用于还原分享者的视图与位置状态。
  */
-const SHARE_EXCLUDED_PARAMS = ['ut', 'loc', 'p'];
+const SHARE_EXCLUDED_PARAMS = ['ut', 'loc', 'p', 'customUrl', 'layerId'];
 
 function syncShareFlagInCurrentUrl() {
     if (typeof window === 'undefined') return;
@@ -584,7 +587,7 @@ function syncShareFlagInCurrentUrl() {
             'l',
             normalizeLayerIndex(
                 hashParams.get('l') ?? hashParams.get('layer'),
-                DEFAULT_BASEMAP_LAYER_INDEX,
+                DEFAULT_BASEMAP_URL_LAYER_NUMBER,
             ),
         );
         hashParams.delete('layer');
@@ -625,7 +628,7 @@ function buildShareMarkedUrl(rawHref) {
             'l',
             normalizeLayerIndex(
                 hashParams.get('l') ?? hashParams.get('layer'),
-                DEFAULT_BASEMAP_LAYER_INDEX,
+                DEFAULT_BASEMAP_URL_LAYER_NUMBER,
             ),
         );
         hashParams.delete('layer');
@@ -640,8 +643,8 @@ function buildShareMarkedUrl(rawHref) {
         // 降级：无法解析 URL 时，直接在原始链接上追加最小标记
         const text = String(rawHref || '');
         return text.includes('?')
-            ? `${text}&s=1&l=${DEFAULT_BASEMAP_LAYER_INDEX}`
-            : `${text}?s=1&l=${DEFAULT_BASEMAP_LAYER_INDEX}`;
+            ? `${text}&s=1&l=${DEFAULT_BASEMAP_URL_LAYER_NUMBER}`
+            : `${text}?s=1&l=${DEFAULT_BASEMAP_URL_LAYER_NUMBER}`;
     }
 }
 

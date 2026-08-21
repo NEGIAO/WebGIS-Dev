@@ -15,6 +15,7 @@ import { getCurrentQuerySnapshot, readQueryValue as readQueryFromSnapshot } from
 import { URL_LAYER_OPTIONS } from '@ol/basemap/constants/basemapResolver';
 import { createBasemapUrlMappingFeature } from '@ol/url-state/useBasemapUrlMapping';
 import { getLayerCategory, getLayerGroup } from '@ol/basemap/constants/basemapResolver';
+import { deserializeBasemapSelection, normalizeBasemapSelection } from '@common/basemap/basemapRegistry';
 
 export { MAP_VIEW_CESIUM, CAMERA_VIEW_PARAM_KEY };
 
@@ -120,76 +121,56 @@ export function useCesiumUrlTracking({ getViewer, getCesium, onCameraViewSync, o
     }
 
     /**
-     * 将当前活跃底图预设的索引写入 URL。
-     * 与 OL 侧 useMapState 使用同一套 URL_LAYER_OPTIONS 映射，
-     * 实现 2D ↔ 3D 切换时底图预设保持一致。
-     *
-     * @param {string} presetId - 当前 Cesium 活跃底图预设 ID
-     * @returns {string|null} 实际写入的索引字符串，presetId 无效时返回 null
+     * 将底图选择写入统一 URL 契约；Wayback 快照固定使用 custom。
+     * @param {string|Object} selection - Preset/custom identity; actual custom URL is not serialized.
+     * @returns {string|null} Public 1-based URL layer number.
      */
-    function syncBasemapToUrl(presetId) {
-        if (!presetId) return null;
-        const layerIndex = getLayerIndexById(presetId);
-        if (layerIndex === null) return null;
+    function syncBasemapToUrl(selection) {
+        const normalized = normalizeBasemapSelection(selection);
+        if (!normalized.id) return null;
+
+        const urlLayerNumber = getLayerIndexById(normalized.id);
+        if (urlLayerNumber === null) return null;
 
         const nextQuery = {
             view: MAP_VIEW_CESIUM,
-            l: String(layerIndex),
+            l: String(urlLayerNumber),
+            layerId: '',
+            customUrl: '',
         };
         replaceUrlQuery(nextQuery);
-        return String(layerIndex);
+        return String(urlLayerNumber);
     }
 
-    /**
-     * 从 URL 参数 l 恢复底图预设
-     * @returns {string|null} 预设 ID，无效时返回 null
-     */
+    /** Restore basemap identity from numeric l; layerId is legacy read compatibility only. */
     function restoreBasemapFromUrl() {
-        const layerIndex = parseFiniteNumber(readQueryValue('l'));
-        if (layerIndex === null) return null;
-
-        const presetId = getLayerIdByIndex(layerIndex);
-        if (presetId) {
-            onBasemapRestore?.(presetId);
-        }
-        return presetId;
+        const selection = deserializeBasemapSelection(
+            getCurrentQuerySnapshot(route.query),
+            (index) => getLayerIdByIndex(index),
+        );
+        if (!selection?.id) return null;
+        onBasemapRestore?.(selection);
+        return selection;
     }
 
-    /**
-     * 绑定 Cesium 相机 moveEnd 事件，用户停下视角后写回 cv 编码参数。
-     * @param {Object} [options]
-     * @param {boolean} [options.initialSync=false] - 是否绑定后立即同步一次 URL
-     * @param {Function} [options.getActivePresetId] - 获取当前活跃底图预设 ID 的函数
-     */
+    /** Bind camera moveEnd; URL writes explicitly remove the legacy customUrl field. */
     function bindCameraViewSync({ initialSync = false, getActivePresetId } = {}) {
         const camera = getCamera();
         if (!camera?.moveEnd || removeMoveEndListener) return;
         removeMoveEndListener = camera.moveEnd.addEventListener(() => {
-            const activePresetId = getActivePresetId?.();
-            syncCameraViewToUrl({ activePresetId });
+            syncCameraViewToUrl({ activePresetId: getActivePresetId?.() });
         });
         if (initialSync) {
-            const activePresetId = getActivePresetId?.();
-            syncCameraViewToUrl({ activePresetId });
+            syncCameraViewToUrl({ activePresetId: getActivePresetId?.() });
         }
     }
 
-    /**
-     * 清理 Cesium 相机视角 URL 监听。
-     */
     function cleanupCameraViewSync() {
-        if (typeof removeMoveEndListener === 'function') {
-            removeMoveEndListener();
-        }
+        if (typeof removeMoveEndListener === 'function') removeMoveEndListener();
         removeMoveEndListener = null;
     }
 
-    /**
-     * 将当前 Cesium 相机姿态编码写回 URL。
-     * 同时写入 lng/lat/z 为相机位置，保证 cv 与明文坐标一致。
-     * @param {Object} [options]
-     * @param {string} [options.activePresetId] - 当前底图预设 ID，用于 l 参数写入
-     */
+    /** 将 Cesium 相机姿态和当前底图选择写回 URL。 */
     function syncCameraViewToUrl({ activePresetId } = {}) {
         const Cesium = getCesium?.();
         const camera = getCamera();
@@ -207,46 +188,30 @@ export function useCesiumUrlTracking({ getViewer, getCesium, onCameraViewSync, o
         if (!Number.isFinite(lng) || !Number.isFinite(lat) || !Number.isFinite(height)) return;
 
         const safeHeight = Math.max(MIN_CAMERA_HEIGHT, height);
-        const encodedCameraView = encodeCesiumPoseState({
-            heading,
-            pitch,
-            roll,
-        });
+        const encodedCameraView = encodeCesiumPoseState({ heading, pitch, roll });
         if (!encodedCameraView || encodedCameraView === '0') return;
 
-        const payload = {
-            view: MAP_VIEW_CESIUM,
-            camera: {
-                lng,
-                lat,
-                height: safeHeight,
-                heading,
-                pitch,
-                roll,
-            },
-        };
-
-        // 构建 URL 查询参数
         const nextQuery = {
             view: MAP_VIEW_CESIUM,
             [CAMERA_VIEW_PARAM_KEY]: encodedCameraView,
             lng: formatNumber(lng, 6),
             lat: formatNumber(lat, 6),
             z: formatZParam(safeHeight),
+            layerId: '',
+            customUrl: '',
         };
 
-        // 写入底图 l 参数
-        const presetId = activePresetId;
-        if (presetId) {
-            const layerIndex = getLayerIndexById(presetId);
-            if (layerIndex !== null) {
-                nextQuery.l = String(layerIndex);
-            }
+        const normalized = normalizeBasemapSelection({ id: activePresetId });
+        if (normalized.id) {
+            const urlLayerNumber = getLayerIndexById(normalized.id);
+            if (urlLayerNumber !== null) nextQuery.l = String(urlLayerNumber);
         }
 
-        // 同时写入姿态 cv + 明文 lng/lat/z，保证 Cesium URL 语义完整一致。
         replaceUrlQuery(nextQuery);
-        onCameraViewSync?.(payload);
+        onCameraViewSync?.({
+            view: MAP_VIEW_CESIUM,
+            camera: { lng, lat, height: safeHeight, heading, pitch, roll },
+        });
     }
 
     function getCamera() {

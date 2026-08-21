@@ -8,7 +8,6 @@ import { useMapSwipe } from '@ol/composables/useMapSwipe';
 import { Z_BAND, Z_BASEMAP_SWIPE_OFFSET } from '@ol/layer/zIndexBands';
 
 const SWIPE_COMPARE_LAYER_PREFIX = '__swipe_compare_layer__';
-const SWIPE_UNSUPPORTED_PRESETS = new Set(['custom']);
 
 /**
  * 创建卷帘分析功能
@@ -22,6 +21,7 @@ const SWIPE_UNSUPPORTED_PRESETS = new Set(['custom']);
  * @param {import('vue').Ref} deps.customMapUrl - 自定义地图 URL
  * @param {Object} deps.layerInstances - 图层实例缓存
  * @param {Function} deps.switchLayerById - 切换图层
+ * @param {Function} deps.setCustomBasemapByUrl - 加载并激活共享 custom 图层
  * @param {Function} deps.emitBaseLayersChangeBatched - 批量发射底图变更事件
  * @param {import('vue').Ref} deps.selectedLayer - 当前选中图层
  * @param {Object} deps.message - 消息系统
@@ -36,6 +36,7 @@ export function createBasemapSwipe({
     customMapUrl,
     layerInstances,
     switchLayerById,
+    setCustomBasemapByUrl,
     emitBaseLayersChangeBatched,
     selectedLayer,
     message,
@@ -59,13 +60,19 @@ export function createBasemapSwipe({
         return layerIds;
     }
 
-    function createSwipeSourceByLayerId(layerId) {
+    function createSwipeSourceByLayerId(layerId, customUrl) {
         const layerConfig = LAYER_CONFIGS.find((cfg) => cfg.id === layerId);
         if (!layerConfig) return null;
 
+        const effectiveCustomUrl = layerId === 'custom'
+            ? customUrl === undefined
+                ? String(customMapUrl.value || '').trim()
+                : String(customUrl || '').trim()
+            : '';
+
         const layerFactoryContext = {
             tiandituTk: getTiandituTk(),
-            customUrl: customMapUrl.value || '',
+            customUrl: effectiveCustomUrl,
         };
 
         return layerConfig.createSource?.(layerFactoryContext) || null;
@@ -112,7 +119,13 @@ export function createBasemapSwipe({
     }
 
     async function enableBasemapSwipe(config = {}) {
-        const { leftBasemapId, rightBasemapId, mode = 'horizontal' } = config;
+        const {
+            leftBasemapId,
+            rightBasemapId,
+            leftCustomUrl = '',
+            rightCustomUrl = '',
+            mode = 'horizontal',
+        } = config;
 
         if (!mapInstance.value) {
             throw new Error('地图尚未初始化');
@@ -122,19 +135,19 @@ export function createBasemapSwipe({
             throw new Error('左右底图 ID 不能为空');
         }
 
-        if (
-            SWIPE_UNSUPPORTED_PRESETS.has(leftBasemapId) ||
-            SWIPE_UNSUPPORTED_PRESETS.has(rightBasemapId)
-        ) {
-            const errorMsg = '不支持的底图类型。卷帘分析仅支持标准在线底图，请选择其他底图选项。';
-            // 下方 message.error 已提示用户,此处不再重复 console.error
-            // console.error('[enableBasemapSwipe] Error:', errorMsg);
-            message.error(errorMsg);
-            throw new Error(errorMsg);
+        if (leftBasemapId === 'custom' && !String(leftCustomUrl).trim()) {
+            throw new Error('左侧自定义底图 URL 不能为空');
+        }
+        if (rightBasemapId === 'custom' && !String(rightCustomUrl).trim()) {
+            throw new Error('右侧自定义底图 URL 不能为空');
         }
 
         try {
-            if (typeof switchLayerById === 'function') {
+            if (leftBasemapId === 'custom' && typeof setCustomBasemapByUrl === 'function') {
+                const result = await setCustomBasemapByUrl(String(leftCustomUrl).trim());
+                if (result?.success === false) throw new Error(result.message || '左侧自定义底图加载失败');
+                selectedLayer.value = 'custom';
+            } else if (typeof switchLayerById === 'function') {
                 switchLayerById(leftBasemapId, {
                     onUpdated: () => {
                         selectedLayer.value = leftBasemapId;
@@ -174,7 +187,10 @@ export function createBasemapSwipe({
             const rightCompareLayers = [];
 
             rightLayerIds.forEach((layerId, index) => {
-                const source = createSwipeSourceByLayerId(layerId);
+                const source = createSwipeSourceByLayerId(
+                    layerId,
+                    rightBasemapId === 'custom' ? rightCustomUrl : '',
+                );
                 if (!source) {
                     throw new Error(`无法为右侧图层 ${layerId} 创建 source`);
                 }
@@ -214,6 +230,8 @@ export function createBasemapSwipe({
                 targetLayerIds: [...leftLayerIds, ...rightLayerIds],
                 leftLayerIds,
                 rightLayerIds,
+                leftCustomUrl: leftBasemapId === 'custom' ? String(leftCustomUrl).trim() : '',
+                rightCustomUrl: rightBasemapId === 'custom' ? String(rightCustomUrl).trim() : '',
             });
 
             mapInstance.value.render();
@@ -254,7 +272,7 @@ export function createBasemapSwipe({
      * 地图初始化后调用，如果 store 中 swipeConfig.enabled 为 true，
      * 则根据持久化的 targetLayerIds 重新附加裁剪效果
      */
-    function restoreSwipe() {
+    async function restoreSwipe() {
         const config = layerStore.swipeConfig;
         if (!config?.enabled || !mapInstance.value) return;
 
@@ -276,6 +294,11 @@ export function createBasemapSwipe({
         }
 
         try {
+            const leftBasemapId = leftLayerIds.includes('custom') ? 'custom' : '';
+            if (leftBasemapId && config.leftCustomUrl && typeof setCustomBasemapByUrl === 'function') {
+                const result = await setCustomBasemapByUrl(config.leftCustomUrl);
+                if (result?.success === false) throw new Error(result.message || '左侧自定义底图恢复失败');
+            }
             const leftTileLayers = resolveVisibleTileLayersByIds(leftLayerIds);
             if (!leftTileLayers.length) {
                 layerStore.disableSwipe();
@@ -284,7 +307,10 @@ export function createBasemapSwipe({
 
             const rightCompareLayers = [];
             rightLayerIds.forEach((layerId, index) => {
-                const source = createSwipeSourceByLayerId(layerId);
+                const source = createSwipeSourceByLayerId(
+                    layerId,
+                    layerId === 'custom' ? config.rightCustomUrl : '',
+                );
                 if (!source) return;
                 const compareLayer = createBasemapLayerFromSource(source, {
                     visible: true,

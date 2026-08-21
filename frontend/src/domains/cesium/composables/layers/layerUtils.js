@@ -8,6 +8,7 @@
 
 import { BASEMAP_OPTIONS, resolvePresetLayerIds } from '@ol/basemap/constants/basemapResolver';
 import { getDescriptorById } from '@ol/basemap/constants/basemapConfig';
+import { CUSTOM_BASEMAP_URL_STORAGE_KEY } from '@common/basemap/useSharedCustomBasemapUrl';
 
 // --- 模块级常量 ---
 
@@ -15,8 +16,8 @@ export const TDT_SUBDOMAINS = ['0', '1', '2', '3', '4', '5', '6', '7'];
 export const TDT_SERVICE_ROOT = 'https://t{s}.tianditu.gov.cn/';
 export const ARCGIS_WORLD_TERRAIN_URL = 'https://elevation3d.arcgis.com/arcgis/rest/services/WorldElevation3D/Terrain3D/ImageServer';
 export const CESIUM_OSM_BUILDINGS_ASSET_ID = 96188;
-export const CUSTOM_XYZ_BASEMAP_ID = 'custom-xyz';
-export const CUSTOM_XYZ_BASEMAP_URL_KEY = 'webgis_custom_basemap_url';
+export const CUSTOM_XYZ_BASEMAP_ID = 'custom';
+export const CUSTOM_XYZ_BASEMAP_URL_KEY = CUSTOM_BASEMAP_URL_STORAGE_KEY;
 export const TDT_LEGACY_LABEL_LAYER_VISIBLE_KEY = 'cesium_tdt_label_layer_visible';
 export const TDT_BOUNDARY_LAYER_VISIBLE_KEY = 'cesium_tdt_boundary_layer_visible';
 export const TDT_TEXT_LABEL_LAYER_VISIBLE_KEY = 'cesium_tdt_text_label_layer_visible';

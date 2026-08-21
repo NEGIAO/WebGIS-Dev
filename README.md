@@ -80,7 +80,7 @@
 
 ## 🎯 项目简介
 
-**NEGIAO's WebGIS** 是一个功能完整、架构清晰的前后端分离 WebGIS 平台（当前版本 V3.5.24），前端托管于 GitHub Pages（正式域名 webgis.negiao.cn），后端以 Docker 部署在 Hugging Face Spaces，通过 RESTful API 通信，支持独立扩展。
+**NEGIAO's WebGIS** 是一个功能完整、架构清晰的前后端分离 WebGIS 平台（当前版本 V3.5.25），前端托管于 GitHub Pages（正式域名 webgis.negiao.cn），后端以 Docker 部署在 Hugging Face Spaces，通过 RESTful API 通信，支持独立扩展。
 
 > 📚 本 README 仅保留核心概览与导航。完整文档已模块化至 [`Docs/Guide/`](Docs/Guide/)，详见下方「文档导航」。
 >
@@ -400,9 +400,9 @@ HF Spaces 在 24 小时无访问后自动休眠。本平台通过**双向互保�
 
 | 版本 | 日期 | 概要 |
 |------|------|------|
-| **V3.5.24** | 2026-08-20 | **综合版本**：暂存区 V3.5.24–V3.5.31 八轮增量（多次不规范 commit 的暂存结果）合并为单一版本。覆盖——①瓦片代理三出站口浏览器特征头泛化（`SEC_CH_UA`/`DEFAULT_BROWSER_HEADERS` 10 项 + 天地图企业域名防盗链）；②图层 zIndex 分带治理（`zIndexBands.js` SSOT 八带常量，标注>数据>底图系统级不变量）；③TOC 拖拽顺序覆写图层 zIndex（统一数据带 DATA=200，跨类型排序生效）；④修复 TOC 标注开关失效（图层名校验闸门移除）；⑤修复 KMZ/KML 标注 + 数据层标注层级上移；⑥导入数据统一贴地（新 `loaders/clampToGround.js`，KML/KMZ/CZML/GeoJSON/SHP 五加载器接入）；⑦奥维 tdtkey L2 密钥池化（`ovital_tdtkey` L2 密钥池 + 管理员面板卡片）；⑧运行时密钥池失败自动轮换（备用 key 闭环，OL/Cesium 双引擎）。详见[完整更新日志](Docs/Guide/CHANGELOG.md) |
+| **V3.5.25** | 2026-08-20~21 | **综合版本**（原 V3.5.25–V3.5.27 三轮暂存增量按用户指令合并收敛）：双引擎底图统一契约——公开 `l` 改为 1-based 数字且 `l=2` 固定 custom/Wayback，实际图源 URL 由共享运行时 store 持有不再进路由，OL/Cesium/卷帘/分享链接全链路共享；实时在线统计后端全权重构（SSE 连接计数 + 鉴权活跃兜底 + 过期扫描即时广播，前端零轮询零心跳，游客身份去 IP）；ESRI Wayback 历史影像后端（同步调度/API）与按年折叠 UI；首屏调度优化（tileloadend + rendercomplete + 双 rAF）。详见[完整更新日志](Docs/Guide/CHANGELOG.md) |
 
-更早版本（V3.5.23 及以前）请查阅 [完整更新日志 →](Docs/Guide/CHANGELOG.md)
+更早版本（V3.5.24 及以前）请查阅 [完整更新日志 →](Docs/Guide/CHANGELOG.md)
 
 ---
 
@@ -424,6 +424,6 @@ HF Spaces 在 24 小时无访问后自动休眠。本平台通过**双向互保�
 |:------:|:--------:|:--------:|
 | [GitHub](https://github.com/NEGIAO/WebGIS-Dev) | [webgis.negiao.cn](https://webgis.negiao.cn)（正式域名，GitHub Pages 托管） | [Hugging Face](https://NEGIAO-WebGIS.hf.space) |
 
-<sub>V3.5.24 · 开发中 · 最后更新 2026-08-20</sub>
+<sub>V3.5.25 · 开发中 · 最后更新 2026-08-21</sub>
 
 </div>

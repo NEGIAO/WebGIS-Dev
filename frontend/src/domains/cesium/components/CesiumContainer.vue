@@ -128,6 +128,7 @@ import {
 } from 'vue';
 import { BACKEND_BASE_URL, apiGetRuntimeDefaults } from '@/api/backend';
 import { URL_LAYER_OPTIONS, resolvePresetLayerIds } from '@ol/basemap/constants/basemapResolver';
+import { getUrlLayerNumberByBasemapId } from '@common/basemap/basemapOptions';
 import { resolveRuntimeTokenPoolKey } from '@ol/basemap/constants/basemapConfig';
 import { useMessage } from '@common/shell/useMessage';
 import { showLoading, hideLoading } from '@common/ui/loading';
@@ -181,9 +182,12 @@ let viewer = null;
 let componentUnmounted = false;
 
 const message = useMessage();
-const emit = defineEmits(['view-sync', 'ready', 'load-failed']);
+const emit = defineEmits([
+    'view-sync',
+    'ready',
+    'load-failed',
+]);
 
-/** 漫游模式操作提示面板显示状态 */
 const showPlayerGuide = ref(true);
 /** 导航目标选择弹窗可见性 */
 const navPickerVisible = ref(false);
@@ -246,7 +250,7 @@ const {
 // 监听 activeBasemap 变化兜底：CesiumToolPanel 等其它入口也能触发 URL 同步
 watch(activeBasemap, (next, prev) => {
     if (!next || next === prev) return;
-    syncBasemapToUrl(next);
+    syncBasemapToUrl({ id: next });
 });
 
 const { coordinateDisplay, setupInteractions, cleanupInteractions } = useCesiumInteractions({
@@ -266,12 +270,46 @@ const {
     getViewer,
     getCesium,
     onCameraViewSync: (payload) => emit('view-sync', payload),
-    onBasemapRestore: (presetId) => {
-        if (presetId && activeBasemap.value !== presetId) {
-            activeBasemap.value = presetId;
+    onBasemapRestore: (selection) => {
+        const normalized = typeof selection === 'string'
+            ? { id: selection }
+            : selection;
+        if (!normalized?.id) return;
+
+        if (normalized.id === 'custom') {
+            if (
+                customXyzBasemapUrl.value &&
+                activeBasemap.value === 'custom' &&
+                getViewer() &&
+                getCesium()
+            ) {
+                layers.applyBasemap('custom', { forceReload: true });
+            } else if (activeBasemap.value !== 'custom') {
+                // l=2 always selects custom; its provider URL comes from shared runtime state.
+                activeBasemap.value = 'custom';
+            }
+            return;
+        }
+
+        if (activeBasemap.value !== normalized.id) {
+            activeBasemap.value = normalized.id;
         }
     },
 });
+
+watch(
+    [customXyzBasemapUrl, activeBasemap],
+    ([nextUrl, nextBasemap], [previousUrl, previousBasemap]) => {
+        if (nextUrl === previousUrl || nextBasemap !== 'custom') return;
+        syncBasemapToUrl({ id: 'custom' });
+
+        // 已在 custom 上更换共享 URL 时立即重建 provider；初次切入 custom 由 activeBasemap watcher 加载。
+        if (previousBasemap === 'custom' && nextUrl && getViewer() && getCesium()) {
+            layers.applyBasemap('custom', { forceReload: true });
+        }
+    },
+);
+
 const sceneActions = useCesiumSceneActions({
     getViewer,
     getCesium,
@@ -440,7 +478,7 @@ function getCurrentViewState() {
     if (!runtimeViewer || !runtimeCesium || !camera || !position) return null;
 
     const basemapId = String(activeBasemap.value || '').trim() || null;
-    const layerIndex = basemapId ? URL_LAYER_OPTIONS.indexOf(basemapId) : -1;
+    const layerIndex = basemapId ? getUrlLayerNumberByBasemapId(basemapId) : null;
     const basemapLabel = basemapId
         ? basemapOptions.value.find((option) => option.value === basemapId)?.label || basemapId
         : null;
@@ -458,7 +496,7 @@ function getCurrentViewState() {
             roll: runtimeCesium.Math.toDegrees(camera.roll),
         },
         basemap: {
-            index: layerIndex >= 0 ? layerIndex : null,
+            index: Number.isInteger(layerIndex) ? layerIndex : null,
             id: basemapId,
             label: basemapLabel,
         },
@@ -534,7 +572,9 @@ async function setBasemapById(presetId) {
 
     if (activeBasemap.value === normalizedPresetId) {
         const applied = layers.applyBasemap(normalizedPresetId);
-        if (applied) syncBasemapToUrl(normalizedPresetId);
+        if (applied) {
+            syncBasemapToUrl({ id: normalizedPresetId, source: 'preset' });
+        }
         return !!applied;
     }
 
@@ -802,6 +842,8 @@ defineExpose({
     waitForViewIdle,
     setBasemapById,
     activeBasemap,
+    customXyzBasemapUrl,
+    handleCustomBasemapSubmit,
     modelManager,
     cameraEnhanced,
     heightSampler,
@@ -1037,7 +1079,10 @@ async function bootCesium() {
                     return;
                 }
                 cesiumReady.value = true;
-                bindCameraViewSync({ initialSync: false, getActivePresetId: () => activeBasemap.value });
+                bindCameraViewSync({
+                    initialSync: false,
+                    getActivePresetId: () => activeBasemap.value,
+                });
                 // B4：viewer 就绪后开始喂属性表视图筛选范围（start 内含首帧同步）
                 attrViewExtentSync.start();
                 // 1) 先从 URL 恢复底图预设：URL l= 参数优先级最高，确保分享链接可重现同一底图
@@ -1066,7 +1111,7 @@ async function bootCesium() {
                     }
                 }
                 // 3) 无条件写回 l：activeBasemap 默认值与初始底图相同时 watch 不触发，强制初始写入避免 URL l 缺失
-                syncBasemapToUrl(activeBasemap.value);
+                syncBasemapToUrl({ id: activeBasemap.value });
                 if (basemapReady && terrainReady) {
                     await waitForInitialSceneReady();
                     if (componentUnmounted) return;

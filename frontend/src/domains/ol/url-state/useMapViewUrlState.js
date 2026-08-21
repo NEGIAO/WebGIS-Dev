@@ -96,10 +96,10 @@ export function useMapViewUrlState() {
 
         const currentSnapshot = getCurrentQuerySnapshot(route.query);
         if (isSameQuerySnapshot(currentSnapshot, nextQuery)) {
-            return;
+            return Promise.resolve();
         }
 
-        void router
+        return router
             .replace({ path: route.path || '/home', query: nextQuery })
             .catch(() => {});
     }

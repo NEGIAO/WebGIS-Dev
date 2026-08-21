@@ -4,6 +4,7 @@ import { normalizeBinaryFlag, normalizeLocationFlag } from '@common/utils/normal
 import { normalizeMapView } from '@common/url-state/urlConstants';
 // 从纯数据层导入(basemapPresets 零 ol 依赖),避免登录页入口连带打包 OpenLayers
 import { URL_LAYER_OPTIONS } from '@common/basemap/basemapPresets';
+import { DEFAULT_BASEMAP_URL_LAYER_NUMBER } from '@common/basemap/basemapOptions';
 
 /**
  * @description URL 路由参数持久化 & 延迟应用仓库
@@ -160,7 +161,8 @@ export const useUrlParamStore = defineStore('urlParamStore', () => {
                 lng,
                 lat,
                 z: z !== null ? z : 17,
-                l: l !== null ? l : 0,
+                // URL 图层编号为 1-based（l=1 起始），无参数时回落到默认底图编号
+                l: l !== null ? l : DEFAULT_BASEMAP_URL_LAYER_NUMBER,
             };
         }
         return null;
@@ -285,13 +287,12 @@ function validateViewZ(value: unknown, view: 'ol' | 'cesium'): number | null {
  * @description 图层索引校验
  * @param value 原始url图层编号
  * @returns 合法索引数字 | null
- * @range 0 ~ URL_LAYER_OPTIONS.length-1，随预设数组动态变化，避免越界写入与未来扩展时校验过宽
+ * @range 1 ~ URL_LAYER_OPTIONS.length (public URL layer numbers are 1-based)
  */
 function validateLayerIndex(value: unknown): number | null {
-    const num = parseInt(value as string, 10);
-    if (!Number.isFinite(num)) return null;
-    const maxIndex = Math.max(0, URL_LAYER_OPTIONS.length - 1);
-    if (num < 0 || num > maxIndex) return null;
+    const num = Number(String(value ?? '').trim());
+    if (!Number.isInteger(num)) return null;
+    if (num < 1 || num > URL_LAYER_OPTIONS.length) return null;
     return num;
 }
 

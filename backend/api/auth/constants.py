@@ -135,18 +135,14 @@ def _normalize_guest_device_id(raw_value: Optional[str]) -> str:
 
 # ─── 游客 UID 构建 ───
 def _build_guest_uid(ip: str, user_agent: str, guest_device_id: str) -> str:
+    # 身份种子只含 device_id：IP/UA 不参与哈希，避免同一访客因网络切换
+    # （WiFi↔蜂窝）或代理出口变化被拆成多个在线身份（V3.5.25 在线统计修正）。
+    # device_id 缺失时退化为随机一次性身份（仅当前请求有效，不合并他人也不持久）。
     seed_device_id = _normalize_guest_device_id(guest_device_id)
     if not seed_device_id:
         seed_device_id = secrets.token_urlsafe(10)
 
-    seed = "|".join(
-        [
-            str(ip or "unknown").strip(),
-            str(user_agent or "unknown").strip(),
-            seed_device_id,
-        ]
-    )
-    digest = hashlib.sha256(seed.encode("utf-8")).hexdigest()
+    digest = hashlib.sha256(f"guest|{seed_device_id}".encode("utf-8")).hexdigest()
     return f"guest_{digest[:16]}"
 
 

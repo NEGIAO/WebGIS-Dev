@@ -329,11 +329,11 @@ export const BASEMAP_PRESETS: BasemapPresetDefinition[] = [
     },
 ];
 
-/** 完整 preset 列表，label 带序号前缀（与 URL 参数 l 索引一致，从 0 开始） */
+/** Preset labels use the public 1-based URL layer number. */
 export const ALL_BASEMAP_PRESETS: BasemapPresetDefinition[] = BASEMAP_PRESETS.map(
     (preset, index) => ({
         ...preset,
-        label: `${index} ${preset.label}`,
+        label: `${index + 1} ${preset.label}`,
     }),
 );
 

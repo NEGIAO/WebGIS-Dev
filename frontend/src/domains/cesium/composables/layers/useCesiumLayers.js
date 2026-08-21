@@ -1,4 +1,5 @@
 import { computed, ref, watch } from 'vue';
+import { useSharedCustomBasemapUrl } from '@common/basemap/useSharedCustomBasemapUrl';
 import { applyCesiumIonToken } from '../core/cesiumRuntime';
 import {
     readStoredBoolean,
@@ -21,7 +22,6 @@ import {
     TDT_SERVICE_ROOT,
     ARCGIS_WORLD_TERRAIN_URL,
     CUSTOM_XYZ_BASEMAP_ID,
-    CUSTOM_XYZ_BASEMAP_URL_KEY,
     TDT_LEGACY_LABEL_LAYER_VISIBLE_KEY,
     TDT_BOUNDARY_LAYER_VISIBLE_KEY,
     TDT_TEXT_LABEL_LAYER_VISIBLE_KEY,
@@ -41,6 +41,235 @@ import {
     createOfficialBasemapId,
     createPickerIcon,
 } from './layerUtils';
+
+const WEB_MERCATOR_WKIDS = new Set([3857, 102100, 102113, 900913]);
+const WEB_MERCATOR_RADIUS = 6378137;
+const WEB_MERCATOR_MAX = Math.PI * WEB_MERCATOR_RADIUS;
+const i3sProjectionAdapterState = new WeakMap();
+
+function getI3SWkid(spatialReference) {
+    if (!spatialReference || typeof spatialReference !== 'object') return null;
+    const latestWkid = Number(spatialReference.latestWkid);
+    if (Number.isFinite(latestWkid)) return latestWkid;
+    const wkid = Number(spatialReference.wkid);
+    return Number.isFinite(wkid) ? wkid : null;
+}
+
+function getWkidFromCrsString(value) {
+    if (typeof value !== 'string') return null;
+    const match = value.match(/(?:EPSG(?:\/0\/|:)|\/)(\d+)\/?$/i);
+    return match ? Number(match[1]) : null;
+}
+
+function detectI3SWkid(value, visited = new WeakSet()) {
+    if (!value || typeof value !== 'object' || visited.has(value)) return null;
+    visited.add(value);
+
+    if (!Array.isArray(value)) {
+        const spatialWkid = getI3SWkid(value.spatialReference);
+        if (spatialWkid !== null) return spatialWkid;
+
+        for (const key of ['indexCRS', 'vertexCRS']) {
+            const crsWkid = getWkidFromCrsString(value[key]);
+            if (crsWkid !== null) return crsWkid;
+        }
+    }
+
+    for (const item of Object.values(value)) {
+        const wkid = detectI3SWkid(item, visited);
+        if (wkid !== null) return wkid;
+    }
+    return null;
+}
+
+function webMercatorToDegrees(x, y) {
+    const clampedX = Math.max(-WEB_MERCATOR_MAX, Math.min(WEB_MERCATOR_MAX, Number(x)));
+    const clampedY = Math.max(-WEB_MERCATOR_MAX, Math.min(WEB_MERCATOR_MAX, Number(y)));
+    return [
+        (clampedX / WEB_MERCATOR_RADIUS) * (180 / Math.PI),
+        Math.atan(Math.sinh(clampedY / WEB_MERCATOR_RADIUS)) * (180 / Math.PI),
+    ];
+}
+
+function transformI3SCenter(center) {
+    if (!Array.isArray(center) || center.length < 2) return false;
+    if (!Number.isFinite(Number(center[0])) || !Number.isFinite(Number(center[1]))) return false;
+    const [longitude, latitude] = webMercatorToDegrees(center[0], center[1]);
+    center[0] = longitude;
+    center[1] = latitude;
+    return true;
+}
+
+function transformI3SExtent(extent) {
+    if (Array.isArray(extent) && extent.length >= 4) {
+        const southwest = webMercatorToDegrees(extent[0], extent[1]);
+        const northeast = webMercatorToDegrees(extent[2], extent[3]);
+        extent[0] = southwest[0];
+        extent[1] = southwest[1];
+        extent[2] = northeast[0];
+        extent[3] = northeast[1];
+        return;
+    }
+
+    if (!extent || typeof extent !== 'object') return;
+    const southwest = webMercatorToDegrees(extent.xmin, extent.ymin);
+    const northeast = webMercatorToDegrees(extent.xmax, extent.ymax);
+    extent.xmin = southwest[0];
+    extent.ymin = southwest[1];
+    extent.xmax = northeast[0];
+    extent.ymax = northeast[1];
+    if (extent.spatialReference) {
+        extent.spatialReference.wkid = 4326;
+        extent.spatialReference.latestWkid = 4326;
+    }
+}
+
+function transformI3SObb(obb, Cesium) {
+    if (!obb || !transformI3SCenter(obb.center)) return;
+    if (!Array.isArray(obb.quaternion) || obb.quaternion.length < 4) return;
+    if (!Cesium?.Cartesian3 || !Cesium?.Quaternion || !Cesium?.Transforms) return;
+
+    const center = Cesium.Cartesian3.fromDegrees(
+        obb.center[0],
+        obb.center[1],
+        Number(obb.center[2]) || 0,
+    );
+    const enuQuaternion = Cesium.Transforms.headingPitchRollQuaternion(
+        center,
+        new Cesium.HeadingPitchRoll(0, 0, 0),
+    );
+    const sourceQuaternion = new Cesium.Quaternion(
+        Number(obb.quaternion[0]) || 0,
+        Number(obb.quaternion[1]) || 0,
+        Number(obb.quaternion[2]) || 0,
+        Number(obb.quaternion[3]) || 0,
+    );
+    const converted = Cesium.Quaternion.multiply(
+        enuQuaternion,
+        sourceQuaternion,
+        new Cesium.Quaternion(),
+    );
+    Cesium.Quaternion.normalize(converted, converted);
+    obb.quaternion = [converted.x, converted.y, converted.z, converted.w];
+}
+
+function normalizeI3SCrsString(value) {
+    if (typeof value !== 'string') return value;
+    return value.replace(
+        /(EPSG(?:\/0\/|:))(?:3857|102100|102113|900913)\b/gi,
+        (_match, prefix) => `${prefix}4326`,
+    );
+}
+
+function transformI3SJsonFromWebMercator(data, Cesium) {
+    const visited = new WeakSet();
+
+    function visit(value) {
+        if (!value || typeof value !== 'object' || visited.has(value)) return;
+        visited.add(value);
+
+        if (!Array.isArray(value)) {
+            transformI3SObb(value.obb, Cesium);
+            transformI3SCenter(value.mbs);
+            transformI3SExtent(value.fullExtent);
+
+            if (
+                Array.isArray(value.extent) &&
+                (value.profile || value.indexCRS || value.vertexCRS)
+            ) {
+                transformI3SExtent(value.extent);
+            }
+
+            if (value.spatialReference) {
+                value.spatialReference.wkid = 4326;
+                value.spatialReference.latestWkid = 4326;
+            }
+            if (value.indexCRS) value.indexCRS = normalizeI3SCrsString(value.indexCRS);
+            if (value.vertexCRS) value.vertexCRS = normalizeI3SCrsString(value.vertexCRS);
+        }
+
+        for (const item of Object.values(value)) visit(item);
+    }
+
+    visit(data);
+    return data;
+}
+
+function normalizeI3SServiceScope(url) {
+    const raw = String(url || '').trim();
+    if (!raw) return '';
+    try {
+        const parsed = new URL(raw, typeof window !== 'undefined' ? window.location.href : undefined);
+        return `${parsed.origin}${parsed.pathname}`.replace(/\/+$/, '').toLowerCase();
+    } catch {
+        return raw.split(/[?#]/, 1)[0].replace(/\/+$/, '').toLowerCase();
+    }
+}
+
+function registerI3SProjectionAdapter(Cesium, url) {
+    // useCesiumLayers normally receives window.Cesium, but prefer the global runtime
+    // explicitly so this also works when a caller passes the lazy cesium-shim Proxy.
+    const runtimeCesium = globalThis.Cesium || Cesium;
+    const Resource = runtimeCesium?.Resource || Cesium?.Resource;
+    const resourcePrototype = Resource?.prototype;
+    if (!resourcePrototype || typeof resourcePrototype.fetchJson !== 'function') {
+        return { release() {}, get wkid() { return null; } };
+    }
+
+    let state = i3sProjectionAdapterState.get(resourcePrototype);
+    if (!state) {
+        const originalFetchJson = resourcePrototype.fetchJson;
+        state = { contexts: new Map() };
+        resourcePrototype.fetchJson = async function fetchJsonWithProjectionAdapter(...args) {
+            const data = await originalFetchJson.apply(this, args);
+            const resourceScope = normalizeI3SServiceScope(
+                this?.url || this?.getUrlComponent?.(),
+            );
+            let matchedContext = null;
+            for (const context of state.contexts.values()) {
+                if (
+                    resourceScope === context.scope ||
+                    resourceScope.startsWith(`${context.scope}/`)
+                ) {
+                    if (!matchedContext || context.scope.length > matchedContext.scope.length) {
+                        matchedContext = context;
+                    }
+                }
+            }
+            if (!matchedContext) return data;
+
+            if (matchedContext.wkid === null) {
+                matchedContext.wkid = detectI3SWkid(data);
+            }
+            if (WEB_MERCATOR_WKIDS.has(matchedContext.wkid)) {
+                return transformI3SJsonFromWebMercator(data, Cesium);
+            }
+            return data;
+        };
+        i3sProjectionAdapterState.set(resourcePrototype, state);
+    }
+
+    const scope = normalizeI3SServiceScope(url);
+    let context = state.contexts.get(scope);
+    if (!context) {
+        context = { scope, wkid: null, references: 0 };
+        state.contexts.set(scope, context);
+    }
+    context.references += 1;
+
+    let released = false;
+    return {
+        get wkid() {
+            return context.wkid;
+        },
+        release() {
+            if (released) return;
+            released = true;
+            context.references -= 1;
+            if (context.references <= 0) state.contexts.delete(scope);
+        },
+    };
+}
 
 export function useCesiumLayers({
     getViewer,
@@ -63,6 +292,7 @@ export function useCesiumLayers({
     let customIonTileset = null;
     let customIonPrimitive = null;  // 实际加入 scene 的 primitive（I3SDataProvider 或 Cesium3DTileset）
     let isRemoteServiceLoad = false;  // 标记当前 primitive 是否来自远程服务加载（I3S/3D Tiles URL）
+    let customI3SProjectionAdapterRelease = null;
     let customIonTilesetLoadPromise = null;
     let customIonTilesetLoadId = 0;
     let customIonImageryLayer = null;
@@ -84,15 +314,9 @@ export function useCesiumLayers({
     const terrainProviderViewModelById = new Map();
     const terrainProviderIdByViewModel = new Map();
 
-    const LEGACY_CUSTOM_XYZ_BASEMAP_URL_KEY = 'cesium_custom_xyz_basemap_url';
-
     const activeBasemap = ref(DEFAULT_BASEMAP_PRESET_ID);
     const activeTerrain = ref(import.meta.env.DEV ? 'ellipsoid' : 'tianditu');
-    // 读取自定义 URL：优先新 key，兼容旧 key
-    const customXyzBasemapUrl = ref(
-        readStoredString(CUSTOM_XYZ_BASEMAP_URL_KEY, '') ||
-            readStoredString(LEGACY_CUSTOM_XYZ_BASEMAP_URL_KEY, ''),
-    );
+    const { customBasemapUrl: customXyzBasemapUrl } = useSharedCustomBasemapUrl();
     // 叠加层默认全部关闭：国界线 + 文字注记 + Cesium OSM Buildings + Google 倾斜摄影
     const legacyTdtLabelLayerVisible = readStoredBoolean(TDT_LEGACY_LABEL_LAYER_VISIBLE_KEY, false);
     const tdtBoundaryLayerVisible = ref(
@@ -166,10 +390,6 @@ export function useCesiumLayers({
     watch(activeBasemap, (value) => {
         if (!getViewer?.() || !getCesium?.()) return;
         applyBasemap(value);
-    });
-
-    watch(customXyzBasemapUrl, (value) => {
-        writeStoredString(CUSTOM_XYZ_BASEMAP_URL_KEY, value);
     });
 
     watch(activeTerrain, async (value) => {
@@ -1007,6 +1227,11 @@ export function useCesiumLayers({
     }
 
     function clearCustomIonLayer() {
+        if (customI3SProjectionAdapterRelease) {
+            customI3SProjectionAdapterRelease();
+            customI3SProjectionAdapterRelease = null;
+        }
+
         const viewer = getViewer?.();
         const Cesium = getCesium?.();
         if (!viewer?.scene || !Cesium) return;
@@ -1103,21 +1328,38 @@ export function useCesiumLayers({
         }
 
         const loadId = ++customIonTilesetLoadId;
+        let i3sProjectionAdapter = null;
+        let ownsI3SProjectionAdapter = false;
         try {
             let tileset;
             if (type === 'i3s') {
-                // I3S / ArcGIS Scene Server：使用 I3SDataProvider 加载
-                // I3SDataProvider 本身是 primitive，内部各图层各有一个 _tileset
+                // Cesium I3SDataProvider accepts 4326 only. Adapt Web Mercator JSON
+                // node centers, extents and OBB orientations before Cesium consumes them.
+                i3sProjectionAdapter = registerI3SProjectionAdapter(Cesium, url);
+                ownsI3SProjectionAdapter = true;
                 const i3sProvider = await Cesium.I3SDataProvider.fromUrl(url, {
                     cesium3dTilesetOptions: {
                         maximumScreenSpaceError: 4,
                         enableCollision: true,
                     },
                 });
-                if (loadId !== customIonTilesetLoadId) { destroyPrimitive(i3sProvider); return; }
+                if (loadId !== customIonTilesetLoadId) {
+                    destroyPrimitive(i3sProvider);
+                    i3sProjectionAdapter.release();
+                    ownsI3SProjectionAdapter = false;
+                    return;
+                }
+
+                if (WEB_MERCATOR_WKIDS.has(i3sProjectionAdapter.wkid)) {
+                    customI3SProjectionAdapterRelease = i3sProjectionAdapter.release;
+                    ownsI3SProjectionAdapter = false;
+                } else {
+                    i3sProjectionAdapter.release();
+                    ownsI3SProjectionAdapter = false;
+                }
 
                 customIonPrimitive = viewer.scene.primitives.add(i3sProvider);
-                // 取第一个图层的 tileset 用于高度偏移和飞行定位
+                // Keep the first internal tileset for terrain fitting and UI controls.
                 tileset = i3sProvider.layers?.[0]?._tileset;
                 if (!tileset) {
                     throw new Error('I3S 数据加载成功但无法获取 tileset 引用');
@@ -1168,9 +1410,28 @@ export function useCesiumLayers({
             });
             message.success(`已加载远程 3D 数据（${type === 'i3s' ? 'I3S' : '3D Tiles'}）`);
         } catch (error) {
+            if (ownsI3SProjectionAdapter) {
+                i3sProjectionAdapter?.release();
+            }
             if (loadId !== customIonTilesetLoadId) return;
+
+            const detectedWkid = i3sProjectionAdapter?.wkid;
+            const errorMessage =
+                type === 'i3s' &&
+                detectedWkid !== null &&
+                detectedWkid !== 4326 &&
+                !WEB_MERCATOR_WKIDS.has(detectedWkid)
+                    ? `I3S 空间参考 EPSG:${detectedWkid} 暂不支持，目前支持 EPSG:4326 / EPSG:3857`
+                    : error?.message || error;
+
+            if (customIonPrimitive) {
+                clearCustomIonLayer();
+            } else if (customI3SProjectionAdapterRelease) {
+                customI3SProjectionAdapterRelease();
+                customI3SProjectionAdapterRelease = null;
+            }
             console.error('[RemoteService] 远程 3D 数据加载失败:', error);
-            message.error(`远程 3D 数据加载失败: ${error?.message || error}`, { closable: true });
+            message.error(`远程 3D 数据加载失败: ${errorMessage}`, { closable: true });
         }
     }
 
@@ -1570,12 +1831,15 @@ export function useCesiumLayers({
             return;
         }
 
+        const urlChanged = customXyzBasemapUrl.value !== normalizedUrl;
         customXyzBasemapUrl.value = normalizedUrl;
 
         if (activeBasemap.value === CUSTOM_XYZ_BASEMAP_ID) {
-            if (applyBasemap(CUSTOM_XYZ_BASEMAP_ID, { forceReload: true })) {
-                message.success('已加载自定义 XYZ 图源');
+            // URL 变化由共享 ref watcher 统一重载；重复提交同一 URL 时才主动强制刷新。
+            if (!urlChanged) {
+                applyBasemap(CUSTOM_XYZ_BASEMAP_ID, { forceReload: true });
             }
+            message.success('已加载自定义 XYZ 图源');
             return;
         }
 

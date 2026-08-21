@@ -241,10 +241,51 @@ async function handleManualRefresh() {
     message.success(t('account.messages.refreshed'));
 }
 
-const sessionDurationText = computed(() => {
-    const sec = Number(selfStats.value?.current_session_seconds || 0);
-    return formatDuration(sec);
+// ---- 会话时长本地实时递增 ----
+// 后端 current_session_seconds 仅 15s 轮询/SSE 推送才更新，
+// 本地以「后端基准秒数 + 自然流逝秒数」每秒 tick，实现秒级实时显示。
+const nowTick = ref(Date.now());
+const sessionDurationBase = ref({
+    seconds: 0,
+    at: Date.now(),
 });
+
+watch(
+    () => selfStats.value?.current_session_seconds,
+    (val) => {
+        sessionDurationBase.value = {
+            seconds: Math.max(0, Number(val || 0)),
+            at: Date.now(),
+        };
+    },
+    { immediate: true },
+);
+
+/** 当前展示用的会话秒数 = 后端基准秒数 + 本地自然流逝秒数 */
+const liveSessionSeconds = computed(() => {
+    void nowTick.value; // 每秒 tick 触发重新求值
+    const { seconds, at } = sessionDurationBase.value;
+    const elapsed = Math.max(0, Math.floor((Date.now() - at) / 1000));
+    return seconds + elapsed;
+});
+
+let sessionTickerTimer = null;
+
+function startSessionTicker() {
+    if (sessionTickerTimer || typeof window === 'undefined') return;
+    sessionTickerTimer = window.setInterval(() => {
+        nowTick.value = Date.now();
+    }, 1000);
+}
+
+function stopSessionTicker() {
+    if (sessionTickerTimer && typeof window !== 'undefined') {
+        window.clearInterval(sessionTickerTimer);
+        sessionTickerTimer = null;
+    }
+}
+
+const sessionDurationText = computed(() => formatDuration(liveSessionSeconds.value));
 
 function formatDuration(totalSeconds) {
     const sec = Math.max(0, Number(totalSeconds || 0));
@@ -390,6 +431,15 @@ function setOpen(nextValue) {
     if (isOpen.value === normalized) return;
     isOpen.value = normalized;
     emit('update:open', normalized);
+
+    // 轮询仅面板打开时运行：打开即启动，关闭即停止（避免后台挂起积压拖垮后端）
+    if (normalized) {
+        startCenterPolling();
+        startSessionTicker();
+    } else {
+        stopCenterPolling();
+        stopSessionTicker();
+    }
 }
 
 function setFullscreen(nextValue) {
@@ -423,7 +473,8 @@ watch(
         if (!hasControlledOpen.value) return;
         const normalized = Boolean(nextValue);
         if (isOpen.value !== normalized) {
-            isOpen.value = normalized;
+            // 统一走 setOpen：联动轮询启停 + 数据加载
+            setOpen(normalized);
             if (normalized) {
                 loadCenterData({ silent: true });
             } else {
@@ -725,6 +776,22 @@ async function handleSubmitUserMessage(content, onSuccess) {
 
 let centerTimer = null;
 
+/** 启动/停止用户中心 15s 轮询：仅面板打开时轮询，关闭即停（避免后台挂起积压拖垮后端） */
+function startCenterPolling() {
+    if (centerTimer || typeof window === 'undefined') return;
+    centerTimer = window.setInterval(() => {
+        loadCenterData({ silent: true });
+        refreshRealtimeData({ silent: true });
+    }, 15000);
+}
+
+function stopCenterPolling() {
+    if (centerTimer && typeof window !== 'undefined') {
+        window.clearInterval(centerTimer);
+        centerTimer = null;
+    }
+}
+
 onMounted(() => {
     syncCurrentUser();
     // 挂载预热偏好/模型（面板未开也先备好），并标记缓存已热
@@ -738,11 +805,10 @@ onMounted(() => {
     refreshRealtimeData({ silent: true });
     refreshMessages();
 
-    if (typeof window !== 'undefined') {
-        centerTimer = window.setInterval(() => {
-            loadCenterData({ silent: true });
-            refreshRealtimeData({ silent: true });
-        }, 15000);
+    // 面板初始为打开状态时立即启动轮询与会话时长实时计时
+    if (isOpen.value) {
+        startCenterPolling();
+        startSessionTicker();
     }
 
     document.addEventListener('keydown', handleDocumentKeydown);
@@ -750,12 +816,8 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
     setFullscreen(false);
-
-    if (centerTimer && typeof window !== 'undefined') {
-        window.clearInterval(centerTimer);
-        centerTimer = null;
-    }
-
+    stopCenterPolling();
+    stopSessionTicker();
     document.removeEventListener('keydown', handleDocumentKeydown);
 });
 </script>

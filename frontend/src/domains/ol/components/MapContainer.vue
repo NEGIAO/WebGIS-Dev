@@ -160,6 +160,32 @@
    避免臃肿和职责混乱 
 */
 import { ref, onMounted, onUnmounted, shallowRef, watch } from 'vue';
+
+// 父组件持有跨引擎共享的 custom URL；本组件用本地 ref 镜像，避免可写
+// computed 在 emit 后、父级下一次渲染前仍读到旧 prop。
+const props = defineProps({
+    urlSyncEnabled: {
+        type: Boolean,
+        default: true,
+    },
+});
+
+const emit = defineEmits([
+    'location-change',
+    'map-click',
+    'search-poi-selected',
+    'coordinate-jump',
+    'update-news-image',
+    'feature-selected',
+    'user-layers-change',
+    'graphics-overview',
+    'base-layers-change',
+    'upload-progress-change',
+    'upload-data',
+    'map-core-ready',
+    'map-core-failed',
+    'view-sync',
+]);
 import { storeToRefs } from 'pinia';
 
 // --- OpenLayers 核心 ---
@@ -176,6 +202,7 @@ import XYZ from 'ol/source/XYZ';
 import VectorSource from 'ol/source/Vector';
 
 // --- Composables (migrated to domains/ol) ---
+import { useSharedCustomBasemapUrl } from '@common/basemap/useSharedCustomBasemapUrl';
 import { createBasemapLayerBootstrap } from '@ol/basemap/composables/useBasemapLayerBootstrap';
 import { createBasemapResilience } from '@ol/basemap/resilience/useBasemapResilience';
 import { createBasemapSelectionWatcher } from '@ol/basemap/composables/useBasemapSelectionWatcher';
@@ -302,7 +329,7 @@ const handleCloseExplanation = () => {
 
 // --- 配置常量 ---
 const INITIAL_VIEW = { center: [114.302, 34.8146], zoom: 4 }; // 初始视图位置
-const CRITICAL_TILE_READY_TIMEOUT_MS = 3000; // 首屏关键瓦片加载超时时间（毫秒）
+const CRITICAL_TILE_READY_TIMEOUT_MS = 15000; // 首屏关键瓦片加载安全兜底（毫秒），与全局 Loading 兜底一致，避免网络波动提前关闭遮罩
 const APP_DISPLAY_VERSION = __APP_VERSION__; // 应用显示版本号（构建时从 README.md 自动提取，无需手动维护）
 
 // 图层 z-index 分层方案（SSOT：@ol/layer/zIndexBands，值越大越在上层）
@@ -330,7 +357,14 @@ const mapInstance = shallowRef(null); // 使用 shallowRef 优化性能
 // 当前选中的底图 ID 统一由 DEFAULT_BASEMAP_PRESET_ID 控制。
 // 与 useMapState 中的 parseUrlToState 默认值保持一致
 const selectedLayer = ref(DEFAULT_BASEMAP_PRESET_ID);
-const customMapUrl = ref('');
+const { customBasemapUrl: customMapUrl } = useSharedCustomBasemapUrl();
+
+watch(customMapUrl, (nextUrl, previousUrl) => {
+    if (!nextUrl || nextUrl === previousUrl) return;
+    if (selectedLayer.value === 'custom' && mapInstance.value) {
+        void setCustomBasemapByUrl(nextUrl);
+    }
+});
 const showDynamicSplitLines = ref(false);
 const basemapCircuitOpen = ref(false);
 const currentZoom = ref(17); // 当前缩放级别
@@ -423,6 +457,7 @@ const {
     customMapUrl,
     layerInstances,
     switchLayerById: (id, opts) => switchLayerById?.(id, opts),
+    setCustomBasemapByUrl,
     emitBaseLayersChangeBatched: () => emitBaseLayersChangeBatched?.(),
     selectedLayer,
     message,
@@ -474,32 +509,6 @@ const drawSource = new VectorSource();
 const userLocationSource = new VectorSource();
 const busPickSource = new VectorSource();
 const busRouteSource = new VectorSource();
-
-// 子组件入参：父组件控制当前引擎可见性，避免隐藏的 OL 面板覆盖 Cesium URL 状态。
-const props = defineProps({
-    urlSyncEnabled: {
-        type: Boolean,
-        default: true,
-    },
-});
-
-// 子组件向父组件回传事件接口定义
-const emit = defineEmits([
-    'location-change',
-    'map-click',
-    'search-poi-selected',
-    'coordinate-jump',
-    'update-news-image',
-    'feature-selected',
-    'user-layers-change',
-    'graphics-overview',
-    'base-layers-change',
-    'upload-progress-change',
-    'upload-data',
-    'map-core-ready',
-    'map-core-failed',
-    'view-sync',
-]);
 
 const {
     isDragging: isMapUploadDragging,
@@ -841,7 +850,7 @@ const queryRasterValueAtCoordinateRef = ref(null);
 /**
  * 通过 XYZ URL 切换到自定义底图
  *
- * 复用现有的 custom 底图机制（l=1）：
+ * 复用现有的 custom 底图机制（l=2）：
  * 1. 设置自定义 URL 到 customMapUrl
  * 2. 触发 handleLayerChange 切换到 custom 图层
  * 3. loadCustomMap 自动识别 URL 类型并创建瓦片源
@@ -862,10 +871,10 @@ async function setCustomBasemapByUrl(url) {
         };
     }
 
-    if (customLayerIndex !== 1) {
+    if (customLayerIndex !== 2) {
         return {
             success: false,
-            message: `自定义底图索引配置异常：期望 l=1，当前为 l=${customLayerIndex}`,
+            message: `自定义底图索引配置异常：期望 l=2，当前为 l=${customLayerIndex}`,
             layerId: 'custom',
             layerIndex: customLayerIndex,
             url: normalizedUrl,
@@ -898,7 +907,7 @@ async function setCustomBasemapByUrl(url) {
             };
         }
 
-        // Agent 切换自定义底图时必须落到 URL 索引 l=1，便于分享链接和状态恢复。
+        // Agent 切换自定义底图时必须落到 URL 索引 l=2，便于分享链接和状态恢复。
         syncUrlFromActiveMap();
         mapInstance.value?.updateSize?.();
 
@@ -1016,6 +1025,8 @@ const {
     layerConfigs: LAYER_CONFIGS,
     resolveVisibleLayerIds: (layerId) => resolvePresetLayerIds(layerId),
     getLayerIndex: () => getLayerIndexById(selectedLayer.value),
+    getLayerId: () => selectedLayer.value,
+    getCustomUrl: () => customMapUrl.value,
     onLayerIndexChange: (layerIndex) => {
         const layerId = getLayerIdByIndex(layerIndex);
         if (!layerId || selectedLayer.value === layerId) return;
@@ -1101,8 +1112,13 @@ function handleResetBasemapChain() {
 
 // --- URL 参数初始化 ---
 const initialUrlState = parseUrlToState();
-const initialLayerId = getLayerIdByIndex(initialUrlState?.layerIndex);
-if (initialLayerId) {
+const initialLayerId = initialUrlState?.layerId || getLayerIdByIndex(initialUrlState?.layerIndex);
+if (initialLayerId === 'custom' && !customMapUrl.value) {
+    // 分享链接指定 l=2/custom，但本机无共享运行时 URL（如新设备首次打开）：
+    // 保持默认预设底图，避免引导出空瓦片源的 custom 图层（与 Cesium 侧空 URL 回退行为对齐）。
+} else if (initialUrlState?.layerId === 'custom' && customMapUrl.value) {
+    selectedLayer.value = 'custom';
+} else if (initialLayerId) {
     selectedLayer.value = initialLayerId;
 }
 
@@ -1133,7 +1149,7 @@ const { applyDeferredUrlParams, getInitialViewState } = createStartupViewResolve
 // [优先级链]
 //   1. initMap() + bindMapViewSync() + setGraticuleActive() + syncUrlFromMap() - 同步初始化，不阻塞
 //   2. 底图瓦片请求在后台自由发送，拥有绝对网络优先级（由 prioritizeTileSourceRequest 保证）
-//   3. waitForCriticalTileReady() - 等待底图 rendercomplete 或 3s 超时
+//   3. waitForCriticalTileReady() - 等待至少一张真实底图瓦片加载完成 + rendercomplete（确保已绘制），超时兜底 15s
 //   4. emit('map-core-ready') - 通知父组件地图核心就绪
 //   5. applyDeferredUrlParams() - 延后到底图加载稳定后，避免打断瓦片加载
 //   6. runDeferredStartupTasks() - 所有非关键任务（Google 测速、定位等）在最后执行
@@ -1163,7 +1179,10 @@ onMounted(async () => {
         //   用户偏好 default_basemap > 管理员全局默认 default_basemap_index
         // 注意：parseUrlToState() 会用硬编码默认值填充 layerIndex，所以不能用它判断
         const urlParams = new URLSearchParams(window.location.search);
-        const hasExplicitLayerParam = urlParams.has('l') || urlParams.has('layer');
+        const hasExplicitLayerParam =
+            urlParams.has('l') ||
+            urlParams.has('layer') ||
+            urlParams.has('layerId');
         if (!hasExplicitLayerParam) {
             // 1) 用户偏好（useUserPreferencesStore bootstrap 时写入的 runtime 缓存）
             const preferredBasemapId = readCachedPreferredBasemap();
@@ -1176,7 +1195,7 @@ onMounted(async () => {
                 // 2) 管理员配置的全局默认底图索引
                 const serverIndex = defaultsRes?.data?.default_basemap_index;
                 if (serverIndex != null) {
-                    const serverLayerId = getLayerIdByIndex(serverIndex);
+                    const serverLayerId = URL_LAYER_OPTIONS[serverIndex] || null;
                     if (serverLayerId) selectedLayer.value = serverLayerId;
                 }
             }
@@ -1188,32 +1207,22 @@ onMounted(async () => {
         setGraticuleActive(showDynamicSplitLines.value); // 设置格网（不阻塞）
         syncUrlFromActiveMap(); // 安全写回当前地图状态，避免覆盖待恢复的分享链接
 
-        // ========== Phase 2: 等待底图渲染完成 ==========
-        // 注意：此时底图瓦片请求已在后台发送，拥有高优先级（由 prioritizeTileSourceRequest 保证）
-        // waitForCriticalTileReady() 是非阻塞的 - 等待 map rendercomplete 事件或 3s 超时
+        // ========== Phase 2: 等待真实底图首屏完成 ==========
         try {
             await waitForCriticalTileReady();
         } catch {
-            // 超时或异常时也继续后续流程，避免阻塞页面可交互性。
+            // 超时或异常时也继续后续流程，避免页面永久阻塞。
         }
 
-        // ========== Phase 3: 通知父组件地图核心就绪 ==========
+        // ========== Phase 3: 通知父组件地图核心真正就绪 ==========
         if (!componentUnmountedRef.value) {
-            if (typeof requestAnimationFrame === 'function') {
-                requestAnimationFrame(() => {
-                    if (!componentUnmountedRef.value) {
-                        emit('map-core-ready');
-                    }
-                });
-            } else {
-                emit('map-core-ready');
-            }
+            emit('map-core-ready');
         }
 
         // ========== Phase 3.1: 恢复持久化的卷帘状态 ==========
         // 如果 localStorage 中 swipeConfig.enabled 为 true，重新附加裁剪效果
         if (!componentUnmountedRef.value) {
-            restoreSwipe();
+            void restoreSwipe();
         }
 
         // ========== Phase 4: 立即应用 URL 参数（移除人为延迟） ==========
@@ -1987,6 +1996,8 @@ defineExpose({
     getMapSize,
     getOlView,
     setCustomBasemapByUrl,
+    selectedLayer,
+    customMapUrl,
 });
 </script>
 

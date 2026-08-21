@@ -26,7 +26,11 @@ import {
     USER_LOCATION_CONTEXT_CHANGE_EVENT,
 } from '@common/map-view/services/userLocationContext';
 import { decodePos, encodePos } from '@ol/utils/biz/index';
-import { DEFAULT_BASEMAP_LAYER_INDEX, URL_LAYER_OPTIONS } from '@ol/basemap/constants';
+import {
+    DEFAULT_BASEMAP_URL_LAYER_NUMBER,
+    getBasemapIdByUrlLayerNumber,
+    getUrlLayerNumberByBasemapId,
+} from '@common/basemap/basemapOptions';
 import { buildRasterBasemapSource } from '@ol/basemap/composables/basemapLayerFactory';
 import { Z_BAND } from '@ol/layer/zIndexBands';
 import { normalizeBinaryFlag, normalizeLocationFlag, normalizeText } from '@common/utils/normalize';
@@ -111,20 +115,16 @@ function isSameQuerySnapshot(currentQuery, nextQuery) {
 }
 
 function resolvePreferredDefaultLayerIndex() {
-    if (typeof window === 'undefined') return DEFAULT_BASEMAP_LAYER_INDEX;
+    if (typeof window === 'undefined') return DEFAULT_BASEMAP_URL_LAYER_NUMBER;
 
     const storage = window.localStorage;
-    if (!storage) return DEFAULT_BASEMAP_LAYER_INDEX;
+    if (!storage) return DEFAULT_BASEMAP_URL_LAYER_NUMBER;
 
     const preferredBasemapId = String(storage.getItem(USER_PREFERENCE_BASEMAP_KEY) || '').trim();
-    if (!preferredBasemapId) return DEFAULT_BASEMAP_LAYER_INDEX;
+    if (!preferredBasemapId) return DEFAULT_BASEMAP_URL_LAYER_NUMBER;
 
-    const matchedIndex = Array.isArray(URL_LAYER_OPTIONS)
-        ? URL_LAYER_OPTIONS.findIndex((item) => String(item || '').trim() === preferredBasemapId)
-        : -1;
-
-    if (matchedIndex >= 0) return matchedIndex;
-    return DEFAULT_BASEMAP_LAYER_INDEX;
+    return getUrlLayerNumberByBasemapId(preferredBasemapId)
+        ?? DEFAULT_BASEMAP_URL_LAYER_NUMBER;
 }
 
 /**
@@ -155,6 +155,8 @@ export function useMapState(mapInstance, options = {}) {
         flyDuration = 700,
         syncDebounceMs = 500,
         getLayerIndex = () => null,
+        getLayerId = () => '',
+        getCustomUrl = () => '',
         onLayerIndexChange = () => {},
         layerListRef = null,
         layerInstances = null,
@@ -263,9 +265,23 @@ export function useMapState(mapInstance, options = {}) {
         let lng = parseNumber(readQueryValue('lng'));
         let lat = parseNumber(readQueryValue('lat'));
         const zoom = parseNumber(readQueryValue('z'));
-        const layerIndex =
-            parseInteger(readQueryValue('l') ?? readQueryValue('layer')) ??
-            resolvePreferredDefaultLayerIndex();
+        const requestedLayerIndex = parseInteger(
+            readQueryValue('l') ?? readQueryValue('layer'),
+        );
+        const numericLayerId = requestedLayerIndex === null
+            ? ''
+            : String(getBasemapIdByUrlLayerNumber(requestedLayerIndex) || '').trim();
+        const legacyLayerId = String(readQueryValue('layerId') || '').trim();
+        const legacyLayerIndex = numericLayerId || !legacyLayerId
+            ? null
+            : getUrlLayerNumberByBasemapId(legacyLayerId);
+        let layerIndex = resolvePreferredDefaultLayerIndex();
+        if (numericLayerId) layerIndex = requestedLayerIndex;
+        else if (legacyLayerIndex !== null) layerIndex = legacyLayerIndex;
+        const layerId = String(getBasemapIdByUrlLayerNumber(layerIndex) || '').trim();
+        const customUrl = layerId === 'custom'
+            ? String(getCustomUrl?.() || '').trim()
+            : '';
 
         const compactPosCode = String(readQueryValue('p') ?? '').trim();
         const { urlHasLocFlag } = resolveLocationState();
@@ -288,6 +304,8 @@ export function useMapState(mapInstance, options = {}) {
             lat,
             zoom: zoom === null ? defaultZoom : zoom,
             layerIndex,
+            layerId,
+            customUrl,
         };
     }
 
@@ -299,9 +317,9 @@ export function useMapState(mapInstance, options = {}) {
      */
     function buildQuery({ lng, lat, zoom, layerIndex }) {
         const shareFlag = normalizeBinaryFlag(readQueryValue('s'), '0');
-        const normalizedLayerIndex = Number.isInteger(layerIndex)
-            ? layerIndex
-            : DEFAULT_BASEMAP_LAYER_INDEX;
+        const normalizedLayerIndex = getBasemapIdByUrlLayerNumber(layerIndex)
+            ? Number(layerIndex)
+            : DEFAULT_BASEMAP_URL_LAYER_NUMBER;
         const { code: compactPosCode, locSource } = resolvePositionCode();
 
         return {
@@ -309,6 +327,8 @@ export function useMapState(mapInstance, options = {}) {
             lat: formatNumber(lat, 6),
             z: formatZParam(zoom),
             l: String(normalizedLayerIndex),
+            layerId: '',
+            customUrl: '',
             s: shareFlag,
             loc: locSource,
             p: compactPosCode,
@@ -544,6 +564,10 @@ export function useMapState(mapInstance, options = {}) {
             lat,
             zoom,
             layerIndex: parseInteger(getLayerIndex()),
+            layerId: String(getLayerId?.() || '').trim(),
+            customUrl: String(getLayerId?.() || '').trim() === 'custom'
+                ? String(getCustomUrl?.() || '').trim()
+                : '',
             size: map.getSize?.() || null,
             resolution: parseNumber(view.getResolution?.()),
             view,
