@@ -38,6 +38,12 @@
 - 外部删除联动：adapter.remove 的 wayline 分支先调 `detachForExternalRemoval()` 复位控制器内部状态再走通用移除销毁句柄，避免悬空引用；下次交互重建全新数据源。
 - 起飞点实体（startPoint / air_start_point）收敛写入托管 DataSource（原先散落 viewer.entities 不受显隐控制）。
 
+#### 六、体积云空中透视（aerialStageEnabled）天际线白蒙版修复
+
+- **根因三层叠加**：Stage1 直通地面被误乘曝光（sRGB 被抬亮）；aerial 分类宽带 0.014 把大片远地表误判为天空走二次 OETF（灰白蒙版带）；aerial 分支线性 inscatter 直加 sRGB 且无 tonemap 出口（近地平线饱和发白 + 交界缝）。
+- **修复**：曝光按分支施加（直通=1.0）；新增 `compositeAerialDisplay` 统一「pow2.2 线性化→合成→mix(scale)→ACES+gamma」出口（scale=0 严格恒等）；分类参数与上游对齐收窄（0.0016 / -0.01），旧宽带防闪理由已因出口统一而消失。
+- 详见[维护日志](../LLM_record/26-08/2026-08-22/2026-08-22-aerial-perspective-white-veil.md)。
+
 
 ### V3.5.26 (2026-08-22) — 综合版本：Cesium 本地化自托管 + 贴地策略统一重构 + 首屏 Loading 过渡 + 暂存区审查收敛
 

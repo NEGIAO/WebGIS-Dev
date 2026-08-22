@@ -264,6 +264,17 @@ float getGroundSunTransmittance(vec3 rawWorldPosMeters) {
   return mix(1.0, shade, fade);
 }
 
+// 上游（AtmospherePostProcess applyGround=0 直通）给到的是 sRGB 显示色；
+// 空中透视必须在「线性化 → 合成 → mix(scale) → 与天空分支同一套 ACES+gamma」下进行：
+// - 线性 inscatter 直接加在 sRGB 上 = 近地平线白蒙版（旧实现根因）
+// - mix(u_aerialPerspectiveScale) 保证 scale=0 时严格原样，且强度平滑淡入
+vec3 compositeAerialDisplay(vec3 srgbOriginal, vec3 transmittance, float sunT, vec3 inscatter, float alpha) {
+  vec3 linOriginal = pow(max(srgbOriginal, vec3(0.0)), vec3(2.2));
+  vec3 aerialLin = linOriginal * transmittance * sunT + max(inscatter, vec3(0.0));
+  vec3 compositedLin = mix(linOriginal, aerialLin, saturateAP(alpha));
+  return tonemapDisplay(compositedLin, 1.0).rgb;
+}
+
 void main() {
   vec4 originalColor = texture(colorTexture, v_textureCoordinates);
   float depth = czm_readDepth(depthTexture, v_textureCoordinates);
@@ -308,10 +319,13 @@ void main() {
     return;
   }
 
-  // 壳层内：与 AtmospherePostProcess 一致用 0.014 宽带，避免相机运动时深度抖动导致误走透视/透传、天际线闪黑。
+  // 壳层内：与 AtmospherePostProcess 对齐的分类参数（旧 0.014 宽带会把大片远距地表
+  // 误判为天空走 tonemap 直通——对 sRGB 地面是二次 OETF，形成天际线灰白蒙版带）。
+  // 现两条分支出口均为同一 ACES+gamma 且 aerial 在低强度下近似恒等，宽带防闪的
+  // 存在理由已消失，收窄到与上游一致的抖动折中值。
   if (inShell && !forceAerialFromDepth) {
-    const float SHELL_SKY_DEPTH_SLOP = 0.014;
-    const float MU_EXPLICIT_GROUND = -0.065;
+    const float SHELL_SKY_DEPTH_SLOP = 0.0016;
+    const float MU_EXPLICIT_GROUND = -0.01;
     bool depthLikelySky = depth >= 1.0 - SHELL_SKY_DEPTH_SLOP;
     bool explicitGround =
       hitBottom || (hasSceneDepth && muLook < MU_EXPLICIT_GROUND);
@@ -355,7 +369,13 @@ void main() {
       transmittanceW
     );
     // w 异常时的 bottom-sphere 交点只是透视兜底，不作为 BSM 地面阴影锚点，避免假贴地阴影粘屏。
-    vec3 finalColorW = originalColor.rgb * transmittanceW + inscatterW * u_aerialPerspectiveScale;
+    vec3 finalColorW = compositeAerialDisplay(
+      originalColor.rgb,
+      transmittanceW,
+      1.0,
+      inscatterW,
+      u_aerialPerspectiveScale
+    );
     out_FragColor = vec4(finalColorW, originalColor.a);
     return;
   }
@@ -413,8 +433,14 @@ void main() {
   float sunT = (rawWorldPosMeters.x != 0.0 || rawWorldPosMeters.y != 0.0 || rawWorldPosMeters.z != 0.0)
     ? getGroundSunTransmittance(rawWorldPosMeters)
     : 1.0;
-  // 地面像素：sRGB 输入不走 tonemapDisplay，避免双重 gamma 白雾
-  vec3 finalColor = originalColor.rgb * transmittance * sunT + inscatter * u_aerialPerspectiveScale;
+  // 与天空分支同一 OETF 出口：线性域合成 + mix(scale) 强度语义，消除交界缝与白蒙版
+  vec3 finalColor = compositeAerialDisplay(
+    originalColor.rgb,
+    transmittance,
+    sunT,
+    inscatter,
+    u_aerialPerspectiveScale
+  );
 
   out_FragColor = vec4(finalColor, originalColor.a);
 }
