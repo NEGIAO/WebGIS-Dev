@@ -13,7 +13,9 @@
         "preview": "vite preview",
         "lint": "eslint src/ --fix",
         "format": "prettier --write src/",
-        "docs:index": "node scripts/generate-boundary-index.mjs"
+        "docs:index": "node scripts/generate-boundary-index.mjs",
+        "shaders": "node scripts/bundle-shaders.mjs",
+        "shaders:check": "node scripts/bundle-shaders.mjs --check"
     },
     "dependencies": {
         "@cesium-extends/subscriber": "^1.1.1",

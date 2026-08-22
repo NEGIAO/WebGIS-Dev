@@ -6,6 +6,26 @@
 
 ## 版本记录
 
+### V3.5.29 (2026-08-22) — shader bundle 漂移防护自动化：vite 求值期自动再生 + CI 门禁
+
+- **问题**：V3.5.28 遗留风险——bundle 再生仍靠手动执行 `node frontend/scripts/bundle-shaders.mjs`，改 `Shaders/` 源文件后忘跑脚本会复现同类漂移（且 public fetch 回退镜像也需手动同步，同属机制缺口）。
+- **修复**（三道防线，全部围绕「让忘跑不可能」）：
+  - **自动再生**：[bundle-shaders.mjs](../../frontend/scripts/bundle-shaders.mjs) 重构为可导出模块 `bundleShaders()`，挂载 [vite.config.js](../../frontend/vite.config.js) 配置求值期（照 `generateShareDataManifest` 先例）——`dev` / `build` / `build:*` 启动即自动同步，产物确定性无 git 噪声；
+  - **脚本增强**：新增 `--check` 校验模式（只读比对 bundle + 镜像与真源，漂移列明细并 exit 1）；写模式下顺带同步 `public/cloud-atmosphere/shaders/` 镜像并清理真源已删除的陈旧副本；比对前统一 CRLF→LF，免受 checkout 行尾转换干扰；
+  - **门禁拦截**：`package.json` 新增 `shaders` / `shaders:check` 脚本；[deploy.yml](../../.github/workflows/deploy.yml) 在 Install 依赖之后、Build 之前插入 `npm run shaders:check` 步骤，把已提交的漂移拦截在部署前。
+- **验证**：`--check` 通过；人为污染 bundle 与镜像后 `--check` 正确 exit 1 并列出两处漂移；重跑再生精确还原；`vite build` 通过且构建期自动再生幂等（git 无额外 diff）；dist 内 aerial frag 已含 Fix A/B/C 修复态。
+- 维护日志：[2026-08-22-cloud-shader-bundle-auto-guard](../LLM_record/26-08/2026-08-22/2026-08-22-cloud-shader-bundle-auto-guard.md)。
+
+### V3.5.28 (2026-08-22) — 体积云 shader 副本漂移修复：补建 bundle 再生脚本 + 重同步
+
+- **问题**：上一版（V3.5.27 时段内同日会话）的空中透视白蒙版修复（`compositeAerialDisplay` 统一 OETF 出口 + 分类带收窄 + 曝光按分支施加）**未生效**——用户实测症状依旧。根因是副本漂移：shader 运行时唯一真源为内联 `bundledShaders.js`（`shaderLoader.js` bundle 优先命中，fetch 仅回退），而其头部声明的再生脚本 `scripts/bundle-shaders.mjs` 在仓库中不存在，导致 `Shaders/aerialPerspectiveEffect.frag` 源文件的修复无法同步进运行时加载的旧 bundle。
+- **修复**：
+  - 新增 [frontend/scripts/bundle-shaders.mjs](../../frontend/scripts/bundle-shaders.mjs)：递归打包 `lib/AtmosphereFromThreeGeospatial/Shaders/` 全部 glsl/frag（CRLF→LF、JSON 转义安全写入），banner 更新为真实脚本路径与真源标注；
+  - 执行重生成 `bundledShaders.js`（5 shader 全量重建，diff 校验 aerial frag 与源逐字节一致）；
+  - 同步 `public/cloud-atmosphere/shaders/` 镜像 5 文件。
+- **验证**：node 动态 import 校验 key 完整 + 双向 diff 通过；实机渲染表现待用户回归（交界无灰白带 / scale=0 恒等 / 升降无闪烁）。
+- 维护日志：[2026-08-22-cloud-shader-bundle-drift-fix](../LLM_record/26-08/2026-08-22/2026-08-22-cloud-shader-bundle-drift-fix.md)（含前置修复日志 [2026-08-22-aerial-perspective-white-veil](../LLM_record/26-08/2026-08-22/2026-08-22-aerial-perspective-white-veil.md)）。
+
 ### V3.5.27 (2026-08-20~22) — 面状航线模块迁移：toolPanel 模块卡片直驱 + 全量 i18n
 
 > 2026-08-20~22 的三轮会话增量（浮层整页方案 → 无头控制器重构 → 启动崩溃修复与本地化）按用户范式指示收敛为单一版本 V3.5.27。

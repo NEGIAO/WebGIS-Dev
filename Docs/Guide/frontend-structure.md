@@ -170,7 +170,7 @@ frontend/src/
 │   │   │   │       │           ├── definitions.glsl
 │   │   │   │       │           └── runtime.glsl
 │   │   │   │       └── shaders/
-│   │   │   │           └── bundledShaders.js
+│   │   │   │           └── bundledShaders.js  # 内联 shader bundle（运行时唯一真源；由 bundle-shaders.mjs 从 Shaders/ 生成，vite.config 求值期自动再生，CI 有 --check 门禁）
 │   │   │   ├── fluid-simulation/
 │   │   │   │   ├── fluidRuntime.js  # WebGL 流体渲染引擎
 │   │   │   │   └── FluidSimulationPanel.vue  # 流体控制面板（高度请求 Loading i18n）
@@ -660,3 +660,5 @@ frontend/src/
     ├── shpWorker.js  # Shapefile 解析 Worker
     └── tiffWorker.js  # TIF 解码 Worker
 ```
+
+> 注：`frontend/src/` 之外的 `frontend/scripts/` 存放构建辅助脚本（如 [bundle-shaders.mjs](../../frontend/scripts/bundle-shaders.mjs)：将体积云 Shaders/ 真源打包为 lib/shaders/bundledShaders.js 并同步 public 镜像，已由 vite.config 求值期自动调用——dev/build 全覆盖；`--check` 模式供 CI 与本地校验），不属于本树扫描范围，改动时仍需保持与本文件注释一致。

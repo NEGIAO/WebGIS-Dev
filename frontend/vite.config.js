@@ -6,6 +6,7 @@ import vue from '@vitejs/plugin-vue';
 import vueDevTools from 'vite-plugin-vue-devtools';
 import { visualizer } from 'rollup-plugin-visualizer';
 import { generateShareDataManifest } from './scripts/generate-sharedata-manifest.mjs';
+import { bundleShaders } from './scripts/bundle-shaders.mjs';
 
 /**
  * 判断模块是否来自指定 node_modules 包
@@ -111,6 +112,11 @@ export default defineConfig(({ command, mode }) => {
     // 刷新 public/ShareData/manifest.json(共享资源清单;dev 与所有 build 脚本统一生效)
     // 替代旧 import.meta.glob 方案,详见 scripts/generate-sharedata-manifest.mjs 头注释
     generateShareDataManifest();
+
+    // 再生体积云 shader bundle 与 public 镜像(真源 Shaders/ → bundledShaders.js + 镜像;
+    // dev 与所有 build 脚本统一生效,杜绝「改源忘跑 bundle 脚本」漂移,
+    // 详见 scripts/bundle-shaders.mjs 头注释;CI 另有 --check 门禁步)
+    bundleShaders();
 
     // 项目基础路径（从当前环境文件读取，缺省相对路径）
     const baseUrl = env.VITE_BASE_URL || './';
