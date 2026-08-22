@@ -7,9 +7,10 @@
  * - 透明度：tif → ImageryLayer.alpha；gltf → Model.color alpha；
  *   3dtiles → Cesium3DTileStyle 白色乘 alpha（与「材质模式」互写 style，
  *   语义为「最后操作生效」，alpha=1 时清空 style 还原）；
- *   矢量类（geojson/kml/czml/shp）→ per-entity 材质 alpha 缩放：
+ *   矢量类（geojson/kml/czml/shp/wayline）→ per-entity 材质 alpha 缩放：
  *   首次调节时以 WeakMap 快照原始颜色（新 alpha = 原始 alpha × 系数，可反复调节
- *   不衰减），时间动态颜色属性（isConstant=false）跳过以保留动态性，
+ *   不衰减）；时间动态颜色属性（isConstant=false）包装为缩放 CallbackProperty
+ *   （每次求值对原始结果缩放，保留时间动态语义），
  *   大数据源经 rAF 合并（滑杆高频拖动一帧只重算一次）。
  */
 
@@ -191,48 +192,94 @@ function applyVectorDataSourceOpacity(Cesium, dataSource, alpha) {
 
 /**
  * 缩放单个颜色属性：快照原始色 → 写入 原始alpha×系数 的新常量色。
- * 时间动态属性（isConstant=false）跳过，保留 CZML 等动画语义。
+ * 时间动态属性（isConstant=false）不再跳过——包装为缩放 CallbackProperty，
+ * 每次求值时对原始属性结果做 alpha 缩放（保留 CZML 等时间动态语义）。
  * 材质支持：ColorMaterialProperty（color）与 PolylineOutlineMaterialProperty（color + outlineColor，P2-2）。
  */
 function applyColorScale(Cesium, graphics, graphicsKey, propKey, snapshot, alpha, now) {
-    const isMaterial = propKey === 'materialColor' || propKey === 'materialOutlineColor';
-    const property = isMaterial ? graphics.material : graphics[propKey];
-    if (!property) return;
+	const isMaterial = propKey === 'materialColor' || propKey === 'materialOutlineColor';
+	const property = isMaterial ? graphics.material : graphics[propKey];
+	if (!property) return;
 
-    // 材质类型白名单：纯色 / 描边线；贴图与特效材质不触碰
-    if (isMaterial) {
-        const isColorMaterial = property instanceof Cesium.ColorMaterialProperty;
-        const isOutlineMaterial = Cesium.PolylineOutlineMaterialProperty
-            && property instanceof Cesium.PolylineOutlineMaterialProperty;
-        if (!isColorMaterial && !isOutlineMaterial) return;
-        // outlineColor 仅描边线材质具备
-        if (propKey === 'materialOutlineColor' && !isOutlineMaterial) return;
-    }
+	// 材质类型白名单：纯色 / 描边线；贴图与特效材质不触碰
+	if (isMaterial) {
+		const isColorMaterial = property instanceof Cesium.ColorMaterialProperty;
+		const isOutlineMaterial = Cesium.PolylineOutlineMaterialProperty
+			&& property instanceof Cesium.PolylineOutlineMaterialProperty;
+		if (!isColorMaterial && !isOutlineMaterial) return;
+		// outlineColor 仅描边线材质具备
+		if (propKey === 'materialOutlineColor' && !isOutlineMaterial) return;
+	}
 
-    // 仅处理常量颜色：材质子属性 / 普通颜色 Property
-    const colorProperty = isMaterial
-        ? (propKey === 'materialOutlineColor' ? property.outlineColor : property.color)
-        : property;
-    if (!colorProperty || typeof colorProperty.getValue !== 'function') return;
-    if (colorProperty.isConstant === false) return;
+	// 仅处理常量颜色：材质子属性 / 普通颜色 Property
+	const colorProperty = isMaterial
+		? (propKey === 'materialOutlineColor' ? property.outlineColor : property.color)
+		: property;
+	if (!colorProperty || typeof colorProperty.getValue !== 'function') return;
 
-    const cacheKey = `${graphicsKey}.${propKey}`;
-    if (!(cacheKey in snapshot)) {
-        const original = colorProperty.getValue(now);
-        if (!original) return;
-        snapshot[cacheKey] = Cesium.Color.clone(original, new Cesium.Color());
-    }
+	const cacheKey = `${graphicsKey}.${propKey}`;
+	let entry = snapshot[cacheKey];
 
-    const base = snapshot[cacheKey];
-    if (!base) return;
-    const next = base.withAlpha(base.alpha * alpha);
-    if (isMaterial) {
-        if (propKey === 'materialOutlineColor') {
-            property.outlineColor = next;
-        } else {
-            property.color = next;
-        }
-    } else {
-        graphics[propKey] = next;
-    }
+	if (!entry) {
+		// 首次调节：按常量/动态分路建立快照
+		if (colorProperty.isConstant === false) {
+			// 动态属性：记录原始属性引用，后续经包装器缩放
+			entry = { dynamicOriginal: colorProperty };
+			snapshot[cacheKey] = entry;
+		} else {
+			const original = colorProperty.getValue(now);
+			if (!original) return;
+			entry = { constantOriginal: Cesium.Color.clone(original, new Cesium.Color()) };
+			snapshot[cacheKey] = entry;
+		}
+	}
+
+	if (entry.dynamicOriginal) {
+		// 动态路径：写入（或刷新）包装属性。包装器标记 __scaledFrom 防止二次包裹。
+		const wrapper = createScaledColorProperty(Cesium, entry.dynamicOriginal, alpha);
+		if (isMaterial) {
+			if (propKey === 'materialOutlineColor') {
+				property.outlineColor = wrapper;
+			} else {
+				property.color = wrapper;
+			}
+		} else {
+			graphics[propKey] = wrapper;
+		}
+		return;
+	}
+
+	const base = entry.constantOriginal;
+	if (!base) return;
+	const next = base.withAlpha(base.alpha * alpha);
+	if (isMaterial) {
+		if (propKey === 'materialOutlineColor') {
+			property.outlineColor = next;
+		} else {
+			property.color = next;
+		}
+	} else {
+		graphics[propKey] = next;
+	}
+}
+
+/** 包装器回指原始属性的标记键（防重复包裹导致缩放叠加） */
+const SCALED_FROM_KEY = '__cesiumScaledFrom';
+
+/**
+ * 创建动态颜色的 alpha 缩放包装属性：getValue 时对原始结果做 withAlpha(alpha)。
+ * 常量性跟随原属性；原属性若已是上一次的包装器则解包，保证始终从真源缩放。
+ * @param {object} Cesium - Cesium 命名空间
+ * @param {object} original - 原始颜色 Property
+ * @param {number} alpha - 0~1 系数
+ * @returns {object} CallbackProperty 实例
+ */
+function createScaledColorProperty(Cesium, original, alpha) {
+	const source = original[SCALED_FROM_KEY] || original;
+	const wrapper = new Cesium.CallbackProperty((time) => {
+		const color = source.getValue(time);
+		return color ? color.withAlpha(color.alpha * alpha) : color;
+	}, source.isConstant !== false);
+	wrapper[SCALED_FROM_KEY] = source;
+	return wrapper;
 }

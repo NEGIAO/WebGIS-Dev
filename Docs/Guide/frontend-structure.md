@@ -122,6 +122,7 @@ frontend/src/
 │   │   │       ├── controlsUtils.js  # 控件工具函数（toFiniteNumberOrNull）
 │   │   │       ├── fluidModule.js  # 流体模块（洪水模拟+水位动画）
 │   │   │       ├── playerModule.js  # 人物漫游模块（WASD移动+碰撞检测）
+│   │   │       ├── planarRouteModule.js  # 面状航线模块（lil-gui 声明式控件+动作，读 planarConfig 响应式单例）
 │   │   │       ├── sceneModule.js  # 场景导航模块（相机飞行+演示数据）
 │   │   │       ├── shallowWaterModule.js  # 热带浅水模块（三渲二水体+闪电）
 │   │   │       └── useCesiumToolModules.js  # 工具面板模块编排（核心）
@@ -173,6 +174,37 @@ frontend/src/
 │   │   │   ├── fluid-simulation/
 │   │   │   │   ├── fluidRuntime.js  # WebGL 流体渲染引擎
 │   │   │   │   └── FluidSimulationPanel.vue  # 流体控制面板（高度请求 Loading i18n）
+│   │   │   ├── planar-route/
+│   │   │   │   ├── planarRouteController.ts  # 无头运行时控制器（起飞点拾取/测区交互/航线规划/KMZ 导入导出/状态上报，面板直驱）
+│   │   │   │   ├── global.d.ts  # window.mainViewer / miniViewer 全局类型声明
+│   │   │   │   ├── composables/
+│   │   │   │   │   ├── useCesiumRenderer.ts  # 航线预览渲染器（飞行路径实体 + 版本失效控制）
+│   │   │   │   │   ├── useKmzImport.ts  # KMZ 导入（解析回填测区/航线/起飞点，useMessage 提示）
+│   │   │   │   │   ├── useLineAngle.ts  # 主航线角度交互（滑块 + 方向指示器）
+│   │   │   │   │   └── useRouteCalc.ts  # 航线时长/高度/首航点/拍照数纯函数
+│   │   │   │   ├── config/
+│   │   │   │   │   ├── cameraConfig.ts  # 相机/画幅参数（M3TD 广角视场角）
+│   │   │   │   │   └── planarConfig.ts  # 模块级响应式配置单例（纯数据，顶层禁触 Cesium）
+│   │   │   │   ├── img/
+│   │   │   │   │   └── start_point.svg  # 起飞点鼠标光标 / 实体图标
+│   │   │   │   ├── utils/
+│   │   │   │   │   ├── comm.ts  # 通用工具（深拷贝/防抖/序号图标/Blob 下载等）
+│   │   │   │   │   ├── drawPolygon.ts  # 测区多边形绘制（顶点拖拽/自相交提示浮层/Esc 重绘）
+│   │   │   │   │   ├── frustum.ts  # 相机视锥计算
+│   │   │   │   │   ├── lineAngleIndicator.ts  # 航线方向指示器实体
+│   │   │   │   │   ├── map.ts  # 地图/坐标工具（takeoffPoint 实体创建）
+│   │   │   │   │   ├── obliqueRoute.ts  # 五向倾斜航线规划
+│   │   │   │   │   ├── planarKmzExport.ts  # KMZ 导出（jszip 打包 WPML）
+│   │   │   │   │   ├── planarKmzImport.ts  # KMZ 解析（WPML 解包）
+│   │   │   │   │   ├── planarLine.ts  # 航线实体构建（弓字形折线 + 专用 handler 起飞点拾取）
+│   │   │   │   │   ├── planarRouteTurn.ts  # 转弯圆角处理（预览）
+│   │   │   │   │   ├── planarTerrain.ts  # 地形采样（AGL 仿地 + 最大地形高度）
+│   │   │   │   │   └── wayLineCalc.ts  # 弓字形航线核心算法（间距/拍照距/局部坐标系）
+│   │   │   │   └── wpml/
+│   │   │   │       ├── actionCodec.ts  # WPML 动作编码（KMZ 导出字节级打包，中文为文件格式载荷非 UI 文案）
+│   │   │   │       ├── constants.ts  # WPML 常量
+│   │   │   │       ├── orientedShoot.ts  # WPML 定向拍摄动作
+│   │   │   │       └── types.ts  # WPML 类型定义
 │   │   │   ├── player-controller/
 │   │   │   │   ├── dynamicObject.ts  # 动态物体
 │   │   │   │   ├── index.js  # 路由与守卫

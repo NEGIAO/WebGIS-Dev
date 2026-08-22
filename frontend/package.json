@@ -16,7 +16,9 @@
         "docs:index": "node scripts/generate-boundary-index.mjs"
     },
     "dependencies": {
+        "@cesium-extends/subscriber": "^1.1.1",
         "@dimforge/rapier3d-compat": "^0.14.0",
+        "@turf/turf": "^7.2.0",
         "@loaders.gl/core": "^4.4.3",
         "@loaders.gl/draco": "^4.4.3",
         "@loaders.gl/gltf": "^4.4.3",

@@ -385,6 +385,12 @@ cesiumLayersStore.registerAdapter({
         dataImport.flyToDataSource(id);
     },
     remove(id) {
+        // 面状航线托管数据源：先让控制器复位内部状态（其句柄随后被通用移除销毁），
+        // 避免控制器持有已销毁 DataSource 引用导致后续重规划写入失效容器
+        const record = findImportRecord(id);
+        if (record?.type === 'wayline') {
+            detachPlanarWorkingSet?.();
+        }
         dataImport.removeDataSource(id);
     },
 });
@@ -913,6 +919,7 @@ const {
     handleToolControlChange,
     handleFluidStateChange,
     cleanupTools,
+    detachPlanarWorkingSet,
 } = useCesiumToolModules({
     fluidPanelRef,
     sceneActions,
@@ -921,7 +928,37 @@ const {
     // 三维分析（通视/限高）运行时依赖：viewer 与 Cesium 命名空间注入
     getViewer,
     getCesium,
+    // 面状航线工作集注册桥：写入/移出统一图层管理（数据页签卡片 + TOC 同源）
+    syncPlanarSource: syncPlanarSourceRecord,
 });
+
+// 面状航线托管数据源的固定 id（模块单工作集：测区+航线+起飞点）
+const PLANAR_SOURCE_ID = 'planar_route_working';
+
+/**
+ * 将面状航线工作集同步进 loadedDataSources（统一图层管理入口）。
+ * 仅增删元数据记录，不动句柄——句柄由控制器自持；
+ * 外部删除走 adapter.remove 的 wayline 分支先复位控制器。
+ * @param {{ present: boolean, name: string, dataSource: object | null }} info 控制器上报
+ */
+function syncPlanarSourceRecord(info) {
+    const list = dataImport.loadedDataSources.value || [];
+    const exists = list.some((item) => item.id === PLANAR_SOURCE_ID);
+    if (info?.present && info.dataSource && !exists) {
+        dataImport.loadedDataSources.value = [
+            ...list,
+            {
+                id: PLANAR_SOURCE_ID,
+                name: info.name || t('cesium.module.planarRoute.msg.defaultRouteName'),
+                type: 'wayline',
+                entity: info.dataSource,
+                managedByModule: true,
+            },
+        ];
+    } else if (!info?.present && exists) {
+        dataImport.loadedDataSources.value = list.filter((item) => item.id !== PLANAR_SOURCE_ID);
+    }
+}
 
 /** 启动中标志，防止并发 bootCesium 调用 */
 let bootInProgress = false;

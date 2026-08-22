@@ -243,6 +243,7 @@ export default defineConfig(({ command, mode }) => {
                         'vendor-lilgui',
                         'vendor-loaders',
                         'vendor-cesium-deps',
+                        'vendor-planar-route',
                     ];
                     return deps.filter(
                         (dep) => !SKIP_PRELOAD_CHUNKS.some((name) => dep.includes(name)),
@@ -336,6 +337,13 @@ export default defineConfig(({ command, mode }) => {
                             isNodeModulePackage(id, 'vue3-toastify')
                         ) {
                             return 'vendor-toast';
+                        }
+                        // 面状航线模块依赖（独立懒加载 chunk，避免混入 vendor-libs 兜底桶被入口预加载）
+                        if (
+                            isNodeModulePackage(id, '@turf') ||
+                            isNodeModulePackage(id, '@cesium-extends')
+                        ) {
+                            return 'vendor-planar-route';
                         }
                         // 剩余 node_modules（小库合集）
                         return 'vendor-libs';

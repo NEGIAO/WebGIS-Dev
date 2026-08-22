@@ -80,7 +80,7 @@
 
 ## 🎯 项目简介
 
-**NEGIAO's WebGIS** 是一个功能完整、架构清晰的前后端分离 WebGIS 平台（当前版本 V3.5.26），前端托管于 GitHub Pages（正式域名 webgis.negiao.cn），后端以 Docker 部署在 Hugging Face Spaces，通过 RESTful API 通信，支持独立扩展。
+**NEGIAO's WebGIS** 是一个功能完整、架构清晰的前后端分离 WebGIS 平台（当前版本 V3.5.27），前端托管于 GitHub Pages（正式域名 webgis.negiao.cn），后端以 Docker 部署在 Hugging Face Spaces，通过 RESTful API 通信，支持独立扩展。
 
 > 📚 本 README 仅保留核心概览与导航。完整文档已模块化至 [`Docs/Guide/`](Docs/Guide/)，详见下方「文档导航」。
 >
@@ -97,6 +97,7 @@
 | 📥 多格式数据导入 | GeoJSON / KML / SHP / GLB / CZML / 3D Tiles 拖拽加载，2D/3D 双管线 |
 | 📐 空间分析 | 缓冲区 / 叠加 / 泰森多边形 / 聚合 / 渔网等 8 算子（Shapely 后端精确计算） |
 | ✨ 三维特效 | 体积云 ray marching、Bruneton 大气、BSM 云影、风场粒子、洪水淹没模拟 |
+| 🛩️ 面状航线规划 | 测区绘制、弓字形/五向倾斜采集、AGL 仿地、DJI KMZ 导入导出，toolPanel 模块卡片直驱并接入统一图层管理 |
 | 🛣️ 路径规划 | 天地图驾车/公交双管线、搜索选点与路线渲染 |
 | 🤖 AI 空间助手 | LLM 集成，三种接入模式（默认 / 个人 Key / 后端代理） |
 | 🔐 账号体系 | 邮箱注册登录、Google/GitHub 一键注册登录与绑定、三级身份、会话鉴权、双 AI 配额管理 |
@@ -379,6 +380,7 @@ HF Spaces 在 24 小时无访问后自动休眠。本平台通过**双向互保�
 | 实用工具 | [`utility-tools.md`](Docs/Architecture/utility-tools.md) | 测量、坐标拾取、罗盘、分享、GeoTIFF 下载 |
 | 账号体系 | [`account-system-ai-quota.md`](Docs/Architecture/account-system-ai-quota.md) | 邮箱登录、三级身份、双 AI 配额 |
 | 洪水淹没模拟 | [`cesium-fluid-flood-simulation.md`](Docs/Architecture/cesium-fluid-flood-simulation.md) | GPU 流体管线详解（三维特效配套） |
+| 面状航线 | [`cesium-planar-route.md`](Docs/Architecture/cesium-planar-route.md) | 模块卡片直驱宿主 Viewer：测区绘制、弓字形/五向规划、KMZ 导入导出与图层管理接入 |
 | 三层配置架构 | [`configuration-three-tier.md`](Docs/Architecture/configuration-three-tier.md) | L1/L2/L3 全景：来源→统一入口→业务/前端消费与门禁 |
 | Cesium 统一图层管理 | [`cesium-unified-layer-management.md`](Docs/Architecture/cesium-unified-layer-management.md) | 设计评审稿：3D 数据接入统一 TOC 的两步走方案 |
 
@@ -400,6 +402,7 @@ HF Spaces 在 24 小时无访问后自动休眠。本平台通过**双向互保�
 
 | 版本 | 日期 | 概要 |
 |------|------|------|
+| **V3.5.27** | 2026-08-20~22 | **面状航线模块迁移**：独立工程 planar-wayline 迁入为 CesiumToolPanel 原生模块卡片（lil-gui 声明式控件 + 无头控制器直驱宿主唯一 Viewer），支持测区绘制/弓字形航线/五向倾斜/AGL 仿地/DJI KMZ 导入导出；工作集自动注册统一图层管理（wayline 类型，支持显隐/透明度/重命名/定位/移除）；Element Plus/gsap 依赖整体移除（vendor chunk −252KB）；修复启动期 Cesium 求值崩溃；≈150 处用户可见文案全量 i18n。详见[完整更新日志](Docs/Guide/CHANGELOG.md) |
 | **V3.5.26** | 2026-08-22 | **综合版本**（原 V3.5.26–V3.5.28 三轮暂存增量按用户指令合并收敛）：Cesium 1.132 主库与云大气资源全部本地化（`public/cesium/`，弃用 jsDelivr/BootCDN/unpkg）+ BSM 天空变黑单位修复 + 空闲预热；贴地策略统一重构——矢量全面走官方加载期 `clampToGround`、glTF/模型 Entity 化 `heightReference`、采样收敛至统一网关；首屏 Loading 遮罩 `hideDelayMs` 过渡修复白屏；暂存区终审修复清空残留/透明度失效等 4 处。详见[完整更新日志](Docs/Guide/CHANGELOG.md) |
 | **V3.5.25** | 2026-08-20~21 | **综合版本**：双引擎底图统一契约——公开 `l` 改为 1-based 数字且 `l=2` 固定 custom/Wayback，实际图源 URL 由共享运行时 store 持有不再进路由，OL/Cesium/卷帘/分享链接全链路共享；实时在线统计后端全权重构（SSE 连接计数 + 鉴权活跃兜底 + 过期扫描即时广播，前端零轮询零心跳，游客身份去 IP）；ESRI Wayback 历史影像后端（同步调度/API）与按年折叠 UI；首屏调度优化（tileloadend + rendercomplete + 双 rAF）。详见[完整更新日志](Docs/Guide/CHANGELOG.md) |
 | **V3.5.24** | 2026-08-19~20 | **综合版本**：出站请求浏览器特征头泛化共享；图层 zIndex 分带治理；数据导入统一贴地；运行时密钥池失败自动轮换；瓦片代理泛化。详见[完整更新日志](Docs/Guide/CHANGELOG.md) |
@@ -426,6 +429,6 @@ HF Spaces 在 24 小时无访问后自动休眠。本平台通过**双向互保�
 |:------:|:--------:|:--------:|
 | [GitHub](https://github.com/NEGIAO/WebGIS-Dev) | [webgis.negiao.cn](https://webgis.negiao.cn)（正式域名，GitHub Pages 托管） | [Hugging Face](https://NEGIAO-WebGIS.hf.space) |
 
-<sub>V3.5.26 · 开发中 · 最后更新 2026-08-22</sub>
+<sub>V3.5.27 · 开发中 · 最后更新 2026-08-22</sub>
 
 </div>

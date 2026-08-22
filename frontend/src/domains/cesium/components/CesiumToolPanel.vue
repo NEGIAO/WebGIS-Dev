@@ -1019,9 +1019,10 @@ import {
     Check,
     ChevronDown,
     Crosshair,
-    EyeOff,
+    Download,
     Droplets,
     Eye,
+    EyeOff,
     FileArchive,
     FileJson,
     FolderOpen,
@@ -1353,6 +1354,7 @@ function getModuleIcon(moduleId) {
         wind: Wind,
         fluid: Droplets,
         shallowWater: Waves,
+        planarRoute: MapPin,
     };
     return icons[moduleId] || SlidersHorizontal;
 }
@@ -1363,6 +1365,12 @@ function getActionIcon(moduleId, actionId) {
         wind: { load: Play, clear: Trash2 },
         fluid: { pick: Eye, clear: Trash2 },
         shallowWater: { toggle: Waves },
+        planarRoute: {
+            setTakeoffPoint: MapPin,
+            importKmz: Upload,
+            saveKmz: Download,
+            clearAll: Trash2,
+        },
     };
     return icons[moduleId]?.[actionId] || RotateCcw;
 }
@@ -1392,6 +1400,7 @@ function getFormatIcon(type) {
         czml: FileJson,
         '3dtiles': Box,
         tif: Image,
+        wayline: MapPin,
     };
     return icons[type] || FileJson;
 }
@@ -1407,6 +1416,7 @@ function formatLabel(type) {
         czml: 'CZML',
         '3dtiles': '3D Tiles',
         tif: 'GeoTIFF',
+        wayline: t('cesium.dataFormat.wayline'),
     };
     return labels[type] || type.toUpperCase();
 }

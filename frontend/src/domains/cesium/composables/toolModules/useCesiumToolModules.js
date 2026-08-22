@@ -13,6 +13,7 @@ import { createWindModule } from '../../modules/wind/windModule';
 import { createFluidModule } from './fluidModule';
 import { createShallowWaterModule } from './shallowWaterModule';
 import { createPlayerModule } from './playerModule';
+import { createPlanarRouteModule } from './planarRouteModule';
 import {
     createAnalysisModule,
     createAnalysisRuntime,
@@ -30,6 +31,8 @@ export function useCesiumToolModules({
     getViewer = () => null,
     getCesium = () => null,
     panelStorageKey = CESIUM_TOOL_PANEL_OPEN_KEY,
+    /** 面状航线工作集注册桥（CesiumContainer 注入：写入 dataImport.loadedDataSources） */
+    syncPlanarSource = null,
 } = {}) {
     const { language } = useLocale();
     const toolPanelOpen = ref(readStoredBoolean(panelStorageKey, true));
@@ -151,6 +154,80 @@ export function useCesiumToolModules({
         return analysisRuntime;
     }
 
+    // ========== 面状航线（无头控制器，面板直驱；控制器按需懒创建） ==========
+    const planarRouteState = ref({
+        hasRoute: false,
+        isCalculating: false,
+        isImporting: false,
+        pickingTakeoff: false,
+        activeRouteIndex: 0,
+        routeOptions: [],
+        routeName: '',
+    });
+
+    let planarRouteController = null;
+    let planarRouteControllerLoading = null;
+
+    /**
+     * 懒创建面状航线控制器（返回 Promise；就绪后自动绑定宿主 Viewer）。
+     * 与 analysis 运行时同模式：首次交互才加载 chunk 并创建。
+     */
+    function ensurePlanarRouteController() {
+        if (planarRouteController) {
+            const viewer = getViewer();
+            if (viewer) {
+                try {
+                    planarRouteController.bind(viewer);
+                } catch {
+                    /* viewer 未就绪时由下次交互重试 */
+                }
+            }
+            return Promise.resolve(planarRouteController);
+        }
+        if (!planarRouteControllerLoading) {
+            planarRouteControllerLoading = import('../../modules/planar-route/planarRouteController').then(
+                ({ PlanarRouteController }) => {
+                    planarRouteController = new PlanarRouteController({
+                        getViewer,
+                        onStateChange: (patch) => {
+                            planarRouteState.value = { ...planarRouteState.value, ...patch };
+                        },
+                        onWorkingSetChange: (info) => syncPlanarSource?.(info),
+                    });
+                    planarRouteControllerLoading = null;
+                    const viewer = getViewer();
+                    if (viewer) {
+                        planarRouteController.bind(viewer);
+                    }
+                    return planarRouteController;
+                },
+            );
+        }
+        return planarRouteControllerLoading;
+    }
+
+    /**
+     * 面状航线动作分发（等待懒加载完成后再执行实际动作）。
+     */
+    async function dispatchPlanarAction(actionId) {
+        const controller = await ensurePlanarRouteController();
+        if (!controller) return;
+        switch (actionId) {
+            case 'setTakeoffPoint':
+                controller.setTakeoffPicking(!controller.pickingTakeoff.value);
+                break;
+            case 'importKmz':
+                controller.pickAndImportKmz();
+                break;
+            case 'saveKmz':
+                void controller.saveKmz();
+                break;
+            case 'clearAll':
+                controller.clearAll();
+                break;
+        }
+    }
+
     // ========== 工具模块定义（使用模块化工厂函数，聚合同类功能） ==========
     // language 依赖：语言切换时重建模块 title/label/tooltip
     const toolModules = computed(() => {
@@ -164,6 +241,7 @@ export function useCesiumToolModules({
             createShallowWaterModule(shallowWaterVisible, shallowWaterParams),
             createPlayerModule(playerParams, _playerController),
             createAnalysisModule(analysisParams, analysisState),
+            createPlanarRouteModule(planarRouteState),
         ];
     });
 
@@ -197,6 +275,12 @@ export function useCesiumToolModules({
                 setNavTarget: () => _playerController?.openNavDialog?.(),
                 clearNavTarget: () => _playerController?.clearNavTarget?.(),
             },
+            planarRoute: {
+                setTakeoffPoint: () => void dispatchPlanarAction('setTakeoffPoint'),
+                importKmz: () => void dispatchPlanarAction('importKmz'),
+                saveKmz: () => void dispatchPlanarAction('saveKmz'),
+                clearAll: () => void dispatchPlanarAction('clearAll'),
+            },
         };
 
         actionMap[moduleId]?.[actionId]?.();
@@ -209,6 +293,14 @@ export function useCesiumToolModules({
                 analysisParams.value = { ...analysisParams.value, [controlId]: value };
             }
             ensureAnalysisRuntime().handleControlChange(controlId, value, analysisParams.value);
+            return;
+        }
+
+        // 面状航线控件（globeConfig 为模块内响应式单例，控制器统一写回 + 重规划）
+        if (moduleId === 'planarRoute') {
+            void ensurePlanarRouteController().then((controller) => {
+                controller?.setParam(controlId, value);
+            });
             return;
         }
 
@@ -373,10 +465,14 @@ export function useCesiumToolModules({
         // 销毁三维分析运行时（实体/事件 handler 全量释放）
         analysisRuntime?.destroy();
         analysisRuntime = null;
+        // 销毁面状航线控制器（测区/航线实体与全局 Viewer 引用全量释放）
+        planarRouteController?.destroy();
+        planarRouteController = null;
     }
 
     return {
         toolPanelOpen,
+        planarRouteState,
         analysisParams,
         analysisState,
         advancedEffectControls,
@@ -392,5 +488,9 @@ export function useCesiumToolModules({
         handleToolControlChange,
         handleFluidStateChange,
         cleanupTools,
+        /** 图层管理外部删除 wayline 数据源前调用：控制器先复位内部状态 */
+        detachPlanarWorkingSet: () => {
+            planarRouteController?.detachForExternalRemoval();
+        },
     };
 }

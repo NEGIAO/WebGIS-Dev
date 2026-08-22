@@ -18,7 +18,7 @@ import { defineStore } from 'pinia';
  * 支持透明度调节的类型（二期已放开矢量类：per-entity 原色快照缩放，
  * 实现见 dataSourceDisplay.js applyVectorDataSourceOpacity）
  */
-const OPACITY_SUPPORTED_TYPES = new Set(['tif', 'gltf', '3dtiles', 'geojson', 'kml', 'czml', 'shp']);
+const OPACITY_SUPPORTED_TYPES = new Set(['tif', 'gltf', '3dtiles', 'geojson', 'kml', 'czml', 'shp', 'wayline']);
 
 /** Cesium 图层元数据记录（禁止出现任何 Cesium 对象字段） */
 export interface CesiumLayerRecord {

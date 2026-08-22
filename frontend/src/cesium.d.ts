@@ -117,4 +117,7 @@ declare module 'cesium' {
     export const cesiumReady: Promise<void>;
     export const CESIUM_BASE_URL: string;
     export function getActiveCesiumBaseUrl(): string;
+
+    // 默认导出（cesium-shim 的真实默认导出为 CDN 全局 Proxy，供 import Cesium from 'cesium' 使用）
+    export default any;
 }

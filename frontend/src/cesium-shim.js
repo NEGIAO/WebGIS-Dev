@@ -182,6 +182,8 @@ if (!knockout.bindingHandlers.cesiumSvgPath) {
 function getCesium() {
     const C = window.Cesium;
     if (!C) {
+        // 打印调用栈定位是哪条代码路径在 CDN 就绪前触碰了惰性导出
+        console.error('[cesium-shim] window.Cesium 未就绪，触发调用栈：', new Error().stack);
         throw new Error(
             '[cesium-shim] window.Cesium 未就绪。' +
             '请确保调用方已 `await import("cesium").cesiumReady` 或通过 cesiumRuntime 等待 CDN 加载完毕。'

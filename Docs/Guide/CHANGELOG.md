@@ -6,6 +6,39 @@
 
 ## 版本记录
 
+### V3.5.27 (2026-08-20~22) — 面状航线模块迁移：toolPanel 模块卡片直驱 + 全量 i18n
+
+> 2026-08-20~22 的三轮会话增量（浮层整页方案 → 无头控制器重构 → 启动崩溃修复与本地化）按用户范式指示收敛为单一版本 V3.5.27。
+
+#### 一、模块迁入与接入层重构（原 V3.5.30 浮层方案 → 本版收敛）
+
+- **源工程迁入**：独立工程 `planar-wayline`（面状航线规划：测区绘制 / 弓字形航线 / 五向倾斜 / AGL 仿地 / DJI WPMZ-KMZ 导入导出）全量复制至 `frontend/src/domains/cesium/modules/planar-route/`，Cesium 导入适配为 CDN shim 默认 Proxy（15 文件 `import * as Cesium` → `import Cesium from 'cesium'`；`cesium.d.ts` 补默认导出）。
+- **接入形态收敛**：初版「全屏浮层 + Element Plus 整页搬运」按用户指示重做为 toolPanel 原生范式——新增 `toolModules/PlanarRouteModule.js`（lil-gui 声明式控件：采集方式/高度模式/航高/速度/云台俯仰角/主航线角度/重叠率/拍照触发/航线名/五向切换 + 4 动作按钮），新增无头运行时 `planarRouteController.ts`（≈900 行：起飞点拾取专用 handler、测区绘制/顶点拖拽/右键删除自管理 DOM、规划编排、KMZ 导入导出、destroy 全量清理，`emitState()` 快照回流驱动卡片）；Element Plus / gsap 依赖整体移除（消息走 `useMessage`、确认弹窗 `window.confirm`、文件选择动态 input、保存命名面板 text 控件），vendor-element-plus chunk（gzip 252KB）消失。
+- **共享宿主 Viewer**：复用唯一 Viewer 实例，不建第二个 WebGL 上下文；起飞点拾取用模块自有 `ScreenSpaceEventHandler` 隔离宿主左键逻辑。
+- 方案文档：[TODO/2026-08-20-planar-route-migration-proposal.md](../TODO/2026-08-20-planar-route-migration-proposal.md)，维护日志：[2026-08-20 迁移](../LLM_record/26-08/2026-08-20/2026-08-20-migrate-planar-route.md)、[2026-08-22 面板集成](../LLM_record/26-08/2026-08-22/2026-08-22-planar-route-panel-integration.md)，架构说明：[Architecture/cesium-planar-route.md](Architecture/cesium-planar-route.md)。
+
+#### 二、启动期 Cesium 求值崩溃修复
+
+- `planarConfig.ts` / `utils/comm.ts` 位于启动静态加载链（被 `useCesiumToolModules.js` 静态引用），顶层 `import Cesium from 'cesium'` 使 `Cesium.Cartesian3.fromDegrees(...)` 在 CDN 就绪前求值，cesium-shim 抛 `[cesium-shim] window.Cesium 未就绪` 导致整个 3D 页打不开。修复：类型改 `import type { Cartesian3 }`，兜底经纬度常量改运行时惰性转换（`PLANAR_FALLBACK_POSITION_DEGREES`），`createTextCanvas` 函数体内取 `window.Cesium`。
+- `global.d.ts` 补 `window.Cesium: any` 声明。
+
+#### 三、全量本地化（≈150 key）
+
+- 模块卡片/控件/选项/提示/动作、规划计算错误文案（33 条）、KMZ 导入导出文案（26 条）、实体名、测区边长单位、拾取提示、自相交警告条、导入 warnings 全部接 `cesium.module.planarRoute.*` 双语言包；`wpml/actionCodec.ts` 中文为 KMZ 文件格式载荷（司空生态约定）不做 i18n。
+
+#### 四、构建与分包
+
+- 新增依赖仅 `@turf/turf` 与 `@cesium-extends/subscriber`；`vendor-planar-route` 独立懒加载 chunk（turf/@cesium-extends，gzip ≈14.5KB）+ `planarRouteController` 动态 import chunk（88KB/gzip 24.7KB），均不入入口预加载清单。
+- 验证：tsc 0 报错、eslint 模块目录 0 error 0 warning、vite build 通过、CheckStructureTree 458/458、CheckConfigRegistry 通过。
+
+#### 五、统一图层管理接入（KMZ 导入可管理）
+
+- 新增数据类型 `wayline`：元数据店透明度白名单放行（复用矢量 per-entity alpha 缩放）、数据页签卡片图标/标签 i18n。
+- 控制器 `onWorkingSetChange` 生命周期钩子：首次生成有效航线（含 KMZ 导入回填）时以固定 id `planar_route_working` 将托管数据源注册进 loadedDataSources → 自动建档，支持 显隐/透明度/重命名/定位(flyTo)/移除；清除全部或控制器销毁时注销。
+- 外部删除联动：adapter.remove 的 wayline 分支先调 `detachForExternalRemoval()` 复位控制器内部状态再走通用移除销毁句柄，避免悬空引用；下次交互重建全新数据源。
+- 起飞点实体（startPoint / air_start_point）收敛写入托管 DataSource（原先散落 viewer.entities 不受显隐控制）。
+
+
 ### V3.5.26 (2026-08-22) — 综合版本：Cesium 本地化自托管 + 贴地策略统一重构 + 首屏 Loading 过渡 + 暂存区审查收敛
 
 > 2026-08-22 的三轮暂存增量（原 V3.5.26 / V3.5.27 / V3.5.28）按用户指令合并收敛为单一版本 V3.5.26。下列小节以原版本号标注，供追溯。
