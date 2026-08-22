@@ -39,6 +39,7 @@ import {
     useLayerStore,
 } from '@/stores';
 import { showLoading, hideLoading } from '@common/ui/loading';
+import { scheduleCesiumWarmup } from '@common/data-import/cesiumWarmup';
 import { apiLogVisit } from '@/api/backend';
 import { useLocale } from '@common/app/useLocale';
 const message = useMessage();
@@ -727,6 +728,11 @@ function handleMapCoreReady() {
         visitLogScheduled.value = true;
         executeVisitLogAsync();
     }
+
+    // ========== Cesium 主脚本空闲预热 ==========
+    // 就绪 10s 后 + 浏览器空闲时后台下载 public/cesium/Cesium.js（约 6MB），
+    // 用户切换 3D 时命中缓存秒开；saveData/慢速网络自动跳过。
+    scheduleCesiumWarmup();
 }
 
 /** 异步执行访问记录，不阻塞底图和侧边面板加载 */

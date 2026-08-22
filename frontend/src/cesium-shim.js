@@ -19,26 +19,24 @@
  *   cesium-navigation 控件依赖这些扩展。
  */
 import knockout from 'knockout';
-import { CESIUM_CDN_ATTEMPT_TIMEOUT_MS, CESIUM_CDN_BASE_URLS } from './config/publicRuntime';
+import { CESIUM_ASSET_ATTEMPT_TIMEOUT_MS, CESIUM_ASSET_BASE_URLS } from './config/publicRuntime';
 
 // ==========================================
-// 公共常量与 CDN 候选链
+// 公共常量与资源候选链
 // ==========================================
 /**
- * CDN 候选源(按序尝试,前一个失败/超时自动切下一个;V3.4.54 加载性能优化)。
- * 单一 jsDelivr 在国内时常不可达且此前无回退——失败即 Cesium 永不加载。
- * 顺序:jsDelivr(全球稳定,保持现行为)→ BootCDN(国内友好,cdnjs 镜像布局,
- * 该源 1.132.0 版本可用性 ⚠️ 未验证——404 时自动跳下一候选,无副作用)→ unpkg(已验证可达)。
- * 注意:Workers/Assets/Widgets 子资源均从 window.CESIUM_BASE_URL 解析,
+ * 静态资源候选源(按序尝试,前一个失败/超时自动切下一个)。
+ * 当前为本地自托管单源:public/cesium/ 随站点部署(GitHub Pages + Cloudflare),
+ * 不再依赖公共 CDN。Workers/Assets/Widgets 子资源均从 window.CESIUM_BASE_URL 解析,
  * 每次尝试前必须先把该全局指到当前候选,保证与主脚本同源。
  */
-const CESIUM_CDN_CANDIDATES = CESIUM_CDN_BASE_URLS.map((base, index) => ({
+const CESIUM_CDN_CANDIDATES = CESIUM_ASSET_BASE_URLS.map((base, index) => ({
     name: index === 0 ? 'primary' : `fallback-${index}`,
     base,
 }));
 
 /** 单个候选源的加载超时(ms):超时视为失败切换下一源(挂起连接不会触发 onerror) */
-const CDN_ATTEMPT_TIMEOUT_MS = CESIUM_CDN_ATTEMPT_TIMEOUT_MS;
+const CDN_ATTEMPT_TIMEOUT_MS = CESIUM_ASSET_ATTEMPT_TIMEOUT_MS;
 
 /** 兼容旧 API:主源静态基址(运行时实际生效源请用 getActiveCesiumBaseUrl) */
 export const CESIUM_BASE_URL = CESIUM_CDN_CANDIDATES[0].base;

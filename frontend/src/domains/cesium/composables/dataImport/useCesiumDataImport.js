@@ -8,7 +8,6 @@
 
 import { ref, toRaw } from 'vue';
 import { getExtension, flyToEntity, revokeBlobUrl } from './loaders/utils.js';
-import { clampDataSourceToGround } from './loaders/clampToGround.js';
 import { loadGeoJSON } from './loaders/geojsonLoader.js';
 import { loadKML, loadKMZ } from './loaders/kmlLoader.js';
 import { loadSHP } from './loaders/shpLoader.js';
@@ -19,9 +18,6 @@ import { loadTilesetJSON, loadTilesetFromZip, importTilesetFromDirectory, TILESE
 
 /** 最大高程网格尺寸（超过此尺寸自动降采样） */
 const MAX_MESH_SIZE = 200;
-
-/** 支持统一贴地的矢量数据源类型（点/线/面实体可施加 heightReference/clampToGround） */
-const VECTOR_GROUND_TYPES = new Set(['geojson', 'kml', 'kmz', 'shp', 'czml']);
 
 /**
  * @param {Object} options
@@ -62,9 +58,10 @@ export function useCesiumDataImport({ getViewer, getCesium, message, heightSampl
     };
 
     // ============================================================
-    // 地形切换 → 自动重贴地
-    // 贴地不是导入时刻的一次性动作：用户先导入数据再开启/切换地形是常规操作，
-    // 监听 terrainProviderChanged，对所有 3D Tiles 用导入时留存的基底采样重新配准。
+    // 地形切换 → 3D Tiles 自动重配准
+    // 矢量数据（geojson/kml/kmz/shp/czml）的贴地由官方机制承担：
+    // DataSource.load 期 clampToGround / heightReference 生成的 GroundPrimitive
+    // 会随地形切换自动跟随，无需任何监听；3D Tiles 无该能力，仍需基底采样重新配准。
     // ============================================================
 
     let terrainWatcherInstalled = false;
@@ -83,7 +80,7 @@ export function useCesiumDataImport({ getViewer, getCesium, message, heightSampl
             const v = getViewer();
             if (!Cesium || !v) return;
 
-            // 1) 3D Tiles 基底采样重配准
+            // 仅 3D Tiles：用导入时留存的基底采样重新配准
             let refitted = 0;
             const tilesets = loadedDataSources.value.filter((r) => r.type === '3dtiles');
             for (const record of tilesets) {
@@ -95,27 +92,12 @@ export function useCesiumDataImport({ getViewer, getCesium, message, heightSampl
                 if (ok) refitted++;
             }
 
-            // 2) 矢量数据源统一贴地：地形关闭时导入的数据保持绝对高度，
-            //    开启/切换地形后由本监听补贴地（贴地幂等，重复执行无副作用；
-            //    时间动态实体在 clampDataSourceToGround 内部自动跳过）
-            let vectorClamped = 0;
-            for (const record of loadedDataSources.value) {
-                if (!VECTOR_GROUND_TYPES.has(record.type)) continue;
-                const ds = toRaw(record.entity);
-                if (!ds?.entities) continue;
-                vectorClamped += clampDataSourceToGround(v, Cesium, ds).clamped;
-            }
-
-            if (refitted || vectorClamped) {
+            if (refitted) {
                 loadedDataSources.value = [...loadedDataSources.value];
-                const parts = [];
-                if (refitted) parts.push(`${refitted} 个 3D Tiles 已重新贴地`);
-                if (vectorClamped) parts.push(`${vectorClamped} 个矢量实体已贴地`);
-                message?.info?.(`地形已切换，${parts.join('，')}`);
+                message?.info?.(`地形已切换，${refitted} 个 3D Tiles 已重新贴地`);
             }
         });
         terrainWatcherInstalled = true;
-        console.warn('[贴地] 已挂载地形切换自动重贴地监听');
     }
 
     // ============================================================
@@ -185,7 +167,13 @@ export function useCesiumDataImport({ getViewer, getCesium, message, heightSampl
         if (!Cesium || !viewer) return;
 
         try {
-            viewer.scene.primitives.remove(toRaw(record.entity));
+            // Entity 模型：从 viewer.entities 移除旧实体后按新坐标重建
+            const oldEntity = toRaw(record.entity);
+            if (oldEntity?.model) {
+                viewer.entities.remove(oldEntity);
+            } else {
+                viewer.scene.primitives.remove(oldEntity);
+            }
             const model = await loadGltfWithCoords(Cesium, viewer, record.blobUrl, record.name, coords);
 
             record.entity = model;
@@ -471,8 +459,15 @@ export function useCesiumDataImport({ getViewer, getCesium, message, heightSampl
             const entity = toRaw(record.entity);
             const type = record.type;
 
-            if (type === '3dtiles' || type === 'gltf') {
+            if (type === '3dtiles') {
                 viewer.scene.primitives.remove(entity);
+            } else if (type === 'gltf') {
+                // Entity 模型：从 viewer.entities 移除（兼容历史 primitive 记录）
+                if (entity?.model) {
+                    viewer.entities.remove(entity);
+                } else {
+                    viewer.scene.primitives.remove(entity);
+                }
             } else if (type === 'tif') {
                 if (entity instanceof Cesium.ImageryLayer) {
                     viewer.imageryLayers.remove(entity);
@@ -515,8 +510,16 @@ export function useCesiumDataImport({ getViewer, getCesium, message, heightSampl
                 const entity = toRaw(record.entity);
                 const type = record.type;
 
-                if (type === '3dtiles' || type === 'gltf') {
+                if (type === '3dtiles') {
                     viewer.scene.primitives.remove(entity);
+                } else if (type === 'gltf') {
+                    // Entity 模型：从 viewer.entities 移除（兼容历史 primitive 记录），
+                    // 与 removeDataSource 同构——primitives.remove 对 Entity 是静默 no-op
+                    if (entity?.model) {
+                        viewer.entities.remove(entity);
+                    } else {
+                        viewer.scene.primitives.remove(entity);
+                    }
                 } else if (type === 'tif') {
                     if (Cesium && entity instanceof Cesium.ImageryLayer) {
                         viewer.imageryLayers.remove(entity);

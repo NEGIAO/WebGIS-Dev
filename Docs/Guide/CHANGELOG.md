@@ -6,6 +6,45 @@
 
 ## 版本记录
 
+### V3.5.26 (2026-08-22) — 综合版本：Cesium 本地化自托管 + 贴地策略统一重构 + 首屏 Loading 过渡 + 暂存区审查收敛
+
+> 2026-08-22 的三轮暂存增量（原 V3.5.26 / V3.5.27 / V3.5.28）按用户指令合并收敛为单一版本 V3.5.26。下列小节以原版本号标注，供追溯。
+
+#### 一、首屏 Loading 遮罩过早消失白屏修复（原 V3.5.26）
+
+- **全链路排查**：确认遮罩生命周期为 router.beforeEach（Loading Relay）→ MapContainer.onMounted → `waitForCriticalTileReady()` → `map-core-ready` → HomeView `settleMapCoreLoading()` → `hideLoading()`；白屏根因是就绪门槛只等 1 张底图瓦片（tileloadend + rendercomplete + 双 rAF），第一张瓦片到位即隐藏遮罩，其余视口瓦片仍在加载。
+- **hideDelayMs 过渡机制**：`useAppStore.showLoading` options 新增 `hideDelayMs` 隐藏延迟——`hideLoading()` 被调用后推迟该时长才真正隐藏（幂等定时器），15s 自动兜底超时走 `forceHideLoading` 不受拖延；`minDurationMs` 最短持续时间作为同轮实验的姊妹机制一并落地并与 hideDelayMs **可链式叠加**。未传参数的调用点行为完全不变。
+- 首屏链路（/home 直达与 register→home 重定向）生产参数 **1000ms** 过渡缓冲。
+- 详见[维护日志](../LLM_record/26-08/2026-08-22/2026-08-22-loading-overlay-premature-hide.md)。
+
+#### 二、Cesium 本地化自托管 + Bruneton 天空单位修复 + 审查收敛（原 V3.5.27）
+
+- **Cesium 主库本地化**：新增 devDependency `cesium@1.132`，`Build/Cesium/`（21MB）拷贝至 `frontend/public/cesium/` 随站点部署；`publicRuntime.ts` 以 `CESIUM_ASSET_BASE_URLS`（默认 `{BASE_URL}/cesium/`，env 可覆写）替代原 jsDelivr→BootCDN→unpkg 公共 CDN 候选链，BootCDN 因 2023 投毒前科彻底移除；`cesium-shim.js` 加载回退机制保留，Workers/Assets/Widgets 子资源继续跟随 `window.CESIUM_BASE_URL` 同源解析。
+- **云大气资源死代码清理**：`assetPaths.js` 删除永不执行的 jsDelivr 分支、包名常量与废弃 API `getDefaultAssetPaths`（运行时实际路径由 `assetConfig.resolveWebgisCloudAssetPaths` 提供 `public/cloud-atmosphere/` 本地资源）。
+- **Bug 修复：BSM 开启档天空变黑**——`AtmospherePostProcess.marchShadowLengthAtm` 以 km 累计却错误 `/METER_TO_LENGTH_UNIT` 放大 1000 倍，Bruneton 光柱分支中 `r_p` 被 ClampRadius 钉在大气层顶，散射≈0 → 均衡/极致档整片天空变黑；流畅档因 BSM 默认关闭幸免。修复为直接返回 km 值。
+- **流畅档云影观感对齐**：手动开启 BSM 时阴影过黑过硬，预设参数对齐均衡档：`bsmGroundScale 0.18→0.12`、`shadowPcfTaps 1→4`、`shadowResolveEnabled false→true`。
+- **Cesium 默认地形统一**：移除 `useCesiumLayers.js` 中 `import.meta.env.DEV ? 'ellipsoid' : 'tianditu'` 分支，本地开发与部署环境统一默认天地图世界地形（token 缺失仍自动降级平面并提示）。
+- **Cesium 主脚本空闲预热**：新增 `cesiumWarmup.js`，首屏 map-core-ready 后延迟 10s 再等浏览器 idle 后台预载 ~6MB 主脚本，切换 3D 秒开；`saveData`/2G 自动跳过。
+- **配置登记同步**：`.env.example` 的 `VITE_CESIUM_CDN_*` 两 key 更名为 `VITE_CESIUM_ASSET_*` 并更新缺省值。
+- **静态资源基址统一相对化（多处部署兼容）**：`ASSET_BASE_URL` 源头重定义为保留 `BASE_URL` 原始形态（'./' 保持相对），修复 `./` 构建下 ShareData / cloud-atmosphere / adcode 树 / 静态图标等 10 处消费方产出绝对路径、子路径部署 404 的问题；已核验全部消费模式兼容尾斜杠形态。
+- 详见[维护日志](../LLM_record/26-08/2026-08-22/2026-08-22-cesium-selfhost-and-review.md)。
+
+#### 三、贴地策略统一重构：全面收敛官方 clampToGround（原 V3.5.28）
+
+- **矢量数据全链路官方化**：geojson/kml/kmz/shp 统一在 `DataSource.load` 期显式 `clampToGround: true`（实证本地 Cesium 1.132 中 KmlDataSource 与 GeoJsonDataSource 该项默认均为 false，KML 湖泊面因此被埋入地下 70m）；面/线走 GroundPrimitive、点自动 heightReference，地形切换由 Cesium 自动跟随。删除加载后自定义补贴地 pass 与 terrainProviderChanged 矢量重贴监听。
+- **危险兜底移除**：GLTF 数据导入采样失败不再「关闭全局地形」。
+- **glTF/模型 Entity 化**：数据导入与模型管理器两条模型路径统一改用 Entity ModelGraphics + `heightReference`（语义高度 > 0 → RELATIVE_TO_GROUND 保留离地意图，否则 CLAMP_TO_GROUND 贴合地表），姿态统一 ENU 四元数；重定位/移除/清空/flyTo/透明度五条链路同步适配 Entity 句柄；非均匀缩放 {x,y,z} 退化等比并告警。方案文档中「维持采样抬升 + Entity 化立项 TODO」的中期裁决被第四轮迭代取代，以本条为准。
+- **采样网关收敛**：新建 `terrain/terrainSampling.js` 合并三套并存实现（availability 首选 mostDetailed，层级阶梯仅作未知 provider 兜底），移除 `_bottomLevel` 私有字段依赖；`terrainClampService.js` 收敛为 CZML 实体贴地唯一入口（原 loaders/clampToGround.js 删除）。
+- 方案文档：[Architecture/2026-08-22-clamp-to-ground-strategy.md](Architecture/2026-08-22-clamp-to-ground-strategy.md)，详见[维护日志](../LLM_record/26-08/2026-08-22/2026-08-22-clamp-to-ground-strategy.md)。
+
+#### 四、暂存区终审修复（本次合并会话）
+
+- **清空全部数据的 glTF 残留**：`clearAllDataSources` 仍按 primitive 移除 Entity 模型（静默 no-op），与已修的 `removeDataSource` 不一致——补齐 entities/primitives 分型移除。
+- **透明度滑杆对 Entity 模型失效**：`setRecordOpacity` 的 gltf 分支对 Entity 直接赋 `.color` 是无效属性——分型写入 `entity.model.color`（ModelGraphics）/ 原路径（历史 primitive）。
+- **Loading 双延迟机制叠加缺陷**：最短持续时间到期回调直接 `forceHideLoading` 会绕过 hideDelayMs——改为链式重入 `hideLoading()`。
+- **采样网关空命名空间防御**：`sampleTerrainBatch` 显式层级兜底前补 `!Cesium` 守卫。
+
+
 ### V3.5.25 (2026-08-20~21) — 综合版本：双引擎底图统一契约 + 实时在线零轮询重构 + 历史影像后端 + 审查修复
 
 > 2026-08-20~21 的三轮暂存增量（原 V3.5.25 / V3.5.26 / V3.5.27）按用户指令合并收敛为单一版本 V3.5.25。下列小节以原版本号标注，供追溯。

@@ -31,7 +31,7 @@ export const CLOUD_QUALITY_PRESETS = {
       layer2Height: 400,
       layer2Coverage: 0.0,
       // 光照
-      sunIntensity: 14.0,
+      sunIntensity: 40.0,
       cloudExposure: 2.2,
       skyToSunRatio: 0.2,
       aerialPerspectiveScale: 0.35,
@@ -60,14 +60,15 @@ export const CLOUD_QUALITY_PRESETS = {
       shadowMapSize: 512,
       // BSM 更新节奏：仅节流昂贵 raymarch；CSM 矩阵每帧仍会更新，运动时会强制刷新。
       bsmUpdateInterval: 4,
-      shadowResolveEnabled: false,
-      shadowPcfTaps: 1,
-      useShadowBuffer: false,
+      // 阴影观感与均衡/极致对齐：时序解析开启 + 4 tap PCF + 0.12 OD 缩放，
+      // 避免「手动开 BSM 后阴影过黑过硬」（原为 false/1/0.18 的低配组合）。
+      shadowResolveEnabled: true,
+      shadowPcfTaps: 4,
+      useShadowBuffer: true,
       shadowLengthEnabled: false,
       hazeEnabled: false,
       temporalEnabled: false,
-      // 流畅档默认关闭 BSM；用户手动开启时给足基础 OD，确保低频 512 阴影仍可见。
-      bsmGroundScale: 0.18,
+      bsmGroundScale: 0.12,
       bsmTyndallScale: 1.0,
       shadowFar: 25000,
       shadowSplitLambda: 0.8,

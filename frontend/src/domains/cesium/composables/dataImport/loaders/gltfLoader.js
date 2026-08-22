@@ -3,7 +3,8 @@
  * GLTF/GLB 三维模型加载器
  *
  * 功能：加载 GLTF/GLB 到 Cesium，提取嵌入坐标，自动放置无坐标模型。
- * 地形自适应：加载后自动采样地形高度，低于地表时抬升；采样失败则关地形兜底。
+ * 贴地：Entity ModelGraphics + heightReference=CLAMP_TO_GROUND（官方机制，
+ * Cesium 内部采样地表并随地形切换自动跟随）。
  */
 
 import { getExtension, createBlobUrl, revokeBlobUrl } from './utils.js';
@@ -33,30 +34,10 @@ export async function loadGLTF({ file, getCesium, getViewer, message, loadedData
 
     let coords;
     if (embeddedCoords) {
+        // 贴地由 Entity heightReference 官方机制承担，无需手动采样：
+        // - 语义高度 > 0 → RELATIVE_TO_GROUND（高度解释为离地高，随地形切换跟随）
+        // - 否则 → CLAMP_TO_GROUND（模型原点贴合地表）
         coords = embeddedCoords;
-        // 嵌入坐标存在时，检查地形高度并补偿
-        const CesiumNs = getCesium();
-        if (CesiumNs && viewer.terrainProvider &&
-            viewer.terrainProvider.constructor !== CesiumNs.EllipsoidTerrainProvider) {
-            try {
-                const pos = CesiumNs.Cartographic.fromDegrees(coords.lng, coords.lat);
-                const results = await CesiumNs.sampleTerrainMostDetailed(viewer.terrainProvider, [pos]);
-                if (results && results.length > 0 && results[0].height !== undefined) {
-                    const terrainH = results[0].height;
-                    const diff = terrainH - coords.height;
-                    if (diff > 0) {
-                        coords = { ...coords, height: terrainH + 10 };
-                        console.warn('[贴地-GLTF] 地形=', terrainH.toFixed(1), 'm, 模型原高=', embeddedCoords.height.toFixed(1), 'm, 抬升至=', coords.height.toFixed(1), 'm');
-                    }
-                } else {
-                    console.warn('[贴地-GLTF] 采样无结果，关闭地形');
-                    viewer.terrainProvider = new CesiumNs.EllipsoidTerrainProvider();
-                }
-            } catch (e) {
-                console.warn('[贴地-GLTF] 采样失败:', e.message || e, '，关闭地形');
-                viewer.terrainProvider = new CesiumNs.EllipsoidTerrainProvider();
-            }
-        }
     } else {
         coords = await getAutoPlaceCoords(viewer, Cesium);
         if (!coords) {
@@ -95,30 +76,41 @@ export async function loadGLTF({ file, getCesium, getViewer, message, loadedData
 }
 
 /**
- * 根据坐标创建 modelMatrix 并加载 GLTF 模型
+ * 按坐标创建 Entity 模型（ModelGraphics）
+ *
+ * 贴地（官方机制，Cesium 内部采样地表、切换地形自动跟随）：
+ * - coords.height > 0 → RELATIVE_TO_GROUND：嵌入语义高度解释为离地高，保留数据意图，
+ *   同时规避 CLAMP_TO_GROUND 把模型原点钉死在地表导致的"半截入土"问题；
+ * - 否则 → CLAMP_TO_GROUND：模型原点贴合当前地形面。
+ * 姿态：默认 ENU 局部系（east-north-up），与模型管理器及 cesium-skills demo 一致。
  */
 export async function loadGltfWithCoords(Cesium, viewer, blobUrl, name, coords) {
-    const { lng, lat, height } = coords;
+    const { lng, lat } = coords;
 
-    const center = Cesium.Cartesian3.fromDegrees(lng, lat, height);
+    const semanticHeight = Number.isFinite(coords.height) ? coords.height : 0;
+    const heightReference = semanticHeight > 0
+        ? Cesium.HeightReference.RELATIVE_TO_GROUND
+        : Cesium.HeightReference.CLAMP_TO_GROUND;
+
+    const position = Cesium.Cartesian3.fromDegrees(lng, lat, Math.max(0, semanticHeight));
     const headingPitchRoll = new Cesium.HeadingPitchRoll(0, 0, 0);
+    // 默认 ENU 固定系，不再沿用 ('north','west') 旧约定，避免与模型管理器朝向分叉
+    const orientation = Cesium.Transforms.headingPitchRollQuaternion(position, headingPitchRoll);
 
-    const model = await Cesium.Model.fromGltfAsync({
-        url: blobUrl,
-        modelMatrix: Cesium.Transforms.headingPitchRollToFixedFrame(
-            center,
-            headingPitchRoll,
-            Cesium.Ellipsoid.WGS84,
-            Cesium.Transforms.localFrameToFixedFrameGenerator('north', 'west'),
-        ),
-        scale: 1.0,
-        show: true,
+    const entity = viewer.entities.add({
+        name,
+        position,
+        orientation,
+        model: {
+            uri: blobUrl,
+            scale: 1.0,
+            show: true,
+            color: Cesium.Color.WHITE,
+            heightReference,
+        },
     });
 
-    model.name = name;
-    viewer.scene.primitives.add(model);
-
-    return model;
+    return entity;
 }
 
 /**
@@ -250,19 +242,8 @@ export async function getAutoPlaceCoords(viewer, Cesium) {
         const lng = Cesium.Math.toDegrees(carto.longitude);
         const lat = Cesium.Math.toDegrees(carto.latitude);
 
-        let height = 0;
-        try {
-            if (viewer.terrainProvider &&
-                viewer.terrainProvider.constructor !== Cesium.EllipsoidTerrainProvider) {
-                const pos = Cesium.Cartographic.fromDegrees(lng, lat);
-                const results = await Cesium.sampleTerrainMostDetailed(viewer.terrainProvider, [pos]);
-                if (results && results.length > 0 && results[0].height !== undefined) {
-                    height = results[0].height;
-                }
-            }
-        } catch { /* 采样失败，使用默认高度 0 */ }
-
-        return { lng, lat, height: Math.max(0, height) };
+        // 高度无需采样：Entity 贴地（CLAMP_TO_GROUND）由 Cesium 自动落到地表
+        return { lng, lat, height: 0 };
     } catch (e) {
         console.warn('[CesiumDataImport] 自动定位失败:', e);
         return null;

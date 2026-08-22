@@ -10,13 +10,20 @@
         <meta charset="UTF-8" />
         <!-- 隐藏 Referer 信息避免被跟踪 -->
         <!-- <meta name="referrer" content="no-referrer"> -->
+        <!-- 品牌 icon.webp 全站唯一网络请求：preload 提前触发，
+             favicon 与首屏 logo <img> 均命中同一缓存响应 -->
+        <link
+            rel="preload"
+            href="./images/icon.webp"
+            as="image"
+            type="image/webp"
+        />
         <link
             rel="icon"
             href="./images/icon.webp"
-            type="image/x-icon"
+            type="image/webp"
         />
-        <!-- 自定义网页的logo
-             顶栏高清 logo 由 TopBar.vue 独立引用 images/icon.webp,互不影响 -->
+        <!-- 自定义网页的logo：favicon / LandingView / TopBar / RegisterView 共用同一资源 -->
 
         <meta
             name="viewport"

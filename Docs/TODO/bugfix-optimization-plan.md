@@ -207,3 +207,8 @@ Sprint 3（穿插）：P3-1 容器二轮（O1/O2 交替）→ P2-1 bundle 分析
   - [ ] **`kmz` 类型未列入 `OPACITY_SUPPORTED_TYPES`**：TOC 中 KMZ 数据源无透明度滑杆（2026-08-08 已登记，待产品确认）
 - [x] **AdminControlPanel Globe 图标未导入** ✅ 2026-08-20 V3.5.24 合并会话销项：模板第 1250 行 `<Globe :size="16" />`（底图配置卡片标题）原本 script 导入清单无 `Globe`，运行时会告警 "Failed to resolve component: Globe" 且图标渲染为空。已在 `@lucide/vue` 导入中补 `Globe` 一行，修复生效。
 - [x] **download_xyz 出站头未套用浏览器特征集** ✅ 2026-08-19 V3.5.24 零散修补销项：`download_xyz/tile_engine.py` `_fetch_tile_bytes` 已合并 `build_browser_headers_no_br()` + 白名单 Referer，三出站面对齐；pytest 34 passed
+- [ ] **Cesium 本地化批次顺带发现**（2026-08-22 · V3.5.27 暂存区审查会话，按 Force_command §2.5 只记不改）：
+  - [ ] (需用户决策) **`public/cesium/index.js` + `index.cjs` 为误拷贝的 npm 包入口**：二者是 cesium npm 包根的 ESM/CJS 模块入口（各 ~1.6 万行），浏览器运行时只加载 `Build/Cesium/Cesium.js`，这两个文件属死重（合计约 3MB 仓库体积）。已入暂存区，移除与否由用户执行 git 操作处理
+  - [ ] (门禁盲区) **CheckConfigRegistry F2 对动态读取的 env key 失明**：`positiveNumberEnv(name)`/`csvEnv(name)` 以变量传参读取，静态扫描无法关联字面量——本次 `VITE_CESIUM_CDN_* → VITE_CESIUM_ASSET_*` 更名期间 F2 一直「通过」，靠人工对账才发现漂移。建议 F2 增加对 config/publicRuntime.ts 内字符串实参的白名单提取
+  - [ ] (部署面) **`.env` 的 `VITE_CESIUM_ASSET_BASE_URLS` 勿填绝对路径**：绝对值（如 `/cesium/`）与子路径部署（`build:webgis-dev`，`VITE_BASE_URL=/WebGIS-Dev/`）组合时 Cesium 会请求 `<域名>/cesium/Cesium.js` 而 404。✅ 2026-08-22 已处理：`.env`/`.env.example` 置空走代码相对默认；本条保留作提醒——多处部署场景该 key 恒留空
+  - [x] **云资源基址在 `./` 构建下同为绝对路径** ✅ 2026-08-22 续审会话统一治理销项：`publicRuntime.ts` 的 `ASSET_BASE_URL` 源头重定义为保留 BASE_URL 原始形态（'./' 保持相对），10 处消费方（ShareData/cloud-atmosphere/adcode/images/hf-logo 等）一次性对齐相对解析；已核验全部消费模式兼容尾斜杠形态

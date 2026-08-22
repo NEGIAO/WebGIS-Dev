@@ -4,7 +4,7 @@
  */
 
 import { createBlobUrl, revokeBlobUrl, flyToEntity } from './utils.js';
-import { clampDataSourceToGround } from './clampToGround.js';
+import { clampDataSourceToGround } from '../../terrain/terrainClampService.js';
 
 /**
  * 加载 CZML 文件到 Cesium

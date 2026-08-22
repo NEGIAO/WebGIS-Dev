@@ -14,6 +14,7 @@
  */
 
 import { flyToEntity } from './utils.js';
+import { sampleTerrainBatch } from '../../terrain/terrainSampling.js';
 
 /** @type {string} tileset.json 文件名标识 */
 export const TILESET_JSON_INDICATOR = 'tileset.json';
@@ -362,62 +363,10 @@ async function collectTilesetBaseSamples({ tileset, Cesium, rootJson, rootJsonUr
 }
 
 /**
- * 提供方感知的批量地形采样（与 FluidSimulation 的采样策略同源）
- *
- * - Cesium World Terrain 等带 availability 的提供方：sampleTerrainMostDetailed，精度最高
- *   （配对点数已抽稀至 ≤MAX_PAIR_SAMPLES，无瓦片过载问题）；
- * - **ArcGIS**（ArcGISTiledElevationTerrainProvider）：availability 为 undefined，
- *   mostDetailed 会直接抛 DeveloperError——走显式层级 sampleTerrain（12 起）；
- * - **天地图/国测局** GeoTerrainProvider：同样无 availability，且服务最深只有
- *   _bottomLevel（=11），显式层级取 _bottomLevel−1；
- * - 层级阶梯逐级降粗重试：所选层级瓦片缺失（老版 Cesium 单瓦片失败会拒绝整批、
- *   新版返回 undefined 高度）时降 3 级再试，直到取得足量有效高程。
- *
- * @returns {Promise<Array|null>} 与入参同序的采样结果（height 可能含 NaN/undefined），全失败返回 null
+ * 批量地形采样已收编至共享网关 terrainSampling.js（含 availability 兼容链与
+ * 层级阶梯降级），本文件仅作转发引用，保持调用点不变。
+ * 详见 Docs/Architecture/2026-08-22-clamp-to-ground-strategy.md
  */
-async function sampleTerrainBatch(viewer, Cesium, cartographics) {
-    const provider = viewer.terrainProvider;
-    // 有效高程门槛：≥30%（上限 8 点）——容忍地形空洞，但拒绝几乎全空的批次
-    const threshold = Math.max(1, Math.min(8, Math.ceil(cartographics.length * 0.3)));
-    const enough = (arr) => Array.isArray(arr)
-        && arr.filter((c) => Number.isFinite(Number(c?.height))).length >= threshold;
-
-    // 1) 带 availability（Cesium World Terrain 等）→ mostDetailed
-    if (provider?.availability) {
-        try {
-            const results = await Cesium.sampleTerrainMostDetailed(provider, cartographics);
-            if (enough(results)) return results;
-            console.warn('[贴地] mostDetailed 有效高程不足，转显式层级');
-        } catch (e) {
-            console.warn('[贴地] mostDetailed 采样异常，转显式层级:', e.message || e);
-        }
-    }
-
-    // 2) 显式层级阶梯：天地图 _bottomLevel−1 > maximumLevel > 12，失败每次降 3 级
-    if (typeof Cesium.sampleTerrain !== 'function') return null;
-    const bottomLevel = Number(provider?._bottomLevel);
-    const preferred = Number.isFinite(bottomLevel)
-        ? Math.max(0, bottomLevel - 1)
-        : Math.min(Number(provider?.maximumLevel) || 12, 12);
-    const ladder = [...new Set([preferred, Math.max(preferred - 3, 0), Math.max(preferred - 6, 0)])];
-
-    for (const level of ladder) {
-        try {
-            const fresh = cartographics.map(
-                (c) => new Cesium.Cartographic(c.longitude, c.latitude, 0));
-            const results = await Cesium.sampleTerrain(provider, level, fresh);
-            if (enough(results)) {
-                console.warn('[贴地] 显式层级采样成功: level', level);
-                return results;
-            }
-            console.warn('[贴地] level', level, '有效高程不足，降级重试');
-        } catch (e) {
-            console.warn('[贴地] level', level, '采样失败，降级重试:', e.message || e);
-        }
-    }
-    console.warn('[贴地] 全部层级采样失败');
-    return null;
-}
 
 /**
  * 核心估计：叶子基底 × 地形逐点配对，返回中位数偏移 + MAD（离散度）+ 地形值域

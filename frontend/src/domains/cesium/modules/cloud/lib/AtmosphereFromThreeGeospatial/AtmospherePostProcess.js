@@ -313,7 +313,11 @@ float marchShadowLengthAtm(vec3 cameraKm, vec3 rd, float tNear, float tFar) {
     shadowLen += (1.0 - exp(-opticalDepth)) * stepSize * attenuation;
     attenuation *= 0.9995;
   }
-  return (shadowLen / METER_TO_LENGTH_UNIT) * max(u_tyndallScale, 0.0);
+  // shadowLen 以 km 累计（tNear/tFar 与 cameraKm 同为 length unit=km），
+  // Bruneton GetSkyRadiance 期望的 shadow_length 也是 km——直接返回，
+  // 不得再做 /METER_TO_LENGTH_UNIT（会把数值放大 1000 倍：
+  // r_p 被 ClampRadius 钉在大气层顶 → 散射≈0 → BSM 开启时整片天空变黑）。
+  return shadowLen * max(u_tyndallScale, 0.0);
 }
 
 float readShadowLengthBuffer(vec2 uv) {

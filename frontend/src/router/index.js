@@ -1,3 +1,4 @@
+// 应用路由表：登录/落地/主页等页面入口，含分享模式与鉴权守卫逻辑
 import { createRouter, createWebHashHistory } from 'vue-router';
 import RegisterView from '../app/RegisterView.vue';
 import LandingView from '../app/LandingView.vue';
@@ -16,6 +17,10 @@ import {
 } from '@common/user/services/auth';
 
 const HomeView = () => import('./lazyHomeViewLoader').then((mod) => mod.loadHomeView());
+
+// 首屏 Loading 隐藏延迟：map-core-ready（首张瓦片就绪）后遮罩再停留 1s，
+// 作为过渡缓冲，避免遮罩消失瞬间视口其余瓦片尚未铺满露出白底。
+const MAP_ENGINE_LOADING_HIDE_DELAY_MS = 1000;
 
 const router = createRouter({
     history: createWebHashHistory(),
@@ -192,13 +197,17 @@ router.beforeEach(async (to, from) => {
         }
 
         if (to.name === 'register' && isLoggedIn && !bindingRequired && !shareModeEnabled) {
-            showLoading(t('loading.mapEngine'));
+            showLoading(t('loading.mapEngine'), {
+                hideDelayMs: MAP_ENGINE_LOADING_HIDE_DELAY_MS,
+            });
             shouldRelayLoadingToHome = true;
             return { name: 'home' };
         }
 
         if (isHomeRoute) {
-            showLoading(t('loading.mapEngine'));
+            showLoading(t('loading.mapEngine'), {
+                hideDelayMs: MAP_ENGINE_LOADING_HIDE_DELAY_MS,
+            });
             shouldRelayLoadingToHome = true;
         }
 

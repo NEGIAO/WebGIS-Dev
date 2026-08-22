@@ -25,6 +25,12 @@ function stripTrailingSlash(value: string): string {
     return String(value || '').replace(/\/+$/, '');
 }
 
+/** 保证以 / 结尾；保留 './' 相对形态，供静态资源相对解析（子路径部署兼容） */
+function withTrailingSlash(value: string): string {
+    const v = String(value || '');
+    return v.endsWith('/') ? v : `${v}/`;
+}
+
 function positiveNumberEnv(name: string, fallback: number): number {
     const value = Number(import.meta.env[name]);
     return Number.isFinite(value) && value > 0 ? value : fallback;
@@ -67,13 +73,26 @@ export const SPATIAL_ANALYSIS_TIMEOUT_MS: number = positiveNumberEnv('VITE_SPATI
 export const TILE_CAPABILITIES_TIMEOUT_MS: number = positiveNumberEnv('VITE_TILE_CAPABILITIES_TIMEOUT_MS', 10000);
 export const TILE_REQUEST_TIMEOUT_MS: number = positiveNumberEnv('VITE_TILE_REQUEST_TIMEOUT_MS', 15000);
 
-/** Cesium CDN 候选链与单源加载超时 */
-export const CESIUM_CDN_BASE_URLS: string[] = csvEnv('VITE_CESIUM_CDN_BASE_URLS', [
-    'https://cdn.jsdelivr.net/npm/cesium@1.132/Build/Cesium/',
-    'https://cdn.bootcdn.net/ajax/libs/cesium/1.132.0/',
-    'https://unpkg.com/cesium@1.132.0/Build/Cesium/',
+/**
+ * 应用基础路径（Vite BASE_URL，即 vite.config.js 的 base 配置）。
+ * 用于拼接静态资源路径（如 ShareData/、cloud-atmosphere/、Cesium 自托管资源等）。
+ * 保留原始形态（'./' 保持相对），保证根域名与子路径多处部署均可正确解析；
+ * 业务代码不得散落 import.meta.env.BASE_URL，统一从本模块取值。
+ */
+export const ASSET_BASE_URL: string = withTrailingSlash(String(import.meta.env.BASE_URL || './'));
+
+/**
+ * Cesium 静态资源候选链（本地自托管，不走公共 CDN）：
+ * public/cesium/ 由 node_modules/cesium 的 Build/Cesium 拷贝而来，随站点一同部署
+ * （GitHub Pages + Cloudflare 边缘缓存，同源无 CORS 问题）。
+ * 默认跟随 ASSET_BASE_URL（'./' → './cesium/'），相对解析兼容多处部署；
+ * Workers/Assets/Widgets 子资源由 window.CESIUM_BASE_URL 跟随实际生效的候选基址解析。
+ * 如需覆写（含临时回退公共 CDN），通过 VITE_CESIUM_ASSET_BASE_URLS 传入完整候选链即可。
+ */
+export const CESIUM_ASSET_BASE_URLS: string[] = csvEnv('VITE_CESIUM_ASSET_BASE_URLS', [
+    `${ASSET_BASE_URL}cesium/`,
 ]);
-export const CESIUM_CDN_ATTEMPT_TIMEOUT_MS: number = positiveNumberEnv('VITE_CESIUM_CDN_ATTEMPT_TIMEOUT_MS', 10000);
+export const CESIUM_ASSET_ATTEMPT_TIMEOUT_MS: number = positiveNumberEnv('VITE_CESIUM_ASSET_ATTEMPT_TIMEOUT_MS', 10000);
 
 /** 公开第三方服务默认端点 */
 export const TIANDITU_API_BASE_URL: string = stripTrailingSlash(String(import.meta.env.VITE_TIANDITU_API_BASE_URL || 'https://api.tianditu.gov.cn'));
@@ -89,13 +108,6 @@ export const GOOGLE_OAUTH_CLIENT_ID: string = String(
 
 /** 游客账号密码（从环境变量读取，避免前端硬编码） */
 export const GUEST_PASSWORD: string = String(import.meta.env.VITE_GUEST_PASSWORD || '').trim();
-
-/**
- * 应用基础路径（Vite BASE_URL，即 vite.config.js 的 base 配置）。
- * 用于拼接静态资源路径（如 ShareData/、CDN 资源等）。
- * 业务代码不得散落 import.meta.env.BASE_URL，统一从本模块取值。
- */
-export const ASSET_BASE_URL: string = String(import.meta.env.BASE_URL || '/').replace(/\/+$/, '') || '/';
 
 /**
  * 拼接后端 API URL

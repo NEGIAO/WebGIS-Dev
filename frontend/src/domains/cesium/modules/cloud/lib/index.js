@@ -12,9 +12,6 @@ export { createCloudAtmosphere } from "./createCloudAtmosphere.js";
 export { ThreeGeospatialPipeline } from "./ThreeGeospatialPipeline.js";
 export {
   resolveAssetPaths,
-  getDefaultAssetPaths,
-  PACKAGE_NAME,
-  PACKAGE_VERSION,
   DEFAULT_CLOUDS_ASSETS_BASE,
   DEFAULT_BRUNETON_SHADER_BASE,
   DEFAULT_BLUE_NOISE_URL,

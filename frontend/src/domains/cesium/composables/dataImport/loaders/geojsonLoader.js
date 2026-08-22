@@ -4,7 +4,6 @@
  */
 
 import { flyToEntity } from './utils.js';
-import { clampDataSourceToGround } from './clampToGround.js';
 
 /**
  * 加载 GeoJSON/JSON 文件到 Cesium
@@ -43,12 +42,8 @@ export async function loadGeoJSON({ file, getCesium, getViewer, message, loadedD
     dataSource.name = file.name;
 
     await viewer.dataSources.add(dataSource);
-    // 统一贴地（地形开启时生效）：加载时已 clampToGround，此处补 disableDepthTestDistance
-    // 硬化（地形/3D Tiles 起伏下点与标注始终可见），与 drawPolygon 属性组合一致
-    const clampResult = clampDataSourceToGround(viewer, Cesium, dataSource);
-    if (clampResult.clamped > 0) {
-        console.warn(`[贴地] GeoJSON "${file.name}": 地形已开启，${clampResult.clamped}/${clampResult.total} 个实体已贴地`);
-    }
+    // 贴地完全由加载期 clampToGround:true 承担（面/线走 GroundPrimitive，
+    // 点自动 heightReference=CLAMP；地形切换由 Cesium 自动跟随），无后续处理
     flyToEntity(viewer, Cesium, dataSource, 'geojson');
 
     const record = { id, name: file.name, type: 'geojson', entity: dataSource };

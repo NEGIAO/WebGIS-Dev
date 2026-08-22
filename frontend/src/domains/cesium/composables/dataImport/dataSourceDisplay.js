@@ -99,8 +99,17 @@ export function setRecordOpacity(Cesium, record, opacity, onApplied) {
             entity.alpha = alpha;
             break;
         case 'gltf':
-            // Model 颜色乘白：仅调透明不改色相
-            entity.color = Cesium.Color.WHITE.withAlpha(alpha);
+            // Model 颜色乘白：仅调透明不改色相。
+            // Entity 化后句柄是 Entity（ModelGraphics 在 entity.model 上），
+            // 直接对 Entity 赋 color 是无效属性——必须写入 model.color
+            // （未显式设色的 ModelGraphics 其 color 读取为 undefined，故只以
+            //   entity.model 存在性判型，勿加 color 存在性条件）；
+            // 历史裸 primitive（Cesium.Model）保持原路径
+            if (entity.model) {
+                entity.model.color = Cesium.Color.WHITE.withAlpha(alpha);
+            } else {
+                entity.color = Cesium.Color.WHITE.withAlpha(alpha);
+            }
             break;
         case '3dtiles': {
             // P1-2 单点合成：透明度变化时保留当前材质模式一并重建外观

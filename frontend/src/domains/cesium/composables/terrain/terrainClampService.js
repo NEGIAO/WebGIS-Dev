@@ -1,31 +1,34 @@
 /**
- * clampToGround.js
- * 导入数据统一贴地工具
+ * terrainClampService.js
+ * Cesium 贴地辅助模块（纯函数，无 Vue 依赖）
  *
- * 借鉴 planar-route/drawPolygon.ts 的贴地实现（该绘制工具在真实地形下已稳定贴地）：
- * - 点   → point.heightReference = CLAMP_TO_GROUND + disableDepthTestDistance = Infinity
- * - 线   → polyline.clampToGround = true
- * - 面   → polygon.heightReference = CLAMP_TO_GROUND + perPositionHeight = false
- * - 标注 → label 同点处理（heightReference + disableDepthTestDistance）
+ * 架构方案：Docs/Architecture/2026-08-22-clamp-to-ground-strategy.md
  *
- * 统一入口设计（对应需求"先判断地形是否开启，再统一贴地"）：
- * - 先判断地形是否开启（terrainProvider 非 EllipsoidTerrainProvider 即视为开启）；
- * - 地形开启才对导入数据统一贴地；地形关闭保持数据原始绝对高度（无地形时
- *   CLAMP_TO_GROUND 退化为椭球面 0 高，若数据本身带语义高度会被误压平）；
- * - 幂等：已设置非 NONE 高度引用的实体（数据自带海拔语义）不覆盖；
- * - 时间动态实体（isConstant === false，如 CZML 采样轨迹）跳过——贴地会拍平
- *   动画语义高度。
+ * ⚠️ 职责边界（能省则省）：
+ *  - geojson/kml/kmz/shp 矢量：官方 DataSource.load 期 `clampToGround: true` 一步到位，
+ *    GroundPrimitive 随地形切换自动跟随，本模块不参与；
+ *  - CZML 无加载期选项 → 使用本模块的实体级 heightReference 贴地（这本身是官方 API）；
+ *  - glTF：Entity ModelGraphics 的 heightReference 官方机制承担（CLAMP_TO_GROUND /
+ *    RELATIVE_TO_GROUND），见 dataImport/loaders/gltfLoader.js 的 loadGltfWithCoords；
+ *  - 3D Tiles 地理配准修正走 tilesetLoader 的基底配准（另一类问题，非贴地）。
  */
 
 /**
- * 判断当前是否开启了真实地形（非椭球地形）
+ * 判断当前是否开启了真实地形（非椭球地形）。
+ *
+ * instanceof 强化：cesium-shim 默认导出 Proxy 返回真类引用，instanceof 可靠；
+ * 若未来经命名导入拿到 bind 副本导致 instanceof 抛错，降级为 constructor 引用比较。
  * @param {Cesium.Viewer} viewer
  * @param {Cesium} Cesium - Cesium 命名空间
  * @returns {boolean} 是否开启真实地形
  */
 export function isTerrainEnabled(viewer, Cesium) {
-    if (!viewer?.terrainProvider || !Cesium) return false;
-    return viewer.terrainProvider.constructor !== Cesium.EllipsoidTerrainProvider;
+    if (!viewer?.terrainProvider || !Cesium?.EllipsoidTerrainProvider) return false;
+    try {
+        return !(viewer.terrainProvider instanceof Cesium.EllipsoidTerrainProvider);
+    } catch {
+        return viewer.terrainProvider.constructor !== Cesium.EllipsoidTerrainProvider;
+    }
 }
 
 /**
@@ -46,7 +49,7 @@ function getConstantValue(property) {
 
 /**
  * 对单个实体施加贴地属性（点/线/面/标注/billboard/柱廊/矩形/椭圆/模型）。
- * 借鉴 drawPolygon.ts 的属性组合；幂等，已设置非 NONE 高度引用则不覆盖。
+ * 幂等，已设置非 NONE 高度引用则不覆盖。
  *
  * @param {Cesium} Cesium - Cesium 命名空间
  * @param {Cesium.Entity} entity - 目标实体
@@ -67,7 +70,7 @@ export function clampEntityToGround(Cesium, entity) {
     const HR = Cesium.HeightReference.CLAMP_TO_GROUND;
     let modified = false;
 
-    // ---- 点：贴地 + 关闭深度测试（地形起伏下始终可见，与 drawPolygon 一致）----
+    // ---- 点：贴地 + 关闭深度测试（地形起伏下始终可见）----
     if (entity.point) {
         const hr = getConstantValue(entity.point.heightReference);
         if (hr === undefined || hr === Cesium.HeightReference.NONE) {
@@ -81,7 +84,7 @@ export function clampEntityToGround(Cesium, entity) {
         }
     }
 
-    // ---- 标注：贴地 + 关闭深度测试（与 drawPolygon 一致）----
+    // ---- 标注：贴地 + 关闭深度测试 ----
     if (entity.label) {
         const hr = getConstantValue(entity.label.heightReference);
         if (hr === undefined || hr === Cesium.HeightReference.NONE) {
@@ -113,8 +116,8 @@ export function clampEntityToGround(Cesium, entity) {
         }
     }
 
-    // ---- 面：贴地需 perPositionHeight=false（drawPolygon 的 perPositionHeight 方案）。
-    //      数据自带海拔（perPositionHeight=true）时跳过，保留语义高度。----
+    // ---- 面：贴地需 perPositionHeight=false。数据自带海拔（perPositionHeight=true）跳过，
+    //      保留语义高度 ----
     if (entity.polygon) {
         const perPosH = getConstantValue(entity.polygon.perPositionHeight);
         if (perPosH !== true) {
@@ -146,7 +149,7 @@ export function clampEntityToGround(Cesium, entity) {
         }
     }
 
-    // ---- 椭圆 / 模型：贴地 ----
+    // ---- 椭圆 / 模型图形：贴地 ----
     if (entity.ellipse) {
         const hr = getConstantValue(entity.ellipse.heightReference);
         if (hr === undefined || hr === Cesium.HeightReference.NONE) {
@@ -167,7 +170,8 @@ export function clampEntityToGround(Cesium, entity) {
 
 /**
  * 统一贴地入口：先判断地形是否开启，开启后对数据源全部实体施加贴地。
- * 供各 loader（KML/KMZ/CZML/GeoJSON/SHP）与地形切换监听共用。
+ * 供 CZML loader 调用（其余矢量格式由 DataSource.load 期 clampToGround 承担）；
+ * 地形关闭时不动作，由 terrainProviderChanged 监听在切换后补贴地（幂等）。
  *
  * @param {Cesium.Viewer} viewer
  * @param {Cesium} Cesium - Cesium 命名空间

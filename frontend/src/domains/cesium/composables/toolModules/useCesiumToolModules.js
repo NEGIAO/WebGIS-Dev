@@ -9,7 +9,6 @@ import { toFiniteNumberOrNull } from './controlsUtils';
 import { createSceneModule } from './sceneModule';
 import { createAtmosphereModule } from './atmosphereModule';
 import { createCloudModule } from './cloudModule';
-import { createToolsModule } from './toolsModule';
 import { createWindModule } from '../../modules/wind/windModule';
 import { createFluidModule } from './fluidModule';
 import { createShallowWaterModule } from './shallowWaterModule';
@@ -27,9 +26,6 @@ export function useCesiumToolModules({
     fluidPanelRef,
     sceneActions = {},
     wind = {},
-    modelManager: _modelManager = null,
-    cameraEnhanced: _cameraEnhanced = null,
-    heightSampler: _heightSampler = null,
     playerController: _playerController = null,
     getViewer = () => null,
     getCesium = () => null,
@@ -163,7 +159,6 @@ export function useCesiumToolModules({
             createSceneModule(),
             createAtmosphereModule(advancedEffectControls, baseAtmosphereParams, atmosphereParams),
             createCloudModule(cloudParams),
-            createToolsModule(_modelManager, _cameraEnhanced),
             createWindModule(wind.windParams),
             createFluidModule(fluidParams, fluidState),
             createShallowWaterModule(shallowWaterVisible, shallowWaterParams),

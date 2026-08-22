@@ -3,7 +3,7 @@
 > **本文件是 AI Agent 在本仓库工作的最高行为准则。** 任何会话开始工作前必须完整读取本文件。
 > 定位：**规定 Agent 能做什么、不能做什么、必须交付什么**。不重复技术细节——技术约定见 [`Guide/dev-conventions.md`](Guide/dev-conventions.md)，项目认知见 [`Guide/handover.md`](Guide/handover.md)。
 > 适用范围：`frontend/`、`backend/`、`Docs/`、根级配置文件的一切增删改。
-
+> cesium相关的代码，参考这个skill：C:\Users\NEGIAO\.cc-switch\skills\cesium-skills，不知道api就别乱改，别臆想，实事求是
 ---
 
 ## 0. 冲突裁决与优先级

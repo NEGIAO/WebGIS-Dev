@@ -29,7 +29,6 @@ import {
 } from '@common/data-import/crsAware.js';
 import { transform } from 'ol/proj';
 import { flyToEntity, revokeBlobUrl } from './utils.js';
-import { clampDataSourceToGround } from './clampToGround.js';
 
 
 const KML_MIME = 'application/vnd.google-earth.kml+xml';
@@ -162,26 +161,14 @@ async function loadKmlDataSource(Cesium, viewer, kmlText) {
     return Cesium.KmlDataSource.load(kmlDocument, {
         camera: viewer.scene.camera,
         canvas: viewer.scene.canvas,
+        // 官方范式（DataSource.load 期选项）：true 时 Polygons/LineStrings/LinearRings
+        // 经 GroundPrimitive/GroundPolyline 贴地渲染。
+        // ⚠️ 已验证本地 Cesium 1.132 bundle：KmlDataSource 与 GeoJsonDataSource 的
+        // clampToGround 默认值均为 false，不显式传入则图元按坐标原始高度生成，
+        // 开启真实地形后被整体埋入地下（如 HENU湖泊.kmz 高度全 0 vs 当地地面 +70m）。
+        clampToGround: true,
     });
 }
-
-/**
- * 统一贴地入口（地形开启时生效）：KML/KMZ 的点/线/面/标注实体施加贴地属性，
- * 避免开启地形后数据被埋没。贴地属性组合与 drawPolygon.ts 对齐。
- * @param {Cesium.Viewer} viewer
- * @param {Cesium} Cesium - Cesium 命名空间
- * @param {Cesium.KmlDataSource} dataSource - 已加载的数据源
- * @param {string} label - 日志标签（含文件名）
- */
-function applyGroundClamping(viewer, Cesium, dataSource, label) {
-    const result = clampDataSourceToGround(viewer, Cesium, dataSource);
-    if (result.clamped > 0) {
-        console.warn(`[贴地] ${label}: 地形已开启，${result.clamped}/${result.total} 个实体已贴地`);
-    } else if (result.total > 0) {
-        console.warn(`[贴地] ${label}: 地形未开启或全部实体已贴地，跳过（${result.total} 个实体）`);
-    }
-}
-
 
 /**
  * 加载 KML 文件到 Cesium
@@ -211,7 +198,9 @@ export async function loadKML({ file, getCesium, getViewer, message, loadedDataS
     dataSource.name = file.name;
 
     await viewer.dataSources.add(dataSource);
-    applyGroundClamping(viewer, Cesium, dataSource, `KML "${file.name}"`);
+    // 贴地完全由加载期 clampToGround:true + KML 自身 altitudeMode 语义承担：
+    // clampToGround 图元走 GroundPrimitive，absolute/relative 高度被尊重，
+    // 地形切换由 Cesium 自动跟随，无需加载后处理
     flyToEntity(viewer, Cesium, dataSource, 'kml');
 
     const record = { id, name: file.name, type: 'kml', entity: dataSource };
@@ -255,7 +244,7 @@ export async function loadKMZ({ file, getCesium, getViewer, message, loadedDataS
         dataSource.name = file.name;
 
         await viewer.dataSources.add(dataSource);
-        applyGroundClamping(viewer, Cesium, dataSource, `KMZ "${file.name}"`);
+        // 贴地同 loadKML：完全由加载期 clampToGround:true + altitudeMode 语义承担
         flyToEntity(viewer, Cesium, dataSource, 'kmz');
 
         const record = {

@@ -315,7 +315,8 @@ export function useCesiumLayers({
     const terrainProviderIdByViewModel = new Map();
 
     const activeBasemap = ref(DEFAULT_BASEMAP_PRESET_ID);
-    const activeTerrain = ref(import.meta.env.DEV ? 'ellipsoid' : 'tianditu');
+    // 本地与部署环境统一默认天地图世界地形（原 DEV 强制平面地形逻辑已移除）
+    const activeTerrain = ref('tianditu');
     const { customBasemapUrl: customXyzBasemapUrl } = useSharedCustomBasemapUrl();
     // 叠加层默认全部关闭：国界线 + 文字注记 + Cesium OSM Buildings + Google 倾斜摄影
     const legacyTdtLabelLayerVisible = readStoredBoolean(TDT_LEGACY_LABEL_LAYER_VISIBLE_KEY, false);

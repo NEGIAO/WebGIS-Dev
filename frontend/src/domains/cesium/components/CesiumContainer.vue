@@ -917,9 +917,6 @@ const {
     fluidPanelRef,
     sceneActions,
     wind,
-    modelManager,
-    cameraEnhanced,
-    heightSampler,
     playerController,
     // 三维分析（通视/限高）运行时依赖：viewer 与 Cesium 命名空间注入
     getViewer,

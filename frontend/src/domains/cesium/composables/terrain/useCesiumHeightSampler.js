@@ -20,6 +20,7 @@
  */
 
 import { ref } from 'vue'
+import { sampleTerrainBatch } from './terrainSampling.js'
 
 // ======================== 辅助工具 ========================
 
@@ -337,18 +338,19 @@ export function useCesiumHeightSampler({ getViewer, getCesium }) {
                 return results
             }
 
-            // 执行批量采样（用 sampleTerrain 指定层级，避免过高精度导致瓦片过载）
-            try {
-                const provider = viewer.terrainProvider
-                const sampleLevel = provider._bottomLevel
-                    ? Math.max(0, provider._bottomLevel - 1)
-                    : Math.min(provider.maximumLevel ?? 12, 12)
-                const resolved = await Cesium.sampleTerrain(provider, sampleLevel, toSample)
+            // 执行批量采样（统一走 terrainSampling 采样网关：
+            // mostDetailed 优先 + 层级阶梯防御性降级，不再依赖 provider 私有字段；
+            // 网关内部已容错，全失败返回 null）
+            const resolved = await sampleTerrainBatch(viewer, Cesium, toSample)
 
+            if (resolved) {
                 for (let j = 0; j < resolved.length; j++) {
-                    const result = cartoToPlain(Cesium, resolved[j])
-                    results[toSampleIndices[j]] = result
-                    setCache(result)
+                    // 无效高程点保持 null 结果，但进度照常推进
+                    if (Number.isFinite(Number(resolved[j]?.height))) {
+                        const result = cartoToPlain(Cesium, resolved[j])
+                        results[toSampleIndices[j]] = result
+                        setCache(result)
+                    }
 
                     // 进度回调
                     if (options.onProgress) {
@@ -356,33 +358,10 @@ export function useCesiumHeightSampler({ getViewer, getCesium }) {
                     }
                     samplingProgress.value = (j + 1) / toSample.length
                 }
-            } catch (e) {
-                console.warn('[HeightSampler] 批量采样失败，降级为逐点采样:', e)
-
-                // 降级：逐点采样（使用较低精度的 sampleTerrain）
-                for (let j = 0; j < toSample.length; j++) {
-                    try {
-                        const carto = toSample[j]
-                        const sampled = Cesium.sampleTerrain(
-                            viewer.terrainProvider,
-                            17,
-                            [carto]
-                        )
-                        const resolved = sampled instanceof Promise ? await sampled : sampled
-                        if (resolved?.length > 0) {
-                            const result = cartoToPlain(Cesium, resolved[0])
-                            results[toSampleIndices[j]] = result
-                            setCache(result)
-                        }
-                    } catch {
-                        // 单点失败不影响其它点
-                    }
-
-                    if (options.onProgress) {
-                        options.onProgress(j + 1, toSample.length)
-                    }
-                    samplingProgress.value = (j + 1) / toSample.length
-                }
+            } else {
+                console.warn('[HeightSampler] 批量地形采样全部失败')
+                options.onProgress?.(toSample.length, toSample.length)
+                samplingProgress.value = 1
             }
 
             return results

@@ -195,6 +195,11 @@ jobs:
             git lfs track "ShareData/**"
             # 图标
             git lfs track "*.ico"
+            # WebAssembly 二进制（Cesium basis/draco/gaussian-splat 转码器；
+            # HF 要求二进制文件必须走 LFS/Xet 存储，裸 blob 会被 pre-receive 拒绝）
+            git lfs track "*.wasm"
+            # GIF 动图（Cesium Widgets 内置 loading 动画等）
+            git lfs track "*.gif"
 
             # 必须添加 .gitattributes 否则追踪不生效
             git add .gitattributes

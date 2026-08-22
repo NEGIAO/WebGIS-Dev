@@ -89,7 +89,6 @@ frontend/src/
 │   │   │   │   ├── useCesiumDataImport.js  # 数据导入主逻辑
 │   │   │   │   ├── useCesiumDataOpsHandlers.js  # 数据操作事件转发层（面板/拖拽/GLTF 弹窗 → dataImport，自容器抽离）
 │   │   │   │   └── loaders/
-│   │   │   │       ├── clampToGround.js  # 导入数据统一贴地工具（地形判断 + 点/线/面贴地属性，借鉴 drawPolygon）
 │   │   │   │       ├── czmlLoader.js  # CZML 时序数据加载器
 │   │   │   │       ├── geojsonLoader.js  # GeoJSON 流式加载器
 │   │   │   │       ├── geotiffLoader.js  # GeoTIFF 影像加载器
@@ -114,7 +113,9 @@ frontend/src/
 │   │   │   │   ├── useCesiumBeautify.js  # 场景美化（HDR/FXAA/定向光）
 │   │   │   │   └── useCesiumCreditHider.js  # 版权信息隐藏
 │   │   │   ├── terrain/
-│   │   │   │   └── useCesiumHeightSampler.js  # 高度采样
+│   │   │   │   ├── terrainClampService.js  # CZML 实体贴地唯一入口（矢量 DataSource 已全面走官方加载期 clampToGround；glTF 走 Entity heightReference）
+│   │   │   │   ├── terrainSampling.js  # 地形高度采样统一网关（mostDetailed 优先 + 层级阶梯防御降级）
+│   │   │   │   └── useCesiumHeightSampler.js  # 高度采样增强器（缓存/批量/进度，内部走采样网关）
 │   │   │   └── toolModules/
 │   │   │       ├── atmosphereModule.js  # 大气模块（晨昏/雾/HBAO/移轴+Tellux）
 │   │   │       ├── cloudModule.js  # 体积云模块（性能预设+参数控件）
@@ -123,7 +124,6 @@ frontend/src/
 │   │   │       ├── playerModule.js  # 人物漫游模块（WASD移动+碰撞检测）
 │   │   │       ├── sceneModule.js  # 场景导航模块（相机飞行+演示数据）
 │   │   │       ├── shallowWaterModule.js  # 热带浅水模块（三渲二水体+闪电）
-│   │   │       ├── toolsModule.js  # 空间工具模块（模型管理+增强相机）
 │   │   │       └── useCesiumToolModules.js  # 工具面板模块编排（核心）
 │   │   ├── constants/
 │   │   │   └── basemapProviderFactory.ts  # Cesium ImageryProvider 工厂
@@ -338,6 +338,7 @@ frontend/src/
 │   │   ├── data-import/
 │   │   │   ├── archiveProcessor.js  # 归档解包
 │   │   │   ├── batchProcessor.js  # 批量数据分类
+│   │   │   ├── cesiumWarmup.js  # Cesium 主脚本空闲预热（首屏就绪 10s 后后台预载，saveData 跳过）
 │   │   │   ├── crsAware.js  # ⚠️ 转发壳（canonical 在 crs/crsAware.js）
 │   │   │   ├── crs-engine.ts  # ⚠️ 转发壳（canonical 在 crs/crs-engine.ts）
 │   │   │   ├── dataDispatcher.js  # 数据格式分发

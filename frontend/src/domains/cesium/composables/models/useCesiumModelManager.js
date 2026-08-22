@@ -53,47 +53,19 @@ function parseCoordinates(coordinates) {
 }
 
 /**
- * 根据地理坐标和姿态角计算模型变换矩阵（Cesium.Matrix4）
- *
- * 原理：在指定经纬度位置构建 ENU（东-北-天）坐标系，
- * 通过 heading/pitch/roll 旋转后叠加缩放分量。
- * 对应 tellux 中 applyModelMatrix 的逻辑。
- *
- * @param {Object} Cesium - Cesium 全局对象
- * @param {Object} options
- * @param {Array|Object} options.coordinates - 地理坐标
- * @param {number} [options.heading=0]  - 航向角（度，正北 0，顺时针）
- * @param {number} [options.pitch=0]    - 俯仰角（度，抬头为正）
- * @param {number} [options.roll=0]     - 横滚角（度）
- * @param {number|{x:number,y:number,z:number}} [options.scale=1] - 缩放
- * @returns {import('cesium').Matrix4|null}
+ * 归一化缩放入参：Entity ModelGraphics.scale 仅接受 number（等比缩放）。
+ * 旧 primitive 方案支持 {x,y,z} 非均匀缩放（矩阵叠加），Entity 化后不再可用——
+ * 传入对象时取 x 分量退化并告警，避免非法值透传导致渲染异常。
+ * @param {number|{x?:number,y?:number,z?:number}|undefined} scale
+ * @returns {number}
  */
-function computeModelMatrix(Cesium, options) {
-    const coord = parseCoordinates(options.coordinates)
-    if (!coord) return null
-
-    const origin = Cesium.Cartesian3.fromDegrees(coord.lng, coord.lat, coord.height)
-    const hpr = new Cesium.HeadingPitchRoll(
-        Cesium.Math.toRadians(options.heading ?? 0),
-        Cesium.Math.toRadians(options.pitch ?? 0),
-        Cesium.Math.toRadians(options.roll ?? 0)
-    )
-    const matrix = Cesium.Transforms.headingPitchRollToFixedFrame(origin, hpr)
-
-    // 叠加缩放
-    const scale = options.scale
-    if (scale !== undefined && scale !== 1) {
-        let sx = 1, sy = 1, sz = 1
-        if (typeof scale === 'number') {
-            sx = sy = sz = scale
-        } else if (typeof scale === 'object') {
-            sx = scale.x ?? 1; sy = scale.y ?? 1; sz = scale.z ?? 1
-        }
-        const scaleMat = Cesium.Matrix4.fromScale(new Cesium.Cartesian3(sx, sy, sz))
-        Cesium.Matrix4.multiply(matrix, scaleMat, matrix)
+function normalizeScale(scale) {
+    if (scale !== undefined && scale !== null && typeof scale === 'object') {
+        console.warn('[ModelManager] Entity 模型不支持非均匀缩放 {x,y,z}，已退化为等比缩放')
+        const s = scale.x ?? scale.y ?? scale.z ?? 1
+        return typeof s === 'number' && Number.isFinite(s) ? s : 1
     }
-
-    return matrix
+    return typeof scale === 'number' && Number.isFinite(scale) ? scale : 1
 }
 
 // ======================== 主 Composable ========================
@@ -119,7 +91,7 @@ function computeModelMatrix(Cesium, options) {
  */
 export function useCesiumModelManager({ getViewer, getCesium, message }) {
     // ---- 内部存储 ----
-    /** @type {Map<string, { primitive: Object|null, objectUrl: string|null, entry: Object }>} */
+    /** @type {Map<string, { entity: Object|null, objectUrl: string|null, entry: Object }>} */
     const modelStore = new Map()
     let nextId = 0
 
@@ -159,7 +131,7 @@ export function useCesiumModelManager({ getViewer, getCesium, message }) {
      * @param {number}  [options.heading=0]           - 航向角（度）
      * @param {number}  [options.pitch=0]             - 俯仰角（度）
      * @param {number}  [options.roll=0]              - 横滚角（度）
-     * @param {number|Object} [options.scale=1]       - 缩放比例（标量或 {x,y,z}）
+     * @param {number|Object} [options.scale=1]       - 缩放比例（标量；{x,y,z} 非均匀缩放已废弃，退化为等比）
      * @param {number}  [options.minimumPixelSize=64] - 最小像素尺寸（LOD 控制）
      * @param {boolean} [options.autoPlayAnimation=true] - 加载完成后自动播放动画
      * @param {Object}  [options.metadata]            - 自定义元数据（可存储任意业务数据）
@@ -189,7 +161,7 @@ export function useCesiumModelManager({ getViewer, getCesium, message }) {
             heading: options.heading ?? 0,
             pitch: options.pitch ?? 0,
             roll: options.roll ?? 0,
-            scale: options.scale ?? 1,
+            scale: normalizeScale(options.scale),
             state: ModelState.LOADING,
             metadata: options.metadata ?? {},
             addedAt: Date.now(),
@@ -197,90 +169,46 @@ export function useCesiumModelManager({ getViewer, getCesium, message }) {
         }
 
         // 占位（先写入 store 再异步加载）
-        modelStore.set(id, { primitive: null, objectUrl: null, entry })
+        modelStore.set(id, { entity: null, objectUrl: null, entry })
         syncModels()
 
         try {
-            // 1. 计算模型变换矩阵
-            const matrix = computeModelMatrix(Cesium, {
-                coordinates: entry.coordinates,
-                heading: entry.heading,
-                pitch: entry.pitch,
-                roll: entry.roll,
-                scale: entry.scale,
+            if (!coord) throw new Error('坐标无效')
+
+            // 1. Entity 模型（ModelGraphics）：贴地走官方 heightReference=CLAMP_TO_GROUND，
+            //    Cesium 内部采样地表并随地形切换自动跟随；姿态用 headingPitchRoll 四元数。
+            //    ⚠️ HeadingPitchRoll 期望弧度：对外契约是度（见 JSDoc），此处必须显式转换
+            //    （对齐 cesium-skills demo 2.4.1 的 Cesium.Math.toRadians 惯例）
+            const position = Cesium.Cartesian3.fromDegrees(coord.lng, coord.lat, coord.height ?? 0)
+            const hpr = new Cesium.HeadingPitchRoll(
+                Cesium.Math.toRadians(entry.heading),
+                Cesium.Math.toRadians(entry.pitch),
+                Cesium.Math.toRadians(entry.roll),
+            )
+            const orientation = Cesium.Transforms.headingPitchRollQuaternion(position, hpr)
+
+            const entity = viewer.entities.add({
+                id,
+                name: entry.name,
+                position,
+                orientation,
+                model: {
+                    uri: options.url,
+                    scale: entry.scale,
+                    minimumPixelSize: options.minimumPixelSize ?? 64,
+                    maximumScale: 20000,
+                    show: true,
+                    runAnimations: options.autoPlayAnimation !== false,
+                    heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
+                },
             })
-            if (!matrix) throw new Error('坐标无效，无法计算模型矩阵')
 
-            // 2. 加载 glTF/GLB
-            const loadOpts = {
-                url: options.url,
-                modelMatrix: matrix,
-                minimumPixelSize: options.minimumPixelSize ?? 64,
-                maximumScale: 20000,
-                scene: viewer.scene,
-            }
-
-            let model
-            if (typeof Cesium.Model.fromGltfAsync === 'function') {
-                model = await Cesium.Model.fromGltfAsync(loadOpts)
-            } else if (typeof Cesium.Model.fromGltf === 'function') {
-                // 旧版 Cesium 降级
-                model = Cesium.Model.fromGltf(loadOpts)
-            } else {
-                throw new Error('当前 Cesium 版本不支持 Model API')
-            }
-
-            // 3. 挂载到场景
-            viewer.scene.primitives.add(model)
+            // 2. 挂载到 store
             const store = modelStore.get(id)
-            store.primitive = model
-
-            // 4. 监听就绪 → 更新状态 / 自动播放动画
-            const onReady = () => {
-                const s = modelStore.get(id)
-                if (!s) return
-                s.entry.state = ModelState.READY
-                syncModels()
-
-                if (options.autoPlayAnimation !== false) {
-                    try {
-                        model.activeAnimations.addAll({
-                            loop: Cesium.ModelAnimationLoop.REPEAT,
-                        })
-                    } catch {
-                        // 模型可能不含动画，忽略
-                    }
-                }
-            }
-
-            if (model.readyEvent) {
-                model.readyEvent.addEventListener(onReady)
-            } else {
-                onReady()
-            }
-
-            // 5. 监听错误（保存 disposer 以便 removeModel 清理）
-            let errorDisposer = null
-            if (model.errorEvent) {
-                const onErrorHandler = (error) => {
-                    const s = modelStore.get(id)
-                    if (!s) return
-                    s.entry.state = ModelState.ERROR
-                    s.entry.errorMessage = error?.message ?? '模型加载异常'
-                    syncModels()
-                    // console.error(`[ModelManager] 模型 "${id}" 错误:`, error)
-                    message?.error?.(`模型 "${id}" 加载错误: ${error?.message ?? '未知错误'}`)
-                }
-                model.errorEvent.addEventListener(onErrorHandler)
-                errorDisposer = () => model.errorEvent.removeEventListener(onErrorHandler)
-            }
-
-            // 保存 disposer 到 store，供 removeModel 清理
-            const storeEntry = modelStore.get(id)
-            if (storeEntry) {
-                storeEntry.readyDisposer = () => model.readyEvent?.removeEventListener(onReady)
-                storeEntry.errorDisposer = errorDisposer
-            }
+            store.entity = entity
+            // 已知取舍：ModelGraphics 无 errorEvent/readyEvent，glTF 资源异步加载失败
+            // 不会回调到本层（仅控制台报错），此处乐观置 READY；如需精确状态需回退 primitive 方案
+            entry.state = ModelState.READY
 
             syncModels()
             return { ...entry }
@@ -339,15 +267,10 @@ export function useCesiumModelManager({ getViewer, getCesium, message }) {
         }
 
         // 从场景移除
-        if (store.primitive && viewer) {
-            try { viewer.scene.primitives.remove(store.primitive) } catch (e) {
+        if (store.entity && viewer) {
+            try { viewer.entities.remove(store.entity) } catch (e) {
                 console.warn(`[ModelManager] 移除 "${id}" 时场景报错:`, e)
             }
-        }
-
-        // 销毁模型内部资源
-        if (store.primitive?.destroy) {
-            try { store.primitive.destroy() } catch { /* 忽略 */ }
         }
 
         // 释放 Object URL
@@ -377,20 +300,25 @@ export function useCesiumModelManager({ getViewer, getCesium, message }) {
         if (updates.heading !== undefined) entry.heading = updates.heading
         if (updates.pitch !== undefined) entry.pitch = updates.pitch
         if (updates.roll !== undefined) entry.roll = updates.roll
-        if (updates.scale !== undefined) entry.scale = updates.scale
+        if (updates.scale !== undefined) entry.scale = normalizeScale(updates.scale)
         if (updates.name) entry.name = updates.name
         if (updates.metadata) entry.metadata = { ...entry.metadata, ...updates.metadata }
 
-        // 重新计算模型矩阵
-        if (store.primitive) {
-            const matrix = computeModelMatrix(Cesium, {
-                coordinates: entry.coordinates,
-                heading: entry.heading,
-                pitch: entry.pitch,
-                roll: entry.roll,
-                scale: entry.scale,
-            })
-            if (matrix) store.primitive.modelMatrix = matrix
+        // 重新计算位置与姿态（Entity：更新 position + orientation，
+        // 贴地仍由 heightReference=CLAMP_TO_GROUND 自动承担）
+        if (store.entity) {
+            const coord = entry.coordinates
+            if (coord) {
+                const position = Cesium.Cartesian3.fromDegrees(coord.lng, coord.lat, coord.height ?? 0)
+                store.entity.position = position
+                // 对外契约是度，HeadingPitchRoll 期望弧度（同 addModel）
+                const hpr = new Cesium.HeadingPitchRoll(
+                    Cesium.Math.toRadians(entry.heading),
+                    Cesium.Math.toRadians(entry.pitch),
+                    Cesium.Math.toRadians(entry.roll),
+                )
+                store.entity.orientation = Cesium.Transforms.headingPitchRollQuaternion(position, hpr)
+            }
         }
 
         syncModels()
@@ -435,48 +363,24 @@ export function useCesiumModelManager({ getViewer, getCesium, message }) {
     /**
      * 播放模型动画
      *
+     * ⚠️ Entity 化后仅支持整体开/关（runAnimations）：animationName 与 options.speedup
+     * 已不再生效（保留形参仅为兼容旧签名）；具名动画/速率控制需底层 Model primitive，
+     * 如有硬需求需回退 primitive 加载方案。
+     *
      * @param {string}  id - 模型 ID
-     * @param {string}  [animationName] - 动画名称（省略则播放全部）
+     * @param {string}  [animationName] - @deprecated 不再生效（Entity ModelGraphics 无具名动画控制）
      * @param {Object}  [options={}]
-     * @param {boolean} [options.loop=true]    - 是否循环
-     * @param {number}  [options.speedup=1.0]  - 播放速率倍率
+     * @param {boolean} [options.loop=true]    - 是否循环播放
+     * @param {number}  [options.speedup=1.0]  - @deprecated 不再生效
      */
     function playAnimation(id, animationName, options = {}) {
         const store = modelStore.get(id)
-        const Cesium = getCesium?.()
-        if (!store?.primitive || !Cesium) return
+        if (!store?.entity) return
 
         try {
-            const model = store.primitive
-            const loopMode = options.loop !== false
-                ? Cesium.ModelAnimationLoop.REPEAT
-                : Cesium.ModelAnimationLoop.NONE
-
-            if (animationName) {
-                // 在已有动画中查找
-                let found = false
-                const anims = model.activeAnimations
-                for (let i = 0; i < anims.length; i++) {
-                    if (anims.get(i).name === animationName) {
-                        anims.get(i).playing = true
-                        found = true
-                        break
-                    }
-                }
-                // 未找到则手动添加
-                if (!found) {
-                    model.activeAnimations.add({
-                        name: animationName,
-                        loop: loopMode,
-                        speedup: options.speedup ?? 1.0,
-                    })
-                }
-            } else {
-                model.activeAnimations.addAll({
-                    loop: loopMode,
-                    speedup: options.speedup ?? 1.0,
-                })
-            }
+            // Entity ModelGraphics 仅支持整体开关（runAnimations），
+            // 具名动画控制需底层 primitive，Entity 化后不再暴露
+            store.entity.model.runAnimations = options.loop !== false
         } catch (e) {
             console.warn(`[ModelManager] 播放动画失败 "${id}":`, e)
         }
@@ -488,13 +392,10 @@ export function useCesiumModelManager({ getViewer, getCesium, message }) {
      */
     function stopAnimation(id) {
         const store = modelStore.get(id)
-        if (!store?.primitive) return
+        if (!store?.entity) return
 
         try {
-            const anims = store.primitive.activeAnimations
-            for (let i = 0; i < anims.length; i++) {
-                anims.get(i).playing = false
-            }
+            store.entity.model.runAnimations = false
         } catch (e) {
             console.warn(`[ModelManager] 停止动画失败 "${id}":`, e)
         }
@@ -513,12 +414,15 @@ export function useCesiumModelManager({ getViewer, getCesium, message }) {
     }
 
     /**
-     * 获取原始 Cesium.Model 对象（高级用法，谨慎操作）
+     * 获取模型 Entity 的 ModelGraphics（高级用法，谨慎操作）
+     *
+     * ⚠️ 返回值语义已随 Entity 化变更：不再是底层 Cesium.Model primitive，
+     * 而是 ModelGraphics 描述对象（无 activeAnimations/errorEvent 等能力）。
      * @param {string} id
-     * @returns {Object|null}
+     * @returns {Object|null} Cesium ModelGraphics 或 null
      */
     function getModelPrimitive(id) {
-        return modelStore.get(id)?.primitive ?? null
+        return modelStore.get(id)?.entity?.model ?? null
     }
 
     // ======================== 生命周期 ========================
