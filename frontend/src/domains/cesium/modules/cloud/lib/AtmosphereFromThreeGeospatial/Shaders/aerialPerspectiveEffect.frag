@@ -278,8 +278,10 @@ vec3 compositeAerialDisplay(vec3 srgbOriginal, vec3 transmittance, float sunT, v
 void main() {
   vec4 originalColor = texture(colorTexture, v_textureCoordinates);
   float depth = czm_readDepth(depthTexture, v_textureCoordinates);
-  // 非清空深度（用于太空视点的透视兜底，见下）
-  const float DEPTH_SKY_EPS = 1e-4;
+  // 深度清空判定：czm_readDepth 在 LOG_DEPTH 下已做对数深度反转，任何有限距离的几何
+  // 都严格 < 1-ε；ε 取 1e-7（与体积云 stage 的 DEPTH_SKY 一致），使远距地形/远距
+  // 低分辨率瓦片（反转后深度 ≈ 1-1/d，极易贴近 1）被可靠识别为几何而非「近似天空」。
+  const float DEPTH_SKY_EPS = 1e-7;
   bool hasSceneDepth = depth < 1.0 - DEPTH_SKY_EPS;
 
   vec3 cameraPosition = u_cameraPosition;
@@ -319,20 +321,62 @@ void main() {
     return;
   }
 
-  // 壳层内：与 AtmospherePostProcess 对齐的分类参数（旧 0.014 宽带会把大片远距地表
-  // 误判为天空走 tonemap 直通——对 sRGB 地面是二次 OETF，形成天际线灰白蒙版带）。
-  // 现两条分支出口均为同一 ACES+gamma 且 aerial 在低强度下近似恒等，宽带防闪的
-  // 存在理由已消失，收窄到与上游一致的抖动折中值。
+  // 壳层内分类（V3.5.30 地形感知）：开启地形后真实地平线高低起伏，
+  // 「视线最终与 bottom 球相交(hitBottom)」不再等价于「该像素是地面」，
+  // 且深度清空的像素也不再能靠几何判据安全归类。改为按「深度 × 几何」三问：
+  // ① 深度非清空 ⇒ 真实几何（含远距地形），一律地面管线，散射终点=深度重建点；
+  //    （旧 SHELL_SKY_DEPTH_SLOP 宽带会把远距几何透传跳过 aerial，已随本版删除：
+  //     两分支出口统一后无二次 OETF 之虞，深度重建终点也比椭球切点更短更准）
+  // ② 深度清空且射线不碰 bottom 球 ⇒ 山脊之间的纯天空缝隙，透传
+  //    （与天空分支同一 OETF 出口）；
+  // ③ 深度清空但射线命中 bottom 球 ⇒ 切角以下的掠射大气段（从山缝里望向
+  //    被地形遮挡的远侧大气）。旧路径把这种像素的终点经远平面重建/
+  //    ClampRadius 顶到大气层顶，积分出过饱和暖黄 inscatter——即贴着理想
+  //    椭圆边的黄蒙版本体；现把散射终点钳到 bottom 球「近交点」，得到与
+  //    原生行星渲染一致的有界临边辉光。该点仅作散射锚点，不参与 BSM 云影。
   if (inShell && !forceAerialFromDepth) {
-    const float SHELL_SKY_DEPTH_SLOP = 0.0016;
-    const float MU_EXPLICIT_GROUND = -0.01;
-    bool depthLikelySky = depth >= 1.0 - SHELL_SKY_DEPTH_SLOP;
-    bool explicitGround =
-      hitBottom || (hasSceneDepth && muLook < MU_EXPLICIT_GROUND);
-    if (depthLikelySky && !explicitGround) {
+    bool skyPocket = !hasSceneDepth && !hitBottom;
+    if (skyPocket) {
       out_FragColor = tonemapDisplay(originalColor.rgb, originalColor.a);
       return;
     }
+    if (!hasSceneDepth) {
+      float bL = dot(cameraPosition, rayDirection);
+      float cL = dot(cameraPosition, cameraPosition) - bottomR * bottomR;
+      float discL = bL * bL - cL;
+      if (discL < 0.0) {
+        out_FragColor = tonemapDisplay(originalColor.rgb, originalColor.a);
+        return;
+      }
+      float sL = sqrt(discL);
+      float tHitL = -bL - sL;
+      if (tHitL <= 1e-6) {
+        tHitL = -bL + sL;
+      }
+      if (tHitL <= 1e-6) {
+        out_FragColor = tonemapDisplay(originalColor.rgb, originalColor.a);
+        return;
+      }
+      vec3 limbPosKm = cameraPosition + rayDirection * tHitL;
+      vec3 limbTransmittance;
+      vec3 limbInscatter = GetSkyRadianceToPoint(
+        cameraPosition,
+        limbPosKm,
+        0.0,
+        u_sunDirection,
+        limbTransmittance
+      );
+      vec3 finalColorLimb = compositeAerialDisplay(
+        originalColor.rgb,
+        limbTransmittance,
+        1.0,
+        limbInscatter,
+        u_aerialPerspectiveScale
+      );
+      out_FragColor = vec4(finalColorLimb, originalColor.a);
+      return;
+    }
+    // hasSceneDepth ⇒ 落到下方常规地面管线（终点=深度重建点）
   }
 
   // 重建 ECEF 世界坐标（米），再转 km，得到几何点位置

@@ -6,6 +6,15 @@
 
 ## 版本记录
 
+### V3.5.30 (2026-08-22) — 体积云空中透视地形感知分类：地平线黄雾带按真实地形轮廓收敛
+
+- **问题**：V3.5.28 生效后的遗留观感缺陷——`aerialPerspectiveEffect.frag` 的地面/天空分类以「视线是否前向擦入海平面椭球（hitBottom）」为核心判据，隐含"地平线=理想平滑椭圆边"。开启地形后真实地平线高低起伏：①山脊之间的天空缝隙、切角以下的掠射视线照样会在远处擦入椭球，被强算「相机→椭球切点/远平面重建点」的全路径散射（掠射段 inscatter 过饱和呈暖黄），形成贴着理想椭圆边的**黄雾带**——盖住山脚，半透明云叠上显黄；②深度清空像素的散射终点经远平面重建后被 `ClampRadius` 顶到大气层顶，积分值无界放大。
+- **修复**（仅 [aerialPerspectiveEffect.frag](../../frontend/src/domains/cesium/modules/cloud/lib/AtmosphereFromThreeGeospatial/Shaders/aerialPerspectiveEffect.frag) 分类块，BSM 云影/丁达尔链路零改动）：
+  - 深度清空判定 `DEPTH_SKY_EPS` 1e-4 → **1e-7**（与体积云 stage 的 `DEPTH_SKY` 对齐；`czm_readDepth` 已做对数深度反转，任何有限距离几何都可靠 < 1-ε，远距地形不再落入"近似天空"灰区）；
+  - 分类改为**深度优先三问**：① 深度非清空 ⇒ 真实几何一律地面管线（终点=深度重建点；旧 `SHELL_SKY_DEPTH_SLOP` 宽带透传删除）；② 深度清空且射线不碰椭球 ⇒ 山脊间纯天空，透传；③ 深度清空但射线命中椭球 ⇒ 掠射大气段，散射终点钳到 bottom 球**近交点**（有界临边辉光，等价原生行星渲染的地平线表现；该锚点不参与 BSM 地面云影防粘屏）。
+- **验证**：bundle/public 镜像/dist 三处同步确认（vite 求值期自动再生）；`vite build` 通过；双门禁通过。实机待回归：开地形看山缝天空无黄带、山脚无雾墙、云不泛黄；关地形场景与贴地平线升降无回归。
+- 维护日志：[2026-08-22-cloud-aerial-terrain-aware-classification](../LLM_record/26-08/2026-08-22/2026-08-22-cloud-aerial-terrain-aware-classification.md)。
+
 ### V3.5.29 (2026-08-22) — shader bundle 漂移防护自动化：vite 求值期自动再生 + CI 门禁
 
 - **问题**：V3.5.28 遗留风险——bundle 再生仍靠手动执行 `node frontend/scripts/bundle-shaders.mjs`，改 `Shaders/` 源文件后忘跑脚本会复现同类漂移（且 public fetch 回退镜像也需手动同步，同属机制缺口）。

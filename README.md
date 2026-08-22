@@ -80,7 +80,7 @@
 
 ## 🎯 项目简介
 
-**NEGIAO's WebGIS** 是一个功能完整、架构清晰的前后端分离 WebGIS 平台（当前版本 V3.5.29），前端托管于 GitHub Pages（正式域名 webgis.negiao.cn），后端以 Docker 部署在 Hugging Face Spaces，通过 RESTful API 通信，支持独立扩展。
+**NEGIAO's WebGIS** 是一个功能完整、架构清晰的前后端分离 WebGIS 平台（当前版本 V3.5.30），前端托管于 GitHub Pages（正式域名 webgis.negiao.cn），后端以 Docker 部署在 Hugging Face Spaces，通过 RESTful API 通信，支持独立扩展。
 
 > 📚 本 README 仅保留核心概览与导航。完整文档已模块化至 [`Docs/Guide/`](Docs/Guide/)，详见下方「文档导航」。
 >
@@ -402,12 +402,12 @@ HF Spaces 在 24 小时无访问后自动休眠。本平台通过**双向互保�
 
 | 版本 | 日期 | 概要 |
 |------|------|------|
+| **V3.5.30** | 2026-08-22 | **体积云空中透视地形感知分类**：开启地形后地平线高低起伏，旧分类以「视线是否擦入海平面椭球」定地面/天空——山脊间天空缝隙被强算掠射全路径散射，形成贴着理想椭圆边的黄雾带遮挡山脚、半透明云显黄。改为深度优先三问（有深度=几何走地面管线 / 深度清空不碰椭球=天空透传 / 深度清空但碰椭球=钳到椭球近交点的有界临边辉光），黄蒙版按真实地形轮廓收敛。详见[完整更新日志](Docs/Guide/CHANGELOG.md) |
 | **V3.5.29** | 2026-08-22 | **shader bundle 漂移防护自动化**：V3.5.28 遗留风险销项——bundle 再生不再依赖手动执行脚本。`bundle-shaders.mjs` 升级为可导出模块（新增 `--check` 校验模式 + public 镜像自动同步），挂载 vite.config 求值期（dev/build/build:* 全覆盖自动再生）；`npm run shaders:check` + deploy.yml build 前置门禁双保险拦截已提交漂移。详见[完整更新日志](Docs/Guide/CHANGELOG.md) |
 | **V3.5.28** | 2026-08-22 | **体积云 shader 副本漂移修复**：空中透视白蒙版修复（上版 Fix A/B/C）因 `bundledShaders.js` 过期未生效——运行时唯一真源是 bundle，再生脚本 `scripts/bundle-shaders.mjs` 缺失导致源文件改动无法同步。补建再生脚本并执行重生成 + public 镜像覆盖，交界白蒙版/分支突变按修复态收敛。详见[完整更新日志](Docs/Guide/CHANGELOG.md) |
 | **V3.5.27** | 2026-08-20~22 | **面状航线模块迁移**：独立工程 planar-wayline 迁入为 CesiumToolPanel 原生模块卡片（lil-gui 声明式控件 + 无头控制器直驱宿主唯一 Viewer），支持测区绘制/弓字形航线/五向倾斜/AGL 仿地/DJI KMZ 导入导出；工作集自动注册统一图层管理（wayline 类型，支持显隐/透明度/重命名/定位/移除）；Element Plus/gsap 依赖整体移除（vendor chunk −252KB）；修复启动期 Cesium 求值崩溃；≈150 处用户可见文案全量 i18n。详见[完整更新日志](Docs/Guide/CHANGELOG.md) |
-| **V3.5.26** | 2026-08-22 | **综合版本**（原 V3.5.26–V3.5.28 三轮暂存增量按用户指令合并收敛）：Cesium 1.132 主库与云大气资源全部本地化（`public/cesium/`，弃用 jsDelivr/BootCDN/unpkg）+ BSM 天空变黑单位修复 + 空闲预热；贴地策略统一重构——矢量全面走官方加载期 `clampToGround`、glTF/模型 Entity 化 `heightReference`、采样收敛至统一网关；首屏 Loading 遮罩 `hideDelayMs` 过渡修复白屏；暂存区终审修复清空残留/透明度失效等 4 处。详见[完整更新日志](Docs/Guide/CHANGELOG.md) |
 
-更早版本（V3.5.24 及以前）请查阅 [完整更新日志 →](Docs/Guide/CHANGELOG.md)
+更早版本（V3.5.26 及以前）请查阅 [完整更新日志 →](Docs/Guide/CHANGELOG.md)
 
 ---
 
@@ -429,6 +429,6 @@ HF Spaces 在 24 小时无访问后自动休眠。本平台通过**双向互保�
 |:------:|:--------:|:--------:|
 | [GitHub](https://github.com/NEGIAO/WebGIS-Dev) | [webgis.negiao.cn](https://webgis.negiao.cn)（正式域名，GitHub Pages 托管） | [Hugging Face](https://NEGIAO-WebGIS.hf.space) |
 
-<sub>V3.5.29 · 开发中 · 最后更新 2026-08-22</sub>
+<sub>V3.5.30 · 开发中 · 最后更新 2026-08-22</sub>
 
 </div>
