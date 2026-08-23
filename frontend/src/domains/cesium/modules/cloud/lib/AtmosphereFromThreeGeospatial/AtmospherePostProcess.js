@@ -520,6 +520,8 @@ void main() {
       finalColor = skyRadiance;
   } else if (u_applyGroundAtmosphere == 0) {
     // 地面/几何交给后续 AerialPerspectiveEffect 等单独 pass，避免两次 * transmittance + inscatter
+    // 白蒙版根因之一：此处直通的是 sRGB 显示色，绝不能再乘曝光（HDR 天空才需要），
+    // 否则远地以「sRGB × exposure」进入 aerial pass，天际线处被抬亮成灰白雾。
     finalColor = originalColor.rgb;
   } else {
     // 关键：直接使用 depth 重建出的世界坐标作为命中点，避免 camera + ray * dist 在远距下误差放大引发闪烁
@@ -535,8 +537,10 @@ void main() {
     finalColor = originalColor.rgb * transmittance * sunTransmittance + inscatter;
   }
 
-  // 线性 HDR + 单次曝光；ACES/gamma 仅在后接 AerialPerspectiveEffect 中做，避免两道 ACES 叠乘过曝
-  out_FragColor = vec4(finalColor * u_atmosphereExposure, originalColor.a);
+  // 曝光只作用于真正处于线性 HDR 域的分支（天空 / applyGround 合成）；
+  // 直通分支保持原样交给链路末端统一处理
+  float exposureOut = (isSky || u_applyGroundAtmosphere != 0) ? u_atmosphereExposure : 1.0;
+  out_FragColor = vec4(finalColor * exposureOut, originalColor.a);
 }
 `;
 

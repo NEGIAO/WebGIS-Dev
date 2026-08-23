@@ -2,3 +2,6 @@ __pycache__
 .git
 .venv
 *.pyc
+
+# 运行时数据/缓存（GCJ 校正缓存、SQLite 等），本地由 compose 挂载 .:/app 提供，不烤进镜像
+data/

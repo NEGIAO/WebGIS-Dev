@@ -14,9 +14,13 @@
                 <button
                     class="eco-close-btn"
                     type="button"
+                    aria-label="关闭面板"
                     @click="emit('close')"
                 >
-                    ×
+                    <X
+                        :size="13"
+                        :stroke-width="2.2"
+                    />
                 </button>
             </header>
 
@@ -111,7 +115,7 @@
 
 <script setup>
 import { computed, ref, watch } from 'vue';
-import { Globe, Search } from '@lucide/vue';
+import { Globe, Search, X } from '@lucide/vue';
 import { useTOCStore } from '@/stores';
 import { ASSET_BASE_URL } from '@/config/publicRuntime';
 import AdministrativeDivisionTreeNode from './AdministrativeDivisionTreeNode.vue';
@@ -257,11 +261,14 @@ watch(
     display: flex;
     align-items: center;
     justify-content: center;
-    transition: background 0.2s;
+    transition:
+        background 0.2s,
+        transform 0.15s ease;
 }
 
 .eco-close-btn:hover {
     background: rgba(255, 255, 255, 0.4);
+    transform: rotate(90deg);
 }
 
 /* 搜索框：圆润、浅绿色背景 */

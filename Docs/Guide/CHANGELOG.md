@@ -6,6 +6,53 @@
 
 ## 版本记录
 
+### V3.5.28 (2026-08-23) — 全站 UI 设计语言统一：ESRI 式图层交互 + 组件合并 + 浅色玻璃拟态换肤
+
+- **问题**：多会话并行迭代导致各面板 UI 风格割裂——文字字符充当图标（`▾ ▸ ▼ × ••• ▶ ⋮⋮ ok`）违反图标规范且跨平台渲染不一致；LayerControlPanel 深绿容器内白字输入框深浅混杂；行政区划树存在暗色主题残留色值；路线规划双面板 90% 代码重复；大量组件未引用已有的 toc-theme/theme 设计令牌。
+- **重构**（纯展示层，业务逻辑零改动）：
+  - **图层管理族**：[TOCTreeItem](../../frontend/src/domains/common/layer-tree/components/TOCTreeItem.vue) 参考 ESRI ArcGIS——checkbox 显隐改行右侧 Eye/EyeOff 开关（文件夹半选降透明度）、新增类型/拖拽把手图标、隐藏行整行淡化、右键菜单 20+ 命令全量 lucide 图标化、激活态强调条改伪元素消除布局抖动；[TOCPanel](../../frontend/src/domains/common/layer-tree/components/TOCPanel.vue) Tab 改 `--active-index` 驱动的滑动胶囊，绘制面板重构为磁贴工具格 + 一体式 join-bar 输入条，样式面板改色卡磁贴 + 渐变填充滑杆；LayerPanel/SharedResourceTreeItem 同构对齐。
+  - **路线规划合并**：BusPlannerPanel + DrivingPlannerPanel → [RoutePlannerPanel](../../frontend/src/domains/ol/routing/components/RoutePlannerPanel.vue) 单组件 `mode="bus"|"drive"` 双触发（SidePanel 两 Tab 各渲染一实例）；差异收敛为配置（策略选项/按钮文案/debug 字段子集/结果区形态）；驾车配色接入全局 `--info/--info-rgb` 功能色令牌；对外回调 prop 名保持不变，仅消费方 SidePanel 调整取点函数名为 `start-point-pick`。
+  - **天气看板**：主面板渐变徽章头部 + 一体式查询条（刷新忙碌旋转动画）；LiveCards/ForecastTable 硬编码绿色全量令牌化、元信息去边框盒、预报表去网格线改行分隔 hover 高亮。
+  - **罗盘面板**：自绘拨动开关、模式分段控件、滑杆渐变填充 + m/km 智能格式化、颜色卡与状态 chip 圆点。
+  - **地图浮层**：[LayerControlPanel](../../frontend/src/domains/ol/layer/components/LayerControlPanel.vue) 深绿容器→浅色玻璃拟态并恢复紧凑两行布局，全部文字字符图标化，图层显隐改眼睛开关，Cesium overlay 改 mini switch；[MapControlsBar](../../frontend/src/domains/ol/components/MapControlsBar.vue) 同步浅色换肤，内联 SVG→Copy/ChevronRight/House，主页按钮升级渐变实底圆钮（涟漪保留）；LocationSearch 图标 Search→Crosshair 并去除硬编码色。
+  - **设计令牌**：`--brand-gradient` 绿主题调亮为同色系 `#5ec773→#35a44f`（蓝主题 `#64b5f6→#1e88e5`），全仓 12 处引用一次性受益。
+- **暂存区附带审查**（非本会话产物）：① 后端 Docker 瘦身三件套（移除 libgdal-dev/libgeos-dev/libgl1、supabase 依赖、.dockerignore 加 data/），已验证 backend 无任何 `import supabase`；② 体积云/shader 全链路——bundle-shaders.mjs 再生脚本逻辑健全，vite 求值期自动再生 + CI 门禁接线正确，**实跑 `shaders:check` 通过（5 个 shader 三副本零漂移）**，AtmospherePostProcess 曝光分支修复与 frag 地形感知分类均与文档一致。⚠️ 镜像构建与 GLSL 渲染观感待实机验证。
+- **验证**：`npm run lint` 全绿；`CheckStructureTree.py` ✅ 457=457；vue-tsc 抽查无新增报错。实机待回归：图层树显隐/菜单、公交驾车全流程、天气/罗盘/底图控制条交互、后端瘦身镜像 build+启动。
+- 维护日志：[2026-08-23-ui-unify-code-review](../LLM_record/26-08/2026-08-23/2026-08-23-ui-unify-code-review.md)。
+
+### V3.5.27 追加批次 (2026-08-22) — 体积云与 shader 三项修复（原编号 V3.5.30 / 29 / 28，按用户裁决并入本条）
+
+> 编号说明：以下三项因历史提交信息不规范，统一并入 V3.5.27 追加批次；各项维护日志链接保留可溯。
+
+#### ① 体积云空中透视地形感知分类（原 V3.5.30）— 地平线黄雾带按真实地形轮廓收敛
+
+- **问题**：V3.5.28 生效后的遗留观感缺陷——`aerialPerspectiveEffect.frag` 的地面/天空分类以「视线是否前向擦入海平面椭球（hitBottom）」为核心判据，隐含"地平线=理想平滑椭圆边"。开启地形后真实地平线高低起伏：①山脊之间的天空缝隙、切角以下的掠射视线照样会在远处擦入椭球，被强算「相机→椭球切点/远平面重建点」的全路径散射（掠射段 inscatter 过饱和呈暖黄），形成贴着理想椭圆边的**黄雾带**——盖住山脚，半透明云叠上显黄；②深度清空像素的散射终点经远平面重建后被 `ClampRadius` 顶到大气层顶，积分值无界放大。
+- **修复**（仅 [aerialPerspectiveEffect.frag](../../frontend/src/domains/cesium/modules/cloud/lib/AtmosphereFromThreeGeospatial/Shaders/aerialPerspectiveEffect.frag) 分类块，BSM 云影/丁达尔链路零改动）：
+  - 深度清空判定 `DEPTH_SKY_EPS` 1e-4 → **1e-7**（与体积云 stage 的 `DEPTH_SKY` 对齐；`czm_readDepth` 已做对数深度反转，任何有限距离几何都可靠 < 1-ε，远距地形不再落入"近似天空"灰区）；
+  - 分类改为**深度优先三问**：① 深度非清空 ⇒ 真实几何一律地面管线（终点=深度重建点；旧 `SHELL_SKY_DEPTH_SLOP` 宽带透传删除）；② 深度清空且射线不碰椭球 ⇒ 山脊间纯天空，透传；③ 深度清空但射线命中椭球 ⇒ 掠射大气段，散射终点钳到 bottom 球**近交点**（有界临边辉光，等价原生行星渲染的地平线表现；该锚点不参与 BSM 地面云影防粘屏）。
+- **验证**：bundle/public 镜像/dist 三处同步确认（vite 求值期自动再生）；`vite build` 通过；双门禁通过。实机待回归：开地形看山缝天空无黄带、山脚无雾墙、云不泛黄；关地形场景与贴地平线升降无回归。
+- 维护日志：[2026-08-22-cloud-aerial-terrain-aware-classification](../LLM_record/26-08/2026-08-22/2026-08-22-cloud-aerial-terrain-aware-classification.md)。
+
+#### ② shader bundle 漂移防护自动化（原 V3.5.29）— vite 求值期自动再生 + CI 门禁
+
+- **问题**：V3.5.28 遗留风险——bundle 再生仍靠手动执行 `node frontend/scripts/bundle-shaders.mjs`，改 `Shaders/` 源文件后忘跑脚本会复现同类漂移（且 public fetch 回退镜像也需手动同步，同属机制缺口）。
+- **修复**（三道防线，全部围绕「让忘跑不可能」）：
+  - **自动再生**：[bundle-shaders.mjs](../../frontend/scripts/bundle-shaders.mjs) 重构为可导出模块 `bundleShaders()`，挂载 [vite.config.js](../../frontend/vite.config.js) 配置求值期（照 `generateShareDataManifest` 先例）——`dev` / `build` / `build:*` 启动即自动同步，产物确定性无 git 噪声；
+  - **脚本增强**：新增 `--check` 校验模式（只读比对 bundle + 镜像与真源，漂移列明细并 exit 1）；写模式下顺带同步 `public/cloud-atmosphere/shaders/` 镜像并清理真源已删除的陈旧副本；比对前统一 CRLF→LF，免受 checkout 行尾转换干扰；
+  - **门禁拦截**：`package.json` 新增 `shaders` / `shaders:check` 脚本；[deploy.yml](../../.github/workflows/deploy.yml) 在 Install 依赖之后、Build 之前插入 `npm run shaders:check` 步骤，把已提交的漂移拦截在部署前。
+- **验证**：`--check` 通过；人为污染 bundle 与镜像后 `--check` 正确 exit 1 并列出两处漂移；重跑再生精确还原；`vite build` 通过且构建期自动再生幂等（git 无额外 diff）；dist 内 aerial frag 已含 Fix A/B/C 修复态。
+- 维护日志：[2026-08-22-cloud-shader-bundle-auto-guard](../LLM_record/26-08/2026-08-22/2026-08-22-cloud-shader-bundle-auto-guard.md)。
+
+#### ③ 体积云 shader 副本漂移修复（原 V3.5.28）— 补建 bundle 再生脚本 + 重同步
+
+- **问题**：上一版（V3.5.27 时段内同日会话）的空中透视白蒙版修复（`compositeAerialDisplay` 统一 OETF 出口 + 分类带收窄 + 曝光按分支施加）**未生效**——用户实测症状依旧。根因是副本漂移：shader 运行时唯一真源为内联 `bundledShaders.js`（`shaderLoader.js` bundle 优先命中，fetch 仅回退），而其头部声明的再生脚本 `scripts/bundle-shaders.mjs` 在仓库中不存在，导致 `Shaders/aerialPerspectiveEffect.frag` 源文件的修复无法同步进运行时加载的旧 bundle。
+- **修复**：
+  - 新增 [frontend/scripts/bundle-shaders.mjs](../../frontend/scripts/bundle-shaders.mjs)：递归打包 `lib/AtmosphereFromThreeGeospatial/Shaders/` 全部 glsl/frag（CRLF→LF、JSON 转义安全写入），banner 更新为真实脚本路径与真源标注；
+  - 执行重生成 `bundledShaders.js`（5 shader 全量重建，diff 校验 aerial frag 与源逐字节一致）；
+  - 同步 `public/cloud-atmosphere/shaders/` 镜像 5 文件。
+- **验证**：node 动态 import 校验 key 完整 + 双向 diff 通过；实机渲染表现待用户回归（交界无灰白带 / scale=0 恒等 / 升降无闪烁）。
+- 维护日志：[2026-08-22-cloud-shader-bundle-drift-fix](../LLM_record/26-08/2026-08-22/2026-08-22-cloud-shader-bundle-drift-fix.md)（含前置修复日志 [2026-08-22-aerial-perspective-white-veil](../LLM_record/26-08/2026-08-22/2026-08-22-aerial-perspective-white-veil.md)）。
+
 ### V3.5.27 (2026-08-20~22) — 面状航线模块迁移：toolPanel 模块卡片直驱 + 全量 i18n
 
 > 2026-08-20~22 的三轮会话增量（浮层整页方案 → 无头控制器重构 → 启动崩溃修复与本地化）按用户范式指示收敛为单一版本 V3.5.27。
@@ -37,6 +84,12 @@
 - 控制器 `onWorkingSetChange` 生命周期钩子：首次生成有效航线（含 KMZ 导入回填）时以固定 id `planar_route_working` 将托管数据源注册进 loadedDataSources → 自动建档，支持 显隐/透明度/重命名/定位(flyTo)/移除；清除全部或控制器销毁时注销。
 - 外部删除联动：adapter.remove 的 wayline 分支先调 `detachForExternalRemoval()` 复位控制器内部状态再走通用移除销毁句柄，避免悬空引用；下次交互重建全新数据源。
 - 起飞点实体（startPoint / air_start_point）收敛写入托管 DataSource（原先散落 viewer.entities 不受显隐控制）。
+
+#### 六、体积云空中透视（aerialStageEnabled）天际线白蒙版修复
+
+- **根因三层叠加**：Stage1 直通地面被误乘曝光（sRGB 被抬亮）；aerial 分类宽带 0.014 把大片远地表误判为天空走二次 OETF（灰白蒙版带）；aerial 分支线性 inscatter 直加 sRGB 且无 tonemap 出口（近地平线饱和发白 + 交界缝）。
+- **修复**：曝光按分支施加（直通=1.0）；新增 `compositeAerialDisplay` 统一「pow2.2 线性化→合成→mix(scale)→ACES+gamma」出口（scale=0 严格恒等）；分类参数与上游对齐收窄（0.0016 / -0.01），旧宽带防闪理由已因出口统一而消失。
+- 详见[维护日志](../LLM_record/26-08/2026-08-22/2026-08-22-aerial-perspective-white-veil.md)。
 
 
 ### V3.5.26 (2026-08-22) — 综合版本：Cesium 本地化自托管 + 贴地策略统一重构 + 首屏 Loading 过渡 + 暂存区审查收敛

@@ -14,7 +14,8 @@ dependencies = [
     "rasterio>=1.3.9",
     "sqlmodel>=0.0.16",
     "apscheduler>=3.10.0",
-    "supabase",
+    # 注：Supabase 同步使用自研 SupabaseClient（httpx 直连 REST，见 api/statistics.py），
+    # 官方 supabase 包从未被 import，引入它会拖进 pyiceberg/zstandard 等约 36 个无用包(+61MB)
     "pytz",
     "python-multipart>=0.0.6",
     "shapely>=2.0.0",

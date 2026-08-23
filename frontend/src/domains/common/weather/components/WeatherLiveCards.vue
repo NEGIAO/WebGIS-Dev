@@ -150,25 +150,27 @@ const liveWeatherTextResolved = computed(
 }
 
 .live-main-card {
-    border: 1px solid rgba(57, 142, 87, 0.26);
-    border-radius: 10px;
-    background: linear-gradient(135deg, rgba(255, 255, 255, 0.88), rgba(227, 244, 233, 0.92));
+    border: 1px solid rgba(var(--brand-primary-rgb), 0.22);
+    border-radius: 12px;
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.92), rgba(232, 246, 237, 0.94));
     padding: 10px 12px;
     display: flex;
     align-items: center;
     gap: 10px;
+    box-shadow: var(--toc-shadow-sm);
 }
 
 .live-main-icon {
     width: 48px;
     height: 48px;
-    border-radius: 12px;
-    background: rgba(54, 154, 91, 0.12);
+    border-radius: 13px;
     display: flex;
     align-items: center;
     justify-content: center;
     font-size: 27px;
     flex-shrink: 0;
+    background: linear-gradient(135deg, rgba(var(--brand-primary-rgb), 0.16), rgba(var(--brand-primary-rgb), 0.06));
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.45);
 }
 
 .live-main-content {
@@ -205,14 +207,25 @@ const liveWeatherTextResolved = computed(
 }
 
 .live-mini-card {
-    border: 1px solid rgba(57, 142, 87, 0.18);
-    border-radius: 10px;
-    background: rgba(255, 255, 255, 0.76);
-    padding: 8px;
+    border: 1px solid rgba(var(--brand-primary-rgb), 0.16);
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.78);
+    padding: 8px 9px;
     display: flex;
     flex-direction: column;
     justify-content: center;
     gap: 4px;
+    transition:
+        border-color var(--toc-transition-fast),
+        transform var(--toc-transition-fast),
+        box-shadow var(--toc-transition-fast);
+}
+
+.live-mini-card:hover {
+    border-color: rgba(var(--brand-primary-dark-rgb), 0.4);
+    background: #ffffff;
+    transform: translateY(-2px);
+    box-shadow: 0 5px 12px rgba(var(--brand-primary-rgb), 0.12);
 }
 
 .mini-label {
@@ -229,8 +242,8 @@ const liveWeatherTextResolved = computed(
 
 /* 降雨聚焦面板 */
 .rain-focus-panel {
-    border: 1px solid rgba(57, 142, 87, 0.22);
-    border-radius: 10px;
+    border: 1px solid rgba(var(--brand-primary-rgb), 0.2);
+    border-radius: 12px;
     background: linear-gradient(135deg, rgba(245, 252, 247, 0.95), rgba(232, 246, 237, 0.92));
     padding: 10px 12px;
     display: flex;
@@ -240,7 +253,7 @@ const liveWeatherTextResolved = computed(
 }
 
 .rain-focus-panel.has-rain {
-    border-color: rgba(34, 126, 192, 0.35);
+    border-color: rgba(34, 126, 192, 0.4);
     background: linear-gradient(135deg, rgba(236, 248, 255, 0.92), rgba(228, 241, 252, 0.95));
 }
 
@@ -259,13 +272,14 @@ const liveWeatherTextResolved = computed(
 .rain-focus-icon {
     width: 44px;
     height: 44px;
-    border-radius: 12px;
+    border-radius: 13px;
     display: flex;
     align-items: center;
     justify-content: center;
-    background: rgba(72, 157, 103, 0.14);
     font-size: 24px;
     flex-shrink: 0;
+    background: linear-gradient(135deg, rgba(var(--brand-primary-rgb), 0.15), rgba(var(--brand-primary-rgb), 0.05));
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.45);
 }
 
 .rain-focus-title {
@@ -294,7 +308,7 @@ const liveWeatherTextResolved = computed(
     justify-content: center;
     padding: 3px 10px;
     border-radius: 999px;
-    border: 1px solid rgba(54, 147, 88, 0.35);
+    border: 1px solid rgba(var(--brand-primary-rgb), 0.35);
     color: var(--brand-accent-dark);
     font-size: 12px;
     font-weight: 700;
@@ -311,7 +325,7 @@ const liveWeatherTextResolved = computed(
 .rain-hit {
     padding: 2px 8px;
     border-radius: 999px;
-    border: 1px solid rgba(54, 147, 88, 0.25);
+    border: 1px solid rgba(var(--brand-primary-rgb), 0.25);
     background: rgba(255, 255, 255, 0.75);
     color: var(--brand-accent-dark);
     font-size: 11px;

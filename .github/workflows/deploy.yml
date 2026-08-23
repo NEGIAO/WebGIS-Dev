@@ -41,6 +41,13 @@ jobs:
         working-directory: ./frontend
         run: npm install
 
+      # Shader bundle 一致性门禁:仓库内提交的 bundledShaders.js / public 镜像
+      # 必须与 Shaders/ 真源一致,漂移则失败并提示本地执行 npm run shaders。
+      # (build 本身也会在 vite.config 求值时自动再生,此步用于把「忘同步」拦截在部署前)
+      - name: Check shader bundle sync
+        working-directory: ./frontend
+        run: npm run shaders:check
+
       - name: Build Frontend Project
         working-directory: ./frontend
         run: npm run build

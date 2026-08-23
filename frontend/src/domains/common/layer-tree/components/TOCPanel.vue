@@ -31,34 +31,23 @@
             </button>
         </div>
 
-        <div class="tabs">
+        <div
+            class="tabs"
+            :style="{ '--active-index': tabIndex }"
+        >
             <button
+                v-for="item in tabItems"
+                :key="item.value"
                 class="tab"
-                :class="{ active: activeTab === 'layers' }"
-                @click="activeTab = 'layers'"
+                :class="{ active: activeTab === item.value }"
+                @click="activeTab = item.value"
             >
-                {{ t('layer.tabLayers') }}
-            </button>
-            <button
-                class="tab"
-                :class="{ active: activeTab === 'draw' }"
-                @click="activeTab = 'draw'"
-            >
-                {{ t('layer.tabDraw') }}
-            </button>
-            <button
-                class="tab"
-                :class="{ active: activeTab === 'style' }"
-                @click="activeTab = 'style'"
-            >
-                {{ t('layer.tabStyle') }}
-            </button>
-            <button
-                class="tab"
-                :class="{ active: activeTab === 'download' }"
-                @click="activeTab = 'download'"
-            >
-                {{ t('layer.tabDownload') }}
+                <component
+                    :is="item.icon"
+                    :size="13"
+                    stroke-width="2"
+                />
+                <span>{{ t(item.label) }}</span>
             </button>
         </div>
 
@@ -274,93 +263,100 @@
             <!-- 1. 核心绘图工具区 -->
             <div class="eco-section">
                 <div class="section-header">
-                    <span class="section-dot"></span>
+                    <span class="section-icon"><PenTool :size="12" /></span>
                     <span class="section-title">{{ t('layer.basicDraw') }}</span>
+                    <span class="header-actions">
+                        <button
+                            class="mini-icon-btn"
+                            :title="t('layer.zoomAll')"
+                            @click="emit('interaction', 'ZoomToGraphics')"
+                        >
+                            <Maximize
+                                :size="13"
+                                :stroke-width="2"
+                            />
+                        </button>
+                        <button
+                            class="mini-icon-btn danger"
+                            :title="t('layer.clearCanvas')"
+                            @click="emit('interaction', 'Clear')"
+                        >
+                            <Eraser
+                                :size="13"
+                                :stroke-width="2"
+                            />
+                        </button>
+                    </span>
                 </div>
                 <div class="eco-draw-grid">
                     <button
                         v-for="tool in drawTools"
                         :key="tool.value"
-                        class="eco-tool-pill"
+                        class="eco-tool-tile"
                         :class="{ active: selectedDrawTool === tool.value }"
                         @click="activateDrawTool(tool.value)"
                     >
-                        {{ tool.label }}
-                    </button>
-                </div>
-                <div class="eco-actions-flex">
-                    <button
-                        class="eco-btn-op primary"
-                        @click="emit('interaction', 'ZoomToGraphics')"
-                    >
-                        {{ t('layer.zoomAll') }}
-                    </button>
-                    <button
-                        class="eco-btn-op warning"
-                        @click="emit('interaction', 'Clear')"
-                    >
-                        {{ t('layer.clearCanvas') }}
+                        <component
+                            :is="tool.icon"
+                            :size="16"
+                            :stroke-width="1.8"
+                        />
+                        <span>{{ tool.label }}</span>
                     </button>
                 </div>
             </div>
 
-            <!-- 2. 精确坐标定位区 (合并了经纬度和 P 参数) -->
-            <div class="eco-section alt-bg">
+            <!-- 2. 精确坐标定位区 -->
+            <div class="eco-section">
                 <div class="section-header">
-                    <span class="section-dot"></span>
+                    <span class="section-icon"><Crosshair :size="12" /></span>
                     <span class="section-title">{{ t('layer.coordLocate') }}</span>
                 </div>
 
-                <!-- 经纬度输入 -->
-                <div class="eco-input-group">
-                    <div class="input-row">
-                        <input
-                            v-model.trim="coordInputLon"
-                            class="eco-input"
-                            :placeholder="t('layer.lonPlaceholder')"
-                        />
-                        <input
-                            v-model.trim="coordInputLat"
-                            class="eco-input"
-                            :placeholder="t('layer.latPlaceholder')"
-                        />
-                    </div>
-                    <div class="input-row compact">
-                        <select
-                            v-model="coordInputCRS"
-                            class="eco-select"
-                        >
-                            <option value="wgs84">WGS-84</option>
-                            <option value="gcj02">GCJ-02</option>
-                        </select>
-                        <button
-                            class="eco-btn-sm"
-                            @click="drawPointByCoordinates"
-                        >
-                            {{ t('layer.draw') }}
-                        </button>
-                    </div>
+                <!-- 经纬度：一体化输入条 -->
+                <div class="join-bar">
+                    <input
+                        v-model.trim="coordInputLon"
+                        class="join-field"
+                        :placeholder="t('layer.lonPlaceholder')"
+                    />
+                    <span class="join-sep"></span>
+                    <input
+                        v-model.trim="coordInputLat"
+                        class="join-field"
+                        :placeholder="t('layer.latPlaceholder')"
+                    />
+                    <select
+                        v-model="coordInputCRS"
+                        class="join-select"
+                    >
+                        <option value="wgs84">WGS-84</option>
+                        <option value="gcj02">GCJ-02</option>
+                    </select>
+                    <button
+                        class="join-go"
+                        @click="drawPointByCoordinates"
+                    >
+                        {{ t('layer.draw') }}
+                    </button>
                 </div>
 
-                <div class="eco-divider"><span>OR</span></div>
-
-                <!-- P 参数输入 -->
-                <div class="eco-input-group">
-                    <div class="input-row">
-                        <input
-                            v-model.trim="coordInputP"
-                            class="eco-input"
-                            :placeholder="t('layer.pParamPlaceholder')"
-                        />
-                        <button
-                            class="eco-btn-sm"
-                            :disabled="isDecodePBusy"
-                            @click="drawPointByPositionCode"
-                        >
-                            {{ isDecodePBusy ? '...' : t('layer.parse') }}
-                        </button>
-                    </div>
+                <!-- P 参数码：同款输入条 -->
+                <div class="join-bar mt-8">
+                    <input
+                        v-model.trim="coordInputP"
+                        class="join-field"
+                        :placeholder="t('layer.pParamPlaceholder')"
+                    />
+                    <button
+                        class="join-go"
+                        :disabled="isDecodePBusy"
+                        @click="drawPointByPositionCode"
+                    >
+                        {{ isDecodePBusy ? '...' : t('layer.parse') }}
+                    </button>
                 </div>
+
                 <div
                     v-if="coordInputError || coordInputPError"
                     class="eco-error-msg"
@@ -372,36 +368,46 @@
             <!-- 3. 地理编码工具 -->
             <div class="eco-section">
                 <div class="section-header">
-                    <span class="section-dot"></span>
+                    <span class="section-icon"><Navigation :size="12" /></span>
                     <span class="section-title">{{ t('layer.geocode') }}</span>
                 </div>
-                <div class="eco-input-group">
+
+                <div class="join-bar">
+                    <span class="join-lead">
+                        <Search
+                            :size="13"
+                            :stroke-width="2"
+                        />
+                    </span>
                     <input
                         v-model.trim="geocodeAddressInput"
-                        class="eco-input full"
+                        class="join-field grow-2"
                         :placeholder="t('layer.addressPlaceholder')"
                     />
-                    <div class="input-row compact mt-8">
-                        <input
-                            v-model.trim="geocodeCityInput"
-                            class="eco-input"
-                            :placeholder="t('layer.cityOptionalPlaceholder')"
-                        />
-                        <button
-                            class="eco-btn-sm"
-                            :disabled="isGeocodeBusy"
-                            @click="drawPointByGeocodeAddress"
-                        >
-                            {{ t('layer.encode') }}
-                        </button>
-                    </div>
+                    <span class="join-sep"></span>
+                    <input
+                        v-model.trim="geocodeCityInput"
+                        class="join-field"
+                        :placeholder="t('layer.cityOptionalPlaceholder')"
+                    />
+                    <button
+                        class="join-go"
+                        :disabled="isGeocodeBusy"
+                        @click="drawPointByGeocodeAddress"
+                    >
+                        {{ t('layer.encode') }}
+                    </button>
                 </div>
 
                 <button
                     class="eco-btn-reverse mt-12"
                     @click="startReverseGeocodePick"
                 >
-                    <span class="icon"><MapPin :size="14" /></span> {{ t('layer.reverseGeocode') }}
+                    <LocateFixed
+                        :size="14"
+                        :stroke-width="2"
+                    />
+                    {{ t('layer.reverseGeocode') }}
                 </button>
             </div>
 
@@ -435,28 +441,43 @@
             class="panel-scroll style-scroll"
         >
             <div class="style-panel">
-                <div class="card-title">{{ t('layer.styleTemplates') }}</div>
-                <div class="template-chip-row">
-                    <button
-                        v-for="tpl in styleTemplates"
-                        :key="tpl.id"
-                        class="template-chip"
-                        @click="applyTemplate(tpl.id)"
-                    >
-                        <span
-                            class="chip-dot"
-                            :style="{ backgroundColor: tpl.color }"
-                        ></span>
-                        <span>{{ tpl.name }}</span>
-                    </button>
+                <!-- 样式模板 -->
+                <div class="eco-section">
+                    <div class="section-header">
+                        <span class="section-icon"><Palette :size="12" /></span>
+                        <span class="section-title">{{ t('layer.styleTemplates') }}</span>
+                    </div>
+                    <div class="template-swatch-grid">
+                        <button
+                            v-for="tpl in styleTemplates"
+                            :key="tpl.id"
+                            class="tpl-swatch"
+                            :title="tpl.color"
+                            @click="applyTemplate(tpl.id)"
+                        >
+                            <span
+                                class="swatch-dot"
+                                :style="{ background: tpl.color }"
+                            ></span>
+                            <span class="swatch-name">{{ tpl.name }}</span>
+                        </button>
+                    </div>
                 </div>
 
-                <div class="style-divider"></div>
+                <!-- 样式编辑 -->
+                <div class="eco-section">
+                    <div class="section-header">
+                        <span class="section-icon"><SlidersHorizontal :size="12" /></span>
+                        <span class="section-title">{{ t('layer.styleEdit') }}</span>
+                    </div>
 
-                <div class="card-title">{{ t('layer.styleEdit') }}</div>
-                <div class="field">
-                    <label>{{ t('layer.editTarget') }}</label>
-                    <div class="select-wrap">
+                    <div class="join-bar">
+                        <span class="join-lead">
+                            <Layers
+                                :size="13"
+                                :stroke-width="1.9"
+                            />
+                        </span>
                         <select
                             v-model="selectedEditLayerId"
                             class="style-select"
@@ -470,58 +491,73 @@
                             </option>
                         </select>
                     </div>
-                </div>
-                <div class="field-grid">
-                    <div class="field">
-                        <label>{{ t('layer.fillColor') }}</label>
-                        <input
-                            v-model="styleForm.fillColor"
-                            type="color"
-                            class="style-color"
-                        />
+
+                    <div class="field-grid mt-8">
+                        <label class="color-card">
+                            <input
+                                v-model="styleForm.fillColor"
+                                type="color"
+                                class="style-color"
+                            />
+                            <span class="color-meta">
+                                <span class="color-label">{{ t('layer.fillColor') }}</span>
+                                <span class="color-hex">{{ styleForm.fillColor }}</span>
+                            </span>
+                        </label>
+                        <label class="color-card">
+                            <input
+                                v-model="styleForm.strokeColor"
+                                type="color"
+                                class="style-color"
+                            />
+                            <span class="color-meta">
+                                <span class="color-label">{{ t('layer.strokeColor') }}</span>
+                                <span class="color-hex">{{ styleForm.strokeColor }}</span>
+                            </span>
+                        </label>
                     </div>
-                    <div class="field">
-                        <label>{{ t('layer.strokeColor') }}</label>
-                        <input
-                            v-model="styleForm.strokeColor"
-                            type="color"
-                            class="style-color"
-                        />
-                    </div>
-                </div>
-                <div class="field-grid">
-                    <div class="field">
-                        <div class="slider-head">
-                            <label>{{ t('layer.fillOpacity') }}</label>
-                            <span>{{ styleForm.fillOpacityPct }}%</span>
+
+                    <div class="field-grid mt-8">
+                        <div class="field">
+                            <div class="slider-head">
+                                <label>{{ t('layer.fillOpacity') }}</label>
+                                <span class="slider-value">{{ styleForm.fillOpacityPct }}%</span>
+                            </div>
+                            <input
+                                v-model.number="styleForm.fillOpacityPct"
+                                class="style-slider"
+                                type="range"
+                                min="0"
+                                max="100"
+                                :style="{ '--fill': `${styleForm.fillOpacityPct}%` }"
+                            />
                         </div>
-                        <input
-                            v-model.number="styleForm.fillOpacityPct"
-                            class="style-slider"
-                            type="range"
-                            min="0"
-                            max="100"
-                        />
-                    </div>
-                    <div class="field">
-                        <div class="slider-head">
-                            <label>{{ t('layer.strokeWidth') }}</label>
-                            <span>{{ styleForm.strokeWidth }}</span>
+                        <div class="field">
+                            <div class="slider-head">
+                                <label>{{ t('layer.strokeWidth') }}</label>
+                                <span class="slider-value">{{ styleForm.strokeWidth }}px</span>
+                            </div>
+                            <input
+                                v-model.number="styleForm.strokeWidth"
+                                class="style-slider"
+                                type="range"
+                                min="1"
+                                max="8"
+                                step="0.5"
+                                :style="{ '--fill': `${((styleForm.strokeWidth - 1) / 7) * 100}%` }"
+                            />
                         </div>
-                        <input
-                            v-model.number="styleForm.strokeWidth"
-                            class="style-slider"
-                            type="range"
-                            min="1"
-                            max="8"
-                            step="0.5"
-                        />
                     </div>
                 </div>
+
                 <button
-                    class="small-btn style-apply-btn"
+                    class="apply-btn"
                     @click="applyStyle"
                 >
+                    <Paintbrush
+                        :size="14"
+                        :stroke-width="2"
+                    />
                     {{ t('layer.applyStyle') }}
                 </button>
             </div>
@@ -537,7 +573,27 @@
 
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
-import { FolderOpen, MapPin } from '@lucide/vue';
+import {
+    CircleDot,
+    Crosshair,
+    Download,
+    Eraser,
+    FolderOpen,
+    Hexagon,
+    Layers,
+    LocateFixed,
+    Maximize,
+    Navigation,
+    Palette,
+    Paintbrush,
+    PenTool,
+    Route,
+    Ruler,
+    Search,
+    SlidersHorizontal,
+    SquareDashed,
+    Table,
+} from '@lucide/vue';
 import { useMessage } from '@common/shell/useMessage';
 import { useLocale } from '@common/app/useLocale';
 import { useGisLoader } from '@common/data-import/useGisLoader';
@@ -619,6 +675,18 @@ const attrStore = useAttrStore();
 const cesiumLayersStore = useCesiumLayersStore();
 const styleEditor = useStyleEditor();
 const activeTab = ref('layers');
+
+const tabItems = [
+    { value: 'layers', label: 'layer.tabLayers', icon: Layers },
+    { value: 'draw', label: 'layer.tabDraw', icon: PenTool },
+    { value: 'style', label: 'layer.tabStyle', icon: Paintbrush },
+    { value: 'download', label: 'layer.tabDownload', icon: Download },
+];
+
+const tabIndex = computed(() =>
+    Math.max(0, tabItems.findIndex((item) => item.value === activeTab.value)),
+);
+
 const lastScanAttempted = ref(false);
 const coordInputLon = ref('');
 const coordInputLat = ref('');
@@ -709,12 +777,12 @@ function getCurrentFormatConfig() {
 const styleTemplates = styleEditor.styleTemplates;
 
 const drawTools = computed(() => [
-    { value: 'AttributeQuery', label: t('layer.attributeQuery') },
-    { value: 'Point', label: t('layer.drawPoint') },
-    { value: 'LineString', label: t('layer.drawLine') },
-    { value: 'Polygon', label: t('layer.drawPolygon') },
-    { value: 'MeasureDistance', label: t('layer.measureDistance') },
-    { value: 'MeasureArea', label: t('layer.measureArea') },
+    { value: 'AttributeQuery', label: t('layer.attributeQuery'), icon: Table },
+    { value: 'Point', label: t('layer.drawPoint'), icon: CircleDot },
+    { value: 'LineString', label: t('layer.drawLine'), icon: Route },
+    { value: 'Polygon', label: t('layer.drawPolygon'), icon: Hexagon },
+    { value: 'MeasureDistance', label: t('layer.measureDistance'), icon: Ruler },
+    { value: 'MeasureArea', label: t('layer.measureArea'), icon: SquareDashed },
 ]);
 
 const styleForm = styleEditor.styleForm;
@@ -1451,237 +1519,317 @@ async function loadSharedResource(resource) {
 </script>
 
 <style scoped>
-/* 面板容器滚动 */
+/* ===== 绘制面板布局 ===== */
 .eco-panel-scroll {
-    padding: 16px;
+    padding: 6px 4px;
     display: flex;
     flex-direction: column;
-    gap: 20px;
+    gap: 18px;
 }
 
-/* 分组标题样式 */
+/* 分组：去卡片化，仅靠标题与留白分区 */
+.eco-section {
+    display: flex;
+    flex-direction: column;
+}
+
+/* 分组标题：渐变小徽章 + 标题 */
 .section-header {
     display: flex;
     align-items: center;
-    gap: 8px;
-    margin-bottom: 12px;
+    gap: 7px;
+    margin-bottom: 10px;
 }
 
-.section-dot {
-    width: 4px;
-    height: 14px;
-    background: var(--brand-accent);
-    border-radius: 4px;
+.section-icon {
+    width: 20px;
+    height: 20px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 6px;
+    background: var(--brand-gradient);
+    color: #ffffff;
+    box-shadow:
+        0 2px 6px rgba(var(--brand-primary-dark-rgb), 0.26),
+        inset 0 1px 0 rgba(255, 255, 255, 0.28);
 }
 
 .section-title {
-    font-size: 14px;
-    font-weight: 600;
-    color: var(--toc-btn-reverse-text);
+    font-size: var(--toc-font-md);
+    font-weight: 700;
+    color: var(--toc-card-title-dark);
+    letter-spacing: 0.3px;
 }
 
-/* 绘图工具网格：胶囊化 */
+/* 标题栏右侧动作区 */
+.header-actions {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 3px;
+}
+
+.mini-icon-btn {
+    width: 24px;
+    height: 24px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: none;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--toc-text-secondary);
+    cursor: pointer;
+    transition:
+        color var(--toc-transition-fast),
+        background var(--toc-transition-fast),
+        transform var(--toc-transition-fast);
+}
+
+.mini-icon-btn:hover {
+    color: var(--toc-primary);
+    background: var(--toc-primary-bg-hover);
+}
+
+.mini-icon-btn.danger:hover {
+    color: var(--toc-danger);
+    background: rgba(184, 61, 61, 0.1);
+}
+
+.mini-icon-btn:active {
+    transform: scale(0.9);
+}
+
+/* 绘图工具磁贴：图标在上、文字在下 */
 .eco-draw-grid {
     display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 8px;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 7px;
 }
 
-.eco-tool-pill {
-    padding: 8px 4px;
-    border: 1px solid var(--toc-border-light);
-    background: var(--toc-bg-white);
-    border-radius: 12px;
-    font-size: 12px;
-    color: var(--toc-text-secondary);
-    cursor: pointer;
-    transition: all 0.2s;
-}
-
-.eco-tool-pill.active {
-    background: var(--toc-btn-primary);
-    color: #fff;
-    border-color: var(--toc-btn-primary);
-    box-shadow: 0 4px 10px rgba(var(--brand-primary-rgb), 0.3);
-}
-
-/* 输入框组合样式 */
-.eco-input-group {
+.eco-tool-tile {
     display: flex;
     flex-direction: column;
-    gap: 8px;
-}
-
-.input-row {
-    display: flex;
-    gap: 8px;
-}
-
-.input-row.compact .eco-input {
-    width: 60%;
-}
-
-.input-row.compact .eco-btn-sm {
-    flex: 1;
-}
-
-.eco-input {
-    background: var(--toc-input-bg);
-    border: 1px solid var(--toc-input-border);
-    border-radius: 10px;
-    padding: 8px 12px;
-    font-size: 12px;
-    outline: none;
-    transition: border 0.2s;
-    width: 100%;
-}
-
-.eco-input:focus {
-    border-color: var(--toc-input-focus);
-}
-
-.eco-select {
-    background: var(--toc-input-bg);
-    border: 1px solid var(--toc-input-border);
-    border-radius: 10px;
-    font-size: 12px;
-    padding: 0 8px;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+    min-width: 0;
+    padding: 11px 2px 9px;
+    border: 1px solid rgba(var(--brand-primary-rgb), 0.18);
+    background: rgba(255, 255, 255, 0.72);
+    border-radius: 12px;
+    font-size: 11px;
     color: var(--toc-text-secondary);
+    cursor: pointer;
+    white-space: nowrap;
+    transition:
+        color 0.16s ease,
+        border-color 0.16s ease,
+        background 0.16s ease,
+        transform 0.16s ease,
+        box-shadow 0.16s ease;
 }
 
-/* 按钮样式：对标截图中的圆润感 */
-.eco-btn-sm {
-    background: var(--toc-btn-primary);
-    color: white;
+.eco-tool-tile svg {
+    transition: transform 0.16s ease;
+}
+
+.eco-tool-tile:hover:not(.active) {
+    color: var(--toc-primary);
+    border-color: rgba(var(--brand-primary-dark-rgb), 0.42);
+    background: #ffffff;
+    transform: translateY(-2px);
+    box-shadow: 0 6px 14px rgba(var(--brand-primary-rgb), 0.15);
+}
+
+.eco-tool-tile:hover:not(.active) svg {
+    transform: translateY(-1px) scale(1.06);
+}
+
+.eco-tool-tile:active:not(.active) {
+    transform: scale(0.94);
+}
+
+.eco-tool-tile.active {
+    background: var(--brand-gradient);
+    color: #ffffff;
+    border-color: transparent;
+    font-weight: 600;
+    box-shadow:
+        0 5px 14px rgba(var(--brand-primary-dark-rgb), 0.34),
+        inset 0 1px 0 rgba(255, 255, 255, 0.25);
+}
+
+/* ===== 一体式输入条（joined bar）===== */
+.join-bar {
+    display: flex;
+    align-items: stretch;
+    min-height: 34px;
+    background: rgba(255, 255, 255, 0.82);
+    border: 1px solid rgba(var(--brand-primary-rgb), 0.22);
+    border-radius: 11px;
+    overflow: hidden;
+    transition:
+        border-color var(--toc-transition-slow),
+        box-shadow var(--toc-transition-slow),
+        background var(--toc-transition-slow);
+}
+
+.join-bar:focus-within {
+    border-color: var(--toc-primary-light);
+    background: rgba(255, 255, 255, 0.95);
+    box-shadow: 0 0 0 3px var(--toc-primary-bg-hover);
+}
+
+.join-field {
+    flex: 1;
+    min-width: 0;
     border: none;
-    border-radius: 10px;
-    padding: 6px 16px;
-    font-size: 12px;
+    background: transparent;
+    padding: 8px 10px;
+    font-size: var(--toc-font-sm);
+    color: var(--toc-text-primary);
+    outline: none;
+}
+
+.grow-2 {
+    flex: 2;
+}
+
+.join-field::placeholder {
+    color: var(--toc-text-light);
+}
+
+.join-sep {
+    flex-shrink: 0;
+    width: 1px;
+    margin: 7px 0;
+    background: rgba(var(--brand-primary-rgb), 0.16);
+}
+
+.join-lead {
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    padding-left: 11px;
+    color: var(--toc-text-light);
+    transition: color var(--toc-transition-normal);
+}
+
+.join-bar:focus-within .join-lead {
+    color: var(--toc-primary);
+}
+
+.join-select {
+    flex-shrink: 0;
+    border: none;
+    background: transparent;
+    padding: 0 2px 0 8px;
+    font-size: 11px;
+    color: var(--toc-text-secondary);
+    outline: none;
     cursor: pointer;
 }
 
+/* 条内渐变主操作段 */
+.join-go {
+    flex-shrink: 0;
+    border: none;
+    background: var(--brand-gradient);
+    color: #ffffff;
+    font-size: var(--toc-font-sm);
+    font-weight: 600;
+    padding: 0 13px;
+    cursor: pointer;
+    white-space: nowrap;
+    transition:
+        filter var(--toc-transition-fast),
+        opacity var(--toc-transition-fast);
+}
+
+.join-go:hover:not(:disabled) {
+    filter: brightness(1.06);
+}
+
+.join-go:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+}
+
+/* 逆地理编码按钮：软着色实底 */
 .eco-btn-reverse {
     width: 100%;
-    padding: 10px;
-    background: var(--toc-btn-reverse-bg);
-    border: 1px dashed var(--toc-btn-reverse-border);
-    border-radius: 12px;
-    color: var(--toc-btn-reverse-text);
-    font-size: 13px;
+    padding: 9px;
+    background: var(--toc-primary-bg);
+    border: 1px solid rgba(var(--brand-primary-rgb), 0.35);
+    border-radius: 11px;
+    color: var(--toc-primary);
+    font-size: var(--toc-font-md);
+    font-weight: 600;
     cursor: pointer;
-    font-weight: 500;
     display: flex;
     align-items: center;
     justify-content: center;
     gap: 6px;
+    transition:
+        background var(--toc-transition-normal),
+        box-shadow var(--toc-transition-normal),
+        transform var(--toc-transition-normal);
 }
 
-.eco-btn-reverse svg {
-    color: var(--toc-btn-reverse-text);
-}
-
-/* 操作按钮行布局 */
-.eco-actions-flex {
-    display: flex;
-    gap: 12px;
-    margin-top: 12px;
-}
-
-/* 基础按钮样式 */
-.eco-btn-op {
-    flex: 1;
-    padding: 10px 0;
-    border: none;
-    border-radius: 12px;
-    /* 保持大圆角一致性 */
-    font-size: 13px;
-    font-weight: 600;
-    cursor: pointer;
-    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-}
-
-/* “全幅显示” - 采用主题中的主绿 */
-.eco-btn-op.primary {
-    background-color: var(--toc-btn-primary);
-    border: var(--toc-primary-dark);
-    color: #ffffff;
-    box-shadow: 0 4px 12px rgba(var(--brand-primary-rgb), 0.2);
-}
-
-.eco-btn-op.primary:hover {
-    background-color: var(--toc-btn-primary-hover);
+.eco-btn-reverse:hover {
+    background: var(--toc-primary-bg-hover);
+    box-shadow: 0 4px 12px rgba(var(--brand-primary-rgb), 0.18);
     transform: translateY(-1px);
-    box-shadow: 0 6px 15px rgba(var(--brand-primary-rgb), 0.3);
 }
 
-/* “清空画布” - 采用柔和的橙黄色，避免过于突兀 */
-.eco-btn-op.warning {
-    background-color: var(--toc-btn-warning);
-    color: #ffffff;
-    box-shadow: 0 4px 12px rgba(248, 181, 0, 0.2);
+.eco-btn-reverse:active {
+    transform: scale(0.98);
 }
 
-.eco-btn-op.warning:hover {
-    background-color: var(--toc-btn-warning-hover);
-    transform: translateY(-1px);
-    box-shadow: 0 6px 15px rgba(248, 181, 0, 0.3);
+/* 错误提示条 */
+.eco-error-msg {
+    margin-top: 8px;
+    font-size: 11px;
+    line-height: 16px;
+    color: var(--toc-danger);
+    background: rgba(184, 61, 61, 0.07);
+    border: 1px solid rgba(184, 61, 61, 0.22);
+    border-radius: 9px;
+    padding: 6px 10px;
 }
 
-/* 按钮点击时的按下效果 */
-.eco-btn-op:active {
-    transform: translateY(1px);
-    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.15);
-}
-
-/* 分隔线 */
-.eco-divider {
-    text-align: center;
-    margin: 12px 0;
-    position: relative;
-}
-
-.eco-divider::before {
-    content: '';
-    position: absolute;
-    top: 50%;
-    left: 0;
-    right: 0;
-    height: 1.5px;
-    background: var(--toc-divider);
-}
-
-.eco-divider span {
-    position: relative;
-    background: var(--toc-bg-white);
-    padding: 0 10px;
-    font-size: 10px;
-    color: var(--toc-text-muted);
-}
-
-/* 提示框 */
+/* 提示框：无框化，仅一层极浅底色聚拢 */
 .eco-hint-box {
-    background: var(--toc-hint-bg);
-    border-radius: 16px;
-    padding: 12px;
-    border: 1px solid var(--toc-hint-border);
+    background: rgba(var(--brand-primary-rgb), 0.05);
+    border-radius: 10px;
+    padding: 9px 12px;
 }
 
 .hint-item {
     font-size: 11px;
     color: var(--toc-hint-text);
-    line-height: 20px;
+    line-height: 22px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
 }
 
 .hint-item span {
-    background: var(--toc-btn-primary);
-    color: white;
-    padding: 0 4px;
-    border-radius: 4px;
-    margin-right: 4px;
-    font-weight: bold;
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    background: #ffffff;
+    color: var(--toc-text-secondary);
+    border: 1px solid rgba(var(--brand-primary-rgb), 0.28);
+    border-bottom-width: 2px;
+    padding: 0 6px;
+    border-radius: 6px;
+    font-weight: 600;
+    font-size: 10px;
+    line-height: 16px;
+    box-shadow: 0 1px 0 rgba(var(--brand-primary-rgb), 0.08);
 }
 
 .mt-8 {
@@ -1711,7 +1859,7 @@ async function loadSharedResource(resource) {
     align-items: center;
     justify-content: space-between;
     border-bottom: 1px solid var(--toc-header-border);
-    padding-bottom: 8px;
+    /* padding-bottom: 8px; */
 }
 
 .title {
@@ -1727,42 +1875,92 @@ async function loadSharedResource(resource) {
 }
 
 .tabs {
+    --tab-pad: 3px;
+    --tab-gap: 2px;
+    position: relative;
     display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 6px;
-    padding: 4px;
-    border-radius: 12px;
-    border: 1px solid rgba(121, 174, 141, 0.32);
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: var(--tab-gap);
+    padding: var(--tab-pad);
+    border-radius: 999px;
+    border: 1px solid rgba(121, 174, 141, 0.28);
     background: rgba(235, 246, 240, 0.58);
     backdrop-filter: blur(10px);
 }
 
-.tab {
-    border: 1px solid var(--toc-tab-border);
-    background: var(--toc-tab-bg);
-    border-radius: 10px;
-    padding: 8px 4px;
-    font-size: 12px;
-    cursor: pointer;
-    color: var(--toc-tab-text);
-    transition:
-        transform 0.14s ease,
-        background-color 0.14s ease,
-        border-color 0.14s ease;
+/* 滑动指示胶囊：随激活 tab 平滑移动 */
+.tabs::before {
+    content: '';
+    position: absolute;
+    top: var(--tab-pad);
+    bottom: var(--tab-pad);
+    width: calc((100% - var(--tab-pad) * 2 - var(--tab-gap) * 3) / 4);
+    left: calc(
+        var(--tab-pad) + var(--active-index, 0) *
+            ((100% - var(--tab-pad) * 2 - var(--tab-gap) * 3) / 4 + var(--tab-gap))
+    );
+    border-radius: 999px;
+    background: var(--toc-tab-active-bg);
+    box-shadow:
+        0 4px 12px rgba(36, 125, 72, 0.32),
+        inset 0 1px 0 rgba(255, 255, 255, 0.28);
+    transition: left 0.32s cubic-bezier(0.34, 1.2, 0.44, 1);
 }
 
-.tab:hover {
+.tab {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+    min-width: 0;
+    border: none;
+    background: transparent;
+    border-radius: 999px;
+    padding: 7px 2px;
+    font-size: 12px;
+    line-height: 1;
+    white-space: nowrap;
+    cursor: pointer;
+    color: var(--toc-tab-text);
+    transition: color 0.22s ease, transform 0.15s ease;
+}
+
+.tab span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.tab svg {
+    flex-shrink: 0;
+    opacity: 0.72;
+    transition:
+        opacity 0.22s ease,
+        transform 0.22s ease;
+}
+
+.tab:hover:not(.active) {
+    color: var(--toc-tab-active-border);
+}
+
+.tab:hover:not(.active) svg {
+    opacity: 1;
     transform: translateY(-1px);
-    background: rgba(255, 255, 255, 0.72);
-    border-color: rgba(77, 150, 103, 0.3);
+}
+
+.tab:active:not(.active) {
+    transform: scale(0.95);
 }
 
 .tab.active {
-    border-color: var(--toc-tab-active-border);
-    background: var(--toc-tab-active-bg);
     color: #ffffff;
     font-weight: 600;
-    box-shadow: 0 8px 20px rgba(36, 125, 72, 0.24);
+}
+
+.tab.active svg {
+    opacity: 1;
+    transform: scale(1.08);
 }
 
 .panel-scroll {
@@ -2263,92 +2461,213 @@ async function loadSharedResource(resource) {
 
 .style-panel {
     padding: 2px 2px 4px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
 }
 
-.template-chip-row {
+/* ===== 模板色卡磁贴 ===== */
+.template-swatch-grid {
     display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 8px;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 7px;
 }
 
-.template-chip {
-    border: 1px solid var(--toc-border-light);
-    background: var(--toc-bg-white);
-    color: var(--toc-text-dark);
-    border-radius: 8px;
-    padding: 7px 9px;
-    font-size: 12px;
-    display: inline-flex;
+.tpl-swatch {
+    display: flex;
+    flex-direction: column;
     align-items: center;
-    gap: 7px;
+    gap: 6px;
+    min-width: 0;
+    padding: 10px 2px 8px;
+    border: 1px solid rgba(var(--brand-primary-rgb), 0.18);
+    background: rgba(255, 255, 255, 0.72);
+    border-radius: 12px;
+    cursor: pointer;
+    transition:
+        transform 0.16s ease,
+        border-color 0.16s ease,
+        background 0.16s ease,
+        box-shadow 0.16s ease;
+}
+
+.tpl-swatch:hover {
+    background: #ffffff;
+    border-color: rgba(var(--brand-primary-dark-rgb), 0.42);
+    transform: translateY(-2px);
+    box-shadow: 0 6px 14px rgba(var(--brand-primary-rgb), 0.15);
+}
+
+.tpl-swatch:active {
+    transform: scale(0.94);
+}
+
+.swatch-dot {
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    box-shadow:
+        inset 0 0 0 2px rgba(255, 255, 255, 0.65),
+        0 2px 6px rgba(0, 0, 0, 0.18);
+}
+
+.swatch-name {
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 10px;
+    color: var(--toc-text-secondary);
+}
+
+/* ===== 目标图层选择：复用一体条 ===== */
+.style-select {
+    flex: 1;
+    min-width: 0;
+    appearance: none;
+    border: none;
+    background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%238faa9b' stroke-width='1.5' stroke-linecap='round'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 10px center;
+    padding: 8px 26px 8px 4px;
+    font-size: var(--toc-font-sm);
+    color: var(--toc-text-primary);
+    outline: none;
     cursor: pointer;
 }
 
-.template-chip:hover {
-    border-color: var(--toc-border-active);
-    background: var(--toc-primary-bg);
+/* ===== 颜色卡片 ===== */
+.color-card {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 9px;
+    border: 1px solid rgba(var(--brand-primary-rgb), 0.16);
+    background: rgba(255, 255, 255, 0.72);
+    border-radius: 11px;
+    cursor: pointer;
+    transition:
+        border-color var(--toc-transition-fast),
+        background var(--toc-transition-fast);
 }
 
-.chip-dot {
-    width: 9px;
-    height: 9px;
-    border-radius: 999px;
-    flex-shrink: 0;
-}
-
-.style-divider {
-    height: 1px;
-    background: var(--toc-border-light);
-    margin: 12px 0;
-}
-
-.select-wrap {
-    position: relative;
-}
-
-.select-wrap::after {
-    content: '▾';
-    position: absolute;
-    right: 10px;
-    top: 50%;
-    transform: translateY(-50%);
-    color: var(--toc-text-secondary);
-    pointer-events: none;
-    font-size: 11px;
-}
-
-.style-select {
-    width: 100%;
-    appearance: none;
-    border: 1px solid var(--toc-border-active);
-    background: var(--toc-bg-white);
-    color: var(--toc-text-dark);
-    border-radius: 8px;
-    padding: 8px 30px 8px 10px;
+.color-card:hover {
+    border-color: rgba(var(--brand-primary-dark-rgb), 0.42);
+    background: #ffffff;
 }
 
 .style-color {
-    border: 1px solid var(--toc-border-light);
+    -webkit-appearance: none;
+    appearance: none;
+    flex-shrink: 0;
+    width: 30px;
+    height: 30px;
+    padding: 0;
+    border: none;
+    background: none;
+    cursor: pointer;
+}
+
+.style-color::-webkit-color-swatch-wrapper {
+    padding: 0;
+}
+
+.style-color::-webkit-color-swatch {
     border-radius: 8px;
-    padding: 2px;
-    background: var(--toc-bg-input);
-    height: 34px;
+    border: 2px solid #ffffff;
+    box-shadow:
+        0 0 0 1px rgba(var(--brand-primary-rgb), 0.28),
+        0 2px 5px rgba(0, 0, 0, 0.14);
+}
+
+.style-color::-moz-color-swatch {
+    border-radius: 8px;
+    border: 2px solid #ffffff;
+    box-shadow:
+        0 0 0 1px rgba(var(--brand-primary-rgb), 0.28),
+        0 2px 5px rgba(0, 0, 0, 0.14);
+}
+
+.color-meta {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    min-width: 0;
+}
+
+.color-label {
+    font-size: 11px;
+    color: var(--toc-text-secondary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.color-hex {
+    font-size: 10px;
+    color: var(--toc-text-light);
+    text-transform: uppercase;
+    font-variant-numeric: tabular-nums;
 }
 
 .slider-head {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    font-size: 12px;
+    font-size: var(--toc-font-sm);
     color: var(--toc-text-secondary);
 }
 
+.slider-value {
+    font-size: 10px;
+    font-weight: 600;
+    line-height: 14px;
+    color: var(--toc-primary);
+    background: var(--toc-primary-bg);
+    border-radius: 999px;
+    padding: 1px 7px;
+    font-variant-numeric: tabular-nums;
+}
+
+/* 滑块：轨道随值渐变填充（--fill 由模板注入） */
 .style-slider {
+    -webkit-appearance: none;
+    appearance: none;
     width: 100%;
-    height: 6px;
-    border-radius: 3px;
-    background: linear-gradient(to right, var(--toc-border-light), var(--toc-primary-lighter));
+    height: 4px;
+    border-radius: 999px;
     outline: none;
+    cursor: pointer;
+    background: linear-gradient(
+        90deg,
+        var(--brand-primary-light) var(--fill, 50%),
+        rgba(var(--brand-primary-rgb), 0.16) var(--fill, 50%)
+    );
+}
+
+.style-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: #ffffff;
+    border: 2px solid var(--brand-primary);
+    box-shadow: 0 1px 4px rgba(var(--brand-primary-dark-rgb), 0.32);
+    transition: transform 0.15s ease;
+}
+
+.style-slider::-webkit-slider-thumb:hover {
+    transform: scale(1.15);
+}
+
+.style-slider::-moz-range-thumb {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: #ffffff;
+    border: 2px solid var(--brand-primary);
+    box-shadow: 0 1px 4px rgba(var(--brand-primary-dark-rgb), 0.32);
 }
 
 /* ===== 共享资源样式 ===== */
@@ -2448,11 +2767,36 @@ async function loadSharedResource(resource) {
     accent-color: var(--toc-primary-light);
 }
 
-.style-apply-btn {
-    margin-top: 8px;
-    border-color: var(--toc-border-active);
-    background: var(--toc-primary-bg);
-    color: var(--toc-primary);
+.apply-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 10px;
+    border: none;
+    border-radius: 12px;
+    background: var(--brand-gradient);
+    color: #ffffff;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    box-shadow:
+        0 4px 12px rgba(var(--brand-primary-dark-rgb), 0.28),
+        inset 0 1px 0 rgba(255, 255, 255, 0.25);
+    transition:
+        filter var(--toc-transition-normal),
+        transform var(--toc-transition-normal),
+        box-shadow var(--toc-transition-normal);
+}
+
+.apply-btn:hover {
+    filter: brightness(1.06);
+    transform: translateY(-1px);
+    box-shadow: 0 6px 15px rgba(var(--brand-primary-dark-rgb), 0.36);
+}
+
+.apply-btn:active {
+    transform: scale(0.98);
 }
 
 .hint {
@@ -2487,8 +2831,8 @@ async function loadSharedResource(resource) {
         grid-template-columns: 1fr;
     }
 
-    .template-chip-row {
-        grid-template-columns: 1fr;
+    .template-swatch-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 
     .name {

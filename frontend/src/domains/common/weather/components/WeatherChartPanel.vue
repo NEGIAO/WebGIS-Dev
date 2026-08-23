@@ -3,62 +3,77 @@
         <!-- 工具栏 -->
         <div class="weather-toolbar">
             <div class="weather-toolbar-left">
-                <h2 class="weather-title">{{ t('weather.title') }}</h2>
-                <p class="weather-subtitle">{{ t('weather.subtitle') }}</p>
+                <span class="weather-badge">
+                    <CloudSun
+                        :size="16"
+                        :stroke-width="1.9"
+                    />
+                </span>
+                <div class="weather-heading">
+                    <h2 class="weather-title">{{ t('weather.title') }}</h2>
+                    <p class="weather-subtitle">{{ t('weather.subtitle') }}</p>
+                </div>
             </div>
-            <div class="weather-toolbar-right">
-                <button
-                    class="toolbar-btn"
-                    :disabled="isBusy"
-                    @click="refreshWeather"
-                >
-                    {{ isBusy ? t('weather.refreshing') : t('weather.refresh') }}
-                </button>
-            </div>
+            <button
+                class="refresh-btn"
+                :class="{ busy: isBusy }"
+                :disabled="isBusy"
+                @click="refreshWeather"
+            >
+                <RefreshCw
+                    :size="13"
+                    :stroke-width="2.2"
+                />
+                <span>{{ isBusy ? t('weather.refreshing') : t('weather.refresh') }}</span>
+            </button>
         </div>
 
-        <!-- 查询行 -->
-        <div class="weather-query-row">
-            <div class="query-block">
-                <label>{{ t('weather.queryAdcode') }}</label>
-                <div class="query-input-row">
-                    <input
-                        v-model.trim="adcodeInput"
-                        class="query-input"
-                        type="text"
-                        maxlength="6"
-                        :placeholder="t('weather.adcodePlaceholder')"
-                        @keyup.enter="applyAdcodeQuery"
-                    />
-                    <button
-                        class="query-btn"
-                        :disabled="isBusy"
-                        @click="applyAdcodeQuery"
-                    >
-                        {{ t('weather.query') }}
-                    </button>
-                </div>
-            </div>
+        <!-- 查询条：Adcode / 城市 -->
+        <div class="join-bar">
+            <span class="join-lead">
+                <Hash
+                    :size="13"
+                    :stroke-width="2"
+                />
+            </span>
+            <input
+                v-model.trim="adcodeInput"
+                class="join-field"
+                type="text"
+                maxlength="6"
+                :placeholder="t('weather.adcodePlaceholder')"
+                @keyup.enter="applyAdcodeQuery"
+            />
+            <button
+                class="join-go"
+                :disabled="isBusy"
+                @click="applyAdcodeQuery"
+            >
+                {{ t('weather.query') }}
+            </button>
+        </div>
 
-            <div class="query-block">
-                <label>{{ t('weather.queryCity') }}</label>
-                <div class="query-input-row">
-                    <input
-                        v-model.trim="cityInput"
-                        class="query-input"
-                        type="text"
-                        :placeholder="t('weather.cityPlaceholder')"
-                        @keyup.enter="resolveCityAndQuery"
-                    />
-                    <button
-                        class="query-btn"
-                        :disabled="isBusy"
-                        @click="resolveCityAndQuery"
-                    >
-                        {{ t('weather.resolve') }}
-                    </button>
-                </div>
-            </div>
+        <div class="join-bar">
+            <span class="join-lead">
+                <MapPin
+                    :size="13"
+                    :stroke-width="2"
+                />
+            </span>
+            <input
+                v-model.trim="cityInput"
+                class="join-field"
+                type="text"
+                :placeholder="t('weather.cityPlaceholder')"
+                @keyup.enter="resolveCityAndQuery"
+            />
+            <button
+                class="join-go soft"
+                :disabled="isBusy"
+                @click="resolveCityAndQuery"
+            >
+                {{ t('weather.resolve') }}
+            </button>
         </div>
 
         <!-- 实况天气卡片 + 降雨聚焦面板 -->
@@ -123,6 +138,7 @@
  *   这样图表渲染函数被回调触发时，读到的始终是最新数据
  */
 import { computed, onBeforeUnmount, onMounted, ref, watchEffect } from 'vue';
+import { CloudSun, Hash, MapPin, RefreshCw } from '@lucide/vue';
 import { useWeatherStore } from '@/stores';
 import { useWeatherCharts } from '@common/weather/composables/useWeatherCharts';
 import { useWeatherData } from '@common/weather/composables/useWeatherData';
@@ -256,119 +272,180 @@ onBeforeUnmount(() => {
     container-name: weather-panel;
 }
 
+/* ===== 工具栏：去卡片化 ===== */
 .weather-toolbar {
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: 10px;
-    padding: 10px 12px;
-    border-radius: 10px;
-    border: 1px solid rgba(66, 147, 92, 0.26);
-    background: rgba(255, 255, 255, 0.78);
-    backdrop-filter: blur(6px);
+    padding: 2px 2px 0;
 }
 
 .weather-toolbar-left {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+}
+
+.weather-badge {
+    flex-shrink: 0;
+    width: 34px;
+    height: 34px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 11px;
+    background: var(--brand-gradient);
+    color: #ffffff;
+    box-shadow:
+        0 4px 10px rgba(var(--brand-primary-dark-rgb), 0.28),
+        inset 0 1px 0 rgba(255, 255, 255, 0.28);
+}
+
+.weather-heading {
     min-width: 0;
 }
 
 .weather-title {
     margin: 0;
-    font-size: 20px;
-    line-height: 1.2;
+    font-size: 17px;
+    line-height: 1.25;
     color: var(--brand-accent-dark);
     overflow: hidden;
     text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .weather-subtitle {
-    margin: 4px 0 0;
-    font-size: 12px;
+    margin: 1px 0 0;
+    font-size: 11px;
     color: var(--brand-accent-muted);
     overflow: hidden;
     text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
-.weather-toolbar-right {
-    display: flex;
+/* 刷新按钮：幽灵胶囊，忙碌时图标旋转 */
+.refresh-btn {
+    flex-shrink: 0;
+    display: inline-flex;
     align-items: center;
-}
-
-.toolbar-btn {
-    border: 1px solid var(--brand-primary-light);
-    border-radius: 8px;
-    background: linear-gradient(135deg, var(--brand-primary) 0%, var(--brand-primary-dark) 100%);
-    color: #fff;
-    height: 34px;
-    padding: 0 14px;
-    font-size: 13px;
+    gap: 6px;
+    height: 30px;
+    padding: 0 12px;
+    border: 1px solid rgba(var(--brand-primary-rgb), 0.35);
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.72);
+    color: var(--toc-primary);
+    font-size: 12px;
+    font-weight: 600;
     cursor: pointer;
     transition:
-        transform 0.16s ease,
-        box-shadow 0.16s ease;
+        background var(--toc-transition-fast),
+        color var(--toc-transition-fast),
+        transform var(--toc-transition-fast);
 }
 
-.toolbar-btn:hover {
-    transform: translateY(-1px);
-    box-shadow: 0 6px 14px rgba(47, 133, 81, 0.22);
-}
-
-.weather-query-row {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 10px;
-    min-width: 0;
-}
-
-.query-block {
-    border: 1px solid rgba(66, 147, 92, 0.24);
-    background: rgba(255, 255, 255, 0.72);
-    border-radius: 10px;
-    padding: 8px 10px;
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-    min-width: 0;
-}
-
-.query-block label {
-    font-size: 12px;
-    color: var(--brand-primary-dark);
-    font-weight: 600;
-}
-
-.query-input-row {
-    display: grid;
-    grid-template-columns: 1fr auto;
-    gap: 6px;
-}
-
-.query-input {
-    border: 1px solid var(--brand-primary-lighter);
-    border-radius: 8px;
-    height: 32px;
-    padding: 0 10px;
-    font-size: 12px;
-    color: var(--brand-primary-dark);
-    background: #fff;
-    min-width: 0;
-}
-
-.query-input:focus {
-    outline: none;
-    border-color: var(--brand-primary);
-    box-shadow: 0 0 0 2px rgba(60, 165, 101, 0.15);
-}
-
-.query-btn {
-    border: 1px solid var(--brand-primary-light);
-    border-radius: 8px;
-    min-width: 58px;
-    height: 32px;
-    background: var(--bg-brand-light);
+.refresh-btn:hover:not(:disabled) {
+    background: #ffffff;
     color: var(--brand-accent-dark);
+    transform: translateY(-1px);
+}
+
+.refresh-btn:active:not(:disabled) {
+    transform: scale(0.96);
+}
+
+.refresh-btn.busy svg {
+    animation: refreshSpin 0.9s linear infinite;
+}
+
+@keyframes refreshSpin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+/* ===== 一体式查询条 ===== */
+.join-bar {
+    display: flex;
+    align-items: stretch;
+    min-height: 34px;
+    background: rgba(255, 255, 255, 0.82);
+    border: 1px solid rgba(var(--brand-primary-rgb), 0.22);
+    border-radius: 11px;
+    overflow: hidden;
+    transition:
+        border-color 0.2s ease-out,
+        box-shadow 0.2s ease-out,
+        background 0.2s ease-out;
+}
+
+.join-bar:focus-within {
+    border-color: var(--brand-primary-light);
+    background: rgba(255, 255, 255, 0.95);
+    box-shadow: 0 0 0 3px rgba(60, 165, 101, 0.14);
+}
+
+.join-lead {
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    padding-left: 11px;
+    color: var(--brand-accent-muted);
+    opacity: 0.7;
+    transition: opacity 0.16s ease;
+}
+
+.join-bar:focus-within .join-lead {
+    opacity: 1;
+}
+
+.join-field {
+    flex: 1;
+    min-width: 0;
+    border: none;
+    background: transparent;
+    padding: 8px 10px;
     font-size: 12px;
+    color: var(--brand-primary-dark);
+    outline: none;
+}
+
+.join-field::placeholder {
+    color: var(--brand-accent-muted);
+    opacity: 0.65;
+}
+
+/* 条尾操作段：主查询渐变 / 次解析软着色 */
+.join-go {
+    flex-shrink: 0;
+    border: none;
+    background: var(--brand-gradient);
+    color: #ffffff;
+    font-size: 12px;
+    font-weight: 600;
+    padding: 0 14px;
     cursor: pointer;
+    white-space: nowrap;
+    transition:
+        filter 0.12s ease,
+        opacity 0.12s ease;
+}
+
+.join-go:hover:not(:disabled) {
+    filter: brightness(1.06);
+}
+
+.join-go.soft {
+    background: rgba(var(--brand-primary-rgb), 0.1);
+    color: var(--brand-accent-dark);
+}
+
+.join-go.soft:hover:not(:disabled) {
+    background: rgba(var(--brand-primary-rgb), 0.18);
+    filter: none;
 }
 
 /* 图表布局 */
@@ -389,8 +466,8 @@ onBeforeUnmount(() => {
 }
 
 .chart-panel {
-    border: 1px solid rgba(57, 142, 87, 0.2);
-    border-radius: 10px;
+    border: 1px solid rgba(var(--brand-primary-rgb), 0.2);
+    border-radius: 12px;
     background:
         linear-gradient(180deg, rgba(246, 253, 248, 0.98) 0%, rgba(255, 255, 255, 0.98) 44%),
         #ffffff;
@@ -400,18 +477,7 @@ onBeforeUnmount(() => {
     min-height: 0;
     position: relative;
     overflow: hidden;
-    box-shadow: 0 10px 26px rgba(35, 105, 61, 0.08);
-}
-
-.chart-panel::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    right: 0;
-    left: 0;
-    height: 3px;
-    background: linear-gradient(90deg, var(--chart-accent, #3cb46b), transparent);
-    pointer-events: none;
+    box-shadow: var(--toc-shadow-sm);
 }
 
 .trend-panel {
@@ -423,6 +489,9 @@ onBeforeUnmount(() => {
 }
 
 .chart-title {
+    display: flex;
+    align-items: center;
+    gap: 7px;
     padding: 11px 12px 5px;
     font-size: 13px;
     font-weight: 700;
@@ -432,6 +501,17 @@ onBeforeUnmount(() => {
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+}
+
+/* 标题前主题色圆点，取代顶部渐变条 */
+.chart-title::before {
+    content: '';
+    flex-shrink: 0;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--chart-accent);
+    box-shadow: 0 0 6px var(--chart-accent);
 }
 
 .chart-canvas {
@@ -446,8 +526,8 @@ onBeforeUnmount(() => {
 }
 
 /* 禁用状态 */
-.toolbar-btn:disabled,
-.query-btn:disabled {
+.refresh-btn:disabled,
+.join-go:disabled {
     opacity: 0.62;
     cursor: not-allowed;
 }
@@ -463,29 +543,13 @@ onBeforeUnmount(() => {
 
 @container weather-panel (max-width: 600px) {
     .weather-toolbar {
-        flex-direction: column;
-        align-items: flex-start;
+        flex-wrap: wrap;
     }
 
-    .weather-title {
-        font-size: 18px;
-    }
-
-    .weather-toolbar-right {
-        width: 100%;
-    }
-
-    .toolbar-btn {
-        width: 100%;
-        height: 36px;
-    }
-
-    .weather-query-row {
-        grid-template-columns: 1fr;
-    }
-
-    .query-input-row {
-        grid-template-columns: 1fr;
+    .refresh-btn {
+        flex: 1 0 auto;
+        justify-content: center;
+        height: 32px;
     }
 
     .charts-layout {

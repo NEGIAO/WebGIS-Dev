@@ -20,9 +20,8 @@
                 >
                     <span class="btn-icon">
                         <search-icon
-                            :size="18"
-                            color="#309441"
-                            :stroke-width="4"
+                            :size="17"
+                            :stroke-width="3"
                         />
                     </span>
                 </button>
@@ -402,14 +401,23 @@ onBeforeUnmount(() => {
     border-radius: 8px;
     padding: 8px 14px;
     background: #ffffff;
-    color: #000000;
+    color: var(--brand-primary-dark);
     cursor: pointer;
     font-size: 13px;
     font-weight: 500;
+    transition:
+        background 0.15s ease,
+        color 0.15s ease,
+        transform 0.12s ease;
 }
 
 .search-btn:hover {
-    background: #cacccfde;
+    background: rgba(255, 255, 255, 0.521);
+    color: var(--brand-accent-dark);
+}
+
+.search-btn:active {
+    transform: scale(0.94);
 }
 
 .service-menu {

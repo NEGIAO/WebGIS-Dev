@@ -2,19 +2,48 @@
     <div class="layer-panel-container">
         <!-- 图层目录 -->
         <div class="layer-tree-wrap card">
-            <div class="card-title">图层目录</div>
-            <div class="layer-search-wrap">
+            <div class="card-head">
+                <div class="head-left">
+                    <span
+                        class="title-badge"
+                        aria-hidden="true"
+                    >
+                        <FolderTree :size="13" />
+                    </span>
+                    <span class="card-title">图层目录</span>
+                </div>
+                <span
+                    v-if="matchedCount"
+                    class="count-pill"
+                >{{ matchedCount }}</span>
+            </div>
+            <div
+                class="layer-search-wrap"
+                :class="{ focused: isSearchFocused }"
+            >
+                <Search
+                    class="search-icon"
+                    :size="14"
+                />
                 <input
                     v-model="searchQuery"
                     class="layer-search-input"
                     type="text"
                     placeholder="搜索图层..."
+                    @focus="isSearchFocused = true"
+                    @blur="isSearchFocused = false"
                 />
-                <span
-                    v-if="searchQuery"
-                    class="search-clear"
-                    @click="clearSearch"
-                >&times;</span>
+                <Transition name="clear-pop">
+                    <button
+                        v-if="searchQuery"
+                        class="search-clear"
+                        type="button"
+                        aria-label="清除搜索"
+                        @click="clearSearch"
+                    >
+                        <X :size="11" />
+                    </button>
+                </Transition>
             </div>
             <div
                 v-if="filteredLayerTree.length"
@@ -33,7 +62,12 @@
                 v-else
                 class="empty"
             >
-                {{ searchQuery ? '无匹配图层' : '暂无图层' }}
+                <component
+                    :is="searchQuery ? SearchX : Inbox"
+                    :size="26"
+                    stroke-width="1.5"
+                />
+                <span>{{ searchQuery ? '无匹配图层' : '暂无图层' }}</span>
             </div>
         </div>
     </div>
@@ -41,6 +75,7 @@
 
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
+import { FolderTree, Search, SearchX, Inbox, X } from '@lucide/vue';
 import { useLayerStore } from '@/stores';
 import TOCTreeItem from '@common/layer-tree/components/TOCTreeItem.vue';
 
@@ -60,7 +95,15 @@ const layerStore = useLayerStore();
 
 const activeLayerId = ref(null);
 const searchQuery = ref('');
+const isSearchFocused = ref(false);
 const layerTree = computed(() => layerStore.layerTree);
+
+function countLeaves(nodes) {
+    return nodes.reduce((sum, node) => {
+        if (node.type === 'folder') return sum + countLeaves(node.children || []);
+        return sum + 1;
+    }, 0);
+}
 
 function matchesSearch(node, query) {
     if (!query) return true;
@@ -97,6 +140,8 @@ function filterTree(nodes, query) {
 const filteredLayerTree = computed(() => {
     return filterTree(layerTree.value, searchQuery.value.trim());
 });
+
+const matchedCount = computed(() => countLeaves(filteredLayerTree.value));
 
 function clearSearch() {
     searchQuery.value = '';
@@ -181,12 +226,50 @@ onBeforeUnmount(() => {
     box-shadow: var(--toc-shadow-md), inset 0 1px 0 rgba(255, 255, 255, 0.3);
 }
 
+.card-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: var(--toc-spacing-md);
+}
+
+.head-left {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+}
+
+.title-badge {
+    width: 22px;
+    height: 22px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 7px;
+    background: var(--brand-gradient);
+    color: #ffffff;
+    box-shadow:
+        0 3px 8px rgba(var(--brand-primary-dark-rgb), 0.28),
+        inset 0 1px 0 rgba(255, 255, 255, 0.28);
+}
+
 .card-title {
     font-size: var(--toc-font-md);
     font-weight: 700;
     color: var(--toc-card-title);
-    margin-bottom: var(--toc-spacing-md);
     letter-spacing: 0.3px;
+}
+
+.count-pill {
+    font-size: var(--toc-font-xs);
+    font-weight: 600;
+    line-height: 15px;
+    color: var(--toc-primary);
+    background: var(--toc-primary-bg);
+    border: 1px solid var(--toc-border-light);
+    padding: 1px 8px;
+    border-radius: 999px;
+    font-variant-numeric: tabular-nums;
 }
 
 .layer-search-wrap {
@@ -196,53 +279,96 @@ onBeforeUnmount(() => {
 
 .layer-search-input {
     width: 100%;
-    padding: var(--toc-spacing-sm) 28px var(--toc-spacing-sm) 10px;
+    padding: 7px 30px 7px 32px;
     border: 1px solid var(--toc-border-light);
-    border-radius: var(--toc-radius-md);
+    border-radius: 999px;
     font-size: var(--toc-font-sm);
     color: var(--toc-text-primary);
     background: var(--toc-bg-white);
     outline: none;
-    transition: border-color var(--toc-transition-slow), box-shadow var(--toc-transition-slow);
+    transition:
+        border-color var(--toc-transition-slow),
+        box-shadow var(--toc-transition-slow),
+        background var(--toc-transition-slow);
     box-sizing: border-box;
 }
 
 .layer-search-input:focus {
-    border-color: var(--toc-primary);
-    box-shadow: 0 0 0 2px var(--toc-primary-bg-hover);
+    border-color: var(--toc-primary-light);
+    background: rgba(255, 255, 255, 0.95);
+    box-shadow: 0 0 0 3px var(--toc-primary-bg-hover);
 }
 
 .layer-search-input::placeholder {
     color: var(--toc-text-light);
 }
 
-.search-clear {
+.search-icon {
     position: absolute;
-    right: var(--toc-spacing-md);
+    left: 12px;
     top: 50%;
     transform: translateY(-50%);
-    cursor: pointer;
     color: var(--toc-text-light);
-    font-size: 16px;
-    line-height: 1;
-    width: 18px;
-    height: 18px;
+    pointer-events: none;
+    transition: color var(--toc-transition-normal);
+}
+
+.layer-search-wrap.focused .search-icon {
+    color: var(--toc-primary);
+}
+
+.search-clear {
+    position: absolute;
+    right: 6px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 17px;
+    height: 17px;
     display: flex;
     align-items: center;
     justify-content: center;
-    border-radius: var(--toc-radius-full);
-    transition: color var(--toc-transition-normal), background var(--toc-transition-normal);
+    border: none;
+    cursor: pointer;
+    border-radius: 999px;
+    background: rgba(var(--brand-primary-rgb), 0.12);
+    color: var(--toc-text-secondary);
+    transition:
+        background var(--toc-transition-fast),
+        color var(--toc-transition-fast),
+        transform var(--toc-transition-fast);
 }
 
 .search-clear:hover {
-    color: var(--toc-text-primary);
-    background: var(--toc-primary-bg);
+    background: rgba(var(--brand-primary-dark-rgb), 0.22);
+    color: var(--toc-text-dark);
+    transform: translateY(-50%) scale(1.08);
+}
+
+.clear-pop-enter-active,
+.clear-pop-leave-active {
+    transition:
+        opacity 0.15s ease,
+        transform 0.15s ease;
+}
+
+.clear-pop-enter-from,
+.clear-pop-leave-to {
+    opacity: 0;
+    transform: translateY(-50%) scale(0.6);
 }
 
 .empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 7px;
     color: var(--toc-text-muted);
     font-size: var(--toc-font-sm);
-    padding: var(--toc-spacing-lg) var(--toc-spacing-md);
+    padding: 22px var(--toc-spacing-md) 16px;
     text-align: center;
+}
+
+.empty svg {
+    opacity: 0.45;
 }
 </style>

@@ -7,29 +7,38 @@
             @select-result="handleSearchJump"
         />
 
-        <div class="layer-label-row">
-            <div class="layer-label">底图</div>
+        <!-- 主行：底图标签 + 选择器 + 控制钮（紧凑单行） -->
+        <div class="main-row">
+            <div class="layer-label-row">
+                <span class="layer-label">底图</span>
+                <button
+                    type="button"
+                    class="icon-toggle"
+                    :class="{ 'hd-on': tileHDRendering }"
+                    title="高清渲染：开启后请求上一瓦片层级并缩小渲染，牺牲性能与流量换取清晰度。"
+                    @click.stop="onToggleHD"
+                >
+                    <ImageIcon
+                        :size="14"
+                        :stroke-width="2"
+                    />
+                </button>
+            </div>
+
             <div
-                class="hd-toggle"
-                :class="{ 'hd-on': tileHDRendering }"
-                title="高清渲染：开启后请求上一瓦片层级并缩小渲染，牺牲性能与流量换取清晰度。"
-                @click.stop="onToggleHD"
+                ref="customSelectRef"
+                class="custom-select-container"
+                @click="toggleSelectDropdown"
             >
-                <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true">
-                    <path d="M3 17l4-4 3 3 5-6 6 7H3z" />
-                    <path d="M9.5 9a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0z" />
-                </svg>
-            </div>
-        </div>
-        <div
-            ref="customSelectRef"
-            class="custom-select-container"
-            @click="toggleSelectDropdown"
-        >
-            <div class="custom-select-trigger">
-                <span class="preset-label-text"><span class="preset-index">{{ currentLayerLabel.split(' ')[0] }}</span> <span class="preset-name">{{ currentLayerLabel.slice(currentLayerLabel.indexOf(' ') + 1) }}</span></span>
-                <span class="dropdown-arrow" :class="{ 'arrow-up': isSelectDropdownOpen }">▼</span>
-            </div>
+                <div class="custom-select-trigger">
+                    <span class="preset-label-text"><span class="preset-index">{{ currentLayerLabel.split(' ')[0] }}</span> <span class="preset-name">{{ currentLayerLabel.slice(currentLayerLabel.indexOf(' ') + 1) }}</span></span>
+                    <ChevronDown
+                        class="dropdown-arrow"
+                        :class="{ 'arrow-up': isSelectDropdownOpen }"
+                        :size="12"
+                        :stroke-width="2.2"
+                    />
+                </div>
             <div v-show="isSelectDropdownOpen" class="custom-select-dropdown">
                 <div
                     v-for="option in regularBasemapOptions"
@@ -65,7 +74,13 @@
                 <template v-if="historicalProviderTab === 'sentinel'">
                     <div v-for="group in sentinelYearGroups" :key="group.year" class="history-year-group">
                         <button type="button" class="history-year-toggle" @click.stop="toggleHistoryYear('sentinel', group.year)">
-                            <span>{{ group.year }}年</span><span>{{ isHistoryYearOpen('sentinel', group.year) ? '▾' : '▸' }}</span>
+                            <span>{{ group.year }}年</span>
+                            <ChevronRight
+                                class="year-chevron"
+                                :class="{ open: isHistoryYearOpen('sentinel', group.year) }"
+                                :size="12"
+                                :stroke-width="2.2"
+                            />
                         </button>
                         <template v-if="isHistoryYearOpen('sentinel', group.year)">
                             <div
@@ -87,7 +102,13 @@
                     </div>
                     <div v-for="group in esriYearGroups" :key="group.year" class="history-year-group">
                         <button type="button" class="history-year-toggle" @click.stop="toggleHistoryYear('esri', group.year)">
-                            <span>{{ group.year }}年</span><span>{{ isHistoryYearOpen('esri', group.year) ? '▾' : '▸' }}</span>
+                            <span>{{ group.year }}年</span>
+                            <ChevronRight
+                                class="year-chevron"
+                                :class="{ open: isHistoryYearOpen('esri', group.year) }"
+                                :size="12"
+                                :stroke-width="2.2"
+                            />
                         </button>
                         <template v-if="isHistoryYearOpen('esri', group.year)">
                             <div
@@ -109,43 +130,47 @@
             </div>
         </div>
 
-        <button
-            v-if="engine === 'ol'"
-            ref="layerManageButtonRef"
-            class="layer-manage-btn"
-            title="底图管理"
-            @click="toggleLayerManager"
-        >
-            <svg
-                viewBox="0 0 24 24"
-                width="16"
-                height="16"
-                fill="currentColor"
+            <div
+                v-if="engine === 'ol'"
+                class="controls-row"
             >
-                <path
-                    d="M12 2L2 7l10 5 10-5-10-5zm0 9l2.5-1.25L12 8 9.5 9.25 12 11zm0 2.5l-5-2.5-2 1L12 15.5l7-3.5-2-1-5 2.5zm0 5l-5-2.5-2 1L12 21l7-3.5-2-1-5 2.5z"
-                />
-            </svg>
-        </button>
-
-        <button
-            v-if="engine === 'ol'"
-            class="graticule-btn"
-            :class="{ active: activeGraticule }"
-            title="经纬度分割线"
-            @click="emit('toggle-graticule')"
-        >
-            经纬线
-        </button>
-
-        <button
-            v-if="basemapCircuitOpen"
-            class="basemap-reset-btn"
-            title="当前网络异常，点击重置底图链路"
-            @click="emit('reset-basemap-chain')"
-        >
-            重置链路
-        </button>
+                <button
+                    ref="layerManageButtonRef"
+                    class="icon-toggle"
+                    title="底图排序与显示"
+                    @click="toggleLayerManager"
+                >
+                    <Layers
+                        :size="14"
+                        :stroke-width="1.9"
+                        :color="white"
+                    />
+                </button>
+                <button
+                    class="icon-toggle text-toggle"
+                    :class="{ active: activeGraticule }"
+                    title="经纬度分割线"
+                    @click="emit('toggle-graticule')"
+                >
+                    <Grid3x3
+                        :size="13"
+                        :stroke-width="2"
+                    />
+                    <span>经纬线</span>
+                </button>
+                <button
+                    v-if="basemapCircuitOpen"
+                    class="icon-toggle danger"
+                    title="当前网络异常，点击重置底图链路"
+                    @click="emit('reset-basemap-chain')"
+                >
+                    <RotateCcw
+                        :size="13"
+                        :stroke-width="2"
+                    />
+                </button>
+            </div>
+        </div>
 
         <!-- Cesium 引擎：3D overlay 开关 -->
         <div
@@ -157,12 +182,13 @@
                 :key="overlay.value"
                 class="cesium-overlay-item"
             >
+                <span class="switch-label-text">{{ overlay.label }}</span>
                 <input
                     type="checkbox"
+                    class="mini-switch"
                     :checked="overlay.active"
                     @change="emit('cesium-overlay-toggle', { overlayId: overlay.value, value: $event.target.checked })"
                 />
-                <span>{{ overlay.label }}</span>
             </label>
         </div>
 
@@ -180,14 +206,17 @@
                 title="加载"
                 @click="submitCustomUrl"
             >
-                ok
+                <Check
+                    :size="14"
+                    :stroke-width="2.4"
+                />
             </button>
-            <div
-                v-if="detectedServiceInfo"
-                class="detected-format-hint"
-            >
-                ✓ 已识别: {{ detectedServiceInfo.name }}
-            </div>
+        </div>
+        <div
+            v-if="selectedLayer === 'custom' && detectedServiceInfo"
+            class="detected-format-hint"
+        >
+            已识别: {{ detectedServiceInfo.name }}
         </div>
 
         <Teleport
@@ -201,12 +230,22 @@
                 :style="layerManagerPanelStyle"
             >
                 <div class="panel-header">
-                    <span>底图排序与显示</span>
-                    <span
+                    <Layers
+                        :size="13"
+                        :stroke-width="2"
+                    />
+                    <span class="panel-header-title">底图排序与显隐</span>
+                    <button
+                        type="button"
                         class="close-panel-btn"
+                        aria-label="关闭"
                         @click="showLayerManager = false"
-                        >×</span
                     >
+                        <X
+                            :size="13"
+                            :stroke-width="2.2"
+                        />
+                    </button>
                 </div>
                 <div class="layer-list">
                     <div
@@ -214,7 +253,7 @@
                         :key="layer.id"
                         class="layer-item"
                         :draggable="!isTouchDevice"
-                        :class="{ dragging: draggingIndex === index }"
+                        :class="{ dragging: draggingIndex === index, 'is-off': !layer.visible }"
                         @dragstart="onDragStart($event, index)"
                         @dragend="onDragEnd"
                         @dragover.prevent
@@ -224,23 +263,35 @@
                         @touchmove="onLayerTouchMove"
                         @touchend="onLayerTouchEnd"
                     >
-                        <div
+                        <span
                             v-if="!isTouchDevice"
                             class="drag-handle"
+                            title="拖拽排序"
                         >
-                            ⋮⋮
-                        </div>
-                        <div
-                            v-if="isTouchDevice"
-                            class="drag-handle mobile-hint"
+                            <GripVertical
+                                :size="12"
+                                :stroke-width="2"
+                            />
+                        </span>
+                        <button
+                            type="button"
+                            class="visibility-btn"
+                            :class="{ off: !layer.visible }"
+                            :aria-label="layer.visible ? '隐藏图层' : '显示图层'"
+                            :title="layer.visible ? '隐藏图层' : '显示图层'"
+                            @click.stop="updateLayerVisibility(layer)"
                         >
-                            ⋯
-                        </div>
-                        <input
-                            type="checkbox"
-                            :checked="layer.visible"
-                            @change="updateLayerVisibility(layer, $event)"
-                        />
+                            <EyeOff
+                                v-if="!layer.visible"
+                                :size="15"
+                                :stroke-width="2"
+                            />
+                            <Eye
+                                v-else
+                                :size="15"
+                                :stroke-width="2"
+                            />
+                        </button>
                         <span class="layer-name">{{ layer.name }}</span>
                     </div>
                 </div>
@@ -264,7 +315,11 @@
                     @mouseleave="showUrlSubmenu = false"
                 >
                     <span>URL 操作</span>
-                    <span class="submenu-arrow">▶</span>
+                    <ChevronRight
+                        class="submenu-arrow"
+                        :size="12"
+                        :stroke-width="2.2"
+                    />
                     <div
                         v-if="showUrlSubmenu"
                         class="context-submenu"
@@ -331,7 +386,22 @@ import {
     ref,
     watch,
 } from 'vue';
-import { toLonLat } from 'ol/proj';
+import {
+    toLonLat,
+} from 'ol/proj';
+import {
+    Check,
+    ChevronDown,
+    ChevronRight,
+    Eye,
+    EyeOff,
+    GripVertical,
+    Image as ImageIcon,
+    Layers,
+    RotateCcw,
+    Grid3x3,
+    X,
+} from '@lucide/vue';
 import { apiGetHistoricalImageryLayers, apiSearchLocations } from '@/api';
 import { BASEMAP_OPTIONS } from '@/constants';
 import { detectCustomTileServiceKind } from '@ol/tile-source/index';
@@ -881,11 +951,11 @@ function handleGlobalPointerDown(event) {
     closeLayerContextMenu();
 }
 
-function updateLayerVisibility(layer, event) {
+function updateLayerVisibility(layer) {
     emit('update-order', {
         type: 'visibility',
         layerId: layer.id,
-        visible: !!event?.target?.checked,
+        visible: !layer.visible,
     });
 }
 
@@ -983,63 +1053,150 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped>
+/* 浅色玻璃拟态浮层：与全站面板语言一致 */
 .layer-switcher {
     position: absolute;
     top: 8px;
     right: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
     background: var(--brand-primary-dark);
-    backdrop-filter: blur(8px);
-    -webkit-backdrop-filter: blur(8px);
-    border: 1px solid rgba(var(--brand-accent-rgb), 0.35);
-    padding: 4px;
-    border-radius: 8px;
-    box-shadow: 0 10px 24px rgba(var(--brand-primary-dark-rgb), 0.22);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border: 1px solid rgba(var(--brand-primary-rgb), 0.22);
+    padding: 5px;
+    border-radius: 10px;
+    box-shadow:
+        var(--toc-shadow-md),
+        inset 0 1px 0 rgba(255, 255, 255, 0.6);
     z-index: 10;
 }
 
 @media (max-width: 768px) {
     .layer-switcher {
         right: 5px;
-        /* 移动端靠右边距减小 */
         top: 10px;
-        /* 可选：通常顶部也会相应调小一点点 */
+        padding: 6px;
     }
 }
 
-/* 自定义下拉框样式 */
+/* ===== 主行：标签 + 选择器 + 控制钮 ===== */
+.main-row {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.layer-label-row {
+    display: flex;
+    align-items: center;
+    gap: 3px;
+    flex-shrink: 0;
+}
+
+.layer-label{
+    color: #f0f0f0;
+}
+
+/* 幽灵图标钮（HD / 图层管理 / 经纬线 / 重置） */
+.icon-toggle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    min-width: 24px;
+    height: 24px;
+    padding: 0 4px;
+    border: none;
+    border-radius: 7px;
+    background: transparent;
+    color: white;
+    cursor: pointer;
+    font-size: 12px;
+    transition:
+        color var(--toc-transition-fast),
+        background var(--toc-transition-fast),
+        transform var(--toc-transition-fast);
+}
+
+.icon-toggle:hover {
+    color: #ffffff92;
+    background: var(--toc-primary-bg-hover);
+}
+
+.icon-toggle:active {
+    transform: scale(0.92);
+}
+
+.icon-toggle.hd-on,
+.icon-toggle.active {
+    color:#38BDF8;
+    background: #38bff836;
+    box-shadow: 0 2px 6px rgba(var(--brand-primary-dark-rgb), 0.3);
+}
+
+.icon-toggle.text-toggle span {
+    white-space: nowrap;
+}
+
+.icon-toggle.danger {
+    color: var(--danger);
+    background: rgba(var(--danger-rgb), 0.08);
+}
+
+.icon-toggle.danger:hover {
+    background: rgba(var(--danger-rgb), 0.16);
+}
+
+/* ===== 底图选择器 ===== */
 .custom-select-container {
     position: relative;
-    display: inline-block;
-    margin: 0 0 0 6px;
-    vertical-align: middle;
-    font-size: 13px;
+    flex: 1;
+    min-width: 0;
     user-select: none;
 }
 
 .custom-select-trigger {
-    padding: 4px 10px;
-    border: 1px solid var(--border-brand);
-    border-radius: 4px;
-    background: rgba(255, 255, 255, 0.85);
-    color: #0f172a;
-    cursor: pointer;
-    min-width: 100px;
     display: flex;
-    justify-content: space-between;
     align-items: center;
-    gap: 8px;
-    transition: all 0.2s;
+    gap: 5px;
+    padding: 4px 7px;
+    border: 1px solid rgba(var(--brand-primary-rgb), 0.22);
+    border-radius: 8px;
+    background: #ffffff;
+    cursor: pointer;
+    transition:
+        border-color var(--toc-transition-slow),
+        box-shadow var(--toc-transition-slow);
 }
 
 .custom-select-trigger:hover {
-    background: rgba(255, 255, 255, 1);
-    box-shadow: 0 0 4px rgba(var(--brand-primary-rgb), 0.2);
+    color:rgb(16, 161, 40);
+    border-color: rgba(var(--brand-primary-rgb), 0.32);
+    box-shadow: 0 3px 9px rgba(var(--brand-primary-rgb), 0.14);
+}
+
+.preset-label-text {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.controls-row {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    margin-left: auto;
+    flex-shrink: 0;
 }
 
 .dropdown-arrow {
-    font-size: 10px;
-    color: var(--brand-accent-dark);
-    transition: transform 0.3s;
+    flex-shrink: 0;
+    margin-left: auto;
+    color: var(--toc-text-secondary);
+    transition: transform 0.25s ease;
 }
 
 .dropdown-arrow.arrow-up {
@@ -1048,135 +1205,163 @@ onBeforeUnmount(() => {
 
 .custom-select-dropdown {
     position: absolute;
-    top: calc(100% + 4px);
+    top: calc(100% + 5px);
     left: 0;
+    right: 0;
     width: max-content;
     min-width: 100%;
-    max-height: 480px;
+    max-height: 450px;
     background: rgba(255, 255, 255, 0.98);
-    border: 1px solid var(--border-brand-light);
-    border-radius: 6px;
-    box-shadow: 0 8px 20px rgba(15, 23, 42, 0.15);
+    border: 1px solid rgba(var(--brand-primary-rgb), 0.2);
+    border-radius: 11px;
+    box-shadow: var(--toc-shadow-lg);
     z-index: var(--z-modal-high);
     overflow-y: auto;
     animation: fadeIn 0.15s ease-out;
 }
 
 .custom-select-dropdown::-webkit-scrollbar {
-    width: 8px;
+    width: 6px;
 }
 
 .custom-select-dropdown::-webkit-scrollbar-track {
-    background: rgba(255, 255, 255, 0.5);
+    background: transparent;
 }
 
 .custom-select-dropdown::-webkit-scrollbar-thumb {
-    background: var(--brand-primary);
+    background: rgba(var(--brand-primary-rgb), 0.35);
     border-radius: 4px;
 }
 
-.custom-select-dropdown::-webkit-scrollbar-thumb:hover {
-    background: var(--brand-primary-dark);
-}
-
 .custom-select-option {
-    padding: 6px 12px;
-    color: #0f172a;
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    padding: 5px 10px;
+    color: var(--toc-text-primary);
     cursor: pointer;
-    transition: background 0.15s;
+    font-size: 12px;
+    transition: background var(--toc-transition-fast);
 }
 
 .preset-index {
-    color: #10b981;
-    font-weight: 600;
-    margin-right: 6px;
+    color: var(--brand-primary);
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
 }
 
-.custom-select-option.selected .preset-index {
-    color: #6ee7b7;
+.preset-name {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .custom-select-option:hover {
-    background: var(--bg-brand-light);
+    background: var(--toc-primary-bg-hover);
 }
 
 .custom-select-option.selected {
-    background: var(--brand-primary);
-    color: #fff;
+    background: var(--toc-primary-bg-hover);
+    color: var(--brand-accent-dark);
     font-weight: 600;
 }
 
+.custom-select-option.selected .preset-index {
+    color: var(--brand-accent-dark);
+}
+
+/* 历史影像区 */
 .history-section-divider {
     height: 1px;
     margin: 5px 8px;
-    background: var(--border-brand-light);
+    background: rgba(var(--brand-primary-rgb), 0.14);
 }
 
 .history-section-title {
-    padding: 5px 12px 3px;
+    padding: 6px 11px 4px;
     color: var(--brand-accent-dark);
-    font-size: 12px;
+    font-size: 11px;
     font-weight: 700;
+    letter-spacing: 0.05em;
 }
 
 .history-tabs {
     display: flex;
-    gap: 4px;
-    padding: 3px 8px 5px;
+    gap: 3px;
+    margin: 0 8px 6px;
+    padding: 3px;
+    border-radius: 9px;
+    background: rgba(var(--brand-primary-rgb), 0.08);
 }
 
 .history-tab {
     flex: 1;
     padding: 4px 6px;
-    border: 1px solid var(--border-brand-light);
-    border-radius: 4px;
-    background: rgba(255, 255, 255, 0.65);
-    color: #334155;
+    border: none;
+    border-radius: 7px;
+    background: transparent;
+    color: var(--toc-text-secondary);
     cursor: pointer;
     font-size: 11px;
+    transition:
+        background var(--toc-transition-fast),
+        color var(--toc-transition-fast);
 }
 
 .history-tab.active {
-    border-color: var(--brand-primary);
-    background: var(--brand-primary);
-    color: #fff;
+    background: #ffffff;
+    color: var(--brand-accent-dark);
+    font-weight: 600;
+    box-shadow: 0 1px 3px rgba(var(--brand-primary-dark-rgb), 0.18);
 }
 
 .history-option .preset-name {
     white-space: nowrap;
 }
 
-.history-year-group {
-    border-bottom: 1px solid rgba(148, 163, 184, 0.2);
+.history-year-group + .history-year-group {
+    border-top: 1px solid rgba(var(--brand-primary-rgb), 0.09);
 }
 
 .history-year-toggle {
     width: 100%;
     display: flex;
+    align-items: center;
     justify-content: space-between;
     padding: 6px 12px;
     border: 0;
-    background: rgba(241, 245, 249, 0.8);
-    color: #334155;
+    background: transparent;
+    color: var(--toc-text-secondary);
     cursor: pointer;
     font-size: 12px;
     font-weight: 700;
+    transition: background var(--toc-transition-fast);
 }
 
 .history-year-toggle:hover {
-    background: var(--bg-brand-light);
+    background: var(--toc-primary-bg);
+}
+
+.year-chevron {
+    color: var(--toc-text-light);
+    transition: transform var(--toc-transition-normal);
+}
+
+.year-chevron.open {
+    transform: rotate(90deg);
 }
 
 .history-empty,
 .history-updated {
     padding: 6px 12px;
-    color: #64748b;
+    color: var(--toc-text-muted);
     font-size: 11px;
 }
 
 .history-updated {
-    border-top: 1px solid var(--border-brand-light);
-    color: #94a3b8;
+    border-top: 1px solid rgba(var(--brand-primary-rgb), 0.12);
+    color: var(--toc-text-light);
 }
 
 @keyframes fadeIn {
@@ -1184,165 +1369,81 @@ onBeforeUnmount(() => {
     to { opacity: 1; transform: translateY(0); }
 }
 
-.layer-select {
-    padding: 4px 8px;
-    border: 1px solid var(--border-brand);
-    border-radius: 4px;
-    outline: none;
-    display: inline-block;
-    margin: 0 0 0 6px;
-    vertical-align: middle;
-    background: rgba(255, 255, 255, 0.832);
-    color: #000000;
-}
-
-.layer-select option {
-    color: #0f172a;
-}
-
-.layer-label {
-    color: var(--bg-brand-light);
-    font-size: 13px;
-    display: inline-block;
-    margin: 0;
-    vertical-align: middle;
-}
-
-.layer-label-row {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    vertical-align: middle;
-}
-
-.hd-toggle {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 22px;
-    height: 22px;
-    border-radius: 4px;
-    color: var(--bg-brand-light);
-    opacity: 0.45;
-    cursor: pointer;
-    transition: opacity 0.2s, background-color 0.2s, color 0.2s;
-    flex-shrink: 0;
-}
-
-.hd-toggle:hover {
-    opacity: 0.85;
-    background-color: rgba(148, 163, 184, 0.15);
-}
-
-.hd-toggle.hd-on {
-    opacity: 1;
-    color: #38bdf8;
-    background-color: rgba(56, 189, 248, 0.15);
-}
-
+/* ===== 自定义 URL ===== */
 .custom-url-wrapper {
-    margin-top: 6px;
     display: flex;
-    gap: 4px;
+    gap: 5px;
 }
 
 .custom-url-input {
     flex: 1;
-    width: 160px;
-    padding: 4px;
-    border-radius: 4px;
-    border: 1px solid var(--border-brand-light);
+    min-width: 0;
+    padding: 4px 8px;
+    border-radius: 9px;
+    border: 1px solid rgba(var(--brand-primary-rgb), 0.22);
     font-size: 12px;
-    background: rgba(255, 255, 255, 0.18);
-    color: var(--brand-primary-lighter);
+    background: #ffffff;
+    color: var(--text-brand-dark);
+    outline: none;
+    transition:
+        border-color var(--toc-transition-slow),
+        box-shadow var(--toc-transition-slow);
 }
 
 .custom-url-input::placeholder {
-    color: rgba(236, 253, 245, 0.7);
+    color: var(--toc-text-light);
+}
+
+.custom-url-input:focus {
+    border-color: var(--brand-primary-light);
+    box-shadow: 0 0 0 3px var(--toc-primary-bg-hover);
 }
 
 .custom-url-btn {
-    padding: 2px 6px;
-    border-radius: 4px;
+    flex-shrink: 0;
+    width: 32px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 9px;
     border: none;
-    background: rgba(240, 253, 244, 0.92);
-    color: var(--brand-accent-dark);
+    background: var(--brand-gradient);
+    color: #ffffff;
     cursor: pointer;
-    font-size: 12px;
+    transition:
+        filter 0.12s ease,
+        transform 0.12s ease;
+}
+
+.custom-url-btn:hover {
+    filter: brightness(1.06);
+}
+
+.custom-url-btn:active {
+    transform: scale(0.94);
 }
 
 .detected-format-hint {
-    margin-top: 4px;
-    padding: 4px 6px;
-    background: rgba(var(--brand-primary-rgb), 0.15);
+    margin-top: -1px;
+    padding: 4px 9px;
+    background: var(--toc-primary-bg);
     border-left: 3px solid var(--brand-primary);
-    border-radius: 2px;
-    color: var(--brand-primary-lighter);
+    border-radius: 6px;
+    color: var(--brand-accent-dark);
     font-size: 11px;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
 }
 
-.layer-manage-btn {
-    background: transparent;
-    border: none;
-    cursor: pointer;
-    color: var(--bg-brand-light);
-    padding: 4px;
-    margin-left: 4px;
-    vertical-align: middle;
-}
-
-.layer-manage-btn:hover {
-    color: var(--brand-primary-lighter);
-}
-
-.graticule-btn {
-    background: rgba(255, 255, 255, 0.14);
-    border: 1px solid var(--border-brand-light);
-    color: var(--brand-primary-lighter);
-    border-radius: 4px;
-    cursor: pointer;
-    padding: 3px 8px;
-    margin-left: 4px;
-    font-size: 12px;
-    vertical-align: middle;
-}
-
-.graticule-btn:hover {
-    background: rgba(255, 255, 255, 0.24);
-}
-
-.graticule-btn.active {
-    background: var(--bg-brand-light);
-    color: var(--brand-accent-dark);
-    border-color: var(--border-brand-light);
-    font-weight: 700;
-}
-
-.basemap-reset-btn {
-    background: rgba(254, 226, 226, 0.2);
-    border: 1px solid rgba(254, 202, 202, 0.55);
-    color: #fee2e2;
-    border-radius: 4px;
-    cursor: pointer;
-    padding: 3px 8px;
-    margin-left: 4px;
-    font-size: 12px;
-    vertical-align: middle;
-}
-
-.basemap-reset-btn:hover {
-    background: rgba(254, 226, 226, 0.34);
-}
-
+/* ===== 图层管理浮层 ===== */
 .layer-manager-panel {
     position: absolute;
-    width: 200px;
-    background: rgba(255, 255, 255, 0.96);
-    border-radius: 4px;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+    width: 216px;
+    background: rgba(255, 255, 255, 0.97);
+    border: 1px solid rgba(var(--brand-primary-rgb), 0.18);
+    border-radius: 12px;
+    box-shadow: var(--toc-shadow-lg);
     padding: 0;
     max-height: 300px;
     overflow-y: auto;
@@ -1382,15 +1483,40 @@ onBeforeUnmount(() => {
     color: var(--brand-accent-dark);
 }
 
+.panel-header-title {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
 .close-panel-btn {
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    border: none;
+    border-radius: 50%;
+    background: transparent;
+    color: var(--toc-text-secondary);
     cursor: pointer;
-    font-size: 16px;
-    color: var(--brand-primary-light);
-    line-height: 1;
+    transition:
+        background 0.12s ease,
+        color 0.12s ease,
+        transform 0.12s ease;
 }
 
 .close-panel-btn:hover {
+    background: rgba(var(--danger-rgb), 0.12);
     color: var(--danger);
+    transform: scale(1.06);
+}
+
+.close-panel-btn:active {
+    transform: scale(0.9);
 }
 
 .layer-list {
@@ -1424,6 +1550,15 @@ onBeforeUnmount(() => {
     background: var(--border-light);
 }
 
+/* 隐藏图层整行淡化 */
+.layer-item.is-off {
+    background: rgba(0, 0, 0, 0.03);
+}
+
+.layer-item.is-off .layer-name {
+    opacity: 0.55;
+}
+
 .drag-handle {
     cursor: grab;
     color: var(--text-muted);
@@ -1437,6 +1572,42 @@ onBeforeUnmount(() => {
     font-weight: bold;
     padding-right: 4px;
     font-size: 16px;
+}
+
+/* 眼睛显隐开关 */
+.visibility-btn {
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    border: none;
+    border-radius: 7px;
+    background: transparent;
+    color: var(--brand-primary);
+    cursor: pointer;
+    transition:
+        color var(--toc-transition-fast),
+        background var(--toc-transition-fast),
+        transform var(--toc-transition-fast);
+}
+
+.visibility-btn:hover {
+    background: rgba(var(--brand-primary-rgb), 0.12);
+    transform: scale(1.05);
+}
+
+.visibility-btn:active {
+    transform: scale(0.9);
+}
+
+.visibility-btn.off {
+    color: var(--text-muted);
+}
+
+.visibility-btn.off:hover {
+    background: rgba(0, 0, 0, 0.06);
 }
 
 .layer-name {

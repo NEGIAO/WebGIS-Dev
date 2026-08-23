@@ -1,18 +1,17 @@
 # 使用官方 Python 运行时作为基础镜像
 FROM python:3.12-slim
 
-# 1. 安装 uv（通过 pip 国内镜像，避免 Docker Hub 拉取失败）
-RUN pip install uv -i https://pypi.tuna.tsinghua.edu.cn/simple
+# 1. 安装 uv（--no-cache-dir 避免残留 pip 缓存）
+RUN pip install --no-cache-dir uv -i https://pypi.tuna.tsinghua.edu.cn/simple
 
 # 2. 安装系统级依赖（先换清华镜像源，再安装）
 #    必须在切换 USER 之前，且使用 root 权限
-#    GIS 库 (rasterio, GDAL) 运行所必需的底层 C 库 + tzdata（时区数据）
+#    注：rasterio/shapely/pyproj 的 manylinux wheel 已自带 GDAL/GEOS/PROJ 二进制，
+#    无需安装系统级 libgdal(-dev)/libgeos(-dev)，可省约 1GB 镜像体积
+#    注：不装 libgl1——无 cv2/matplotlib/torch 等 OpenGL 依赖，装它会拖进整个 Mesa 栈(~180MB)
 RUN sed -i 's/deb.debian.org/mirrors.tuna.tsinghua.edu.cn/g' /etc/apt/sources.list.d/debian.sources && \
     apt-get update && apt-get install -y --no-install-recommends \
     libexpat1 \
-    libgdal-dev \
-    libgeos-dev \
-    libgl1 \
     sqlite3 \
     tzdata \
     && rm -rf /var/lib/apt/lists/*

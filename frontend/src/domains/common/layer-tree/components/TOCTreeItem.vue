@@ -11,6 +11,7 @@
                 'is-leaf': node.type === 'layer',
                 'is-active': node.type === 'layer' && node.id === activeLayerId,
                 'is-multi-selected': isLayerMultiSelected,
+                'is-off': !isVisible,
             }"
             :draggable="!!node.draggable"
             @click="handlePrimaryClick"
@@ -19,6 +20,17 @@
             @dragover.prevent
             @drop="handleDrop"
         >
+            <span
+                v-if="node.draggable"
+                class="drag-grip"
+                title="拖拽排序"
+            >
+                <GripVertical
+                    :size="12"
+                    :stroke-width="2"
+                />
+            </span>
+
             <button
                 v-if="node.type === 'folder'"
                 class="tree-toggle"
@@ -30,28 +42,40 @@
                     })
                 "
             >
-                <span
+                <ChevronRight
                     class="chevron"
                     :class="{ open: !!node.expanded }"
-                    >▸</span
-                >
+                    :size="13"
+                    :stroke-width="2.2"
+                />
             </button>
-            <span
-                v-else
-                class="tree-toggle tree-toggle-placeholder"
-            ></span>
 
-            <label
+            <!-- 类型图标：文件夹 / 图层 -->
+            <span
+                class="kind-icon"
+                :class="{ 'is-folder': node.type === 'folder' }"
+            >
+                <FolderOpen
+                    v-if="node.type === 'folder' && node.expanded"
+                    :size="14"
+                    :stroke-width="1.8"
+                />
+                <Folder
+                    v-else-if="node.type === 'folder'"
+                    :size="14"
+                    :stroke-width="1.8"
+                />
+                <Layers
+                    v-else
+                    :size="13"
+                    :stroke-width="1.8"
+                />
+            </span>
+
+            <div
                 class="row-label"
                 @click.stop
             >
-                <input
-                    v-if="node.showCheckbox !== false"
-                    :ref="node.type === 'folder' ? setFolderCheckboxRef : null"
-                    type="checkbox"
-                    :checked="!!node.visible"
-                    @change="handleToggleVisibility"
-                />
                 <span
                     v-if="!isRenaming"
                     class="name"
@@ -74,15 +98,34 @@
                 <span
                     v-if="node.type === 'layer' && node.id === activeLayerId"
                     class="active-indicator"
-                    >●</span
-                >
-            </label>
+                ></span>
+            </div>
 
             <span
-                v-if="node.type === 'layer'"
+                v-if="node.type === 'layer' && (node.featureCount || 0) > 0"
                 class="feature-badge"
-                >{{ node.featureCount || 0 }}</span
+                >{{ node.featureCount }}</span
             >
+
+            <!-- 可见性：ESRI 式眼睛开关（文件夹支持半选态） -->
+            <button
+                class="visibility-btn"
+                :class="{ off: !isVisible, partial: isPartialVisible }"
+                :aria-label="isVisible ? '隐藏图层' : '显示图层'"
+                :title="isPartialVisible ? '部分子图层可见' : isVisible ? '隐藏图层' : '显示图层'"
+                @click.stop="handleToggleVisibility"
+            >
+                <EyeOff
+                    v-if="!isVisible"
+                    :size="14"
+                    :stroke-width="1.9"
+                />
+                <Eye
+                    v-else
+                    :size="14"
+                    :stroke-width="1.9"
+                />
+            </button>
 
             <button
                 v-if="menuItems.length"
@@ -90,7 +133,10 @@
                 aria-label="更多操作"
                 @click.stop="openContextMenuFromButton"
             >
-                •••
+                <MoreHorizontal
+                    :size="15"
+                    :stroke-width="2"
+                />
             </button>
         </div>
 
@@ -146,7 +192,14 @@
                         :class="{ danger: !!item.danger }"
                         @click="handleMenuCommand(item.key)"
                     >
-                        {{ item.label }}
+                        <component
+                            :is="item.icon"
+                            v-if="item.icon"
+                            class="menu-icon"
+                            :size="13"
+                            :stroke-width="1.8"
+                        />
+                        <span>{{ item.label }}</span>
                     </button>
                 </template>
             </div>
@@ -156,6 +209,33 @@
 
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue';
+import {
+    ArrowLeftRight,
+    ChevronRight,
+    Copy,
+    Droplet,
+    Eye,
+    EyeOff,
+    FileDown,
+    Focus,
+    Folder,
+    FolderOpen,
+    GripVertical,
+    Info,
+    Layers,
+    ListMinus,
+    ListPlus,
+    ListX,
+    MapPin,
+    MoreHorizontal,
+    Paintbrush,
+    Pencil,
+    PencilLine,
+    Table,
+    Tag,
+    Trash2,
+    ZoomIn,
+} from '@lucide/vue';
 import { isValidLabel } from '@common/utils/labelValidator';
 import { useMessage } from '@common/shell/useMessage';
 import {
@@ -193,6 +273,10 @@ const isLayerMultiSelected = computed(() => {
     if (!layerId) return false;
     return selectedLayerIdSet.value.has(layerId);
 });
+
+/* 可见性（ESRI 式眼睛开关）：off = 隐藏，partial = 文件夹部分可见 */
+const isVisible = computed(() => props.node?.visible !== false);
+const isPartialVisible = computed(() => !!props.node?.indeterminate && isVisible.value);
 
 const folderSelectionState = computed(() => {
     if (props.node?.type !== 'folder') {
@@ -241,6 +325,37 @@ const menuCapabilities = computed(() => {
     };
 });
 
+const MENU_ICONS = {
+    view: Eye,
+    solo: Focus,
+    edit: PencilLine,
+    rename: Pencil,
+    attribute: Table,
+    style: Paintbrush,
+    'open-aoi-panel': MapPin,
+    label: Tag,
+    copy: Copy,
+    opacity: Droplet,
+    properties: Info,
+    zoom: ZoomIn,
+    remove: Trash2,
+    'batch-show': Eye,
+    'batch-hide': EyeOff,
+    'multi-select-add': ListPlus,
+    'folder-multi-select-add': ListPlus,
+    'multi-select-remove': ListMinus,
+    'folder-multi-select-remove': ListMinus,
+    'multi-select-clear': ListX,
+};
+
+function resolveMenuIcon(key) {
+    const k = String(key || '');
+    if (MENU_ICONS[k]) return MENU_ICONS[k];
+    if (k.includes('export')) return FileDown;
+    if (k.startsWith('convert-')) return ArrowLeftRight;
+    return null;
+}
+
 const menuItems = computed(() => {
     return buildContextMenuItems({
         node: props.node,
@@ -251,16 +366,11 @@ const menuItems = computed(() => {
             isCurrentLayerSelected: isLayerMultiSelected.value,
             folderSelectionState: folderSelectionState.value,
         },
-    });
+    }).map((item) => (item.divider ? item : { ...item, icon: resolveMenuIcon(item.key) }));
 });
 
 function emitAction(type, payload = {}) {
     emit('action', { type, ...payload });
-}
-
-function setFolderCheckboxRef(el) {
-    if (!el) return;
-    el.indeterminate = !!props.node?.indeterminate;
 }
 
 function closeContextMenu() {
@@ -337,8 +447,8 @@ function handleMenuCommand(key) {
     }
 }
 
-function handleToggleVisibility(event) {
-    const visible = !!event?.target?.checked;
+function handleToggleVisibility() {
+    const visible = !isVisible.value;
     if (props.node.type === 'folder') {
         emitAction('toggle-folder-visibility', { nodeId: props.node.id, visible });
         return;
@@ -428,19 +538,38 @@ defineExpose({ closeContextMenu });
     user-select: none;
 }
 
-.toc-row:hover {
-    background: var(--toc-bg-hover);
+/* 隐藏的图层整行淡化（ESRI 惯例） */
+.toc-row.is-off .name,
+.toc-row.is-off .kind-icon {
+    opacity: 0.5;
+}
+
+/* 提高特异性并排除激活/多选行，避免被 is-leaf/is-folder 的后置背景覆盖 */
+.toc-row:not(.is-active):not(.is-multi-selected):hover {
+    background: rgba(var(--brand-primary-rgb), 0.18);
+    box-shadow: inset 0 0 0 1px rgba(var(--brand-primary-rgb), 0.14);
 }
 
 .toc-row.is-active {
     background: var(--toc-bg-active);
-    border-left: 3px solid var(--toc-primary);
-    padding-left: calc(3px + (var(--node-level, 0) * 18px));
+}
+
+/* 激活态左侧强调条：伪元素实现，不产生布局位移 */
+.toc-row.is-active::after {
+    content: '';
+    position: absolute;
+    left: calc(var(--node-level, 0) * 18px + 2px);
+    top: 7px;
+    bottom: 7px;
+    width: 3px;
+    border-radius: 999px;
+    background: var(--brand-gradient);
+    box-shadow: 0 0 8px rgba(var(--brand-primary-dark-rgb), 0.35);
 }
 
 .toc-row.is-active .name {
     color: var(--toc-primary);
-    font-weight: 500;
+    font-weight: 600;
 }
 
 .toc-row.is-active:hover {
@@ -462,14 +591,9 @@ defineExpose({ closeContextMenu });
     left: calc((var(--node-level, 0) * 18px) - 9px);
     top: 50%;
     width: 10px;
-    border-top: 1px solid var(--toc-tree-line);
+    border-top: 1px solid rgba(var(--brand-primary-rgb), 0.28);
     transform: translateY(-50%);
-    opacity: calc(min(var(--node-level, 0), 0.6));
-    transition: opacity var(--toc-transition-normal);
-}
-
-.toc-row.is-active::before {
-    opacity: 0;
+    opacity: calc(min(var(--node-level, 0), 1));
 }
 
 .tree-toggle {
@@ -492,18 +616,80 @@ defineExpose({ closeContextMenu });
     color: var(--toc-primary);
 }
 
-.tree-toggle-placeholder {
-    cursor: default;
-}
-
 .chevron {
     transition: transform var(--toc-transition-normal);
-    font-size: 11px;
-    line-height: 1;
 }
 
 .chevron.open {
     transform: rotate(90deg);
+}
+
+/* 拖拽排序把手：仅可拖拽行显示，悬停浮现 */
+.drag-grip {
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 14px;
+    margin-left: -4px;
+    color: var(--toc-text-light);
+    opacity: 0;
+    cursor: grab;
+    transition: opacity var(--toc-transition-normal);
+}
+
+.toc-row:hover .drag-grip {
+    opacity: 0.85;
+}
+
+/* 类型图标：文件夹品牌色 / 图层中性色 */
+.kind-icon {
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    color: var(--toc-text-secondary);
+}
+
+.kind-icon.is-folder {
+    color: var(--brand-primary);
+}
+
+/* 可见性：ESRI 式眼睛开关 */
+.visibility-btn {
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    border: none;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--toc-primary);
+    cursor: pointer;
+    transition:
+        color var(--toc-transition-fast),
+        background var(--toc-transition-fast),
+        transform var(--toc-transition-fast);
+}
+
+.visibility-btn:hover {
+    background: var(--toc-primary-bg-hover);
+    transform: scale(1.06);
+}
+
+.visibility-btn:active {
+    transform: scale(0.9);
+}
+
+.visibility-btn.off {
+    color: var(--toc-text-light);
+}
+
+.visibility-btn.partial {
+    opacity: 0.55;
 }
 
 .row-label {
@@ -524,27 +710,34 @@ defineExpose({ closeContextMenu });
     transition: color var(--toc-transition-normal);
 }
 
+/* 激活态呼吸圆点 */
 .active-indicator {
     flex-shrink: 0;
-    font-size: 8px;
-    color: var(--toc-primary);
-    opacity: 0;
-    transition: opacity var(--toc-transition-normal);
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--brand-gradient);
+    box-shadow: 0 0 6px rgba(var(--brand-primary-dark-rgb), 0.45);
+    animation: activePulse 1.8s ease-in-out infinite;
 }
 
-.toc-row.is-active .active-indicator {
-    opacity: 1;
+@keyframes activePulse {
+    50% {
+        transform: scale(0.7);
+        opacity: 0.55;
+    }
 }
 
 .feature-badge {
     flex-shrink: 0;
     font-size: var(--toc-font-xs);
+    font-variant-numeric: tabular-nums;
     color: var(--toc-text-secondary);
     border: 1px solid var(--toc-badge-border);
-    background: linear-gradient(135deg, rgba(242, 248, 244, 0.9) 0%, rgba(235, 244, 239, 0.9) 100%);
-    border-radius: var(--toc-radius-lg);
-    padding: 2px var(--toc-spacing-md);
-    line-height: 1.4;
+    background: rgba(255, 255, 255, 0.55);
+    border-radius: 999px;
+    padding: 1px 7px;
+    line-height: 14px;
     transition: all var(--toc-transition-normal);
 }
 
@@ -561,49 +754,66 @@ defineExpose({ closeContextMenu });
 
 .more-btn {
     margin-left: auto;
-    border: 1px solid var(--toc-border-medium);
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: none;
     background: transparent;
     color: var(--toc-text-secondary);
-    border-radius: 6px;
-    min-width: 28px;
-    height: 28px;
-    line-height: 1;
-    padding: 0 6px;
+    border-radius: var(--toc-radius-md);
+    width: 24px;
+    height: 24px;
+    padding: 0;
     cursor: pointer;
     opacity: 0;
-    transition: all var(--toc-transition-normal);
-    font-size: var(--toc-font-lg);
-    font-weight: bold;
+    transform: translateX(4px);
+    transition:
+        opacity var(--toc-transition-normal),
+        transform var(--toc-transition-normal),
+        color var(--toc-transition-fast),
+        background var(--toc-transition-fast);
 }
 
 .more-btn:hover {
-    border-color: var(--toc-primary);
     color: var(--toc-primary);
-    background: linear-gradient(135deg, rgba(31, 123, 72, 0.263) 0%, rgba(31, 123, 73, 0.05) 100%);
+    background: var(--toc-primary-bg-hover);
 }
 
 .more-btn:active {
-    transform: scale(0.95);
+    transform: scale(0.92);
 }
 
 .toc-row:hover .more-btn,
 .toc-row:focus-within .more-btn,
 .toc-row.is-active .more-btn {
     opacity: 1;
+    transform: translateX(0);
 }
 
 .toc-row.is-active .more-btn {
-    border-color: var(--toc-primary);
     color: var(--toc-primary);
 }
 
+/* 图层行：干净透明，靠 hover/激活态反馈 */
 .toc-row.is-leaf {
-    background-color: var(--toc-bg-leaf);
+    background-color: transparent;
     transition: background-color var(--toc-transition-slow);
 }
+
+/* 文件夹行：轻品牌色着色 + 加粗标题 */
 .toc-row.is-folder {
-    background-color: var(--toc-bg-folder);
+    background: linear-gradient(
+        135deg,
+        rgba(var(--brand-primary-rgb), 0.13) 0%,
+        rgba(var(--brand-primary-rgb), 0.04) 100%
+    );
     transition: background-color var(--toc-transition-slow);
+}
+
+.toc-row.is-folder .name {
+    font-weight: 600;
+    color: var(--toc-text-dark);
 }
 
 .toc-children {
@@ -615,37 +825,50 @@ defineExpose({ closeContextMenu });
     position: absolute;
     left: calc((var(--node-level, 0) * 18px) + 5px);
     top: 0;
-    bottom: 0px;
-    border-left: 2px solid var(--toc-tree-guide);
+    bottom: 6px;
+    border-left: 1px solid rgba(var(--brand-primary-rgb), 0.22);
 }
 
 .toc-context-menu {
     position: fixed;
     z-index: var(--z-popover);
-    min-width: 180px;
-    border: 1px solid var(--toc-menu-border);
+    min-width: 190px;
+    border: 1px solid var(--toc-border-light);
     border-radius: var(--toc-radius-lg);
     background: var(--toc-bg-menu);
     box-shadow: var(--toc-shadow-lg);
     padding: var(--toc-spacing-sm);
-    backdrop-filter: blur(4px);
+    backdrop-filter: blur(10px);
 }
 
 .menu-item {
     width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 8px;
     border: none;
     background: transparent;
     color: var(--toc-text-primary);
     text-align: left;
     border-radius: var(--toc-radius-md);
-    padding: var(--toc-spacing-md) 11px;
+    padding: var(--toc-spacing-md) 10px;
     font-size: var(--toc-font-sm);
     cursor: pointer;
     transition: all var(--toc-transition-fast);
 }
 
+.menu-icon {
+    flex-shrink: 0;
+    color: var(--toc-text-secondary);
+    transition: color var(--toc-transition-fast);
+}
+
 .menu-item:hover {
-    background: linear-gradient(135deg, rgba(230, 218, 200, 0.4) 0%, rgba(190, 225, 215, 0.3) 100%);
+    background: var(--toc-primary-bg-hover);
+    color: var(--toc-primary);
+}
+
+.menu-item:hover .menu-icon {
     color: var(--toc-primary);
 }
 

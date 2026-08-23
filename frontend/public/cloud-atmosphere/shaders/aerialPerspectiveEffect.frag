@@ -24,11 +24,17 @@ uniform float u_cloudShadowNear;
 uniform float u_cloudShadowFar;
 uniform float u_cloudShadowTopHeight;
 uniform float u_cloudShadowBottomRadius;
+uniform float u_cloudShadowAltitudeFadeStart;
+uniform float u_cloudShadowAltitudeFadeEnd;
 uniform float u_bsmGroundOpticalDepthScale;
 // cascade UV 空间 texel 尺寸（单 cascade tile，非整个 atlas）
 uniform vec2 u_cloudShadowTexelSize;
+// 地面云影 PCF tap 数（1~16），按质量预设注入；性能优化：不再硬编码 16
+uniform int u_cloudShadowPcfTaps;
 // 远距几何误差修正量 [0,1]：越大越把 BSM 采样点拉向椭球/bottom 球，抑制地形 LOD 抖动
 uniform float u_geometricErrorCorrectionAmount;
+// 空中透视强度 [0,1]：0=透传原色（无透视），1=全强度大气散射
+uniform float u_aerialPerspectiveScale;
 
 const float METER_TO_LENGTH_UNIT = 0.001; // m -> km
 
@@ -120,7 +126,9 @@ int getFadedCascadeIndex(mat4 viewMat, vec3 worldPos, vec2 intervals[4], float n
       }
     }
   }
-  return jitter <= alpha ? nextIndex : prevIndex;
+  // V3.4.12：硬阈值 0.35 会形成随相机深度扫动的 cascade 硬边界线（升降时肉眼可见）。
+  // 改为逐像素 IGN 抖动阈值：边界带内两级 cascade 空间蓝噪声式混合，PCF 自然平滑。
+  return alpha > jitter ? nextIndex : prevIndex;
 }
 
 vec2 getShadowUv(vec3 worldPos, int ci) {
@@ -143,9 +151,14 @@ vec2 vogelDisk(int index, int count, float phi) {
 
 float readShadowOpticalDepth(vec2 uv, int ci, float distToTop) {
   float scale = max(u_cloudShadowScale, 1e-6);
+  // V3.4.7：tile UV 半 texel gutter clamp。2×2 atlas + LINEAR 过滤下，
+  // PCF vogel 偏移越过 tile 边界会读到相邻 cascade（矩阵语义不同）→ 边缘黑条/异常斑块。
+  vec2 gutter = max(u_cloudShadowTexelSize, vec2(1e-4)) * 0.5;
+  uv = clamp(uv, gutter, 1.0 - gutter);
   vec2 atlasUv = getCloudShadowAtlasOffset(ci) + uv * 0.5;
   vec4 shadow = (texture(u_cloudShadowBuffer, atlasUv) / scale) * u_cloudShadowDecode;
-  float od = min(shadow.b, shadow.g * max(0.0, distToTop - shadow.r));
+  // BSM atlas 语义：b=maxOpticalDepth，a=tail；地面也必须消费 tail，否则阴影边缘会被硬截断。
+  float od = min(shadow.b + shadow.a, shadow.g * max(0.0, distToTop - shadow.r));
   return od * max(u_bsmGroundOpticalDepthScale, 0.0);
 }
 
@@ -154,13 +167,15 @@ float sampleShadowOpticalDepthPCF(vec3 worldPos, float distToTop, float radius, 
   // 与 three-geospatial 一致：UV 出 [0,1] 才无阴影（硬切），不再做 edgeFade 矩形软边
   if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) return 0.0;
   vec2 texel = max(u_cloudShadowTexelSize, vec2(1e-4));
-  if (radius < 0.1) return readShadowOpticalDepth(uv, ci, distToTop);
+  int taps = clamp(u_cloudShadowPcfTaps, 1, 16);
+  if (radius < 0.1 || taps <= 1) return readShadowOpticalDepth(uv, ci, distToTop);
   float sum = 0.0;
   float phi = interleavedGradientNoise(gl_FragCoord.xy) * 6.28318530718;
   for (int i = 0; i < 16; ++i) {
+    if (i >= taps) break;
     sum += readShadowOpticalDepth(uv + vogelDisk(i, 16, phi) * radius * texel, ci, distToTop);
   }
-  return sum / 16.0;
+  return sum / float(taps);
 }
 
 // three-geospatial correctGeometricError：远距把位置混向 bottom 球表面，减轻 tile/地形几何误差对阴影 UV 的影响
@@ -174,9 +189,8 @@ vec3 correctBsmPosition(vec3 posMeters, float amount) {
 // 远距额外径向稳定：保留水平位置方向，高度向粗略地表混合，进一步抑制 DEM LOD 高度跳变
 vec3 stabilizeBsmSamplePosition(vec3 posMeters, float viewDistMeters) {
   float geoAmt = max(u_geometricErrorCorrectionAmount, 0.0);
-  // 距离驱动：约 8km 起开始拉向稳定面，50km 附近接近满修正
-  float distAmt = smoothstep(8000.0, 50000.0, viewDistMeters);
-  float amount = saturateAP(max(geoAmt, distAmt));
+  // 只使用显式几何误差修正；不再按距离强制贴合 bottom 球，避免远处地面云影被压平成“贴球滑动”的假阴影。
+  float amount = saturateAP(geoAmt);
   vec3 corrected = correctBsmPosition(posMeters, amount);
   if (amount < 0.01) return corrected;
   // 径向高度：用当前高度与 bottom 的差做轻度保留，避免近处地形阴影完全贴球
@@ -186,16 +200,26 @@ vec3 stabilizeBsmSamplePosition(vec3 posMeters, float viewDistMeters) {
   return n * (u_cloudShadowBottomRadius + stableH);
 }
 
+float getCloudShadowCameraAltitudeFade(vec3 cameraMeters) {
+  float cameraHeight = length(cameraMeters) - u_cloudShadowBottomRadius;
+  float fadeStart = max(u_cloudShadowAltitudeFadeStart, 0.0);
+  float fadeEnd = max(u_cloudShadowAltitudeFadeEnd, fadeStart + 1.0);
+  return 1.0 - smoothstep(fadeStart, fadeEnd, cameraHeight);
+}
+
 // rawWorldPosMeters：ECEF 米；u_cloudShadowBottomRadius / TopHeight 与管线 setCloudShadow 一致（米）
 float getGroundSunTransmittance(vec3 rawWorldPosMeters) {
   if (u_cloudShadowEnabled == 0) return 1.0;
 
   // 采样前稳定 BSM 世界点（空中透视仍用原始 depth 点，见 main）
   vec3 camMeters = (u_cameraPosition + u_altitudeCorrection) / METER_TO_LENGTH_UNIT;
-  float viewDist = length(rawWorldPosMeters - camMeters);
+  float altitudeFade = getCloudShadowCameraAltitudeFade(camMeters);
+  if (altitudeFade <= 0.0) return 1.0;
+  float viewDist = length(rawWorldPosMeters - u_cameraPosition / METER_TO_LENGTH_UNIT);
   vec3 samplePos = stabilizeBsmSamplePosition(rawWorldPosMeters, viewDist);
 
-  vec3 groundNormal = normalize(samplePos);
+  vec3 shellSamplePos = samplePos + u_altitudeCorrection / METER_TO_LENGTH_UNIT;
+  vec3 groundNormal = normalize(shellSamplePos);
   float sunSinElev = dot(u_sunDirection, groundNormal);
 
   // 1) 昼夜线遮挡：太阳低于该地面点本地地平线时，地面点已入夜，无云阴影。
@@ -204,8 +228,8 @@ float getGroundSunTransmittance(vec3 rawWorldPosMeters) {
 
   float topShellR = u_cloudShadowBottomRadius + u_cloudShadowTopHeight;
   vec3 rd = u_sunDirection;
-  float bS = dot(rd, samplePos);
-  float cTop = dot(samplePos, samplePos) - topShellR * topShellR;
+  float bS = dot(rd, shellSamplePos);
+  float cTop = dot(shellSamplePos, shellSamplePos) - topShellR * topShellR;
   float discTop = bS * bS - cTop;
   if (discTop <= 0.0) return 1.0;
   float distToShadowTop = -bS + sqrt(discTop);
@@ -216,7 +240,7 @@ float getGroundSunTransmittance(vec3 rawWorldPosMeters) {
   float rayLenFade = 1.0 - smoothstep(u_cloudShadowTopHeight * 6.0,
                                        u_cloudShadowTopHeight * 20.0,
                                        distToShadowTop);
-  float fade = horizonFade * lowSunFade * rayLenFade;
+  float fade = horizonFade * lowSunFade * rayLenFade * altitudeFade;
   if (fade <= 0.0) return 1.0;
 
   float jitter = interleavedGradientNoise(gl_FragCoord.xy);
@@ -232,18 +256,32 @@ float getGroundSunTransmittance(vec3 rawWorldPosMeters) {
   );
   if (ci < 0) return 1.0;
 
-  // PCF 半径（cascade UV texel 单位）；远处略加大，减轻锯齿
-  float pcfRadius = mix(1.5, 3.0, saturateAP(viewDist / max(far, 1.0)));
+  // V3.4.12：PCF 半径固定（texel 单位，随 cascade 分辨率自适应）。
+  // 旧 mix(1.5,3.0,viewDist/far) 随视距连续变化，相机升降时模糊宽度“呼吸”→ 抖动感。
+  float pcfRadius = 2.0;
   float opticalDepth = sampleShadowOpticalDepthPCF(samplePos, distToShadowTop, pcfRadius, ci);
   float shade = exp(-opticalDepth);
   return mix(1.0, shade, fade);
 }
 
+// 上游（AtmospherePostProcess applyGround=0 直通）给到的是 sRGB 显示色；
+// 空中透视必须在「线性化 → 合成 → mix(scale) → 与天空分支同一套 ACES+gamma」下进行：
+// - 线性 inscatter 直接加在 sRGB 上 = 近地平线白蒙版（旧实现根因）
+// - mix(u_aerialPerspectiveScale) 保证 scale=0 时严格原样，且强度平滑淡入
+vec3 compositeAerialDisplay(vec3 srgbOriginal, vec3 transmittance, float sunT, vec3 inscatter, float alpha) {
+  vec3 linOriginal = pow(max(srgbOriginal, vec3(0.0)), vec3(2.2));
+  vec3 aerialLin = linOriginal * transmittance * sunT + max(inscatter, vec3(0.0));
+  vec3 compositedLin = mix(linOriginal, aerialLin, saturateAP(alpha));
+  return tonemapDisplay(compositedLin, 1.0).rgb;
+}
+
 void main() {
   vec4 originalColor = texture(colorTexture, v_textureCoordinates);
   float depth = czm_readDepth(depthTexture, v_textureCoordinates);
-  // 非清空深度（用于太空视点的透视兜底，见下）
-  const float DEPTH_SKY_EPS = 1e-4;
+  // 深度清空判定：czm_readDepth 在 LOG_DEPTH 下已做对数深度反转，任何有限距离的几何
+  // 都严格 < 1-ε；ε 取 1e-7（与体积云 stage 的 DEPTH_SKY 一致），使远距地形/远距
+  // 低分辨率瓦片（反转后深度 ≈ 1-1/d，极易贴近 1）被可靠识别为几何而非「近似天空」。
+  const float DEPTH_SKY_EPS = 1e-7;
   bool hasSceneDepth = depth < 1.0 - DEPTH_SKY_EPS;
 
   vec3 cameraPosition = u_cameraPosition;
@@ -283,17 +321,62 @@ void main() {
     return;
   }
 
-  // 壳层内：与 AtmospherePostProcess 一致用 0.014 宽带，避免相机运动时深度抖动导致误走透视/透传、天际线闪黑。
+  // 壳层内分类（V3.5.30 地形感知）：开启地形后真实地平线高低起伏，
+  // 「视线最终与 bottom 球相交(hitBottom)」不再等价于「该像素是地面」，
+  // 且深度清空的像素也不再能靠几何判据安全归类。改为按「深度 × 几何」三问：
+  // ① 深度非清空 ⇒ 真实几何（含远距地形），一律地面管线，散射终点=深度重建点；
+  //    （旧 SHELL_SKY_DEPTH_SLOP 宽带会把远距几何透传跳过 aerial，已随本版删除：
+  //     两分支出口统一后无二次 OETF 之虞，深度重建终点也比椭球切点更短更准）
+  // ② 深度清空且射线不碰 bottom 球 ⇒ 山脊之间的纯天空缝隙，透传
+  //    （与天空分支同一 OETF 出口）；
+  // ③ 深度清空但射线命中 bottom 球 ⇒ 切角以下的掠射大气段（从山缝里望向
+  //    被地形遮挡的远侧大气）。旧路径把这种像素的终点经远平面重建/
+  //    ClampRadius 顶到大气层顶，积分出过饱和暖黄 inscatter——即贴着理想
+  //    椭圆边的黄蒙版本体；现把散射终点钳到 bottom 球「近交点」，得到与
+  //    原生行星渲染一致的有界临边辉光。该点仅作散射锚点，不参与 BSM 云影。
   if (inShell && !forceAerialFromDepth) {
-    const float SHELL_SKY_DEPTH_SLOP = 0.014;
-    const float MU_EXPLICIT_GROUND = -0.065;
-    bool depthLikelySky = depth >= 1.0 - SHELL_SKY_DEPTH_SLOP;
-    bool explicitGround =
-      hitBottom || (hasSceneDepth && muLook < MU_EXPLICIT_GROUND);
-    if (depthLikelySky && !explicitGround) {
+    bool skyPocket = !hasSceneDepth && !hitBottom;
+    if (skyPocket) {
       out_FragColor = tonemapDisplay(originalColor.rgb, originalColor.a);
       return;
     }
+    if (!hasSceneDepth) {
+      float bL = dot(cameraPosition, rayDirection);
+      float cL = dot(cameraPosition, cameraPosition) - bottomR * bottomR;
+      float discL = bL * bL - cL;
+      if (discL < 0.0) {
+        out_FragColor = tonemapDisplay(originalColor.rgb, originalColor.a);
+        return;
+      }
+      float sL = sqrt(discL);
+      float tHitL = -bL - sL;
+      if (tHitL <= 1e-6) {
+        tHitL = -bL + sL;
+      }
+      if (tHitL <= 1e-6) {
+        out_FragColor = tonemapDisplay(originalColor.rgb, originalColor.a);
+        return;
+      }
+      vec3 limbPosKm = cameraPosition + rayDirection * tHitL;
+      vec3 limbTransmittance;
+      vec3 limbInscatter = GetSkyRadianceToPoint(
+        cameraPosition,
+        limbPosKm,
+        0.0,
+        u_sunDirection,
+        limbTransmittance
+      );
+      vec3 finalColorLimb = compositeAerialDisplay(
+        originalColor.rgb,
+        limbTransmittance,
+        1.0,
+        limbInscatter,
+        u_aerialPerspectiveScale
+      );
+      out_FragColor = vec4(finalColorLimb, originalColor.a);
+      return;
+    }
+    // hasSceneDepth ⇒ 落到下方常规地面管线（终点=深度重建点）
   }
 
   // 重建 ECEF 世界坐标（米），再转 km，得到几何点位置
@@ -329,9 +412,15 @@ void main() {
       u_sunDirection,
       transmittanceW
     );
-    float sunTW = getGroundSunTransmittance(scenePosKmApprox / METER_TO_LENGTH_UNIT);
-    vec3 finalColorW = originalColor.rgb * transmittanceW * sunTW + inscatterW;
-    out_FragColor = tonemapDisplay(finalColorW, originalColor.a);
+    // w 异常时的 bottom-sphere 交点只是透视兜底，不作为 BSM 地面阴影锚点，避免假贴地阴影粘屏。
+    vec3 finalColorW = compositeAerialDisplay(
+      originalColor.rgb,
+      transmittanceW,
+      1.0,
+      inscatterW,
+      u_aerialPerspectiveScale
+    );
+    out_FragColor = vec4(finalColorW, originalColor.a);
     return;
   }
   eyePos /= eyePos.w;
@@ -343,7 +432,8 @@ void main() {
   vec3 scenePosKm;
   vec3 rawWorldPosMeters = vec3(0.0);
   if (eyePos.z >= 0.0 && hasSceneDepth) {
-    // z>=0 但深度非空：远距/对数深度常见数值问题，眼→世界不可靠，用射线与 bottom 球前向交点作地表锚点
+    // z>=0 但深度非空：远距/对数深度常见数值问题，眼→世界不可靠。
+    // 这里仅做空中透视近似，不再把 bottom-sphere 交点喂给 BSM，避免假贴地阴影。
     float bz = dot(cameraPosition, rayDirection);
     float cz = dot(cameraPosition, cameraPosition) - bottomR * bottomR;
     float discz = bz * bz - cz;
@@ -383,15 +473,19 @@ void main() {
     transmittance
   );
 
-  vec3 rawForBSM;
-  if (eyePos.z >= 0.0 && hasSceneDepth) {
-    rawForBSM = scenePosKm / METER_TO_LENGTH_UNIT;
-  } else {
-    rawForBSM = rawWorldPosMeters;
-  }
-  float sunT = getGroundSunTransmittance(rawForBSM);
-  vec3 finalColor = originalColor.rgb * transmittance * sunT + inscatter;
+  // 仅在可靠 depth→ECEF 路径上启用地面 BSM；假球壳点不参与，防止屏幕粘滞阴影。
+  float sunT = (rawWorldPosMeters.x != 0.0 || rawWorldPosMeters.y != 0.0 || rawWorldPosMeters.z != 0.0)
+    ? getGroundSunTransmittance(rawWorldPosMeters)
+    : 1.0;
+  // 与天空分支同一 OETF 出口：线性域合成 + mix(scale) 强度语义，消除交界缝与白蒙版
+  vec3 finalColor = compositeAerialDisplay(
+    originalColor.rgb,
+    transmittance,
+    sunT,
+    inscatter,
+    u_aerialPerspectiveScale
+  );
 
-  out_FragColor = tonemapDisplay(finalColor, originalColor.a);
+  out_FragColor = vec4(finalColor, originalColor.a);
 }
 

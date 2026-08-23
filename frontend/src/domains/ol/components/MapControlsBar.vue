@@ -23,49 +23,23 @@
                             :title="t('mapControls.copyCoord')"
                             @click.stop="copyCurrentCoordinate"
                         >
-                            <svg
-                                viewBox="0 0 24 24"
-                                width="14"
-                                height="14"
-                                fill="none"
-                                stroke="currentColor"
-                                stroke-width="1.8"
-                                stroke-linecap="round"
-                                stroke-linejoin="round"
-                                aria-hidden="true"
-                            >
-                                <rect
-                                    x="9"
-                                    y="9"
-                                    width="11"
-                                    height="11"
-                                    rx="2"
-                                ></rect>
-                                <path
-                                    d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"
-                                ></path>
-                            </svg>
+                            <Copy
+                                :size="13"
+                                :stroke-width="2"
+                            />
                             <span class="copy-tooltip">{{ copyTooltipText }}</span>
                         </button>
                         <button
                             class="format-config-btn"
                             type="button"
+                            :class="{ open: isFormatMenuVisible }"
                             :title="t('mapControls.formatSettings')"
                             @click.stop="toggleFormatMenu"
                         >
-                            <svg
-                                viewBox="0 0 24 24"
-                                width="14"
-                                height="14"
-                                fill="none"
-                                stroke="currentColor"
-                                stroke-width="2"
-                                stroke-linecap="round"
-                                stroke-linejoin="round"
-                                aria-hidden="true"
-                            >
-                                <polyline points="9 18 15 12 9 6"></polyline>
-                            </svg>
+                            <ChevronRight
+                                :size="14"
+                                :stroke-width="2.2"
+                            />
                         </button>
                     </div>
                 </template>
@@ -140,21 +114,10 @@
             type="button"
             @click="handleHomeInteract"
         >
-            <svg
-                viewBox="0 0 24 24"
-                width="20"
-                height="20"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="1.5"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                aria-hidden="true"
-            >
-                <path d="M3 10.5 12 3l9 7.5"></path>
-                <path d="M5 9.8V20h14V9.8"></path>
-                <path d="M10 20v-6h4v6"></path>
-            </svg>
+            <House
+                :size="18"
+                :stroke-width="1.8"
+            />
         </button>
     </div>
 </template>
@@ -173,6 +136,7 @@
  */
 
 import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue';
+import { ChevronRight, Copy, House } from '@lucide/vue';
 import {
     COORDINATE_FORMATS,
     DECIMAL_PLACES,
@@ -554,71 +518,59 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
+/* 浅色玻璃拟态，与 LayerControlPanel / TOC 面板统一 */
 .map-controls-group {
-    --brand-color: var(--brand-primary-dark);
-    --brand-color-rgb: var(--brand-primary-dark-rgb);
-    --glass-bg: linear-gradient(
-        135deg,
-        rgba(var(--brand-color-rgb), 0.85),
-        rgba(var(--brand-color-rgb), 0.85)
-    );
-    --glass-border: rgba(255, 255, 255, 0.2);
-    --glass-shadow: 0 8px 32px rgba(0, 0, 0, 0.15);
-    --glass-text: #ffffff;
-    --glass-chip-bg: rgba(255, 255, 255, 0.15);
-    --recessed-bg: rgba(0, 0, 0, 0.1);
-    --glass-divider: rgba(255, 255, 255, 0.2);
-    --trans-curve: cubic-bezier(0.4, 0, 0.2, 1);
-
+    --mc-text: var(--text-brand-dark);
+    --mc-muted: var(--brand-accent-muted);
     position: absolute;
     right: 8px;
     bottom: 8px;
     z-index: var(--z-panel);
     display: flex;
     align-items: center;
-    gap: 10px;
-    /* padding: 8px 10px; */
+    gap: 8px;
     border-radius: 9999px;
-    color: var(--glass-text);
+    color: var(--mc-text);
     white-space: nowrap;
-    transition: all 0.3s var(--trans-curve);
-
-    background: var(--glass-bg);
-    border: 1px solid var(--glass-border);
-    box-shadow: var(--glass-shadow);
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    background: rgba(255, 255, 255, 0.92);
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
-    padding:4px;
+    border: 1px solid rgba(var(--brand-primary-rgb), 0.22);
+    box-shadow:
+        var(--toc-shadow-md),
+        inset 0 1px 0 rgba(255, 255, 255, 0.6);
+    padding: 4px;
 }
 
 .coordinate-display {
     min-width: 260px;
-    height: 38px;
+    height: 36px;
     padding: 0 10px 0 14px;
     border-radius: 9999px;
     border: 1px solid transparent;
-    background: var(--recessed-bg);
+    background: rgba(var(--brand-primary-rgb), 0.06);
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: 8px;
     cursor: text;
-    transition: all 0.3s var(--trans-curve);
+    transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .coordinate-display:hover {
-    background: rgba(0, 0, 0, 0.15);
+    background: rgba(var(--brand-primary-rgb), 0.1);
 }
 
 .coordinate-display.editing {
     background: #ffffff;
-    border: 1px solid var(--brand-color);
-    box-shadow: inset 0 0 0 1px var(--brand-color);
+    border-color: var(--brand-primary-light);
+    box-shadow: 0 0 0 3px var(--toc-primary-bg-hover);
 }
 
 .coordinate-display.invalid {
-    box-shadow: inset 0 0 0 1px rgba(254, 202, 202, 0.85);
-    border-color: rgba(254, 202, 202, 0.85);
+    border-color: rgba(var(--danger-rgb), 0.55);
+    box-shadow: 0 0 0 3px rgba(var(--danger-rgb), 0.12);
 }
 
 .coordinate-section {
@@ -630,21 +582,20 @@ onUnmounted(() => {
 .coordinate-actions {
     display: flex;
     align-items: center;
-    gap: 4px;
+    gap: 3px;
 }
 
 .coordinate-text {
-    /* 使用专门为显示数据设计的等宽字体 */
+    /* 等宽字体保证数字跳动时不抖动 */
     font-family: 'JetBrains Mono', 'Fira Code', 'Roboto Mono', monospace;
-    font-size: 16px;
-    font-weight: 600; /* 加粗一点，让它在绿色背景上更有力量感 */
-    color: #ffffff;
-    letter-spacing: 0.05em; /* 稍微拉开字间距，更有呼吸感 */
-    text-shadow: 0 1px 2px rgba(194, 178, 178, 0.2); /* 给文字加一点微弱阴影，防止在亮色图层上看不清 */
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--mc-text);
+    letter-spacing: 0.03em;
 }
 
 .coordinate-display.editing .coordinate-input {
-    color: #706969;
+    color: var(--text-brand-dark);
 }
 
 .copy-coordinate-btn {
@@ -652,44 +603,64 @@ onUnmounted(() => {
     display: inline-flex;
     align-items: center;
     gap: 4px;
-    border: 1px solid rgba(255, 255, 255, 0.3);
-    background: rgba(255, 255, 255, 0.15);
-    color: var(--glass-text);
+    border: none;
+    background: transparent;
+    color: var(--toc-text-secondary);
     border-radius: 9999px;
-    padding: 0 8px;
+    padding: 0 7px;
     font-size: 11px;
     cursor: pointer;
-    transition: all 0.3s var(--trans-curve);
+    transition:
+        background 0.15s ease,
+        color 0.15s ease,
+        transform 0.12s ease;
 }
 
 .copy-coordinate-btn:hover {
     transform: translateY(-1px);
-    background: rgba(255, 255, 255, 0.25);
+    background: var(--toc-primary-bg-hover);
+    color: var(--brand-accent-dark);
 }
 
 .copy-tooltip {
     line-height: 1;
+    font-variant-numeric: tabular-nums;
 }
 
 .format-config-btn {
-    height: 22px;
-    width: 20px;
+    height: 24px;
+    width: 24px;
     display: inline-flex;
     align-items: center;
     justify-content: center;
     border: none;
-    background: rgba(255, 255, 255, 0.1);
-    color: var(--glass-text);
+    background: transparent;
+    color: var(--toc-text-secondary);
     border-radius: 50%;
     padding: 0;
     cursor: pointer;
-    transition: all 0.3s var(--trans-curve);
     flex-shrink: 0;
+    transition:
+        background 0.15s ease,
+        color 0.15s ease;
 }
 
 .format-config-btn:hover {
-    background: rgba(255, 255, 255, 0.2);
-    transform: translateY(-1px) scale(1.1);
+    background: var(--toc-primary-bg-hover);
+    color: var(--brand-accent-dark);
+}
+
+.format-config-btn.open {
+    background: var(--toc-primary-bg-hover);
+    color: var(--brand-accent-dark);
+}
+
+.format-config-btn.open svg {
+    transform: rotate(90deg);
+}
+
+.format-config-btn svg {
+    transition: transform 0.2s ease;
 }
 
 .format-menu {
@@ -698,16 +669,14 @@ onUnmounted(() => {
     left: 0;
     margin-bottom: 8px;
     z-index: var(--z-modal);
-    background: linear-gradient(135deg, rgba(255, 255, 255, 0.95), rgba(255, 255, 255, 0.9));
-    border: 1px solid rgba(255, 255, 255, 0.5);
-    border-radius: var(--panel-radius);
-    box-shadow:
-        0 16px 48px rgba(0, 0, 0, 0.15),
-        0 4px 12px rgba(0, 0, 0, 0.1);
-    backdrop-filter: blur(8px);
-    -webkit-backdrop-filter: blur(8px);
+    background: rgba(255, 255, 255, 0.97);
+    border: 1px solid rgba(var(--brand-primary-rgb), 0.2);
+    border-radius: 12px;
+    box-shadow: var(--toc-shadow-lg);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
     overflow: hidden;
-    animation: slideUp 0.3s var(--trans-curve);
+    animation: slideUp 0.22s var(--trans-curve, ease-out);
 }
 
 @keyframes slideUp {
@@ -750,24 +719,23 @@ onUnmounted(() => {
 }
 
 .format-option {
-    padding: 6px 8px;
-    border: 1px solid var(--border-brand-light);
-    border-radius: 8px;
+    padding: 6px 9px;
+    border: 1px solid rgba(var(--brand-primary-rgb), 0.16);
+    border-radius: 9px;
     background: transparent;
     cursor: pointer;
     text-align: left;
-    transition: all 0.2s var(--trans-curve);
+    transition: all 0.15s ease;
 }
 
 .format-option:hover {
-    background: var(--bg-hover);
-    border-color: var(--border-brand);
+    background: var(--toc-primary-bg);
+    border-color: rgba(var(--brand-primary-dark-rgb), 0.4);
 }
 
 .format-option.active {
-    background: var(--bg-active);
-    border-color: var(--brand-primary-dark);
-    box-shadow: inset 0 0 0 1px var(--bg-active);
+    background: var(--toc-primary-bg-hover);
+    border-color: var(--brand-primary);
 }
 
 .format-label {
@@ -801,28 +769,28 @@ onUnmounted(() => {
 }
 
 .decimal-option {
-    padding: 8px 12px;
-    border: 1px solid var(--border-brand-light);
-    border-radius: 8px;
+    padding: 7px 12px;
+    border: 1px solid rgba(var(--brand-primary-rgb), 0.16);
+    border-radius: 9px;
     background: transparent;
     cursor: pointer;
     text-align: center;
     font-size: 12px;
     font-weight: 600;
-    color: var(--text-primary);
-    transition: all 0.2s var(--trans-curve);
+    color: var(--toc-text-secondary);
+    transition: all 0.15s ease;
 }
 
 .decimal-option:hover {
-    background: var(--bg-hover);
-    border-color: var(--border-brand);
+    background: var(--toc-primary-bg);
+    border-color: rgba(var(--brand-primary-dark-rgb), 0.4);
 }
 
 .decimal-option.active {
-    background: var(--bg-active);
-    border-color: var(--brand-primary-dark);
-    color: var(--brand-primary-dark);
-    box-shadow: 0 0 0 2px rgba(var(--brand-primary-rgb), 0.1);
+    background: var(--brand-gradient);
+    border-color: transparent;
+    color: #ffffff;
+    box-shadow: 0 2px 7px rgba(var(--brand-primary-dark-rgb), 0.3);
 }
 
 .coordinate-input {
@@ -830,53 +798,60 @@ onUnmounted(() => {
     border: none;
     outline: none;
     background: transparent;
-    color: var(--glass-text);
+    color: var(--text-brand-dark);
     font-family: 'JetBrains Mono', 'Roboto Mono', monospace;
     font-size: 13px;
 }
 
 .coordinate-input::placeholder {
-    color: rgba(0, 0, 0, 0.4);
+    color: var(--toc-text-light);
 }
 
 .zoom-level-display {
     width: 30px;
     height: 30px;
     border-radius: 50%;
-    background: var(--glass-chip-bg);
-    color: #ffffff;
+    background: #ffffff;
+    border: 1px solid rgba(var(--brand-primary-rgb), 0.22);
+    color: var(--brand-accent-dark);
     font-family: 'JetBrains Mono', 'Roboto Mono', monospace;
-    font-size: 18px;
+    font-size: 15px;
     font-weight: 700;
     display: flex;
     align-items: center;
     justify-content: center;
-    transition: all 0.3s var(--trans-curve);
+    font-variant-numeric: tabular-nums;
 }
 
 .divider {
-    width: 2px;
+    width: 1px;
     height: 20px;
-    background-color: var(--glass-divider);
+    background-color: rgba(var(--brand-primary-rgb), 0.18);
     flex-shrink: 0;
 }
 
 .home-btn {
     --ripple-x: 50%;
     --ripple-y: 50%;
-    width: 38px;
-    height: 38px;
+    width: 36px;
+    height: 36px;
     position: relative;
     overflow: hidden;
     border-radius: 50%;
-    background: transparent;
+    background: var(--brand-gradient);
     border: none;
     color: #ffffff;
     display: inline-flex;
     align-items: center;
     justify-content: center;
     cursor: pointer;
-    transition: all 0.3s var(--trans-curve);
+    box-shadow:
+        0 3px 9px rgba(var(--brand-primary-dark-rgb), 0.32),
+        inset 0 1px 0 rgba(255, 255, 255, 0.28);
+    transition:
+        transform 0.2s cubic-bezier(0.4, 0, 0.2, 1),
+        filter 0.2s ease,
+        box-shadow 0.2s ease;
 }
 
 .home-btn::after {
@@ -888,7 +863,7 @@ onUnmounted(() => {
     height: 10px;
     border-radius: 50%;
     transform: translate(-50%, -50%) scale(0);
-    background: rgba(255, 255, 255, 0.3);
+    background: rgba(255, 255, 255, 0.4);
     opacity: 0;
     pointer-events: none;
 }
@@ -898,13 +873,15 @@ onUnmounted(() => {
 }
 
 .home-btn:hover {
-    background: rgba(255, 255, 255, 0.1);
-    transform: scale(1.1);
-    filter: brightness(1.2);
+    filter: brightness(1.07);
+    transform: scale(1.06);
+    box-shadow:
+        0 5px 14px rgba(var(--brand-primary-dark-rgb), 0.4),
+        inset 0 1px 0 rgba(255, 255, 255, 0.28);
 }
 
 .home-btn:active {
-    transform: scale(0.95);
+    transform: scale(0.94);
 }
 
 @keyframes home-button-ripple {

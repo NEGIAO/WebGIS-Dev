@@ -1,214 +1,242 @@
 <template>
     <div class="compass-panel">
+        <!-- 头部 -->
         <div class="panel-header">
-            <div>
-                <div class="panel-title">{{ t('compass.title') }}</div>
-                <div class="panel-subtitle">{{ t('compass.subtitle') }}</div>
+            <div class="header-left">
+                <span class="panel-badge">
+                    <Compass
+                        :size="16"
+                        :stroke-width="1.9"
+                    />
+                </span>
+                <div>
+                    <div class="panel-title">{{ t('compass.title') }}</div>
+                    <div class="panel-subtitle">{{ t('compass.subtitle') }}</div>
+                </div>
             </div>
             <button
-                class="ghost-btn"
+                class="back-btn"
                 @click="$emit('close')"
             >
-                {{ t('compass.back') }}
+                <ArrowLeft
+                    :size="13"
+                    :stroke-width="2"
+                />
+                <span>{{ t('compass.back') }}</span>
             </button>
         </div>
 
-        <div class="card-row switch-grid">
-            <label class="switch-item">
+        <!-- 开关组 -->
+        <div class="switch-group">
+            <label class="switch-row">
+                <span class="switch-label">{{ t('compass.enable') }}</span>
                 <input
                     type="checkbox"
+                    class="switch-input"
                     :checked="compassStore.enabled"
                     @change="handleEnabledChange"
                 />
-                <span>{{ t('compass.enable') }}</span>
             </label>
-            <label class="switch-item">
+            <label class="switch-row">
+                <span class="switch-label">{{ t('compass.placement') }}</span>
                 <input
                     type="checkbox"
+                    class="switch-input"
                     :checked="compassStore.placementMode"
                     :disabled="!compassStore.enabled || compassStore.mode !== 'vector'"
                     @change="handlePlacementModeChange"
                 />
-                <span>{{ t('compass.placement') }}</span>
             </label>
-            <label class="switch-item">
+            <label class="switch-row">
+                <span class="switch-label">{{ t('compass.sensorSync') }}</span>
                 <input
                     type="checkbox"
+                    class="switch-input"
                     :checked="compassStore.sensorEnabled"
                     :disabled="!compassStore.enabled"
                     @change="handleSensorToggle"
                 />
-                <span>{{ t('compass.sensorSync') }}</span>
             </label>
         </div>
 
-        <div class="card-row">
-            <div class="field full-width">
-                <label>{{ t('compass.displayMode') }}</label>
-                <select
-                    :value="compassStore.mode"
+        <!-- 显示模式：分段控件 -->
+        <div
+            class="field-block"
+            :class="{ disabled: !compassStore.enabled }"
+        >
+            <label class="field-label">{{ t('compass.displayMode') }}</label>
+            <div class="seg">
+                <button
+                    type="button"
+                    class="seg-btn"
+                    :class="{ active: compassStore.mode === 'vector' }"
                     :disabled="!compassStore.enabled"
-                    @change="handleModeChange"
+                    @click="compassStore.setMode('vector')"
                 >
-                    <option value="vector">{{ t('compass.modeVector') }}</option>
-                    <option value="hud">{{ t('compass.modeHud') }}</option>
-                </select>
-            </div>
-
-            <div class="field full-width">
-                <label>{{ t('compass.theme') }}</label>
-                <select
-                    :value="compassStore.cid"
-                    :disabled="compassStore.isConfigLoading"
-                    @change="handleThemeChange"
+                    {{ t('compass.modeVector') }}
+                </button>
+                <button
+                    type="button"
+                    class="seg-btn"
+                    :class="{ active: compassStore.mode === 'hud' }"
+                    :disabled="!compassStore.enabled"
+                    @click="compassStore.setMode('hud')"
                 >
-                    <option
-                        v-for="item in compassStore.themeOptions"
-                        :key="item.cid"
-                        :value="item.cid"
-                    >
-                        {{ item.name }}
-                    </option>
-                </select>
+                    {{ t('compass.modeHud') }}
+                </button>
             </div>
         </div>
 
-        <div class="card-row">
-            <div class="field full-width">
-                <div
-                    class="label-row"
-                    style="
-                        display: flex;
-                        justify-content: space-between;
-                        align-items: center;
-                        margin-bottom: 8px;
-                    "
-                >
-                    <label>{{ t('compass.radius') }}</label>
-                    <input
-                        type="number"
-                        class="compact-number-input"
-                        :disabled="!compassStore.enabled"
-                        :value="Number(compassStore.physicalRadiusMeters).toFixed(1)"
-                        @input="(e) => compassStore.setPhysicalRadiusMeters(Number(e.target.value))"
-                    />
-                </div>
-
-                <input
-                    type="range"
-                    :min="100"
-                    :max="20000000"
-                    step="0.5"
-                    class="compass-slider"
-                    :disabled="!compassStore.enabled"
-                    :value="compassStore.physicalRadiusMeters"
-                    @input="(e) => compassStore.setPhysicalRadiusMeters(Number(e.target.value))"
+        <!-- 主题 -->
+        <div class="join-bar">
+            <span class="join-lead">
+                <Palette
+                    :size="13"
+                    :stroke-width="1.9"
                 />
-
-                <div
-                    class="slider-ticks"
-                    style="
-                        display: flex;
-                        justify-content: space-between;
-                        font-size: 10px;
-                        color: #888;
-                        margin-top: 4px;
-                    "
-                >
-                    <span>100m</span>
-                    <span>10000000</span>
-                    <span>20000000m</span>
-                </div>
-            </div>
-
-            <div class="field full-width">
-                <label>{{ t('compass.opacity') }}：{{ (Number(compassStore.opacity) * 100).toFixed(0) }}%</label>
-                <input
-                    type="range"
-                    min="0.1"
-                    max="1"
-                    step="0.01"
-                    class="compass-slider"
-                    :disabled="!compassStore.enabled"
-                    :value="compassStore.opacity"
-                    @input="(e) => compassStore.setOpacity(Number(e.target.value))"
-                />
-            </div>
-
-
-            <div
-                v-if="compassStore.mode === 'hud'"
-                class="field full-width"
+            </span>
+            <select
+                class="join-select"
+                :value="compassStore.cid"
+                :disabled="compassStore.isConfigLoading"
+                @change="handleThemeChange"
             >
-                <label>{{ t('compass.hudSize') }}：{{ Number(compassStore.hudSizePx).toFixed(0) }}px</label>
-                <input
-                    type="range"
-                    min="240"
-                    max="560"
-                    step="1"
-                    class="compass-slider"
-                    :disabled="!compassStore.enabled"
-                    :value="compassStore.hudSizePx"
-                    @input="(e) => compassStore.setHudSize(Number(e.target.value))"
-                />
-            </div>
-
-            <div class="field full-width">
-                <label>{{ t('compass.gradientBase') }}</label>
-                <div class="color-picker-row">
-                    <input
-                        type="color"
-                        class="color-input"
-                        :disabled="!compassStore.enabled"
-                        :value="compassStore.bgColor"
-                        @input="(e) => compassStore.setBgColor(e.target.value)"
-                    />
-                    <span class="color-hex">{{ compassStore.bgColor }}</span>
-                </div>
-            </div>
+                <option
+                    v-for="item in compassStore.themeOptions"
+                    :key="item.cid"
+                    :value="item.cid"
+                >
+                    {{ item.name }}
+                </option>
+            </select>
         </div>
 
-        <div class="card-row">
-            <div class="field">
-                <label>{{ t('compass.longitude') }}</label>
-                <input
-                    v-model="lngInput"
-                    type="number"
-                    step="0.000001"
-                    :disabled="!compassStore.enabled"
-                />
+        <!-- 半径 -->
+        <div class="field-block">
+            <div class="slider-head">
+                <label>{{ t('compass.radius') }}</label>
+                <span class="slider-value">{{ formatMeters(compassStore.physicalRadiusMeters) }}</span>
             </div>
-            <div class="field">
-                <label>{{ t('compass.latitude') }}</label>
-                <input
-                    v-model="latInput"
-                    type="number"
-                    step="0.000001"
-                    :disabled="!compassStore.enabled"
-                />
-            </div>
-            <div class="field actions-field">
-                <label>&nbsp;</label>
-                <div class="actions-row">
-                    <button
-                        class="action-btn"
-                        :disabled="!compassStore.enabled"
-                        @click="applyLonLat"
-                    >
-                        {{ t('compass.applyCoord') }}
-                    </button>
-                    <button
-                        class="action-btn action-muted"
-                        :disabled="!compassStore.enabled || !getUserLocation"
-                        @click="useGps"
-                    >
-                        GPS
-                    </button>
-                </div>
-            </div>
+            <input
+                type="range"
+                min="100"
+                max="20000000"
+                step="0.5"
+                class="range-slider"
+                :disabled="!compassStore.enabled"
+                :value="compassStore.physicalRadiusMeters"
+                :style="{ '--fill': `${((Number(compassStore.physicalRadiusMeters) - 100) / (20000000 - 100)) * 100}%` }"
+                @input="(e) => compassStore.setPhysicalRadiusMeters(Number(e.target.value))"
+            />
         </div>
 
-        <div class="card-row compact-row">
+        <!-- 透明度 -->
+        <div class="field-block">
+            <div class="slider-head">
+                <label>{{ t('compass.opacity') }}</label>
+                <span class="slider-value">{{ (Number(compassStore.opacity) * 100).toFixed(0) }}%</span>
+            </div>
+            <input
+                type="range"
+                min="0.1"
+                max="1"
+                step="0.01"
+                class="range-slider"
+                :disabled="!compassStore.enabled"
+                :value="compassStore.opacity"
+                :style="{ '--fill': `${((Number(compassStore.opacity) - 0.1) / 0.9) * 100}%` }"
+                @input="(e) => compassStore.setOpacity(Number(e.target.value))"
+            />
+        </div>
+
+        <!-- HUD 尺寸 -->
+        <div
+            v-if="compassStore.mode === 'hud'"
+            class="field-block"
+        >
+            <div class="slider-head">
+                <label>{{ t('compass.hudSize') }}</label>
+                <span class="slider-value">{{ Number(compassStore.hudSizePx).toFixed(0) }}px</span>
+            </div>
+            <input
+                type="range"
+                min="240"
+                max="560"
+                step="1"
+                class="range-slider"
+                :disabled="!compassStore.enabled"
+                :value="compassStore.hudSizePx"
+                :style="{ '--fill': `${((Number(compassStore.hudSizePx) - 240) / 320) * 100}%` }"
+                @input="(e) => compassStore.setHudSize(Number(e.target.value))"
+            />
+        </div>
+
+        <!-- 渐变基色 -->
+        <label
+            class="color-card"
+            :class="{ disabled: !compassStore.enabled }"
+        >
+            <input
+                type="color"
+                class="swatch-color"
+                :disabled="!compassStore.enabled"
+                :value="compassStore.bgColor"
+                @input="(e) => compassStore.setBgColor(e.target.value)"
+            />
+            <span class="color-meta">
+                <span class="color-label">{{ t('compass.gradientBase') }}</span>
+                <span class="color-hex">{{ compassStore.bgColor }}</span>
+            </span>
+        </label>
+
+        <!-- 坐标定位 -->
+        <div class="join-bar">
+            <span class="join-lead">
+                <MapPin
+                    :size="13"
+                    :stroke-width="2"
+                />
+            </span>
+            <input
+                v-model="lngInput"
+                type="number"
+                step="0.000001"
+                class="join-field"
+                :aria-label="t('compass.longitude')"
+                :disabled="!compassStore.enabled"
+            />
+            <span class="join-sep"></span>
+            <input
+                v-model="latInput"
+                type="number"
+                step="0.000001"
+                class="join-field"
+                :aria-label="t('compass.latitude')"
+                :disabled="!compassStore.enabled"
+            />
+            <button
+                class="join-go"
+                :disabled="!compassStore.enabled"
+                @click="applyLonLat"
+            >
+                {{ t('compass.applyCoord') }}
+            </button>
+        </div>
+
+        <button
+            class="gps-btn"
+            :disabled="!compassStore.enabled || !getUserLocation"
+            @click="useGps"
+        >
+            <Satellite
+                :size="13"
+                :stroke-width="2"
+            />
+            GPS
+        </button>
+
+        <!-- 状态 -->
+        <div class="status-row">
             <div
                 class="status-chip"
                 :class="`status-${compassStore.sensorPermission}`"
@@ -217,7 +245,7 @@
             </div>
             <div
                 v-if="compassStore.isConfigLoading"
-                class="status-chip"
+                class="status-chip status-loading"
             >
                 {{ t('compass.loading') }}
             </div>
@@ -232,7 +260,13 @@
 </template>
 
 <script setup>
+/**
+ * WeatherChartPanel 同款设计语言：
+ * - 渐变徽章头部 + 幽灵返回钮
+ * - 自绘开关 / 分段控件 / 一体式输入条 / 渐变填充滑杆
+ */
 import { computed, ref, watch } from 'vue';
+import { ArrowLeft, Compass, MapPin, Palette, Satellite } from '@lucide/vue';
 import { useMessage } from '@common/shell/useMessage';
 import { useLocale } from '@common/app/useLocale';
 import { useCompassStore } from '@/stores';
@@ -269,6 +303,15 @@ const sensorStatusText = computed(() => {
     return t('compass.sensorUnknown');
 });
 
+function formatMeters(value) {
+    const n = Number(value) || 0;
+    if (n >= 1000) {
+        const digits = n >= 100000 ? 0 : 1;
+        return `${(n / 1000).toLocaleString(undefined, { maximumFractionDigits: digits })} km`;
+    }
+    return `${n} m`;
+}
+
 function handleEnabledChange(event) {
     const checked = Boolean(event?.target?.checked);
     compassStore.setEnabled(checked);
@@ -277,13 +320,6 @@ function handleEnabledChange(event) {
 function handlePlacementModeChange(event) {
     const checked = Boolean(event?.target?.checked);
     compassStore.setPlacementMode(checked);
-}
-
-function handleModeChange(event) {
-    const mode = String(event?.target?.value || 'vector')
-        .trim()
-        .toLowerCase();
-    compassStore.setMode(mode === 'hud' ? 'hud' : 'vector');
 }
 
 async function handleThemeChange(event) {
@@ -362,187 +398,513 @@ async function useGps() {
     background: linear-gradient(180deg, #f8fff8 0%, #eef8ef 100%);
 }
 
+/* ===== 头部 ===== */
 .panel-header {
     display: flex;
-    align-items: flex-start;
+    align-items: center;
     justify-content: space-between;
     gap: 10px;
+}
+
+.header-left {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+}
+
+.panel-badge {
+    flex-shrink: 0;
+    width: 34px;
+    height: 34px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 11px;
+    background: var(--brand-gradient);
+    color: #ffffff;
+    box-shadow:
+        0 4px 10px rgba(var(--brand-primary-dark-rgb), 0.28),
+        inset 0 1px 0 rgba(255, 255, 255, 0.28);
 }
 
 .panel-title {
     font-size: 16px;
     font-weight: 700;
     color: var(--brand-accent-dark);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .panel-subtitle {
-    margin-top: 2px;
-    font-size: 12px;
+    margin-top: 1px;
+    font-size: 11px;
     color: var(--brand-accent-muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
-.ghost-btn {
-    height: 30px;
-    padding: 0 10px;
-    border: 1px solid var(--border-brand);
-    border-radius: 8px;
-    background: #ffffff;
-    color: var(--brand-primary-dark);
-    cursor: pointer;
-}
-
-.card-row {
-    border: 1px solid rgba(var(--brand-primary-rgb), 0.18);
-    background: rgba(255, 255, 255, 0.92);
-    border-radius: 10px;
-    padding: 10px;
-    display: flex;
-    flex-wrap: wrap;
-    gap: 10px;
-}
-
-.switch-grid {
-    display: grid;
-    grid-template-columns: repeat(1, minmax(0, 1fr));
-}
-
-.switch-item {
+.back-btn {
+    flex-shrink: 0;
     display: inline-flex;
     align-items: center;
-    gap: 8px;
-    color: var(--brand-accent-dark);
-    font-size: 13px;
-}
-
-.field {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-    min-width: 130px;
-    flex: 1;
-}
-
-.field.full-width {
-    min-width: 100%;
-}
-
-.field label {
-    color: var(--brand-primary-dark);
+    gap: 5px;
+    height: 30px;
+    padding: 0 12px;
+    border: 1px solid rgba(var(--brand-primary-rgb), 0.35);
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.72);
+    color: var(--toc-primary);
     font-size: 12px;
     font-weight: 600;
-}
-
-input,
-select,
-button {
-    font: inherit;
-}
-
-input[type='number'],
-select {
-    height: 34px;
-    border: 1px solid var(--border-brand-light);
-    border-radius: 8px;
-    padding: 0 10px;
-    color: var(--text-brand-dark);
-    background: #fff;
-}
-
-input[type='range'] {
-    width: 100%;
-}
-
-.actions-field {
-    min-width: 100%;
-}
-
-.actions-row {
-    display: flex;
-    gap: 8px;
-}
-
-.action-btn {
-    height: 34px;
-    border: none;
-    border-radius: 8px;
-    padding: 0 12px;
     cursor: pointer;
-    background: var(--brand-primary);
-    color: #fff;
-    font-weight: 600;
+    transition:
+        background 0.12s ease,
+        color 0.12s ease,
+        transform 0.12s ease;
 }
 
-.action-btn:disabled {
-    opacity: 0.55;
+.back-btn:hover {
+    background: #ffffff;
+    transform: translateY(-1px);
+}
+
+.back-btn:active {
+    transform: scale(0.96);
+}
+
+/* ===== 开关组 ===== */
+.switch-group {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.switch-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 4px 2px;
+    cursor: pointer;
+}
+
+.switch-label {
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text-brand-dark);
+}
+
+/* 自绘开关 */
+.switch-input {
+    appearance: none;
+    position: relative;
+    flex-shrink: 0;
+    width: 34px;
+    height: 20px;
+    margin: 0;
+    border-radius: 999px;
+    background: rgba(var(--brand-primary-rgb), 0.22);
+    cursor: pointer;
+    transition: background 0.18s ease;
+}
+
+.switch-input::after {
+    content: '';
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: #ffffff;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+    transition: left 0.18s cubic-bezier(0.34, 1.4, 0.44, 1);
+}
+
+.switch-input:checked {
+    background: var(--brand-gradient);
+}
+
+.switch-input:checked::after {
+    left: 16px;
+}
+
+.switch-input:disabled {
+    opacity: 0.45;
     cursor: not-allowed;
 }
 
-.action-muted {
-    background: var(--brand-accent-muted);
+/* ===== 字段块通用 ===== */
+.field-block {
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
 }
 
-.compact-row {
-    align-items: center;
+.field-block.disabled {
+    opacity: 0.55;
+    pointer-events: none;
 }
 
-.status-chip {
-    border-radius: 999px;
-    padding: 5px 10px;
+.field-label,
+.slider-head label {
     font-size: 12px;
     font-weight: 600;
-    background: rgba(35, 129, 67, 0.16);
     color: var(--brand-primary-dark);
 }
 
+/* 分段控件 */
+.seg {
+    display: flex;
+    gap: 2px;
+    padding: 3px;
+    border-radius: 10px;
+    background: rgba(var(--brand-primary-rgb), 0.08);
+}
+
+.seg-btn {
+    flex: 1;
+    border: none;
+    background: transparent;
+    padding: 6px 0;
+    font-size: 12px;
+    color: var(--brand-accent-muted);
+    border-radius: 8px;
+    cursor: pointer;
+    transition:
+        background 0.14s ease,
+        color 0.14s ease,
+        box-shadow 0.14s ease;
+}
+
+.seg-btn:hover:not(:disabled):not(.active) {
+    color: var(--brand-accent-dark);
+}
+
+.seg-btn.active {
+    background: #ffffff;
+    color: var(--brand-accent-dark);
+    font-weight: 600;
+    box-shadow: 0 1px 4px rgba(35, 105, 61, 0.18);
+}
+
+.seg-btn:disabled {
+    cursor: not-allowed;
+}
+
+/* ===== 一体式输入条 ===== */
+.join-bar {
+    display: flex;
+    align-items: stretch;
+    min-height: 34px;
+    background: rgba(255, 255, 255, 0.82);
+    border: 1px solid rgba(var(--brand-primary-rgb), 0.22);
+    border-radius: 11px;
+    overflow: hidden;
+    transition:
+        border-color 0.2s ease-out,
+        box-shadow 0.2s ease-out,
+        background 0.2s ease-out;
+}
+
+.join-bar:focus-within {
+    border-color: var(--brand-primary-light);
+    background: rgba(255, 255, 255, 0.95);
+    box-shadow: 0 0 0 3px rgba(60, 165, 101, 0.14);
+}
+
+.join-lead {
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    padding-left: 11px;
+    color: var(--brand-accent-muted);
+    transition: color 0.16s ease;
+}
+
+.join-bar:focus-within .join-lead {
+    color: var(--brand-primary);
+}
+
+.join-field,
+.join-select {
+    flex: 1;
+    min-width: 0;
+    border: none;
+    background: transparent;
+    padding: 8px 10px;
+    font-size: 12px;
+    color: var(--text-brand-dark);
+    outline: none;
+}
+
+.join-field::-webkit-outer-spin-button,
+.join-field::-webkit-inner-spin-button {
+    opacity: 0.35;
+}
+
+.join-sep {
+    flex-shrink: 0;
+    width: 1px;
+    margin: 7px 0;
+    background: rgba(var(--brand-primary-rgb), 0.16);
+}
+
+.join-select {
+    appearance: none;
+    background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%238faa9b' stroke-width='1.5' stroke-linecap='round'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 10px center;
+    cursor: pointer;
+}
+
+.join-go {
+    flex-shrink: 0;
+    border: none;
+    background: var(--brand-gradient);
+    color: #ffffff;
+    font-size: 12px;
+    font-weight: 600;
+    padding: 0 14px;
+    cursor: pointer;
+    white-space: nowrap;
+    transition:
+        filter 0.12s ease,
+        opacity 0.12s ease;
+}
+
+.join-go:hover:not(:disabled) {
+    filter: brightness(1.06);
+}
+
+/* ===== GPS 软按钮 ===== */
+.gps-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    height: 32px;
+    border: 1px solid rgba(var(--brand-primary-rgb), 0.35);
+    border-radius: 999px;
+    background: rgba(var(--brand-primary-rgb), 0.08);
+    color: var(--brand-accent-dark);
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition:
+        background 0.12s ease,
+        transform 0.12s ease;
+}
+
+.gps-btn:hover:not(:disabled) {
+    background: rgba(var(--brand-primary-rgb), 0.16);
+    transform: translateY(-1px);
+}
+
+.gps-btn:active:not(:disabled) {
+    transform: scale(0.97);
+}
+
+/* ===== 滑杆：渐变填充轨道 ===== */
+.slider-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.slider-value {
+    font-size: 10px;
+    font-weight: 600;
+    line-height: 15px;
+    color: var(--toc-primary);
+    background: rgba(var(--brand-primary-rgb), 0.1);
+    border-radius: 999px;
+    padding: 1px 8px;
+    font-variant-numeric: tabular-nums;
+}
+
+.range-slider {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 100%;
+    height: 4px;
+    border-radius: 999px;
+    outline: none;
+    cursor: pointer;
+    background: linear-gradient(
+        90deg,
+        var(--brand-primary-light) var(--fill, 50%),
+        rgba(var(--brand-primary-rgb), 0.16) var(--fill, 50%)
+    );
+}
+
+.range-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: #ffffff;
+    border: 2px solid var(--brand-primary);
+    box-shadow: 0 1px 4px rgba(var(--brand-primary-dark-rgb), 0.32);
+    transition: transform 0.15s ease;
+}
+
+.range-slider::-webkit-slider-thumb:hover {
+    transform: scale(1.15);
+}
+
+.range-slider::-moz-range-thumb {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: #ffffff;
+    border: 2px solid var(--brand-primary);
+    box-shadow: 0 1px 4px rgba(var(--brand-primary-dark-rgb), 0.32);
+}
+
+.range-slider:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+/* ===== 颜色卡片 ===== */
+.color-card {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    padding: 7px 10px;
+    border: 1px solid rgba(var(--brand-primary-rgb), 0.16);
+    background: rgba(255, 255, 255, 0.72);
+    border-radius: 11px;
+    cursor: pointer;
+    transition:
+        border-color 0.12s ease,
+        background 0.12s ease;
+}
+
+.color-card:hover {
+    border-color: rgba(var(--brand-primary-dark-rgb), 0.42);
+    background: #ffffff;
+}
+
+.color-card.disabled {
+    opacity: 0.55;
+    pointer-events: none;
+}
+
+.swatch-color {
+    -webkit-appearance: none;
+    appearance: none;
+    flex-shrink: 0;
+    width: 30px;
+    height: 30px;
+    padding: 0;
+    border: none;
+    background: none;
+    cursor: pointer;
+}
+
+.swatch-color::-webkit-color-swatch-wrapper {
+    padding: 0;
+}
+
+.swatch-color::-webkit-color-swatch {
+    border-radius: 8px;
+    border: 2px solid #ffffff;
+    box-shadow:
+        0 0 0 1px rgba(var(--brand-primary-rgb), 0.28),
+        0 2px 5px rgba(0, 0, 0, 0.14);
+}
+
+.swatch-color::-moz-color-swatch {
+    border-radius: 8px;
+    border: 2px solid #ffffff;
+    box-shadow:
+        0 0 0 1px rgba(var(--brand-primary-rgb), 0.28),
+        0 2px 5px rgba(0, 0, 0, 0.14);
+}
+
+.color-meta {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    min-width: 0;
+}
+
+.color-label {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--brand-primary-dark);
+}
+
+.color-hex {
+    font-size: 11px;
+    font-family: monospace;
+    text-transform: uppercase;
+    color: var(--brand-accent-muted);
+}
+
+/* ===== 状态条 ===== */
+.status-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+}
+
+.status-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    border-radius: 999px;
+    padding: 4px 10px;
+    font-size: 11px;
+    font-weight: 600;
+    background: rgba(35, 129, 67, 0.14);
+    color: var(--brand-primary-dark);
+}
+
+.status-chip::before {
+    content: '';
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: currentColor;
+    opacity: 0.75;
+}
+
 .status-granted {
-    background: rgba(35, 129, 67, 0.18);
+    background: rgba(35, 129, 67, 0.16);
     color: #1e6a39;
 }
 
 .status-denied {
-    background: rgba(220, 80, 80, 0.2);
+    background: rgba(220, 80, 80, 0.16);
     color: #a02626;
 }
 
 .status-unsupported {
-    background: rgba(150, 150, 150, 0.2);
+    background: rgba(150, 150, 150, 0.18);
     color: #555;
 }
 
 .status-unknown {
-    background: rgba(255, 193, 7, 0.25);
+    background: rgba(255, 193, 7, 0.22);
     color: #805b00;
 }
 
+.status-loading {
+    background: rgba(45, 140, 255, 0.14);
+    color: #1c62b9;
+}
+
 .status-error {
-    background: rgba(220, 80, 80, 0.18);
+    max-width: 100%;
+    background: rgba(220, 80, 80, 0.14);
     color: #9b2424;
-}
-
-.color-picker-row {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-}
-
-.color-input {
-    width: 40px;
-    height: 34px;
-    border: 1px solid var(--border-brand-light);
-    border-radius: 8px;
-    padding: 2px;
-    cursor: pointer;
-    background: #fff;
-}
-
-.color-input:disabled {
-    opacity: 0.55;
-    cursor: not-allowed;
-}
-
-.color-hex {
-    font-size: 13px;
-    font-family: monospace;
-    color: var(--text-brand-dark);
 }
 </style>

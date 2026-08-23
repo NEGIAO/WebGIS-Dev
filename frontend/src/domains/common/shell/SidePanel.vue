@@ -113,10 +113,11 @@
                 v-show="activeTab === 'bus'"
                 class="toolbox-content"
             >
-                <BusPlannerPanel
+                <RoutePlannerPanel
                     v-if="loadedTabs.has('bus')"
+                    mode="bus"
                     :token="tiandituToken"
-                    :start-bus-point-pick="startBusPointPick"
+                    :start-point-pick="startBusPointPick"
                     :draw-route-on-map="drawRouteOnMap"
                     :zoom-to-bus-route-step="zoomToBusRouteStep"
                     :preview-bus-route-step="previewBusRouteStep"
@@ -130,10 +131,11 @@
                 v-show="activeTab === 'drive'"
                 class="toolbox-content"
             >
-                <DrivingPlannerPanel
+                <RoutePlannerPanel
                     v-if="loadedTabs.has('drive')"
+                    mode="drive"
                     :token="tiandituToken"
-                    :start-map-point-pick="startBusPointPick"
+                    :start-point-pick="startBusPointPick"
                     :draw-drive-route-on-map="drawDriveRouteOnMap"
                     :zoom-to-drive-route-step="zoomToDriveRouteStep"
                     :preview-drive-route-step="previewDriveRouteStep"
@@ -308,11 +310,8 @@ function preloadToolboxPanel() {
     return toolboxModulePromise;
 }
 const ToolboxPanel = defineAsyncComponent(() => preloadToolboxPanel());
-const BusPlannerPanel = defineAsyncComponent(() =>
-    import('@ol/routing/components/BusPlannerPanel.vue'),
-);
-const DrivingPlannerPanel = defineAsyncComponent(() =>
-    import('@ol/routing/components/DrivingPlannerPanel.vue'),
+const RoutePlannerPanel = defineAsyncComponent(() =>
+    import('@ol/routing/components/RoutePlannerPanel.vue'),
 );
 const CompassControlPanel = defineAsyncComponent(() =>
     import('@common/compass/components/CompassControlPanel.vue'),

@@ -221,12 +221,13 @@ defineProps({
 }
 
 .detail-panel {
-    border: 1px solid rgba(57, 142, 87, 0.2);
-    border-radius: 10px;
+    border: 1px solid rgba(var(--brand-primary-rgb), 0.2);
+    border-radius: 12px;
     background: #ffffff;
-    padding: 10px;
+    padding: 11px;
     position: relative;
     z-index: 2;
+    box-shadow: var(--toc-shadow-sm);
 }
 
 .detail-panel.forecast-panel {
@@ -234,17 +235,29 @@ defineProps({
 }
 
 .detail-title {
-    margin: 0 0 8px;
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    margin: 0 0 9px;
     font-size: 13px;
     font-weight: 700;
     color: var(--brand-primary-dark);
 }
 
-/* 元信息网格 */
+.detail-title::before {
+    content: '';
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--brand-gradient);
+    box-shadow: 0 0 6px rgba(var(--brand-primary-rgb), 0.45);
+}
+
+/* 元信息网格：去边框盒，仅浅色聚拢 */
 .meta-grid {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 8px;
+    gap: 6px;
 }
 
 .meta-grid.two-columns {
@@ -256,32 +269,34 @@ defineProps({
 }
 
 .meta-item {
-    border: 1px solid rgba(83, 157, 112, 0.2);
+    background: rgba(var(--brand-primary-rgb), 0.05);
     border-radius: 8px;
-    background: var(--bg-brand-light);
-    padding: 6px 8px;
+    padding: 5px 8px;
     min-width: 0;
 }
 
 .meta-key {
     display: block;
-    font-size: 11px;
+    font-size: 10px;
+    letter-spacing: 0.03em;
     color: var(--brand-accent-muted);
 }
 
 .meta-val {
     display: block;
-    margin-top: 2px;
+    margin-top: 1px;
     color: var(--brand-primary-dark);
     font-size: 13px;
     font-weight: 600;
     word-break: break-word;
+    font-variant-numeric: tabular-nums;
 }
 
-/* 预报表格 */
+/* 预报表格：横向行分隔 + 悬停高亮，去网格线 */
 .forecast-table-wrap {
     width: 100%;
     overflow-x: auto;
+    border-radius: 9px;
 }
 
 .forecast-table {
@@ -292,19 +307,39 @@ defineProps({
 
 .forecast-table th,
 .forecast-table td {
-    border: 1px solid rgba(93, 163, 121, 0.22);
-    padding: 6px 7px;
+    padding: 7px 9px;
     text-align: left;
     font-size: 12px;
     color: var(--brand-primary-dark);
-    background: rgba(255, 255, 255, 0.78);
+    white-space: nowrap;
+    border-bottom: 1px solid rgba(var(--brand-primary-rgb), 0.12);
+}
+
+.forecast-table thead th {
+    background: rgba(var(--brand-primary-rgb), 0.09);
+    color: var(--brand-accent-dark);
+    font-weight: 700;
     white-space: nowrap;
 }
 
-.forecast-table th {
-    background: rgba(222, 242, 230, 0.92);
-    color: var(--brand-primary-dark);
-    font-weight: 700;
+.forecast-table thead tr:first-child th:first-child {
+    border-top-left-radius: 9px;
+}
+
+.forecast-table thead tr:first-child th:last-child {
+    border-top-right-radius: 9px;
+}
+
+.forecast-table tbody tr {
+    transition: background var(--toc-transition-fast);
+}
+
+.forecast-table tbody tr:hover {
+    background: rgba(var(--brand-primary-rgb), 0.07);
+}
+
+.forecast-table tbody tr:last-child td {
+    border-bottom: none;
 }
 
 .forecast-empty {
@@ -315,8 +350,8 @@ defineProps({
 
 /* 原始 JSON 折叠区 */
 .raw-details {
-    border: 1px solid rgba(57, 142, 87, 0.18);
-    border-radius: 10px;
+    border: 1px solid rgba(var(--brand-primary-rgb), 0.18);
+    border-radius: 12px;
     background: rgba(255, 255, 255, 0.82);
     padding: 8px 10px;
 }
@@ -342,10 +377,10 @@ defineProps({
     margin: 0;
     max-height: 220px;
     overflow: auto;
-    background: rgba(10, 48, 30, 0.9);
+    background: rgba(10, 48, 30, 0.92);
     color: var(--bg-brand-light);
-    border-radius: 8px;
-    padding: 8px;
+    border-radius: 9px;
+    padding: 9px;
     font-size: 11px;
     line-height: 1.45;
 }

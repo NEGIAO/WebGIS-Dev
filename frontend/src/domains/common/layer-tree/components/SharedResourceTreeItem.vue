@@ -13,16 +13,13 @@
                 :aria-label="expanded ? '折叠' : '展开'"
                 @click.stop="toggleFolder"
             >
-                <span
+                <ChevronRight
                     class="shared-tree-chevron"
                     :class="{ open: expanded }"
-                    >▸</span
-                >
+                    :size="13"
+                    :stroke-width="2.2"
+                />
             </button>
-            <span
-                v-else
-                class="shared-tree-toggle shared-tree-toggle-placeholder"
-            ></span>
 
             <button
                 v-if="!isFolder"
@@ -39,6 +36,18 @@
                 class="shared-tree-folder-label"
                 @click="toggleFolder"
             >
+                <FolderOpen
+                    v-if="expanded"
+                    class="shared-tree-folder-icon"
+                    :size="14"
+                    :stroke-width="1.8"
+                />
+                <Folder
+                    v-else
+                    class="shared-tree-folder-icon"
+                    :size="14"
+                    :stroke-width="1.8"
+                />
                 <span class="shared-tree-name">{{ displayName }}</span>
                 <span class="shared-tree-count">{{ node.fileCount || 0 }}</span>
             </div>
@@ -61,6 +70,7 @@
 
 <script setup>
 import { computed, ref, watch } from 'vue';
+import { ChevronRight, Folder, FolderOpen } from '@lucide/vue';
 
 defineOptions({ name: 'SharedResourceTreeItem' });
 
@@ -123,45 +133,44 @@ function forwardLoad(resource) {
 }
 
 .shared-tree-row {
-    min-height: 30px;
+    min-height: 28px;
     display: flex;
     align-items: center;
     gap: 6px;
-    padding: 3px 6px 3px calc(6px + (var(--node-level, 0) * 16px));
-    border-radius: 8px;
+    padding: 2px 6px 2px calc(4px + (var(--node-level, 0) * 16px));
+    border-radius: var(--toc-radius-md);
+    transition: background var(--toc-transition-fast);
 }
 
 .shared-tree-row:hover {
-    background: linear-gradient(135deg, rgba(116, 175, 144, 0.2) 0%, rgba(235, 247, 240, 0.7) 100%);
+    background: var(--toc-primary-bg-hover);
 }
 
 .shared-tree-toggle {
-    border: none;
-    background: transparent;
-    width: 18px;
-    height: 18px;
+    flex-shrink: 0;
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    border-radius: 4px;
-    color: var(--text-secondary);
-    cursor: pointer;
+    width: 18px;
+    height: 18px;
     padding: 0;
+    border: none;
+    background: transparent;
+    border-radius: var(--toc-radius-sm);
+    color: var(--toc-text-secondary);
+    cursor: pointer;
+    transition:
+        color var(--toc-transition-fast),
+        background var(--toc-transition-fast);
 }
 
 .shared-tree-toggle:hover {
-    background: rgba(31, 123, 73, 0.08);
-    color: #1f7b49;
-}
-
-.shared-tree-toggle-placeholder {
-    cursor: default;
+    background: var(--toc-primary-bg);
+    color: var(--toc-primary);
 }
 
 .shared-tree-chevron {
-    font-size: 11px;
-    line-height: 1;
-    transition: transform 0.15s ease;
+    transition: transform var(--toc-transition-normal);
 }
 
 .shared-tree-chevron.open {
@@ -173,45 +182,71 @@ function forwardLoad(resource) {
     flex: 1;
     display: flex;
     align-items: center;
-    justify-content: space-between;
-    gap: 8px;
+    gap: 7px;
     color: var(--text-brand-dark);
     cursor: pointer;
+    user-select: none;
 }
 
+.shared-tree-folder-icon {
+    flex-shrink: 0;
+    color: var(--brand-primary);
+    opacity: 0.85;
+    transition: opacity var(--toc-transition-fast), transform var(--toc-transition-normal);
+}
+
+.shared-tree-folder-label:hover .shared-tree-folder-icon {
+    opacity: 1;
+    transform: scale(1.08);
+}
+
+/* 文件行：去掉描边盒子，扁平化融入树 */
 .shared-tree-file-btn {
     min-width: 0;
     flex: 1;
-    border: 1px solid rgba(153, 195, 170, 0.28);
-    background: rgba(255, 255, 255, 0.68);
-    color: var(--text-brand-dark);
-    border-radius: 7px;
-    padding: 6px 8px;
     display: flex;
     align-items: center;
     gap: 8px;
+    border: none;
+    background: transparent;
+    color: var(--text-brand-dark);
+    border-radius: var(--toc-radius-md);
+    padding: 4px 8px;
     cursor: pointer;
     text-align: left;
-    transition: all 0.12s ease;
+    transition:
+        background var(--toc-transition-fast),
+        color var(--toc-transition-fast),
+        transform var(--toc-transition-fast);
 }
 
 .shared-tree-file-btn:hover {
-    border-color: var(--border-brand);
-    background: var(--bg-brand-light);
+    background: var(--toc-primary-bg);
     color: var(--text-brand);
+}
+
+.shared-tree-file-btn:hover .shared-tree-type {
+    box-shadow: 0 2px 6px rgba(var(--brand-primary-dark-rgb), 0.3);
+}
+
+.shared-tree-file-btn:active {
+    transform: scale(0.98);
 }
 
 .shared-tree-type {
     flex-shrink: 0;
-    min-width: 34px;
-    height: 18px;
-    border-radius: 4px;
-    background: linear-gradient(135deg, var(--brand-primary-light) 0%, var(--brand-accent) 100%);
+    min-width: 36px;
+    height: 16px;
+    border-radius: 999px;
+    background: var(--brand-gradient);
     color: #ffffff;
-    font-size: 10px;
-    line-height: 18px;
+    font-size: 9px;
+    line-height: 16px;
+    letter-spacing: 0.3px;
     text-align: center;
     font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    transition: box-shadow var(--toc-transition-fast);
 }
 
 .shared-tree-name {
@@ -219,18 +254,20 @@ function forwardLoad(resource) {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    font-size: 12px;
+    font-size: var(--toc-font-sm);
 }
 
 .shared-tree-count {
     flex-shrink: 0;
-    font-size: 10px;
-    color: var(--text-secondary);
-    border: 1px solid var(--border-brand-light);
-    border-radius: 10px;
-    padding: 1px 6px;
-    line-height: 1.4;
-    background: rgba(246, 252, 249, 0.9);
+    margin-left: auto;
+    font-size: var(--toc-font-xs);
+    font-variant-numeric: tabular-nums;
+    color: var(--toc-primary);
+    border: 1px solid var(--toc-border-light);
+    border-radius: 999px;
+    padding: 0 7px;
+    line-height: 15px;
+    background: var(--toc-primary-bg);
 }
 
 .shared-tree-children {
@@ -242,7 +279,7 @@ function forwardLoad(resource) {
     position: absolute;
     left: calc((var(--node-level, 0) * 16px) + 12px);
     top: 0;
-    bottom: 0;
-    border-left: 1px solid rgba(87, 113, 100, 0.35);
+    bottom: 4px;
+    border-left: 1px solid rgba(var(--brand-primary-rgb), 0.22);
 }
 </style>
