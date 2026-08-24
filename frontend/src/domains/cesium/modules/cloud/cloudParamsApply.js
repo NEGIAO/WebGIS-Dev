@@ -87,6 +87,11 @@ export function applyCloudPanelParams(pipeline, panelParams) {
     pipeline.aerial._aerialPerspectiveScale = groundAerialVal;
   }
 
+  // 云层高度基准：absolute=相对海平面 0m；terrain=相对相机下方地形表面
+  if (panelParams.altitudeMode === 'absolute' || panelParams.altitudeMode === 'terrain') {
+    p.altitudeMode = panelParams.altitudeMode;
+  }
+
   // 布尔开关
   if (typeof panelParams.useShadowBuffer === 'boolean') p.useShadowBuffer = panelParams.useShadowBuffer;
   if (typeof panelParams.shadowLengthEnabled === 'boolean') p.shadowLengthEnabled = panelParams.shadowLengthEnabled;

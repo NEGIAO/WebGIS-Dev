@@ -90,12 +90,19 @@ def _parse_env_value(raw_value: str) -> str:
 
 
 def _resolve_env_file(filename: str) -> Path:
-    """解析 env 文件路径，同时兼容完整仓库与 subtree 扁平部署。"""
+    """解析 env 文件路径，同时兼容完整仓库与 subtree 扁平部署。
+
+    查找优先级：deploy/（环境文件统一收敛处）→ 仓库根（历史兼容）→ 应用根
+    """
     override = os.environ.get(_ENV_FILE_OVERRIDE, "").strip()
     if override:
         return Path(override).expanduser()
 
-    candidates = (PROJECT_ROOT / filename, BACKEND_DIR / filename)
+    candidates = (
+        PROJECT_ROOT / "deploy" / filename,
+        PROJECT_ROOT / filename,
+        BACKEND_DIR / filename,
+    )
     for candidate in candidates:
         if candidate.is_file():
             return candidate

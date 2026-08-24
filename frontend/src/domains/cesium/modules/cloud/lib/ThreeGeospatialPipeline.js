@@ -864,6 +864,8 @@ export class ThreeGeospatialPipeline {
       distFadeStart: 11000.0, distFadeEnd: 51000.0,
       // 相机高度淡出（米）：相机升过云顶后，在 altitudeFadeRange 范围内线性淡出至消失
       altitudeFadeRange: 8000.0,
+      // 云层高度基准："absolute"=相对海平面 0m；"terrain"=相对相机下方地形表面（每帧采样 + 指数平滑）
+      altitudeMode: "absolute",
       minSecondaryStepSize: 100.0, secondaryStepScale: 2.0, multiScatteringOctaves: 8, lowLayerDensityBoost: 1.0,
       shadowLengthEnabled: true, useShadowBuffer: true, hazeEnabled: false,
       maxShadowLengthIterationCount: 500, minShadowLengthStepSize: 50.0, maxShadowLengthRayDistance: 200000.0,
@@ -924,6 +926,10 @@ export class ThreeGeospatialPipeline {
     this._clockElapsedSeconds = 0;
     this._lastClockElapsedSeconds = undefined;
     this._listeners = [];
+    // terrain 高度基准：每帧采样状态与平滑值
+    this._terrainOffsetFrame = -1;
+    this._terrainOffsetSampled = false;
+    this._terrainOffsetSmoothed = 0;
 
     // 每帧 uniform 回调复用的 scratch 对象池：每个 uniform 独立实例，避免同帧互相覆盖与 GC 抖动
     this._scratch = {
@@ -940,6 +946,8 @@ export class ThreeGeospatialPipeline {
       altitudeCorrection: new Cesium.Cartesian3(),
       cameraHeightCorr: new Cesium.Cartesian3(),
       cameraHeightPos: new Cesium.Cartesian3(),
+      // _getTerrainOffset 内部中间量
+      terrainCarto: new Cesium.Cartographic(),
       minLayerHeights: new Cesium.Cartesian4(),
       maxLayerHeights: new Cesium.Cartesian4(),
       densityScales: new Cesium.Cartesian4(),
@@ -1006,6 +1014,7 @@ export class ThreeGeospatialPipeline {
     }
     // 低成本档关闭 3D detail 噪声采样：保持云形大轮廓，减少每步 texture3D 访问。
     const smoothMode = params.quality === "smooth";
+    if (params.altitudeMode === "absolute" || params.altitudeMode === "terrain") p.altitudeMode = params.altitudeMode;
     for (let i = 0; i < 3; i++) {
       const layer = p.layers[i];
       if (!layer) continue;
@@ -1212,8 +1221,43 @@ uniform sampler2D irradiance_texture;
     return Cesium.Cartesian3.negate(center, out);
   }
 
-  _getMinHeight() { const ls = this.params.layers; let m = Infinity; for (let i = 0; i < 4; i++) { if ((Number(ls[i]?.height) || 0) > 0) m = Math.min(m, Number(ls[i]?.altitude) || 0); } return Number.isFinite(m) ? m : 0; }
-  _getMaxHeight() { const ls = this.params.layers; let m = 0; for (let i = 0; i < 4; i++) { const h = Number(ls[i]?.height) || 0; if (h > 0) m = Math.max(m, (Number(ls[i]?.altitude) || 0) + h); } return m; }
+  // 层高出口统一叠加地形偏移：terrain 模式下所有高度消费方（uniform / BSM / 阴影）看到的是世界坐标
+  _getMinHeight() { const ls = this.params.layers; const off = this._getTerrainOffset(); let m = Infinity; for (let i = 0; i < 4; i++) { if ((Number(ls[i]?.height) || 0) > 0) m = Math.min(m, Number(ls[i]?.altitude) || 0); } return (Number.isFinite(m) ? m : 0) + off; }
+  _getMaxHeight() { const ls = this.params.layers; const off = this._getTerrainOffset(); let m = 0; for (let i = 0; i < 4; i++) { const h = Number(ls[i]?.height) || 0; if (h > 0) m = Math.max(m, (Number(ls[i]?.altitude) || 0) + h); } return m + off; }
+
+  /**
+   * 云层高度基准偏移（米）。
+   * absolute 模式恒为 0；terrain 模式取相机正下方地形表面海拔，经指数平滑抑制采样跳变。
+   * 每帧只采样一次（帧去重），uniform 回调与 _syncBSM 共享同一值。
+   * @returns {number}
+   */
+  _getTerrainOffset() {
+    if (this.params.altitudeMode !== "terrain") {
+      this._terrainOffsetSmoothed = 0;
+      return 0;
+    }
+    // 帧去重：同一帧内多个 uniform 回调 / BSM 同步复用首次采样结果
+    const frame = this._frameCount || 0;
+    if (this._terrainOffsetFrame === frame && this._terrainOffsetSampled) {
+      return this._terrainOffsetSmoothed;
+    }
+    this._terrainOffsetFrame = frame;
+    this._terrainOffsetSampled = true;
+
+    const globe = this.viewer?.scene?.globe;
+    const cameraPos = this.viewer?.camera?.positionWC;
+    if (!globe || !cameraPos) return this._terrainOffsetSmoothed || 0;
+    const carto = Cesium.Cartographic.fromCartesian(cameraPos, globe.ellipsoid, this._scratch.terrainCarto);
+    if (!carto) return this._terrainOffsetSmoothed || 0;
+
+    // 仅用已加载地形瓦片同步采样；未覆盖时保持上一帧平滑值，避免跳变
+    const terrainHeight = globe.getHeight?.(carto);
+    if (!Number.isFinite(terrainHeight)) return this._terrainOffsetSmoothed || 0;
+    // 无有效历史时直接采用；否则指数平滑（相机平移/地形起伏时云层高度连续变化）
+    const prev = Number.isFinite(this._terrainOffsetSmoothed) ? this._terrainOffsetSmoothed : terrainHeight;
+    this._terrainOffsetSmoothed = prev + (terrainHeight - prev) * 0.08;
+    return this._terrainOffsetSmoothed;
+  }
 
   // ── Cloud PostProcessStage uniform map ─────────────────────────────────
 
@@ -1245,8 +1289,8 @@ uniform sampler2D irradiance_texture;
       u_bottomRadius: () => Number(p().bottomRadius),
       u_minHeight: () => self._getMinHeight(),
       u_maxHeight: () => self._getMaxHeight(),
-      u_minLayerHeights: () => self._getLayerVec4("altitude", 0, self._scratch.minLayerHeights),
-      u_maxLayerHeights: () => { const ls = p().layers, out = self._scratch.maxLayerHeights; out.x = (Number(ls[0]?.altitude)||0)+(Number(ls[0]?.height)||0); out.y = (Number(ls[1]?.altitude)||0)+(Number(ls[1]?.height)||0); out.z = (Number(ls[2]?.altitude)||0)+(Number(ls[2]?.height)||0); out.w = (Number(ls[3]?.altitude)||0)+(Number(ls[3]?.height)||0); return out; },
+      u_minLayerHeights: () => { const off = self._getTerrainOffset(); const out = self._getLayerVec4("altitude", 0, self._scratch.minLayerHeights); out.x += off; out.y += off; out.z += off; out.w += off; return out; },
+      u_maxLayerHeights: () => { const ls = p().layers, out = self._scratch.maxLayerHeights, off = self._getTerrainOffset(); out.x = (Number(ls[0]?.altitude)||0)+(Number(ls[0]?.height)||0)+off; out.y = (Number(ls[1]?.altitude)||0)+(Number(ls[1]?.height)||0)+off; out.z = (Number(ls[2]?.altitude)||0)+(Number(ls[2]?.height)||0)+off; out.w = (Number(ls[3]?.altitude)||0)+(Number(ls[3]?.height)||0)+off; return out; },
       u_densityScales: () => self._getLayerVec4("densityScale", 0, self._scratch.densityScales),
       u_shapeAmounts: () => self._getLayerVec4("shapeAmount", 0, self._scratch.shapeAmounts),
       u_shapeDetailAmounts: () => self._getLayerVec4("shapeDetailAmount", 0, self._scratch.shapeDetailAmounts),
@@ -1551,8 +1595,9 @@ uniform sampler2D irradiance_texture;
     }
     // V3.4.x：层高/间隙/密度剖面每帧装配（updateDynamicParams 值级检测，变更才触发 BSM 重绘）
     const iv = this._getIntervalHeights();
+    const terrainOff = this._getTerrainOffset();
     for (let i = 0; i < 4; i++) {
-      const alt = layerVal(i, "altitude", 0);
+      const alt = layerVal(i, "altitude", 0) + terrainOff;
       const hgt = layerVal(i, "height", 0);
       dyn.minLayerHeights[i] = alt;
       dyn.maxLayerHeights[i] = alt + hgt;
@@ -1562,8 +1607,8 @@ uniform sampler2D irradiance_texture;
       dyn.densityProfileExpTerms[i] = Number(profile?.expTerm ?? 0);
       dyn.densityProfileExponents[i] = Number(profile?.exponent ?? 0);
     }
-    dyn.minIntervalHeights[0] = iv.min.x; dyn.minIntervalHeights[1] = iv.min.y; dyn.minIntervalHeights[2] = iv.min.z;
-    dyn.maxIntervalHeights[0] = iv.max.x; dyn.maxIntervalHeights[1] = iv.max.y; dyn.maxIntervalHeights[2] = iv.max.z;
+    dyn.minIntervalHeights[0] = iv.min.x + terrainOff; dyn.minIntervalHeights[1] = iv.min.y + terrainOff; dyn.minIntervalHeights[2] = iv.min.z + terrainOff;
+    dyn.maxIntervalHeights[0] = iv.max.x + terrainOff; dyn.maxIntervalHeights[1] = iv.max.y + terrainOff; dyn.maxIntervalHeights[2] = iv.max.z + terrainOff;
     dyn.localWeatherOffset[0] = this._weatherOffsetX || 0; dyn.localWeatherOffset[1] = this._weatherOffsetY || 0;
     dyn.shapeOffset[0] = this._shapeOffsetX || 0; dyn.shapeOffset[1] = this._shapeOffsetY || 0; dyn.shapeOffset[2] = this._shapeOffsetZ || 0;
     dyn.shapeDetailOffset[0] = this._shapeDetailOffsetX || 0; dyn.shapeDetailOffset[1] = this._shapeDetailOffsetY || 0; dyn.shapeDetailOffset[2] = this._shapeDetailOffsetZ || 0;
@@ -1807,12 +1852,13 @@ uniform sampler2D irradiance_texture;
 
   _getShadowPassParams() {
     const ls = this.params.layers;
+    const off = this._getTerrainOffset();
     const minLayerHeights = [], maxLayerHeights = [], densityProfileLinear = [], densityProfileConstant = [];
     const densityScales = [], shapeAmounts = [], shapeDetailAmounts = [], weatherExponents = [];
     const shapeAlteringBiases = [], coverageFilterWidths = [], coverages = [];
     let minAlt = 1e9, maxAltH = 0;
     for (let i = 0; i < 4; i++) {
-      const a = Number(ls[i]?.altitude) || 0, h = Number(ls[i]?.height) || 0;
+      const a = (Number(ls[i]?.altitude) || 0) + off, h = Number(ls[i]?.height) || 0;
       if (a + h > 0) { minAlt = Math.min(minAlt, a); maxAltH = Math.max(maxAltH, a + h); }
       minLayerHeights[i] = a; maxLayerHeights[i] = a + h;
       densityProfileLinear[i] = Number(ls[i]?.densityProfile?.linearTerm) ?? 0.75;
@@ -1853,8 +1899,8 @@ uniform sampler2D irradiance_texture;
       densityProfileExpTerms: [0,0,0,0], densityProfileExponents: [0,0,0,0],
       densityScales, shapeAmounts, shapeDetailAmounts, weatherExponents,
       shapeAlteringBiases, coverageFilterWidths, coverages,
-      minIntervalHeights: [iv.min.x, iv.min.y, iv.min.z],
-      maxIntervalHeights: [iv.max.x, iv.max.y, iv.max.z],
+      minIntervalHeights: [iv.min.x + off, iv.min.y + off, iv.min.z + off],
+      maxIntervalHeights: [iv.max.x + off, iv.max.y + off, iv.max.z + off],
       localWeatherOffset: [0, 0], shapeOffset: [0, 0, 0], shapeDetailOffset: [0, 0, 0],
     };
   }

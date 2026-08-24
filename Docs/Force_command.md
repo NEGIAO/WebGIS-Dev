@@ -42,7 +42,7 @@
 
 1. **禁止 Git 写操作** —— `git commit` / `push` / `stash` / `reset` / `checkout -- ` / `rebase` / 改分支。版本控制决策权 100% 归用户。Agent 只负责把改动准备好并说明清楚。
 2. **禁止在 `/Docs` 之外新建说明类文档** —— 不得在根目录或任意子目录新建临时 README、SUMMARY、NOTES、`*_说明.md`。所有说明统一进 `Docs/LLM_record/` 日志或 `Docs/Guide/`。
-3. **密钥与部署面分级** —— **L3 绝密**（`SUPER_USER`、OAuth secret、SMTP 密码、HF Secrets、生产私钥）禁止写入仓库、禁止在会话中扩散明文。**L1 非密**根 `.env`（公开 URL、超时、非密默认值）和根 `.env.local`（本地开发覆盖值，git 追踪）可改，但必须与根 `.env.example` + `backend/config/catalog.py` 同步，并跑 `CheckConfigRegistry.py`。`.github/workflows/`、Dockerfile、HF Space 部署清单仍须谨慎：能只提建议则先提建议；确需改动须在日志写明动机。`.env.example` 属登记表，按第 5 节流程可改。
+3. **密钥与部署面分级** —— **L3 绝密**（`SUPER_USER`、OAuth secret、SMTP 密码、HF Secrets、生产私钥）禁止写入仓库、禁止在会话中扩散明文。**L1 非密** `deploy/.env`（公开 URL、超时、非密默认值）和 `deploy/.env.local`（本地开发覆盖值，git 追踪）可改，但必须与 `deploy/.env.example` + `backend/config/catalog.py` 同步，并跑 `Scripts/CheckConfigRegistry.py`。`.github/workflows/`、Dockerfile、HF Space 部署清单仍须谨慎：能只提建议则先提建议；确需改动须在日志写明动机。`.env.example` 属登记表，按第 5 节流程可改。
 4. **禁止删除或重写非本次任务范围的文件** —— 包括历史日志、他人代码、注释掉的备用逻辑。确需清理时先列清单请求批准。
 5. **禁止越权扩大范围** —— 修 A Bug 时发现 B 问题：**记录到 `Docs/TODO/bugfix-optimization-plan.md` 并在交接块中提示**，不得顺手改。
 6. **禁止臆造事实** —— 不得凭印象编写 API 签名、字段名、配置 key、文件路径。**必须先读实际代码确认**。无法确认的一律标注 `⚠️ 未验证` 并在交接块中列为待确认项。
@@ -77,7 +77,7 @@
 - **UI 图标规范**：Vue 模板中的图标统一使用 `@lucide/vue` 组件（`import { IconName } from '@lucide/vue'`），**禁止使用 emoji 作为图标**（如 📊、🤖、🗄️ 等）。原因：① Lucide 图标支持 currentColor，自动适配主题色与悬停态；② emoji 跨平台渲染不一致（Windows/macOS/移动端字形差异）；③ Lucide 图标可通过 `:size`、`:stroke-width` 等属性精确控制，emoji 无法做到。
 - **类型零报错**：新增 `.ts` 文件必须通过 `tsc --noEmit`，不得引入新的类型错误。
 - **注释义务**：新增函数必须有简洁注释说明「功能 / 参数 / 返回 / 核心逻辑」；同类逻辑函数组织在一起维护。
-- **配置 key 登记前置**：新增任何配置项，顺序恒为 **① 登记根 `.env.example` + `backend/config/catalog.py` → ② 再写读取代码 → ③ 跑 `CheckConfigRegistry.py`**。后端业务代码禁止裸读 `os.getenv`；前端业务代码禁止散落 `import.meta.env.VITE_*`（唯一入口 `src/config/publicRuntime.ts`）。
+- **配置 key 登记前置**：新增任何配置项，顺序恒为 **① 登记 `deploy/.env.example` + `backend/config/catalog.py` → ② 再写读取代码 → ③ 跑 `Scripts/CheckConfigRegistry.py`**。后端业务代码禁止裸读 `os.getenv`；前端业务代码禁止散落 `import.meta.env.VITE_*`（唯一入口 `src/config/publicRuntime.ts`）。
   - **例外：底图源 URL**。底图源 URL（如 Mapbox、MapTiler、GeovisEarth 等第三方瓦片服务）属于**静态资源地址**，非密钥类配置，允许在 `basemapConfig.ts` 等 constants 文件中直接硬编码。原因：① URL 与 token 耦合，拆分到环境变量反而增加维护复杂度；② 底图源变更属于功能变更而非配置变更，需走代码审查流程；③ 这些 URL 是公开可获取的资源地址，无保密需求。
 
 ### 阶段四：收尾（见第 7 节 DoD，逐项勾选）
@@ -95,7 +95,7 @@
 | 根级 + Docs 目录树 | `Docs/Guide/project-structure.md` | README 不放树 |
 | 前端文件树 | `Docs/Guide/frontend-structure.md` | 前端 README 不放树，只放链接 |
 | 后端文件树 | `Docs/Guide/backend-structure.md` | 后端 README 不放树，只放链接 |
-| 配置 key 清单 | 根 `.env.example` + `backend/config/catalog.py` | 文档只解释语义，不复制清单 |
+| 配置 key 清单 | `deploy/.env.example` + `backend/config/catalog.py` | 文档只解释语义，不复制清单 |
 | 单次改动全貌 | `Docs/LLM_record/<日期>/*.md` | CHANGELOG 只写一句摘要 + 日志链接 |
 | 技术分层约定 | `Docs/Guide/dev-conventions.md` | 本文件不复制 |
 | 接手导航 | `Docs/Guide/handover.md` | — |
@@ -159,8 +159,8 @@ L2/L3 任务在会话结束前逐项核对，**任何一项未过必须显式说
 - [ ] 涉及文件增删 → 对应 `*-structure.md` 结构树已同步（含功能注释）
 - [ ] 涉及配置 key → `.env.example` 与 `catalog.py` 已登记
 - [ ] **门禁脚本已运行且通过**：
-      `python CheckStructureTree.py` （结构树漂移）
-      `python CheckConfigRegistry.py` （配置登记）
+      `python Scripts/CheckStructureTree.py` （结构树漂移）
+      `python Scripts/CheckConfigRegistry.py` （配置登记）
       *脚本报错必须修到通过或明确说明为何无法通过，禁止无视*
 - [ ] 未执行任何 Git 写操作
 - [ ] 已输出第 8 节交接块
@@ -182,6 +182,15 @@ L2/L3 任务在会话结束前逐项核对，**任何一项未过必须显式说
 - **待用户操作**：<实机验证步骤 / 需用户执行的 git 命令 / 需补的密钥>
 - **遗留与风险**：<未解决问题、临时方案、已记入 TODO 的顺带发现>
 - **下一步建议**：<若继续推进，从哪个文件的哪一处入手>
+- **输出本次版本**：message给我，按照这样的格式message：
+                V3.5.24 
+
+                summary:
+                ##########
+
+                1、- ########
+                2、- #########
+                3、- #########
 ```
 
 ---

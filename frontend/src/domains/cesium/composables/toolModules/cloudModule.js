@@ -65,6 +65,18 @@ function createCloudControls(params = {}, disabled) {
             tooltip: t('cesium.module.cloud.qualityTip'),
         },
         {
+            id: 'altitudeMode',
+            label: t('cesium.module.cloud.altitudeMode'),
+            type: 'select',
+            value: params.altitudeMode ?? 'absolute',
+            options: [
+                { value: 'absolute', label: t('cesium.module.cloud.altitudeModeAbsolute') },
+                { value: 'terrain', label: t('cesium.module.cloud.altitudeModeTerrain') },
+            ],
+            disabled: off,
+            tooltip: t('cesium.module.cloud.altitudeModeTip'),
+        },
+        {
             id: 'layer0Coverage',
             label: t('cesium.module.cloud.layer0Coverage'),
             type: 'range',

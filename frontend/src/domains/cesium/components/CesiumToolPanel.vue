@@ -1018,13 +1018,18 @@ import {
     Building,
     Check,
     ChevronDown,
+    Cloud,
     Crosshair,
     Download,
     Droplets,
     Eye,
     EyeOff,
+    FastForward,
     FileArchive,
+    FileDown,
     FileJson,
+    FileUp,
+    Flag,
     FolderOpen,
     Globe,
     Home,
@@ -1035,12 +1040,20 @@ import {
     MapPin,
     Mountain,
     Navigation,
+    Pause,
+    PenLine,
+    PersonStanding,
+    Plane,
     Play,
+    Rewind,
     RotateCcw,
+    Route,
+    ScanEye,
     Send,
     Settings,
     SlidersHorizontal,
-    Sparkles,
+    Square,
+    Sun,
     Trash2,
     Upload,
     Waves,
@@ -1349,12 +1362,16 @@ function persistUiState() {
 
 function getModuleIcon(moduleId) {
     const icons = {
-        scene: Navigation,
-        effects: Sparkles,
+        scene: Globe,
+        atmosphere: Sun,
+        cloud: Cloud,
         wind: Wind,
         fluid: Droplets,
         shallowWater: Waves,
-        planarRoute: MapPin,
+        player: PersonStanding,
+        analysis: ScanEye,
+        planarRoute: Plane,
+        routeFly: Route,
     };
     return icons[moduleId] || SlidersHorizontal;
 }
@@ -1363,12 +1380,29 @@ function getActionIcon(moduleId, actionId) {
     const icons = {
         scene: { home: Home, everest: Mountain },
         wind: { load: Play, clear: Trash2 },
-        fluid: { pick: Eye, clear: Trash2 },
+        fluid: { pick: Crosshair, floodSim: Waves, clear: Trash2 },
         shallowWater: { toggle: Waves },
+        player: {
+            toggle: PersonStanding,
+            changeView: Eye,
+            setNavTarget: Flag,
+            clearNavTarget: X,
+        },
         planarRoute: {
             setTakeoffPoint: MapPin,
             importKmz: Upload,
             saveKmz: Download,
+            clearAll: Trash2,
+        },
+        routeFly: {
+            drawRoute: PenLine,
+            startFly: Play,
+            suspend: Pause,
+            speedUp: FastForward,
+            speedDown: Rewind,
+            stop: Square,
+            importRoute: FileUp,
+            exportRoute: FileDown,
             clearAll: Trash2,
         },
     };
@@ -1534,7 +1568,8 @@ function getTilesetHeightRange(source) {
     }
 
     if (!Number.isFinite(baseHeight)) return null;
-    const min = Math.max(Math.floor(baseHeight - 100), -10);
+
+    const min = Math.max(Math.floor(baseHeight - 100), -10);
     let max = Math.ceil(baseHeight + 100);
     if (max < min + 1) max = min + 1;
     requestRangeSampleIfNeeded(source);

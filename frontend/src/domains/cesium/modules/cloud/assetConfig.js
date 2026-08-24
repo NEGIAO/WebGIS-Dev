@@ -52,6 +52,7 @@ export function createDefaultCloudPanelParams() {
     {
       cloudsEnabled: false,
       quality: DEFAULT_CLOUD_QUALITY,
+      altitudeMode: 'absolute',
     },
     DEFAULT_CLOUD_QUALITY,
   );

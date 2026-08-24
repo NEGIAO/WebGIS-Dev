@@ -33,6 +33,24 @@
         v-bind="shallowWaterParams"
     />
 
+    <!-- 路线漫游状态 HUD（绘制/飞行期间悬浮显示） -->
+    <div
+        v-if="cesiumReady && (routeFlyState.isDrawing || routeFlyState.hasRoute || routeFlyState.isFlying)"
+        class="route-fly-hud"
+    >
+        <span class="hud-tip">{{ routeFlyHudTip }}</span>
+        <span>{{ t('cesium.module.routeFly.stats.points') }}: {{ routeFlyState.pointCount }}</span>
+        <span
+            v-if="routeFlyState.routeLengthText"
+        >{{ t('cesium.module.routeFly.stats.length') }}: {{ routeFlyState.routeLengthText }}</span>
+        <span
+            v-if="routeFlyState.durationText"
+        >{{ t('cesium.module.routeFly.stats.duration') }}: {{ routeFlyState.durationText }}</span>
+        <span
+            v-if="routeFlyState.isFlying"
+        >{{ t('cesium.module.routeFly.control.speed') }}: {{ routeFlyState.multiplier }}x</span>
+    </div>
+
     <CesiumToolPanel
         v-if="cesiumReady"
         v-model:open="cesiumToolPanelOpen"
@@ -385,11 +403,12 @@ cesiumLayersStore.registerAdapter({
         dataImport.flyToDataSource(id);
     },
     remove(id) {
-        // 面状航线托管数据源：先让控制器复位内部状态（其句柄随后被通用移除销毁），
-        // 避免控制器持有已销毁 DataSource 引用导致后续重规划写入失效容器
-        const record = findImportRecord(id);
-        if (record?.type === 'wayline') {
+        // 模块托管数据源（面状航线 / 路线漫游）：先让对应控制器复位内部状态，
+        // 避免控制器持有已销毁 DataSource 引用导致后续写入失效容器
+        if (id === PLANAR_SOURCE_ID) {
             detachPlanarWorkingSet?.();
+        } else if (id === ROUTE_FLY_SOURCE_ID) {
+            detachRouteFlyWorkingSet?.();
         }
         dataImport.removeDataSource(id);
     },
@@ -918,22 +937,29 @@ const {
     handleToolAction,
     handleToolControlChange,
     handleFluidStateChange,
+    routeFlyState,
     cleanupTools,
     detachPlanarWorkingSet,
+    detachRouteFlyWorkingSet,
 } = useCesiumToolModules({
-    fluidPanelRef,
-    sceneActions,
-    wind,
-    playerController,
-    // 三维分析（通视/限高）运行时依赖：viewer 与 Cesium 命名空间注入
-    getViewer,
-    getCesium,
-    // 面状航线工作集注册桥：写入/移出统一图层管理（数据页签卡片 + TOC 同源）
-    syncPlanarSource: syncPlanarSourceRecord,
+        fluidPanelRef,
+        sceneActions,
+        wind,
+        playerController,
+        // 三维分析（通视/限高）运行时依赖：viewer 与 Cesium 命名空间注入
+        getViewer,
+        getCesium,
+        // 面状航线工作集注册桥：写入/移出统一图层管理（数据页签卡片 + TOC 同源）
+        syncPlanarSource: syncPlanarSourceRecord,
+        // 路线漫游工作集注册桥（同模式复用 wayline 图层分支）
+        syncRouteFlySource: syncRouteFlySourceRecord,
 });
 
 // 面状航线托管数据源的固定 id（模块单工作集：测区+航线+起飞点）
 const PLANAR_SOURCE_ID = 'planar_route_working';
+
+// 路线漫游托管数据源的固定 id（手绘贴地线路 + CZML 漫游实体）
+const ROUTE_FLY_SOURCE_ID = 'route_fly_working';
 
 /**
  * 将面状航线工作集同步进 loadedDataSources（统一图层管理入口）。
@@ -959,6 +985,40 @@ function syncPlanarSourceRecord(info) {
         dataImport.loadedDataSources.value = list.filter((item) => item.id !== PLANAR_SOURCE_ID);
     }
 }
+
+/**
+ * 路线漫游工作集同步（同 syncPlanarSourceRecord 模式）：
+ * 仅增删元数据记录，句柄由控制器自持；外部删除先经 remove() 复位控制器。
+ * @param {{ present: boolean, name: string, dataSource: object | null }} info 控制器上报
+ */
+function syncRouteFlySourceRecord(info) {
+    const list = dataImport.loadedDataSources.value || [];
+    const exists = list.some((item) => item.id === ROUTE_FLY_SOURCE_ID);
+    if (info?.present && info.dataSource && !exists) {
+        dataImport.loadedDataSources.value = [
+            ...list,
+            {
+                id: ROUTE_FLY_SOURCE_ID,
+                name: info.name || t('cesium.module.routeFly.sourceName'),
+                type: 'wayline',
+                entity: info.dataSource,
+                managedByModule: true,
+            },
+        ];
+    } else if (!info?.present && exists) {
+        dataImport.loadedDataSources.value = list.filter((item) => item.id !== ROUTE_FLY_SOURCE_ID);
+    }
+}
+
+/** 路线漫游 HUD 提示语（按状态切换）；语言包未热更新时逐级退回，最终空串隐藏 */
+const routeFlyHudTip = computed(() => {
+    const s = routeFlyState.value;
+    const stateKey = s.isDrawing ? 'drawing' : s.isPaused ? 'paused' : s.isFlying ? 'flying' : 'ready';
+    const tip = String(t(`cesium.module.routeFly.hud.${stateKey}`));
+    if (!tip.startsWith('cesium.module.')) return tip;
+    const statusText = String(t(`cesium.module.routeFly.status.${stateKey}`));
+    return statusText.startsWith('cesium.module.') ? '' : statusText;
+});
 
 /** 启动中标志，防止并发 bootCesium 调用 */
 let bootInProgress = false;
@@ -1645,5 +1705,33 @@ watch(
 .drag-overlay-hint {
     font-size: 13px;
     color: rgba(220, 243, 255, 0.56);
+}
+
+/* 路线漫游状态 HUD：底部居中悬浮，避开左右面板 */
+.route-fly-hud {
+    position: fixed;
+    left: 50%;
+    top:70px;
+    transform: translateX(-50%);
+    z-index: 1000;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    max-width: calc(100vw - 48px);
+    padding: 8px 18px;
+    border-radius: 999px;
+    background: rgba(12, 18, 28, 0.78);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    color: #e8f1ff;
+    font-size: 12px;
+    line-height: 1.6;
+    white-space: nowrap;
+    pointer-events: none;
+}
+
+.route-fly-hud .hud-tip {
+    color: #7fd4ff;
+    font-weight: 600;
 }
 </style>

@@ -1,0 +1,96 @@
+# =====================================================================
+# WebGIS 本地编排（镜像与 Hugging Face 完全同源：deploy/Dockerfile）
+#
+# 默认（调试双端口）：
+#   docker compose -f deploy/docker-compose.yml up -d --build
+#     http://localhost:5173  前端 Vite dev —— 真 HMR，改源码秒级生效，零 build
+#     http://localhost:7860  后端 API 直连（/docs）—— 改 .py 即时重载
+#   前端请求链路：浏览器 → 5173(vite) ──/api 代理──▶ 7860(uvicorn)
+#
+# 生产仿真（可选，与 HF 行为一致）：
+#   docker compose -f deploy/docker-compose.yml --profile prod up -d
+#     http://localhost:8080  nginx 托管镜像内打包的 dist + 反代（含 cron 保活）
+#
+# 与 HF 的关系：同一 Dockerfile；CI 组装 {Dockerfile, deploy/, backend/,
+# frontend/} 推送 Space，构建路径两侧完全一致。
+# =====================================================================
+
+name: webgis
+
+services:
+  # -----------------------------------------------------------------
+  # 后端调试：复用全栈镜像但只跑 uvicorn（直连 7860，热重载）
+  # -----------------------------------------------------------------
+  api:
+    image: negiao/webgis:latest
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    container_name: webgis-api
+    restart: unless-stopped
+    ports:
+      - "7860:7860"
+    environment:
+      - PYTHONUNBUFFERED=1
+      - APP_ENV=development
+      # Windows 宿主目录 bind mount 的文件事件跨层不可靠 → 轮询兜底保证触发重载
+      - WATCHFILES_FORCE_POLLING=1
+    volumes:
+      # 后端源码挂载 → 改 .py 即时生效；匿名卷保护镜像内 .venv
+      - ../backend:/app
+      - /app/.venv
+      # env 统一收敛于 deploy/（load.py 按 APP_ENV 二选一读取）
+      - ../deploy/.env:/app/.env:ro
+      - ../deploy/.env.local:/app/.env.local:ro
+    # 覆盖镜像 CMD：纯后端模式，跳过 nginx/cron
+    command: uv run uvicorn app:app --host 0.0.0.0 --port 7860 --reload
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:7860/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  # -----------------------------------------------------------------
+  # 前端调试：Vite dev server（真 HMR，不产出 build 产物）
+  # -----------------------------------------------------------------
+  web:
+    image: node:22-bookworm-slim
+    container_name: webgis-web
+    restart: unless-stopped
+    # 挂载点布局 = 宿主 frontend/ 目录原样映射（内含 src/ public/ vite.config.js）
+    working_dir: /work/frontend
+    environment:
+      # vite.config 据此启用 watch.usePolling（Windows bind mount 的 inotify 不触发）；
+      # 秒级轮询 + 排除 public/：兼顾 HMR 触发与请求吞吐
+      - VITE_WATCH_USEPOLLING=1
+      - VITE_WATCH_INTERVAL=1500
+      # vite /api 代理目标 = compose 网络内的 api 服务
+      - VITE_DEV_PROXY_TARGET=http://api:7860
+    ports:
+      - "5173:5173"
+    volumes:
+      # 前端源码挂载；node_modules 用匿名卷隔离宿主 Windows 二进制
+      - ../frontend:/work/frontend
+      - /work/frontend/node_modules
+      # vite.config 跨目录依赖：父级 README(版本号) + deploy/(双 env 文件，
+      # dev 模式读 .env.local：VITE_BACKEND_URL=/api 由 5173 的 /api 代理消化)
+      - ../README.md:/work/README.md:ro
+      - ../deploy:/work/deploy:ro
+    # 首次自动装依赖（匿名卷内 Linux 版二进制），随后常驻 HMR；
+    # 以 .bin/vite 可执行标记判断完整性 —— 被中断的残留安装会被重装覆盖；
+    # npm install 与 CI 同款（npm ci 在跨平台 lockfile 下会漏装 rollup 原生二进制）
+    command: >
+      sh -c "[ -x node_modules/.bin/vite ] ||
+             npm install --no-audit --no-fund;
+             exec npx vite"
+
+  # -----------------------------------------------------------------
+  # 生产仿真（可选）：零覆写即 HF Space 同款行为（nginx + 打包 dist + cron 保活）
+  # -----------------------------------------------------------------
+  app:
+    image: negiao/webgis:latest
+    profiles: ["prod"]
+    container_name: webgis-app
+    ports:
+      - "8080:7860"

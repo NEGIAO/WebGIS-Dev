@@ -123,6 +123,7 @@ frontend/src/
 │   │   │       ├── fluidModule.js  # 流体模块（洪水模拟+水位动画）
 │   │   │       ├── playerModule.js  # 人物漫游模块（WASD移动+碰撞检测）
 │   │   │       ├── planarRouteModule.js  # 面状航线模块（lil-gui 声明式控件+动作，读 planarConfig 响应式单例）
+│   │   │       ├── routeFlyModule.js  # 路线漫游模块（手绘贴地线路+第一/第三人称相机漫游卡片）
 │   │   │       ├── sceneModule.js  # 场景导航模块（相机飞行+演示数据）
 │   │   │       ├── shallowWaterModule.js  # 热带浅水模块（三渲二水体+闪电）
 │   │   │       └── useCesiumToolModules.js  # 工具面板模块编排（核心）
@@ -226,6 +227,8 @@ frontend/src/
 │   │   │   │       ├── math.ts  # lerp + smoothDamp 平滑阻尼
 │   │   │   │       ├── mobileControls.ts  # 移动端触控
 │   │   │   │       └── terrainHelper.ts  # 地形 provider 检测
+│   │   │   ├── route-fly/
+│   │   │   │   └── firstPersonFlyController.js  # 路线漫游无头控制器（手绘贴地线路/表面三级采样/CZML 时间轴/camera.lookAt 第一·第三人称跟随）
 │   │   │   ├── shallow-water/
 │   │   │   │   ├── ShallowWaterOverlay.vue  # 叠加层组件
 │   │   │   │   ├── composables/

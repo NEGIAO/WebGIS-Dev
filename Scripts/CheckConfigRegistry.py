@@ -6,10 +6,10 @@
   [B1] 后端业务代码禁止裸读 os.getenv / os.environ（仅 backend/config 包内允许）
   [B2] 后端经 config helper（get_str/get_int/get_float/get_bool）读取的字面量 key
        必须已登记 backend/config/catalog.py（平台注入变量白名单除外）
-  [B3] catalog 全部 key 必须出现在根 .env.example（登记门禁：先登记再写代码）
-  [B4] 根 .env.example 的非 VITE_/L2_ key 必须存在于 catalog（防清单孤儿）
+  [B3] catalog 全部 key 必须出现在deploy/.env.example（登记门禁：先登记再写代码）
+  [B4] deploy/.env.example 的非 VITE_/L2_ key 必须存在于 catalog（防清单孤儿）
   [F1] 前端业务代码禁止散落 import.meta.env.VITE_*（仅 src/config/publicRuntime.ts 允许）
-  [F2] 前端使用到的 VITE_* key 必须登记在根 .env.example
+  [F2] 前端使用到的 VITE_* key 必须登记在deploy/.env.example
   [F3] 前端 src 禁止硬编码原作者后端域名
 
 用法：
@@ -24,10 +24,10 @@ import re
 import sys
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent
+ROOT = Path(__file__).resolve().parent.parent  # 脚本已移入 Scripts/，仓库根为其父目录
 BACKEND = ROOT / "backend"
 FRONTEND_SRC = ROOT / "frontend" / "src"
-ENV_EXAMPLE = ROOT / ".env.example"
+ENV_EXAMPLE = ROOT / "deploy" / ".env.example"  # 环境文件已收敛至 deploy/
 
 # 平台自动注入 / 诊断变量：允许经 config helper 读取但不强制登记 catalog
 PLATFORM_KEY_ALLOWLIST = {
@@ -180,10 +180,10 @@ def main() -> int:
     sections = [
         ("[B1] 后端裸 os.getenv/os.environ", bare_env),
         ("[B2] 后端 helper key 未登记 catalog", unregistered),
-        ("[B3] catalog key 未登记根 .env.example", catalog_missing),
+        ("[B3] catalog key 未登记deploy/.env.example", catalog_missing),
         ("[B4] .env.example 孤儿 key（catalog 缺失）", orphan),
         ("[F1] 前端散落 import.meta.env", scattered),
-        ("[F2] 前端 VITE_ key 未登记根 .env.example", vite_missing),
+        ("[F2] 前端 VITE_ key 未登记deploy/.env.example", vite_missing),
         ("[F3] 前端硬编码部署域名", domain_hits),
     ]
 
@@ -202,7 +202,7 @@ def main() -> int:
             f"\n统计：catalog {len(catalog_keys)} key · 前端使用 VITE_ {len(used_vite)} 个"
         )
     if violations:
-        print(f"\n结论：发现 {violations} 处违规（登记规则见根 .env.example 头部与 Docs/Guide/configuration.md）")
+        print(f"\n结论：发现 {violations} 处违规（登记规则见deploy/.env.example 头部与 Docs/Guide/configuration.md）")
         return 1
     print("\n结论：配置登记门禁全部通过 ✅")
     return 0

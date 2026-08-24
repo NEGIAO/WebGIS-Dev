@@ -3,7 +3,7 @@
  * GeoJSON/JSON 格式加载器
  */
 
-import { flyToEntity } from './utils.js';
+import { flyToEntity, forceDataSourceClampToGround } from './utils.js';
 
 /**
  * 加载 GeoJSON/JSON 文件到 Cesium
@@ -42,8 +42,9 @@ export async function loadGeoJSON({ file, getCesium, getViewer, message, loadedD
     dataSource.name = file.name;
 
     await viewer.dataSources.add(dataSource);
-    // 贴地完全由加载期 clampToGround:true 承担（面/线走 GroundPrimitive，
-    // 点自动 heightReference=CLAMP；地形切换由 Cesium 自动跟随），无后续处理
+    // 贴地兜底：加载期选项之外再强制实体级钳制（防文件语义绕过）
+    forceDataSourceClampToGround(dataSource, Cesium);
+    // 面/线走 GroundPrimitive，点自动 heightReference=CLAMP；地形切换由 Cesium 自动跟随
     flyToEntity(viewer, Cesium, dataSource, 'geojson');
 
     const record = { id, name: file.name, type: 'geojson', entity: dataSource };

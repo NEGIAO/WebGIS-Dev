@@ -15,14 +15,28 @@
 
 ```text
 WebGIS_Dev/
-├── .github/workflows/                 # CI/CD（前端 GitHub Pages 自动部署）
+├── .github/workflows/                 # CI/CD（前端多渠道静态部署 + 全栈 HF Space 单容器部署）
 │
 ├── frontend/                          # 前端工程（Vue 3 + Vite + OpenLayers + Cesium）
 │   └── src/                           # 详细文件树见 frontend-structure.md
 │
-├── backend/                           # 后端工程（FastAPI + Docker，部署于 HF Spaces）
+├── backend/                           # 后端工程（FastAPI，随全栈镜像部署于 HF Spaces）
 │   ├── api/                           # API 路由模块，详细文件树见 backend-structure.md
 │   └── config/                        # 三层配置统一 loader（L1 env / L2 Admin+DB / L3 Secrets）
+│
+├── deploy/                            # 部署编排与环境文件统一收敛处
+│   ├── Dockerfile                     # 全栈单镜像构建（nginx 前端静态 + FastAPI 同容器；HF Space 与本地同源）
+│   ├── Dockerfile.dockerignore        # 全栈镜像构建上下文白名单（BuildKit 按 Dockerfile 路径配对）
+│   ├── docker-compose.yml             # 本地编排：api(后端热重载) + web(Vite HMR) + app(prod 仿真 profile)
+│   ├── nginx.conf                     # 全栈容器 nginx 主配置（后端顶级段原样透传 + 静态缓存策略）
+│   ├── .env                           # 部署环境配置（L1 不涉密，tracked，生产基线：APP_ENV=production、线上 URL）
+│   ├── .env.local                     # 本地开发环境配置（L1 不涉密，tracked，覆盖 .env：APP_ENV=development、localhost URL）
+│   └── .env.example                   # 配置全集 registry（L1/L2/L3 权威入口，不再作为复制模板）
+│
+├── Scripts/                           # 门禁与维护脚本
+│   ├── CheckConfigRegistry.py         # 配置登记门禁扫描（裸 getenv / 未登记 key / 散落 VITE_ / 硬编码域名）
+│   ├── CheckStructureTree.py          # 结构树漂移门禁（frontend-structure.md ⇄ frontend/src 双向 diff）
+│   └── UpdateReadmeTree.py            # README 文件树同步脚本
 │
 ├── Docs/                              # 项目文档（维护日志 + 架构文档 + 指南文档 + Demo 演示）
 │   ├── LLM_record/                    # 维护日志（按日期归档）
@@ -33,14 +47,8 @@ WebGIS_Dev/
 │   ├── Force_command.md
 │   └── TODO/                          # 待办（含 bugfix-optimization-plan.md 修复优化规划）
 │
-├── LocalDev.bat                       # Windows 一键启动脚本
-├── CheckConfigRegistry.py             # 配置登记门禁扫描（裸 getenv / 未登记 key / 散落 VITE_ / 硬编码域名）
-├── CheckStructureTree.py              # 结构树漂移门禁（frontend-structure.md ⇄ frontend/src 双向 diff）
-├── UpdateReadmeTree.py                # README 文件树同步脚本
-├── docker-compose.yml                 # 前后端容器编排
-├── .env                               # 部署环境配置（L1 不涉密，tracked，生产基线：APP_ENV=production、线上 URL）
-├── .env.local                         # 本地开发环境配置（L1 不涉密，tracked，覆盖 .env：APP_ENV=development、localhost URL）
-├── .env.example                       # 配置全集 registry（L1/L2/L3 权威入口，不再作为复制模板）
+├── LocalDev.bat                       # Windows 一键启动脚本（容器化全栈：web+api 双服务）
+├── Write-Color.ps1                    # LocalDev.bat 彩色输出辅助脚本
 ├── .gitignore
 ├── LICENSE
 └── README.md                          # 项目门户页

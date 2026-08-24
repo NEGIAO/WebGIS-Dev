@@ -21,7 +21,7 @@ import re
 import sys
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent
+ROOT = Path(__file__).resolve().parent.parent  # 脚本已移入 Scripts/，仓库根为其父目录
 DOC = ROOT / "Docs" / "Guide" / "frontend-structure.md"
 SRC = ROOT / "frontend" / "src"
 

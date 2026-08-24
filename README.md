@@ -80,7 +80,7 @@
 
 ## 🎯 项目简介
 
-**NEGIAO's WebGIS** 是一个功能完整、架构清晰的前后端分离 WebGIS 平台（当前版本 V3.5.28），前端托管于 GitHub Pages（正式域名 webgis.negiao.cn），后端以 Docker 部署在 Hugging Face Spaces，通过 RESTful API 通信，支持独立扩展。
+**NEGIAO's WebGIS** 是一个功能完整、架构清晰的前后端分离 WebGIS 平台（当前版本 V3.5.29），前端托管于 GitHub Pages（正式域名 webgis.negiao.cn），后端以 Docker 部署在 Hugging Face Spaces，通过 RESTful API 通信，支持独立扩展。
 
 > 📚 本 README 仅保留核心概览与导航。完整文档已模块化至 [`Docs/Guide/`](Docs/Guide/)，详见下方「文档导航」。
 >
@@ -119,15 +119,15 @@
 
 | 文件 | git 状态 | 用途 | 读取时机 | `APP_ENV` |
 |------|----------|------|----------|-----------|
-| **`.env`** | **git 追踪** | 部署环境（生产基线） | `npm run build` + 线上部署 | `production` |
-| **`.env.local`** | **git 追踪** | 本地开发（覆盖 `.env`） | `npm run dev` + 本地后端 | `development` |
-| `.env.example` | git 追踪 | 全集 key 目录（不写真值） | — | — |
+| **`deploy/.env`** | **git 追踪** | 部署环境（生产基线） | `npm run build` + 线上部署 | `production` |
+| **`deploy/.env.local`** | **git 追踪** | 本地开发（覆盖 `.env`） | `npm run dev` + 本地后端 | `development` |
+| `deploy/.env.example` | git 追踪 | 全集 key 目录（不写真值） | — | — |
 
 **三层密钥分层**（L1/L2/L3）：
 
 | 层 | 放哪里 | 做什么 |
 |----|--------|--------|
-| **L1** | 根 `.env` / `.env.local`（不涉密） | URL、端口、前端 `VITE_*`、公开服务端点/超时 |
+| **L1** | `deploy/.env` / `.env.local`（不涉密） | URL、端口、前端 `VITE_*`、公开服务端点/超时 |
 | **L2** | 管理员面板 + 数据库 | 地图 token、Agent/LLM Key 与参数、底图、公告（常变、动态生效） |
 | **L3** | Hugging Face **Secrets** | 绝密：`SUPER_USER`、OAuth secret、SMTP 密码、Supabase Key、监控令牌 |
 
@@ -170,31 +170,33 @@ npm run dev
 </details>
 
 <details>
-<summary><strong>后端（Docker Compose）</strong></summary>
+<summary><strong>全栈一键（Docker 单容器，推荐）</strong></summary>
 
 ```bash
+# nginx(前端静态+/api 反代) + FastAPI 同容器，单端口 7860
 # 首次运行需 --build 构建镜像（文件较大，需等待几分钟）
-docker-compose up --build
+docker compose -f deploy/docker-compose.yml up -d --build
 
 # 后续运行
-docker-compose up
-# → http://localhost:7860/docs
+docker compose -f deploy/docker-compose.yml up -d
+# → http://localhost:7860 （API 文档 /docs）
 ```
 
-> 后端已升级为 Docker Compose 容器化部署，不再支持直接运行 `uvicorn`。
+> 环境文件统一收敛在 `deploy/`（.env / .env.local）；后端不再支持直接运行 `uvicorn`。
 
 </details>
 
 <details>
-<summary><strong>生产部署</strong></summary>
+<summary><strong>双轨部署（生产）</strong></summary>
 
 ```bash
-# 一键启动前后端
-docker-compose up
+# 前端静态轨：GitHub Actions 自动执行（Pages / 主页仓库 / HF Static），无需本地操作
+# 全栈轨：push main 后 CI 组装 {Dockerfile, deploy/, backend/, frontend/}
+#         推送 Hugging Face Space，镜像内自行 npm ci + vite build + uv sync
 
-# 或单独构建后端镜像
-cd backend
-docker build -t webgis-backend .
+# 手动等价：构建全栈单容器镜像（nginx + FastAPI 同容器，单端口 7860）
+docker build -t negiao/webgis -f deploy/Dockerfile .
+docker run -p 7860:7860 negiao/webgis
 ```
 
 </details>
@@ -207,7 +209,7 @@ docker build -t webgis-backend .
 docker pull negiao/webgis_dev:V3.5
 ```
 
-> 镜像与 `docker-compose.yml` 中 `HF` 服务的基础镜像一致，适用于 `WebGIS-Dev` 本地开发环境启动。
+> 镜像与 `deploy/docker-compose.yml` 本地编排同源（构建文件 `deploy/Dockerfile`），适用于 `WebGIS-Dev` 本地开发环境启动。
 
 ## 📁 项目结构
 
@@ -351,7 +353,7 @@ HF Spaces 在 24 小时无访问后自动休眠。本平台通过**双向互保�
 | [开发指南与贡献指南](Docs/Guide/dev-guide.md) | 新增页面/API 标准流程、前后端通信、代码风格 |
 | [技术栈与常见问题](Docs/Guide/faq.md) | 前后端技术栈、参考资源、FAQ、TODO |
 | [更新日志 CHANGELOG](Docs/Guide/CHANGELOG.md) | 完整版本演进历史 |
-| [配置指南 configuration](Docs/Guide/configuration.md) | 三层配置（根 .env / Admin+DB / HF Secrets） |
+| [配置指南 configuration](Docs/Guide/configuration.md) | 三层配置（deploy .env / Admin+DB / HF Secrets） |
 | [配置架构执行计划](Docs/Guide/configuration-architecture-plan.md) | 分阶段收拢配置的落地路线 |
 | [OAuth 部署配置指南](Docs/Guide/oauth-deployment.md) | Google/GitHub 登录：控制台申请、HF Secrets 配置、验收与排错全流程 |
 
@@ -402,9 +404,8 @@ HF Spaces 在 24 小时无访问后自动休眠。本平台通过**双向互保�
 
 | 版本 | 日期 | 概要 |
 |------|------|------|
-| **V3.5.28** | 2026-08-23 | **全站 UI 设计语言统一**：TOC 图层树/共享资源树/行政区划树对齐 ESRI 式交互（眼睛显隐、类型图标、拖拽把手、滑动胶囊 Tab）；BusPlanner+DrivingPlanner 合并为 RoutePlannerPanel（mode=bus/drive 双触发）；天气/罗盘/底图控制条/地图坐标条换肤浅色玻璃拟态并全量 lucide 图标化；驾车规划配色接入全局 --info 令牌；附带暂存区后端 Docker 瘦身静态审查。详见[完整更新日志](Docs/Guide/CHANGELOG.md) |
-| **V3.5.27 追加批次** | 2026-08-22 | **体积云与 shader 三项修复**（原编号 V3.5.28~30，按用户裁决并入）：①体积云空中透视地形感知分类——地平线黄雾带按深度优先三问收敛到真实地形轮廓；②shader bundle 再生挂载 vite 求值期 + `shaders:check` CI 门禁，漂移防护自动化；③补建 bundle 再生脚本修复副本漂移。详见[完整更新日志](Docs/Guide/CHANGELOG.md) |
-| **V3.5.27** | 2026-08-20~22 | **面状航线模块迁移**：独立工程 planar-wayline 迁入为 CesiumToolPanel 原生模块卡片（lil-gui 声明式控件 + 无头控制器直驱宿主唯一 Viewer），支持测区绘制/弓字形航线/五向倾斜/AGL 仿地/DJI KMZ 导入导出；工作集自动注册统一图层管理（wayline 类型，支持显隐/透明度/重命名/定位/移除）；Element Plus/gsap 依赖整体移除（vendor chunk −252KB）；修复启动期 Cesium 求值崩溃；≈150 处用户可见文案全量 i18n。详见[完整更新日志](Docs/Guide/CHANGELOG.md) |
+| **V3.5.29** | 2026-08-23 | **部署架构重组 + nginx 瓦片边缘缓存**：**nginx 瓦片磁盘缓存**：deploy/nginx.conf 新增 /tiles/ /proxy/ 边缘缓存层（仅缓存 200、TTL 1h 短过期自愈、2GB LRU、忽略上游缓存指令保证确定性、X-Cache 头可观测）；透传段按缓存性拆分（api/monitor 保持 SSE 关缓冲不缓存）。热点瓦片二次访问由 nginx 直接吐盘，Python 进程零占用，与后端内部缓存形成分层互补。详见[完整更新日志](Docs/Guide/CHANGELOG.md)；全栈单容器镜像（deploy/Dockerfile：nginx+FastAPI 单端口 7860）与环境文件收敛 deploy/，修复 P0 构建期 env 路径错位、CI 补拷 dockerignore 配对、结构树/架构文档 subtree→git archive 全量对齐。详见[完整更新日志](Docs/Guide/CHANGELOG.md) |
+| **V3.5.28** | 2026-08-23 | **全站 UI 设计语言统一 + 路线漫游模块**：TOC 图层树/共享资源树/行政区划树对齐 ESRI 式交互（眼睛显隐、类型图标、拖拽把手、滑动胶囊 Tab）；BusPlanner+DrivingPlanner 合并为 RoutePlannerPanel（mode=bus/drive 双触发）；新增 RouteFly 路线漫游模块——手绘贴地线路入图层管理，相机第一/第三人称沿线漫游；天气/罗盘/底图控制条/地图坐标条换肤浅色玻璃拟态并全量 lucide 图标化；附带暂存区后端 Docker 瘦身与体积云 shader 防漂移链路审查。详见[完整更新日志](Docs/Guide/CHANGELOG.md) |
 
 更早版本（V3.5.26 及以前）请查阅 [完整更新日志 →](Docs/Guide/CHANGELOG.md)
 
@@ -428,6 +429,6 @@ HF Spaces 在 24 小时无访问后自动休眠。本平台通过**双向互保�
 |:------:|:--------:|:--------:|
 | [GitHub](https://github.com/NEGIAO/WebGIS-Dev) | [webgis.negiao.cn](https://webgis.negiao.cn)（正式域名，GitHub Pages 托管） | [Hugging Face](https://NEGIAO-WebGIS.hf.space) |
 
-<sub>V3.5.28 · 开发中 · 最后更新 2026-08-23</sub>
+<sub>V3.5.29 · 开发中 · 最后更新 2026-08-24</sub>
 
 </div>

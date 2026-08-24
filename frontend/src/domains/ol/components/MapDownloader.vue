@@ -1,40 +1,47 @@
 <template>
-    <div v-if="visible" class="map-downloader-panel">
-        <!-- 头部区域 -->
-        <header class="panel-header">
-            <div class="header-main">
-                <h3 class="header-title">{{ t('mapDownload.title') }}</h3>
-                <p class="header-subtitle">{{ t('mapDownload.subtitle') }}</p>
-            </div>
-            <div class="header-actions">
-                <span class="status-badge" :class="statusClass">
-                    <span class="status-dot"></span>
-                    {{ statusText }}
+    <div v-if="visible" class="map-downloader">
+        <!-- 头部：标题徽章 + 状态 + 关闭（对齐兄弟 tab 的 section-header 语言） -->
+        <div class="eco-section">
+            <div class="section-header">
+                <span class="section-icon">
+                    <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
                 </span>
-                <button class="close-btn" type="button" aria-label="Close" @click="emit('close')">
-                    <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none"><path d="M18 6L6 18M6 6l12 12"/></svg>
-                </button>
+                <span class="section-title">{{ t('mapDownload.title') }}</span>
+                <div class="header-actions">
+                    <span class="status-badge" :class="statusClass">
+                        <span class="status-dot"></span>
+                        {{ statusText }}
+                    </span>
+                    <button class="mini-icon-btn danger" type="button" aria-label="Close" @click="emit('close')">
+                        <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2" fill="none"><path d="M18 6L6 18M6 6l12 12"/></svg>
+                    </button>
+                </div>
             </div>
-        </header>
+            <p class="head-subtitle">{{ t('mapDownload.subtitle') }}</p>
+        </div>
 
-        <!-- Tab 切换标签页 -->
-        <div class="panel-tabs">
-            <button class="tab-item" :class="{ active: activeTab === 'config' }" @click="activeTab = 'config'">
-                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+        <!-- 子页签 -->
+        <div class="subtabs">
+            <button class="subtab" :class="{ active: activeTab === 'config' }" @click="activeTab = 'config'">
+                <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
                 任务配置
             </button>
-            <button class="tab-item" :class="{ active: activeTab === 'history' }" @click="activeTab = 'history'">
-                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+            <button class="subtab" :class="{ active: activeTab === 'history' }" @click="activeTab = 'history'">
+                <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
                 我的任务
             </button>
         </div>
 
-        <section class="panel-body">
-            <!-- TAB 1: 下载配置（支持拉宽自动分列网格） -->
-            <div v-show="activeTab === 'config'" class="config-container">
-                <!-- 1. 底图与源设置 -->
-                <div class="section-card">
-                    <div class="card-title">底图与数据源</div>
+        <!-- TAB 1: 下载配置 -->
+        <div v-show="activeTab === 'config'" class="dl-col">
+            <div class="eco-section">
+                <div class="section-header">
+                    <span class="section-icon">
+                        <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z"/></svg>
+                    </span>
+                    <span class="section-title">底图与数据源</span>
+                </div>
+                <div class="card glass">
                     <div class="form-grid single-col">
                         <div class="form-field">
                             <label class="field-label">{{ t('mapDownload.basemapSource') }}</label>
@@ -81,21 +88,26 @@
                         </div>
                     </div>
                 </div>
+            </div>
 
-                <!-- 2. 空间与分辨率参数 -->
-                <div class="section-card">
-                    <div class="card-title-row">
-                        <span class="card-title">裁剪与范围 (Extent)</span>
+            <div class="eco-section">
+                <div class="section-header">
+                    <span class="section-icon">
+                        <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 6v16l7-4 8 4 7-4V2l-7 4-8-4-7 4zM8 2v16M16 6v16"/></svg>
+                    </span>
+                    <span class="section-title">{{ t('mapDownload.bboxCrs') }}</span>
+                    <div class="header-actions">
                         <ExtentPicker
                             :show-overlay="true"
                             @extent-change="applyExtentFromPicker"
                             @extent-clear="handleClearExtent"
                         />
                     </div>
-
+                </div>
+                <div class="card glass">
                     <div class="form-grid two-col mb-12">
                         <div class="form-field">
-                            <label class="field-label">{{ t('mapDownload.bboxCrs') }}</label>
+                            <label class="field-label">CRS</label>
                             <select v-model="store.bboxCrs" class="form-select">
                                 <option value="EPSG:4326">EPSG:4326 (WGS 84)</option>
                             </select>
@@ -112,7 +124,6 @@
                         </div>
                     </div>
 
-                    <!-- 空间四至方位阵列 -->
                     <div class="spatial-compass-grid">
                         <div class="compass-cell north">
                             <span class="compass-tag">北 (Max Y)</span>
@@ -143,44 +154,35 @@
                         </div>
                     </label>
                 </div>
+            </div>
 
-                <!-- 3. 下载模式与策略（修改位置） -->
-                <div class="section-card mode-section">
-                    <div class="card-title">{{ t('mapDownload.downloadMode') }}</div>
+            <div class="eco-section">
+                <div class="section-header">
+                    <span class="section-icon">
+                        <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+                    </span>
+                    <span class="section-title">{{ t('mapDownload.downloadMode') }}</span>
+                </div>
+                <div class="card glass">
                     <div class="mode-cards-grid">
                         <div
                             class="mode-card"
                             :class="{ active: store.downloadMode === 'native' }"
                             @click="store.downloadMode = 'native'"
                         >
-                            <input
-                                type="radio"
-                                name="download-mode"
-                                value="native"
-                                :checked="store.downloadMode === 'native'"
-                                class="sr-only"
-                                tabindex="-1"
-                            />
+                            <input type="radio" name="download-mode" value="native" :checked="store.downloadMode === 'native'" class="sr-only" tabindex="-1" />
                             <div class="mode-header">
                                 <span class="mode-name">{{ t('mapDownload.modeNative') }}</span>
                                 <span class="radio-indicator"></span>
                             </div>
                             <span class="mode-desc">{{ t('mapDownload.modeNativeHint') }}</span>
                         </div>
-
                         <div
                             class="mode-card"
                             :class="{ active: store.downloadMode === 'progressive' }"
                             @click="store.downloadMode = 'progressive'"
                         >
-                            <input
-                                type="radio"
-                                name="download-mode"
-                                value="progressive"
-                                :checked="store.downloadMode === 'progressive'"
-                                class="sr-only"
-                                tabindex="-1"
-                            />
+                            <input type="radio" name="download-mode" value="progressive" :checked="store.downloadMode === 'progressive'" class="sr-only" tabindex="-1" />
                             <div class="mode-header">
                                 <span class="mode-name">{{ t('mapDownload.modeProgressive') }}</span>
                                 <span class="radio-indicator"></span>
@@ -189,123 +191,119 @@
                         </div>
                     </div>
                 </div>
+            </div>
 
-                <!-- 提交与控制栏（占用整行） -->
-                <div class="execution-bar">
-                    <div class="quota-info">
-                        <span v-if="store.estimatingTiles" class="quota-badge">估算中...</span>
-                        <span v-else-if="store.estimatedTileCount > 0" class="quota-badge">
-                            约 <strong>{{ store.estimatedTileCount }}</strong> 瓦片
-                        </span>
-                        <span v-if="currentQuotaCost !== null && currentQuotaCost > 0" class="quota-badge">
-                            预估消耗: <strong>{{ currentQuotaCost }}</strong> 配额
-                        </span>
-                    </div>
-
-                    <div class="btn-group">
-                        <button class="btn btn-ghost" type="button" @click="handleReset">
-                            {{ t('mapDownload.reset') }}
-                        </button>
-                        <button v-if="store.isPolling" class="btn btn-warning" type="button" @click="store.stopPolling">
-                            {{ t('mapDownload.stopPolling') }}
-                        </button>
-                        <button
-                            class="btn btn-primary"
-                            type="button"
-                            :disabled="store.isSubmitting"
-                            @click="handleSubmit"
-                        >
-                            <span v-if="store.isSubmitting" class="spinner"></span>
-                            {{ store.isSubmitting ? t('mapDownload.submitting') : t('mapDownload.startDownload') }}
-                        </button>
-                    </div>
+            <div class="execution-bar">
+                <div class="quota-info">
+                    <span v-if="store.estimatingTiles" class="quota-badge">估算中...</span>
+                    <span v-else-if="store.estimatedTileCount > 0" class="quota-badge">
+                        约 <strong>{{ store.estimatedTileCount }}</strong> 瓦片
+                    </span>
+                    <span v-if="currentQuotaCost !== null && currentQuotaCost > 0" class="quota-badge">
+                        预估消耗: <strong>{{ currentQuotaCost }}</strong> 配额
+                    </span>
                 </div>
-
-                <!-- 后端生成进度（占用整行） -->
-                <div v-if="store.taskId || store.isSubmitting" class="progress-panel">
-                    <div class="progress-header">
-                        <div class="progress-title">
-                            <span>后端处理进度</span>
-                            <span v-if="store.basemapName" class="task-basemap-badge">
-                                <svg viewBox="0 0 24 24" width="12" height="12" stroke="currentColor" stroke-width="2" fill="none"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
-                                {{ store.basemapName }}
-                            </span>
-                            <span v-if="store.taskId" class="task-tag" @click="copyTaskId(store.taskId)">
-                                ID: {{ store.taskId }}
-                                <svg viewBox="0 0 24 24" width="12" height="12" stroke="currentColor" fill="none"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
-                            </span>
-                        </div>
-                        <span class="progress-percent">{{ progressLabel }}</span>
-                    </div>
-
-                    <div class="progress-bar-track">
-                        <div class="progress-bar-fill" :style="{ width: progressWidth }"></div>
-                    </div>
-
-                    <div v-if="store.tileCount > 0" class="tile-progress-row">
-                        <span class="tile-progress-text">
-                            瓦片: <strong>{{ store.tilesDownloaded }}</strong> / {{ store.tileCount }}
-                        </span>
-                    </div>
-
-                    <div class="progress-footer">
-                        <span class="status-msg">{{ displayStoreMessage || expiresHint }}</span>
-                        <span v-if="displayLastError" class="error-msg">{{ displayLastError }}</span>
-
-                        <button
-                            v-if="store.taskId && store.status === 'success' && store.fileReady"
-                            class="btn btn-success btn-sm"
-                            type="button"
-                            @click="handleRedownload"
-                        >
-                            立即下载到本地
-                        </button>
-                    </div>
-                </div>
-
-                <!-- 客户端前端传输卡片 (仅用户选择 progressive 模式时显示) -->
-                <div
-                    v-if="(transferState.active || transferState.total > 0 || transferState.error) && store.downloadMode === 'progressive'"
-                    class="progress-panel transfer-theme"
-                >
-                    <div class="progress-header">
-                        <div class="progress-title">
-                            <span>前端传输中 ({{ countdownText }})</span>
-                        </div>
-                        <span class="progress-percent">{{ transferState.progress }}%</span>
-                    </div>
-
-                    <div class="progress-bar-track">
-                        <div class="progress-bar-fill transfer-fill" :style="{ width: transferState.progress + '%' }"></div>
-                    </div>
-
-                    <div class="progress-footer">
-                        <span>
-                            {{ transferState.total > 0 ? `${formatBytes(transferState.downloaded)} / ${formatBytes(transferState.total)}` : '计算传输量...' }}
-                        </span>
-                        <span v-if="transferState.error" class="error-msg">{{ transferState.error }}</span>
-
-                        <div class="btn-group">
-                            <button v-if="transferState.active" class="btn btn-danger btn-sm" type="button" @click="cancelTransfer">
-                                {{ t('mapDownload.cancelDownload') }}
-                            </button>
-                            <button
-                                v-if="!transferState.active && (store.status === 'success' || transferState.error)"
-                                class="btn btn-primary btn-sm"
-                                type="button"
-                                @click="handleRedownload"
-                            >
-                                {{ t('mapDownload.redownload') }}
-                            </button>
-                        </div>
-                    </div>
+                <div class="btn-group">
+                    <button class="btn btn-ghost" type="button" @click="handleReset">
+                        {{ t('mapDownload.reset') }}
+                    </button>
+                    <button v-if="store.isPolling" class="btn btn-warning" type="button" @click="store.stopPolling">
+                        {{ t('mapDownload.stopPolling') }}
+                    </button>
+                    <button
+                        class="btn btn-primary"
+                        type="button"
+                        :disabled="store.isSubmitting"
+                        @click="handleSubmit"
+                    >
+                        <span v-if="store.isSubmitting" class="spinner"></span>
+                        {{ store.isSubmitting ? t('mapDownload.submitting') : t('mapDownload.startDownload') }}
+                    </button>
                 </div>
             </div>
 
-            <!-- TAB 2: 历史任务列表 -->
-            <div v-show="activeTab === 'history'" class="history-container">
-                <div class="section-card">
-                    <div class="card-title">{{ t('mapDownload.taskLookup') }}</div>
+            <div v-if="store.taskId || store.isSubmitting" class="progress-panel">
+                <div class="progress-header">
+                    <div class="progress-title">
+                        <span>后端处理进度</span>
+                        <span v-if="store.basemapName" class="task-basemap-badge">
+                            <svg viewBox="0 0 24 24" width="12" height="12" stroke="currentColor" stroke-width="2" fill="none"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
+                            {{ store.basemapName }}
+                        </span>
+                        <span v-if="store.taskId" class="task-tag" @click="copyTaskId(store.taskId)">
+                            ID: {{ store.taskId }}
+                            <svg viewBox="0 0 24 24" width="12" height="12" stroke="currentColor" fill="none"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+                        </span>
+                    </div>
+                    <span class="progress-percent">{{ progressLabel }}</span>
+                </div>
+                <div class="progress-bar-track">
+                    <div class="progress-bar-fill" :style="{ width: progressWidth }"></div>
+                </div>
+                <div v-if="store.tileCount > 0" class="tile-progress-row">
+                    <span class="tile-progress-text">
+                        瓦片: <strong>{{ store.tilesDownloaded }}</strong> / {{ store.tileCount }}
+                    </span>
+                </div>
+                <div class="progress-footer">
+                    <span class="status-msg">{{ displayStoreMessage || expiresHint }}</span>
+                    <span v-if="displayLastError" class="error-msg">{{ displayLastError }}</span>
+                    <button
+                        v-if="store.taskId && store.status === 'success' && store.fileReady"
+                        class="btn btn-success btn-sm"
+                        type="button"
+                        @click="handleRedownload"
+                    >
+                        立即下载到本地
+                    </button>
+                </div>
+            </div>
+
+            <div
+                v-if="(transferState.active || transferState.total > 0 || transferState.error) && store.downloadMode === 'progressive'"
+                class="progress-panel transfer-theme"
+            >
+                <div class="progress-header">
+                    <div class="progress-title">
+                        <span>前端传输中 ({{ countdownText }})</span>
+                    </div>
+                    <span class="progress-percent">{{ transferState.progress }}%</span>
+                </div>
+                <div class="progress-bar-track">
+                    <div class="progress-bar-fill transfer-fill" :style="{ width: transferState.progress + '%' }"></div>
+                </div>
+                <div class="progress-footer">
+                    <span>
+                        {{ transferState.total > 0 ? formatBytes(transferState.downloaded) + ' / ' + formatBytes(transferState.total) : '计算传输量...' }}
+                    </span>
+                    <span v-if="transferState.error" class="error-msg">{{ transferState.error }}</span>
+                    <div class="btn-group">
+                        <button v-if="transferState.active" class="btn btn-danger btn-sm" type="button" @click="cancelTransfer">
+                            {{ t('mapDownload.cancelDownload') }}
+                        </button>
+                        <button
+                            v-if="!transferState.active && (store.status === 'success' || transferState.error)"
+                            class="btn btn-primary btn-sm"
+                            type="button"
+                            @click="handleRedownload"
+                        >
+                            {{ t('mapDownload.redownload') }}
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- TAB 2: 历史任务 -->
+        <div v-show="activeTab === 'history'" class="dl-col">
+            <div class="eco-section">
+                <div class="section-header">
+                    <span class="section-icon">
+                        <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+                    </span>
+                    <span class="section-title">{{ t('mapDownload.taskLookup') }}</span>
+                </div>
+                <div class="card glass">
                     <div class="task-search-bar">
                         <input
                             v-model.trim="lookupTaskId"
@@ -313,21 +311,22 @@
                             type="text"
                             :placeholder="t('mapDownload.taskIdPlaceholder')"
                         />
-                        <button class="btn btn-ghost" type="button" @click="handleLookup">
+                        <button class="btn btn-primary btn-sm" type="button" @click="handleLookup">
                             {{ t('mapDownload.query') }}
                         </button>
                     </div>
                 </div>
-
-                <MyDownloadTasks
-                    @download="handleDownloadFromList"
-                    @view="handleViewFromList"
-                    @cancel="handleCancelFromList"
-                />
             </div>
-        </section>
+
+            <MyDownloadTasks
+                @download="handleDownloadFromList"
+                @view="handleViewFromList"
+                @cancel="handleCancelFromList"
+            />
+        </div>
     </div>
 </template>
+
 
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
@@ -873,235 +872,229 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped>
-/* 全局变量定义（适配流式拖拽布局） */
-.map-downloader-panel {
-    --panel-bg: #ffffff;
-    --section-bg: #f8fafc;
-    --border-color: #e2e8f0;
-    --text-primary: #0f172a;
-    --text-secondary: #475569;
-    --text-muted: #94a3b8;
-    --brand-primary: #10b981;
-    --brand-primary-hover: #059669;
-    --brand-light: #ecfdf5;
+/* =====================================================================
+   MapDownloader — 对齐 TOCPanel 兄弟 tab 的 eco-section 设计语言
+   （渐变徽章标题 / 玻璃卡片 / 同源 --toc-* 令牌；逻辑层零改动）
+   ===================================================================== */
 
-    width: 100%;
-    height: 100%;
-    min-width: 320px;
-    box-sizing: border-box;
-    background: var(--panel-bg);
-    border: 1px solid var(--border-color);
-    border-radius: 12px;
-    box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.05);
+.map-downloader {
     display: flex;
     flex-direction: column;
-    overflow: hidden;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-    color: var(--text-primary);
+    gap: 12px;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding-right: 2px;
 }
 
-/* 头部样式 */
-.panel-header {
-    padding: 16px 20px 12px;
+.dl-col {
     display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
+    flex-direction: column;
+    gap: 10px;
+}
+
+/* ---------- 分组：徽章标题（与兄弟 tab 同 DNA） ---------- */
+.eco-section {
+    display: flex;
+    flex-direction: column;
+}
+
+.section-header {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    margin-bottom: 10px;
+}
+
+.section-icon {
+    width: 20px;
+    height: 20px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 6px;
+    background: var(--brand-gradient);
+    color: #ffffff;
+    box-shadow:
+        0 2px 6px rgba(var(--brand-primary-dark-rgb), 0.26),
+        inset 0 1px 0 rgba(255, 255, 255, 0.28);
     flex-shrink: 0;
 }
 
-.header-title {
-    font-size: 16px;
+.section-title {
+    font-size: var(--toc-font-md, 13px);
     font-weight: 700;
-    margin: 0;
-    color: var(--text-primary);
-}
-
-.header-subtitle {
-    font-size: 12px;
-    color: var(--text-secondary);
-    margin: 2px 0 0 0;
+    color: var(--toc-card-title-dark, var(--text-primary));
+    letter-spacing: 0.3px;
 }
 
 .header-actions {
+    margin-left: auto;
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 6px;
 }
 
-.status-badge {
+.mini-icon-btn {
+    width: 24px;
+    height: 24px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: none;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--toc-text-secondary, var(--text-secondary));
+    cursor: pointer;
+    transition:
+        color 0.15s ease,
+        background 0.15s ease,
+        transform 0.15s ease;
+}
+
+.mini-icon-btn:hover {
+    color: var(--toc-primary, var(--brand-primary));
+    background: var(--toc-primary-bg-hover, rgba(var(--brand-primary-rgb), 0.08));
+}
+
+.mini-icon-btn.danger:hover {
+    color: var(--toc-danger, #b83d3d);
+    background: rgba(184, 61, 61, 0.1);
+}
+
+.mini-icon-btn:active {
+    transform: scale(0.92);
+}
+
+.head-subtitle {
+    margin: -4px 0 0 27px;
+    font-size: 11.5px;
+    color: var(--toc-text-secondary, var(--text-secondary));
+}
+
+/* ---------- 子页签（胶囊分段） ---------- */
+.subtabs {
+    display: inline-flex;
+    gap: 4px;
+    padding: 3px;
+    border-radius: 10px;
+    background: rgba(0, 0, 0, 0.045);
+    align-self: flex-start;
+}
+
+.subtab {
     display: inline-flex;
     align-items: center;
     gap: 5px;
-    font-size: 11px;
-    font-weight: 600;
-    padding: 3px 8px;
-    border-radius: 12px;
-    background: #f1f5f9;
-    color: var(--text-secondary);
-}
-
-.status-dot {
-    width: 6px;
-    height: 6px;
-    border-radius: 50%;
-    background: var(--text-muted);
-}
-
-.status-badge.status-success { background: #dcfce7; color: #15803d; }
-.status-badge.status-success .status-dot { background: #22c55e; }
-.status-badge.status-failed { background: #fee2e2; color: #b91c1c; }
-.status-badge.status-failed .status-dot { background: #ef4444; }
-.status-badge.status-transferring { background: #e0f2fe; color: #0369a1; }
-.status-badge.status-transferring .status-dot { background: #0284c7; }
-
-.close-btn {
+    padding: 5px 12px;
+    border: none;
+    border-radius: 8px;
     background: transparent;
-    border: none;
-    color: var(--text-muted);
-    cursor: pointer;
-    padding: 4px;
-    border-radius: 6px;
-    display: inline-flex;
-    transition: all 0.2s;
-}
-
-.close-btn:hover {
-    background: #f1f5f9;
-    color: var(--text-primary);
-}
-
-/* Tab 页签 */
-.panel-tabs {
-    display: flex;
-    border-bottom: 1px solid var(--border-color);
-    padding: 0 20px;
-    gap: 16px;
-    flex-shrink: 0;
-}
-
-.tab-item {
-    background: none;
-    border: none;
-    padding: 8px 4px;
-    font-size: 13px;
-    font-weight: 500;
-    color: var(--text-secondary);
-    cursor: pointer;
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    border-bottom: 2px solid transparent;
-    transition: all 0.2s;
-}
-
-.tab-item:hover { color: var(--text-primary); }
-.tab-item.active {
-    color: var(--brand-primary);
-    border-bottom-color: var(--brand-primary);
+    font-size: 12px;
     font-weight: 600;
+    color: var(--toc-text-secondary, var(--text-secondary));
+    cursor: pointer;
+    transition:
+        background 0.18s ease,
+        color 0.18s ease,
+        box-shadow 0.18s ease;
 }
 
-/* 核心内容纵向流体容器 */
-.panel-body {
-    padding: 16px;
-    flex: 1;
-    overflow-y: auto;
+.subtab:hover {
+    color: var(--toc-primary, var(--brand-primary));
 }
 
-/* 响应式自适应卡片网格系统 (根据面板宽度自动从 1 列过渡到 2 列) */
-.config-container {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-    gap: 12px;
+.subtab.active {
+    background: #ffffff;
+    color: var(--toc-primary, var(--brand-primary));
+    box-shadow: 0 1px 4px rgba(58, 91, 67, 0.14);
 }
 
-/* 让核心状态和执行栏填满单行跨列 */
-.execution-bar, .progress-panel, .mode-section {
-    grid-column: 1 / -1;
-}
-
-.history-container {
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-}
-
-/* 配置卡片 */
-.section-card {
-    background: var(--section-bg);
-    border: 1px solid var(--border-color);
+/* ---------- 玻璃卡片 ---------- */
+.card.glass {
+    border: 1px solid rgba(153, 195, 170, 0.38);
     border-radius: 10px;
-    padding: 12px 14px;
-    display: flex;
-    flex-direction: column;
+    padding: 11px;
+    background: rgba(255, 255, 255, 0.72);
+    backdrop-filter: blur(8px);
+    box-shadow: 0 8px 20px rgba(58, 91, 67, 0.08);
 }
 
-.card-title {
-    font-size: 11px;
-    font-weight: 700;
-    color: var(--text-muted);
-    margin-bottom: 10px;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-}
-
-.card-title-row {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 10px;
-}
-
-/* 表单通用控件 */
+/* ---------- 表单控件 ---------- */
 .form-grid {
     display: grid;
     gap: 10px;
 }
 
-.form-grid.single-col { grid-template-columns: 1fr; }
-.form-grid.two-col { grid-template-columns: 1fr 1fr; }
+.form-grid.single-col {
+    grid-template-columns: 1fr;
+}
+
+.form-grid.two-col {
+    grid-template-columns: 1fr 1fr;
+}
+
+.mb-12 {
+    margin-bottom: 12px;
+}
 
 .form-field {
     display: flex;
     flex-direction: column;
-    gap: 4px;
+    gap: 5px;
+    min-width: 0;
 }
 
 .field-label {
-    font-size: 12px;
-    font-weight: 500;
-    color: var(--text-secondary);
+    font-size: 11.5px;
+    font-weight: 600;
+    color: var(--toc-text-secondary, var(--text-secondary));
+    letter-spacing: 0.2px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.checkbox-inline {
+    accent-color: var(--brand-primary);
+    margin: 0;
+}
+
+.form-select,
+.form-input {
+    width: 100%;
+    padding: 7px 9px;
+    border: 1px solid rgba(153, 195, 170, 0.45);
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.85);
+    font-size: 12.5px;
+    color: var(--text-primary);
+    outline: none;
+    transition:
+        border-color 0.15s ease,
+        box-shadow 0.15s ease;
+}
+
+.form-select:focus,
+.form-input:focus {
+    border-color: var(--brand-primary);
+    box-shadow: 0 0 0 3px rgba(var(--brand-primary-rgb), 0.14);
+}
+
+.code-font {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 11.5px;
 }
 
 .field-hint {
     font-size: 11px;
-    color: var(--text-muted);
+    color: var(--toc-text-secondary, var(--text-secondary));
 }
 
-.field-hint.warning { color: #d97706; }
-
-.form-input, .form-select {
-    width: 100%;
-    height: 32px;
-    padding: 0 10px;
-    border-radius: 6px;
-    border: 1px solid var(--border-color);
-    background: #ffffff;
-    font-size: 12px;
-    color: var(--text-primary);
-    box-sizing: border-box;
-    transition: border-color 0.2s, box-shadow 0.2s;
+.field-hint.warning {
+    color: #b8863d;
 }
 
-.form-input:focus, .form-select:focus {
-    outline: none;
-    border-color: var(--brand-primary);
-    box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.12);
-}
-
-.code-font { font-family: ui-monospace, SFMono-Regular, Monaco, Consolas, monospace; }
-
-/* 空间四至方位盘 */
+/* ---------- 方位阵列 ---------- */
 .spatial-compass-grid {
     display: grid;
     grid-template-columns: 1fr 1fr 1fr;
@@ -1114,312 +1107,485 @@ onBeforeUnmount(() => {
 .compass-cell {
     display: flex;
     flex-direction: column;
-    align-items: center;
+    gap: 3px;
+    min-width: 0;
 }
 
 .compass-cell.north { grid-column: 2; grid-row: 1; }
-.compass-cell.west { grid-column: 1; grid-row: 2; }
-.compass-cell.center-icon { grid-column: 2; grid-row: 2; display: flex; justify-content: center; }
-.compass-cell.east { grid-column: 3; grid-row: 2; }
+.compass-cell.west  { grid-column: 1; grid-row: 2; }
+.compass-cell.east  { grid-column: 3; grid-row: 2; }
 .compass-cell.south { grid-column: 2; grid-row: 3; }
 
+.compass-cell.center-icon {
+    grid-column: 2;
+    grid-row: 2;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--toc-text-secondary, var(--text-secondary));
+}
+
+.compass-cell.north,
+.compass-cell.south {
+    grid-column: 2;
+}
+
 .compass-tag {
-    font-size: 10px;
-    color: var(--text-muted);
-    margin-bottom: 2px;
+    font-size: 10.5px;
+    font-weight: 600;
+    color: var(--toc-text-secondary, var(--text-secondary));
+    letter-spacing: 0.3px;
 }
 
 .compass-input {
-    text-align: center;
-    font-size: 11px;
-    height: 28px;
+    padding: 5px 7px;
+    font-size: 11.5px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
 
-/* Checkbox卡片 */
+/* ---------- 复选卡片 ---------- */
 .checkbox-card {
     display: flex;
+    gap: 9px;
     align-items: flex-start;
-    gap: 8px;
+    padding: 9px 11px;
+    border: 1px dashed rgba(153, 195, 170, 0.55);
+    border-radius: 9px;
     cursor: pointer;
-    user-select: none;
+    transition: background 0.15s ease;
 }
 
-.checkbox-meta { display: flex; flex-direction: column; }
-.checkbox-title { font-size: 12px; font-weight: 500; color: var(--text-primary); }
-.checkbox-desc { font-size: 11px; color: var(--text-muted); }
+.checkbox-card:hover {
+    background: rgba(var(--brand-primary-rgb), 0.05);
+}
 
-/* 下载模式卡片 */
+.checkbox-card input {
+    accent-color: var(--brand-primary);
+    margin-top: 2px;
+}
+
+.checkbox-meta {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+
+.checkbox-title {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.checkbox-desc {
+    font-size: 11px;
+    color: var(--toc-text-secondary, var(--text-secondary));
+}
+
+.mt-12 {
+    margin-top: 12px;
+}
+
+/* ---------- 模式选择卡 ---------- */
 .mode-cards-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-    gap: 10px;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
 }
 
 .mode-card {
-    border: 1px solid var(--border-color);
-    background: #ffffff;
-    border-radius: 8px;
-    padding: 10px;
-    cursor: pointer;
-    transition: all 0.2s;
+    position: relative;
     display: flex;
     flex-direction: column;
-    gap: 4px;
-    user-select: none;
+    gap: 5px;
+    padding: 10px 11px;
+    border: 1.5px solid rgba(153, 195, 170, 0.45);
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.65);
+    cursor: pointer;
+    transition:
+        border-color 0.15s ease,
+        background 0.15s ease,
+        box-shadow 0.15s ease;
 }
 
-.mode-card:hover { border-color: var(--brand-primary); }
+.mode-card:hover {
+    border-color: var(--brand-primary);
+}
 
 .mode-card.active {
     border-color: var(--brand-primary);
-    background: var(--brand-light);
+    background: rgba(var(--brand-primary-rgb), 0.07);
+    box-shadow: 0 4px 12px rgba(var(--brand-primary-rgb), 0.16);
 }
 
 .mode-header {
     display: flex;
-    justify-content: space-between;
     align-items: center;
+    justify-content: space-between;
+    gap: 6px;
 }
 
-.mode-name { font-size: 12px; font-weight: 600; color: var(--text-primary); }
+.mode-name {
+    font-size: 12.5px;
+    font-weight: 700;
+    color: var(--text-primary);
+}
 
 .radio-indicator {
-    width: 12px;
-    height: 12px;
+    width: 14px;
+    height: 14px;
     border-radius: 50%;
-    border: 1px solid var(--border-color);
-    background: #fff;
+    border: 1.5px solid rgba(153, 195, 170, 0.7);
+    transition: all 0.15s ease;
 }
 
 .mode-card.active .radio-indicator {
     border-color: var(--brand-primary);
-    background: var(--brand-primary);
-    box-shadow: inset 0 0 0 2px #fff;
+    border-width: 4.5px;
 }
 
-.mode-desc { font-size: 11px; color: var(--text-muted); }
+.mode-desc {
+    font-size: 11px;
+    line-height: 1.45;
+    color: var(--toc-text-secondary, var(--text-secondary));
+}
 
-/* 控制栏 */
+/* ---------- 执行栏 ---------- */
 .execution-bar {
+    position: sticky;
+    bottom: 0;
+    z-index: 2;
     display: flex;
-    justify-content: space-between;
     align-items: center;
-    padding-top: 4px;
+    justify-content: space-between;
+    gap: 10px;
+    flex-wrap: wrap;
+    padding: 9px 11px;
+    border: 1px solid rgba(153, 195, 170, 0.38);
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.9);
+    backdrop-filter: blur(8px);
+    box-shadow: 0 -2px 14px rgba(58, 91, 67, 0.08);
 }
 
-.quota-badge { font-size: 12px; color: var(--text-secondary); }
-.quota-badge strong { color: var(--brand-primary-hover); }
-
-.btn-group { display: flex; gap: 8px; }
-
-.btn {
-    height: 32px;
-    padding: 0 14px;
-    border-radius: 6px;
-    font-size: 12px;
-    font-weight: 600;
-    border: none;
-    cursor: pointer;
-    display: inline-flex;
+.quota-info {
+    display: flex;
     align-items: center;
     gap: 6px;
-    transition: all 0.2s;
+    flex-wrap: wrap;
 }
 
-.btn-primary { background: var(--brand-primary); color: #ffffff; }
-.btn-primary:hover { background: var(--brand-primary-hover); }
+.quota-badge {
+    font-size: 11px;
+    color: var(--toc-card-title-dark, var(--text-primary));
+    background: rgba(var(--brand-primary-rgb), 0.09);
+    border-radius: 999px;
+    padding: 3px 9px;
+}
+
+.btn-group {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+}
+
+.btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 7px 13px;
+    border: none;
+    border-radius: 9px;
+    font-size: 12.5px;
+    font-weight: 600;
+    cursor: pointer;
+    transition:
+        transform 0.15s ease,
+        box-shadow 0.15s ease,
+        opacity 0.15s ease,
+        background 0.15s ease;
+}
+
+.btn:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+}
+
+.btn:not(:disabled):active {
+    transform: scale(0.96);
+}
+
+.btn-sm {
+    padding: 5px 10px;
+    font-size: 11.5px;
+    border-radius: 8px;
+}
+
+.btn-primary {
+    background: var(--brand-gradient);
+    color: #fff;
+    box-shadow: 0 4px 12px rgba(var(--brand-primary-rgb), 0.32);
+}
+
+.btn-primary:not(:disabled):hover {
+    box-shadow: 0 6px 16px rgba(var(--brand-primary-rgb), 0.42);
+    transform: translateY(-1px);
+}
 
 .btn-ghost {
     background: transparent;
-    border: 1px solid var(--border-color);
-    color: var(--text-secondary);
+    border: 1px solid rgba(153, 195, 170, 0.55);
+    color: var(--toc-text-secondary, var(--text-secondary));
 }
 
-.btn-ghost:hover { background: #f1f5f9; color: var(--text-primary); }
-.btn-warning { background: #f59e0b; color: #ffffff; }
-.btn-danger { background: #ef4444; color: #ffffff; }
-.btn-success { background: #10b981; color: #ffffff; }
+.btn-ghost:hover {
+    color: var(--toc-primary, var(--brand-primary));
+    border-color: var(--brand-primary);
+}
 
-.btn-sm { height: 26px; padding: 0 8px; font-size: 11px; }
+.btn-warning {
+    background: #f0a63a;
+    color: #fff;
+}
 
-/* 进度反馈卡片 */
+.btn-success {
+    background: linear-gradient(135deg, #3e9e5f, #2f7d4a);
+    color: #fff;
+}
+
+.btn-danger {
+    background: #c45454;
+    color: #fff;
+}
+
+.spinner {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    border: 2px solid rgba(255, 255, 255, 0.35);
+    border-top-color: #fff;
+    animation: md-spin 0.7s linear infinite;
+}
+
+@keyframes md-spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+/* ---------- 进度面板 ---------- */
 .progress-panel {
-    background: #f8fafc;
-    border: 1px solid var(--border-color);
-    border-radius: 10px;
-    padding: 10px 12px;
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: 9px;
+    padding: 11px 12px;
+    border: 1px solid rgba(153, 195, 170, 0.38);
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.72);
+    backdrop-filter: blur(8px);
 }
 
 .progress-panel.transfer-theme {
-    background: #f0f9ff;
-    border-color: #bae6fd;
+    border-color: rgba(62, 158, 95, 0.45);
 }
 
 .progress-header {
     display: flex;
-    justify-content: space-between;
     align-items: center;
-    font-size: 12px;
-    font-weight: 500;
+    justify-content: space-between;
+    gap: 8px;
 }
 
-.task-tag {
-    font-family: ui-monospace, SFMono-Regular, Monaco, Consolas, monospace;
-    font-size: 10px;
-    background: #e2e8f0;
-    padding: 2px 6px;
-    border-radius: 4px;
-    margin-left: 6px;
-    cursor: pointer;
-    display: inline-flex;
+.progress-title {
+    display: flex;
     align-items: center;
-    gap: 4px;
+    gap: 7px;
+    flex-wrap: wrap;
+    font-size: 12.5px;
+    font-weight: 700;
+    color: var(--text-primary);
 }
 
 .task-basemap-badge {
     display: inline-flex;
     align-items: center;
     gap: 4px;
-    font-size: 11px;
+    font-size: 10.5px;
     font-weight: 500;
-    color: #6366f1;
-    background: #eef2ff;
-    border: 1px solid #c7d2fe;
+    color: var(--toc-text-secondary, var(--text-secondary));
+    background: rgba(0, 0, 0, 0.05);
+    border-radius: 999px;
     padding: 2px 8px;
-    border-radius: 10px;
-    margin-left: 6px;
 }
 
-.tile-progress-row {
-    text-align: center;
-    margin-top: 6px;
+.task-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    max-width: 180px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 10.5px;
+    color: var(--toc-text-secondary, var(--text-secondary));
+    cursor: pointer;
+    border-radius: 999px;
+    padding: 2px 8px;
+    transition: background 0.15s ease;
 }
 
-.tile-progress-text {
-    font-size: 11px;
-    color: #64748b;
+.task-tag:hover {
+    background: rgba(var(--brand-primary-rgb), 0.08);
+    color: var(--toc-primary, var(--brand-primary));
 }
 
-.tile-progress-text strong {
-    color: #334155;
+.progress-percent {
+    font-variant-numeric: tabular-nums;
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--toc-primary, var(--brand-primary));
 }
 
 .progress-bar-track {
-    height: 6px;
-    background: #e2e8f0;
-    border-radius: 3px;
+    height: 7px;
+    border-radius: 999px;
+    background: rgba(0, 0, 0, 0.07);
     overflow: hidden;
 }
 
 .progress-bar-fill {
     height: 100%;
-    background: var(--brand-primary);
-    transition: width 0.3s ease;
+    border-radius: 999px;
+    background: var(--brand-gradient);
+    transition: width 0.4s ease;
 }
 
-.progress-bar-fill.transfer-fill { background: #0284c7; }
+.progress-bar-fill.transfer-fill {
+    background: linear-gradient(90deg, #3e9e5f, #56c47b);
+}
+
+.tile-progress-row {
+    font-size: 11.5px;
+    color: var(--toc-text-secondary, var(--text-secondary));
+}
+
+.tile-progress-row strong {
+    color: var(--toc-primary, var(--brand-primary));
+    font-variant-numeric: tabular-nums;
+}
 
 .progress-footer {
     display: flex;
-    justify-content: space-between;
-    align-items: center;
-    font-size: 11px;
-    color: var(--text-muted);
-}
-
-.error-msg { color: #ef4444; font-weight: 500; }
-.task-search-bar { display: flex; gap: 8px; }
-
-/* 隐藏 Radio 默认样式 */
-.sr-only {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    padding: 0;
-    margin: -1px;
-    overflow: hidden;
-    clip: rect(0, 0, 0, 0);
-    border: 0;
-}
-
-.mb-12 { margin-bottom: 12px; }
-.mt-12 { margin-top: 12px; }
-
-/* Task Item 单行 UI 样式 */
-:deep(.task-item) {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    padding: 10px 12px;
-    background: #ffffff;
-    border: 1px solid var(--border-color);
-    border-radius: 8px;
-    transition: border-color 0.2s, box-shadow 0.2s;
-}
-
-:deep(.task-item:hover) {
-    border-color: var(--brand-primary);
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
-}
-
-:deep(.task-item-info) {
-    display: flex;
     align-items: center;
     gap: 8px;
-    width: 100%;
+    flex-wrap: wrap;
+    font-size: 11.5px;
+    color: var(--toc-text-secondary, var(--text-secondary));
 }
 
-:deep(.task-item-id) {
-    font-family: ui-monospace, SFMono-Regular, Monaco, Consolas, monospace;
-    font-size: 11px;
-    color: var(--text-secondary);
-    background: #f1f5f9;
-    padding: 2px 6px;
-    border-radius: 4px;
-    border: 1px solid #e2e8f0;
-    flex: 1;
+.status-msg {
     min-width: 0;
-    white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+    white-space: nowrap;
+    flex: 1;
 }
 
-:deep(.copy-btn) {
-    flex-shrink: 0;
+.error-msg {
+    color: #c45454;
+    font-weight: 600;
+}
+
+/* ---------- 状态徽章 ---------- */
+.status-badge {
     display: inline-flex;
     align-items: center;
-    justify-content: center;
-    width: 24px;
-    height: 24px;
-    padding: 0;
-    border-radius: 4px;
-    border: 1px solid var(--border-color);
-    background: #ffffff;
-    color: var(--text-secondary);
-    cursor: pointer;
-    transition: all 0.2s;
-}
-
-:deep(.copy-btn:hover) {
-    background: #f8fafc;
-    color: var(--brand-primary);
-    border-color: var(--brand-primary);
-}
-
-:deep(.task-item-status) {
-    flex-shrink: 0;
+    gap: 5px;
     font-size: 11px;
     font-weight: 600;
-    padding: 2px 8px;
-    border-radius: 10px;
-    background: #f1f5f9;
-    color: var(--text-secondary);
+    padding: 3px 9px;
+    border-radius: 999px;
+    background: rgba(0, 0, 0, 0.06);
+    color: var(--toc-text-secondary, var(--text-secondary));
 }
 
-:deep(.task-status-success .task-item-status) { background: #dcfce7; color: #15803d; }
-:deep(.task-status-downloading .task-item-status) { background: #e0f2fe; color: #0369a1; }
-:deep(.task-status-failed .task-item-status) { background: #fee2e2; color: #b91c1c; }
+.status-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: currentColor;
+}
+
+.status-badge.status-running,
+.status-badge.status-processing,
+.status-badge.status-transferring {
+    background: rgba(62, 158, 95, 0.12);
+    color: #2f7d4a;
+}
+
+.status-badge.status-success {
+    background: rgba(62, 158, 95, 0.16);
+    color: #2f7d4a;
+}
+
+.status-badge.status-error,
+.status-badge.status-failed {
+    background: rgba(196, 84, 84, 0.12);
+    color: #c45454;
+}
+
+.status-badge.status-cancelled {
+    background: rgba(0, 0, 0, 0.06);
+    color: var(--toc-text-secondary, var(--text-secondary));
+}
+
+.status-badge.status-running .status-dot,
+.status-badge.status-processing .status-dot,
+.status-badge.status-transferring .status-dot {
+    animation: md-pulse 1.2s ease infinite;
+}
+
+@keyframes md-pulse {
+    0%,
+    100% {
+        opacity: 1;
+    }
+    50% {
+        opacity: 0.35;
+    }
+}
+
+/* ---------- 历史任务查询 ---------- */
+.task-search-bar {
+    display: flex;
+    gap: 8px;
+}
+
+.task-search-bar .form-input {
+    flex: 1;
+    min-width: 0;
+}
+
+/* ---------- 窄屏 ---------- */
+@media (max-width: 480px) {
+    .form-grid.two-col {
+        grid-template-columns: 1fr;
+    }
+
+    .mode-cards-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .execution-bar {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .btn-group {
+        justify-content: flex-end;
+    }
+}
 </style>

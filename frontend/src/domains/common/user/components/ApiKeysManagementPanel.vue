@@ -33,10 +33,24 @@
                             </div>
                         </div>
                         <div v-else class="key-display">
-                            <p class="key-value">
-                                {{ keysStatus.amap_key?.is_set ? t('apiKeys.masked') : t('apiKeys.notConfigured') }}
+                            <p class="key-value mono">
+                                {{ displayKeyValue('amap_key') }}
                             </p>
                             <div class="key-actions">
+                                <button
+                                    v-if="keysStatus.amap_key?.is_set"
+                                    class="btn btn-edit"
+                                    @click="toggleReveal('amap_key')"
+                                >
+                                    {{ isRevealed('amap_key') ? t('apiKeys.hide') : t('apiKeys.reveal') }}
+                                </button>
+                                <button
+                                    v-if="keysStatus.amap_key?.is_set"
+                                    class="btn btn-edit"
+                                    @click="copyKey('amap_key')"
+                                >
+                                    {{ copiedKey === 'amap_key' ? t('apiKeys.copied') : t('apiKeys.copy') }}
+                                </button>
                                 <button class="btn btn-edit" @click="startEdit('amap_key')">{{ t('apiKeys.edit') }}</button>
                                 <button
                                     v-if="keysStatus.amap_key?.is_set"
@@ -83,10 +97,24 @@
                             </div>
                         </div>
                         <div v-else class="key-display">
-                            <p class="key-value">
-                                {{ keysStatus.agent_api_key?.is_set ? t('apiKeys.masked') : t('apiKeys.notConfigured') }}
+                            <p class="key-value mono">
+                                {{ displayKeyValue('agent_api_key') }}
                             </p>
                             <div class="key-actions">
+                                <button
+                                    v-if="keysStatus.agent_api_key?.is_set"
+                                    class="btn btn-edit"
+                                    @click="toggleReveal('agent_api_key')"
+                                >
+                                    {{ isRevealed('agent_api_key') ? t('apiKeys.hide') : t('apiKeys.reveal') }}
+                                </button>
+                                <button
+                                    v-if="keysStatus.agent_api_key?.is_set"
+                                    class="btn btn-edit"
+                                    @click="copyKey('agent_api_key')"
+                                >
+                                    {{ copiedKey === 'agent_api_key' ? t('apiKeys.copied') : t('apiKeys.copy') }}
+                                </button>
                                 <button class="btn btn-edit" @click="startEdit('agent_api_key')">{{ t('apiKeys.edit') }}</button>
                                 <button
                                     v-if="keysStatus.agent_api_key?.is_set"
@@ -125,10 +153,24 @@
                             </div>
                         </div>
                         <div v-else class="key-display">
-                            <p class="key-value">
-                                {{ keysStatus.tianditu_tk?.is_set ? t('apiKeys.masked') : t('apiKeys.notConfigured') }}
+                            <p class="key-value mono">
+                                {{ displayKeyValue('tianditu_tk') }}
                             </p>
                             <div class="key-actions">
+                                <button
+                                    v-if="keysStatus.tianditu_tk?.is_set"
+                                    class="btn btn-edit"
+                                    @click="toggleReveal('tianditu_tk')"
+                                >
+                                    {{ isRevealed('tianditu_tk') ? t('apiKeys.hide') : t('apiKeys.reveal') }}
+                                </button>
+                                <button
+                                    v-if="keysStatus.tianditu_tk?.is_set"
+                                    class="btn btn-edit"
+                                    @click="copyKey('tianditu_tk')"
+                                >
+                                    {{ copiedKey === 'tianditu_tk' ? t('apiKeys.copied') : t('apiKeys.copy') }}
+                                </button>
                                 <button class="btn btn-edit" @click="startEdit('tianditu_tk')">{{ t('apiKeys.edit') }}</button>
                                 <button
                                     v-if="keysStatus.tianditu_tk?.is_set"
@@ -167,10 +209,24 @@
                             </div>
                         </div>
                         <div v-else class="key-display">
-                            <p class="key-value">
-                                {{ keysStatus.ovital_tdtkey?.is_set ? t('apiKeys.masked') : t('apiKeys.notConfigured') }}
+                            <p class="key-value mono">
+                                {{ displayKeyValue('ovital_tdtkey') }}
                             </p>
                             <div class="key-actions">
+                                <button
+                                    v-if="keysStatus.ovital_tdtkey?.is_set"
+                                    class="btn btn-edit"
+                                    @click="toggleReveal('ovital_tdtkey')"
+                                >
+                                    {{ isRevealed('ovital_tdtkey') ? t('apiKeys.hide') : t('apiKeys.reveal') }}
+                                </button>
+                                <button
+                                    v-if="keysStatus.ovital_tdtkey?.is_set"
+                                    class="btn btn-edit"
+                                    @click="copyKey('ovital_tdtkey')"
+                                >
+                                    {{ copiedKey === 'ovital_tdtkey' ? t('apiKeys.copied') : t('apiKeys.copy') }}
+                                </button>
                                 <button class="btn btn-edit" @click="startEdit('ovital_tdtkey')">{{ t('apiKeys.edit') }}</button>
                                 <button
                                     v-if="keysStatus.ovital_tdtkey?.is_set"
@@ -209,10 +265,24 @@
                             </div>
                         </div>
                         <div v-else class="key-display">
-                            <p class="key-value">
-                                {{ keysStatus.cesium_ion_token?.is_set ? t('apiKeys.masked') : t('apiKeys.notConfigured') }}
+                            <p class="key-value mono">
+                                {{ displayKeyValue('cesium_ion_token') }}
                             </p>
                             <div class="key-actions">
+                                <button
+                                    v-if="keysStatus.cesium_ion_token?.is_set"
+                                    class="btn btn-edit"
+                                    @click="toggleReveal('cesium_ion_token')"
+                                >
+                                    {{ isRevealed('cesium_ion_token') ? t('apiKeys.hide') : t('apiKeys.reveal') }}
+                                </button>
+                                <button
+                                    v-if="keysStatus.cesium_ion_token?.is_set"
+                                    class="btn btn-edit"
+                                    @click="copyKey('cesium_ion_token')"
+                                >
+                                    {{ copiedKey === 'cesium_ion_token' ? t('apiKeys.copied') : t('apiKeys.copy') }}
+                                </button>
                                 <button class="btn btn-edit" @click="startEdit('cesium_ion_token')">{{ t('apiKeys.edit') }}</button>
                                 <button
                                     v-if="keysStatus.cesium_ion_token?.is_set"
@@ -596,6 +666,47 @@ const managedApiKeys = computed(() => [
 ]);
 
 const loading = ref(false);
+const copiedKey = ref('');
+
+/** 密钥明文（后端仅对管理员下发） */
+function keyValue(name) {
+    return String(keysStatus.value[name]?.key_value || '');
+}
+
+/** 显隐状态（每把钥匙独立切换，默认掩码） */
+const revealedKeys = ref({});
+function isRevealed(name) {
+    return Boolean(revealedKeys.value[name]);
+}
+function toggleReveal(name) {
+    revealedKeys.value = { ...revealedKeys.value, [name]: !revealedKeys.value[name] };
+}
+
+/** 展示值：未配置提示 / 掩码(前4+****+后4) / 明文 */
+function displayKeyValue(name) {
+    const raw = keyValue(name);
+    if (!raw) return t('apiKeys.notConfigured');
+    if (!isRevealed(name)) {
+        return raw.length > 8 ? raw.slice(0, 4) + '****' + raw.slice(-4) : '****';
+    }
+    return raw;
+}
+
+/** 复制到剪贴板，1.5s 后恢复按钮文案 */
+async function copyKey(name) {
+    const value = keyValue(name);
+    if (!value) return;
+    try {
+        await navigator.clipboard.writeText(value);
+        copiedKey.value = name;
+        setTimeout(() => {
+            if (copiedKey.value === name) copiedKey.value = '';
+        }, 1500);
+    } catch (e) {
+        console.warn('[ApiKeys] copy failed', e);
+    }
+}
+
 const keysStatus = ref({
     amap_key: { is_set: false, updated_at: null },
     agent_api_key: { is_set: false, updated_at: null },
@@ -681,6 +792,7 @@ function normalizeKeyStatus(raw = {}) {
     const backups = Array.isArray(raw?.backups) ? raw.backups : [];
     return {
         is_set: Boolean(raw?.is_set),
+        key_value: String(raw?.key_value || ''),
         updated_at: raw?.updated_at || null,
         backup_count: Number(raw?.backup_count ?? backups.length ?? 0),
         backups,
@@ -1067,6 +1179,14 @@ onMounted(async () => {
 
 .key-display {
     flex: 1;
+}
+
+.key-value.mono {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 12px;
+    word-break: break-all;
+    color: var(--text-primary);
+    user-select: all;
 }
 
 .key-value {

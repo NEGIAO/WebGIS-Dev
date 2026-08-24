@@ -89,7 +89,7 @@ Cloudflare R2"]
 
 | 组件 | 域名 | 平台 | 部署来源 |
 |------|------|------|----------|
-| 后端 API | `negiao-webgis.hf.space` | Hugging Face Docker | WebGIS-Dev 直接推送（subtree split）|
+| 后端 API | `negiao-webgis.hf.space` | Hugging Face Docker | WebGIS-Dev 直接推送（git archive 全栈 → 单容器镜像）|
 | 瓦片存储 | `tiles.negiao.cc.cd` | Cloudflare R2 | 手动上传 |
 
 ---
@@ -111,7 +111,7 @@ Cloudflare R2"]
 | `webgis-dev.pages.dev` | NEGIAO.github.io 仓库 | `frontend/dist`（同步）| Cloudflare Pages 默认 |
 | `negiao-webgis.share.connect.posit.cloud` | NEGIAO.github.io 仓库 | `frontend/dist`（同步）| Posit Connect |
 | `negiao-web.static.hf.space` | WebGIS-Dev 仓库 | `frontend/dist`（LFS）| `git push --force` |
-| `negiao-webgis.hf.space` | WebGIS-Dev 仓库 | `backend/` 子树 | `git subtree split` + HF Docker |
+| `negiao-webgis.hf.space` | WebGIS-Dev 仓库 | 全栈源码（deploy/ + backend/ + frontend/）| `git archive` 组装 + HF Docker 单容器构建（nginx + FastAPI）|
 | `tiles.negiao.cc.cd` | — | 瓦片文件 | Cloudflare R2 手动上传 |
 
 ---

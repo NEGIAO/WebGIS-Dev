@@ -3,7 +3,7 @@
  * Shapefile 格式加载器
  */
 
-import { ensureGisParsers, getExtension, flyToEntity } from './utils.js';
+import { ensureGisParsers, getExtension, flyToEntity, forceDataSourceClampToGround } from './utils.js';
 
 /**
  * 加载 Shapefile 到 Cesium
@@ -59,7 +59,8 @@ export async function loadSHP({ file, sidecarFiles = [], getCesium, getViewer, m
     dataSource.name = file.name;
 
     await viewer.dataSources.add(dataSource);
-    // 贴地完全由加载期 clampToGround:true 承担（同 GeoJSON），无后续处理
+    // 贴地兜底：加载期选项之外再强制实体级钳制
+    forceDataSourceClampToGround(dataSource, Cesium);
     flyToEntity(viewer, Cesium, dataSource, 'shp');
 
     const record = { id, name: file.name, type: 'shp', entity: dataSource };

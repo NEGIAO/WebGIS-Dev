@@ -19,25 +19,15 @@ set PROJECT_ROOT=%~dp0
 set FRONTEND_DIR=%PROJECT_ROOT%frontend
 set BACKEND_DIR=%PROJECT_ROOT%backend
 
+
 REM ====================================================================
 REM Step 1: Check dependencies
 REM ====================================================================
 %WC% 200
 echo.
 
-REM 1. Node.js / npm
-where node >nul 2>&1
-if errorlevel 1 goto :ERR_NODE
-
-for /f "tokens=*" %%i in ('node -v') do set NODE_VERSION=%%i
-%WC% 300 "!NODE_VERSION!"
-
-where npm >nul 2>&1
-if errorlevel 1 goto :ERR_NPM
-
-for /f "tokens=*" %%i in ('npm -v') do set NPM_VERSION=%%i
-%WC% 301 "!NPM_VERSION!"
-
+REM 1. Node.js toolchain is containerized (web service runs Vite inside Docker);
+REM    host Node/npm are optional and no longer required.
 echo.
 
 REM 2. Docker
@@ -75,11 +65,11 @@ REM ====================================================================
 %WC% 201
 echo.
 
-REM --- Root .env auto-create (L1 local config, key catalog in .env.example) ---
-if not exist "%PROJECT_ROOT%.env" (
-    if exist "%PROJECT_ROOT%.env.example" (
-        copy /y "%PROJECT_ROOT%.env.example" "%PROJECT_ROOT%.env" >nul
-        echo [OK] Root .env created from .env.example (deployment baseline; dev mode enabled by docker-compose APP_ENV=development)
+REM --- Deploy .env auto-create (L1 local config lives in deploy\, key catalog in deploy\.env.example) ---
+if not exist "%PROJECT_ROOT%deploy\.env" (
+    if exist "%PROJECT_ROOT%deploy\.env.example" (
+        copy /y "%PROJECT_ROOT%deploy\.env.example" "%PROJECT_ROOT%deploy\.env" >nul
+        echo [OK] deploy\.env created from deploy\.env.example (deployment baseline; dev mode enabled by docker-compose APP_ENV=development)
     )
 )
 
@@ -87,24 +77,18 @@ REM --- Advisory gates (non-blocking): config registry + structure tree drift --
 where python >nul 2>&1
 if not errorlevel 1 (
     echo [Gate] Running config registry / structure tree checks...
-    python "%PROJECT_ROOT%CheckConfigRegistry.py" 2>nul
-    python "%PROJECT_ROOT%CheckStructureTree.py" --quiet 2>nul
+    python "%PROJECT_ROOT%Scripts\CheckConfigRegistry.py" 2>nul
+    python "%PROJECT_ROOT%Scripts\CheckStructureTree.py" --quiet 2>nul
     echo [Gate] Advisory only - warnings above do not block startup
 )
-
-set "FRONTEND_DIR=%PROJECT_ROOT%frontend"
 
 if not exist "%FRONTEND_DIR%" (
     %WC% 501
     mkdir "%FRONTEND_DIR%"
 )
 
-REM --- Env unified at repo root: Vite envDir points to root, VITE_* read from root .env ---
-if exist "%FRONTEND_DIR%\.env.local" (
-    del /q "%FRONTEND_DIR%\.env.local" >nul 2>nul
-    echo [OK] Removed legacy frontend\.env.local - Vite now reads root .env only
-)
-echo [OK] Frontend env unified: edit VITE_* in root .env ^(production^) or .env.local ^(dev^)
+REM --- Env unified in deploy\: Vite envDir points to deploy\, VITE_* read from deploy\.env(.local) ---
+echo [OK] Frontend env unified: edit VITE_* in deploy\.env ^(production^) or deploy\.env.local ^(dev^)
 echo.
 
 REM ====================================================================
@@ -114,22 +98,16 @@ REM ====================================================================
 %WC% 700
 echo.
 
-cd /d "%BACKEND_DIR%"
+cd /d "%PROJECT_ROOT%"
 
-if not exist "docker-compose.yml" goto :ERR_COMPOSE_FILE
+if not exist "deploy\docker-compose.yml" goto :ERR_COMPOSE_FILE
 
 REM --- Smart image build detection ---
 %WC% 703
 echo.
 
 set DOCKER_ACTION=up
-set IMAGE_NAME=negiao/webgis_dev:latest
-
-for /f "tokens=*" %%i in ('docker compose config --images 2^>nul') do (
-    set IMAGE_NAME=%%i
-    goto :GOT_IMAGE
-)
-:GOT_IMAGE
+set IMAGE_NAME=negiao/webgis:latest
 
 docker image inspect !IMAGE_NAME! >nul 2>&1
 if errorlevel 1 (
@@ -146,7 +124,7 @@ set /p IMG_TIME=<"%TEMP%\wc_img_time.txt"
 
 %WC% 704 "!IMG_TIME!"
 
-powershell -NoProfile -Command "$img=[DateTime]::Parse((Get-Content '%TEMP%\wc_img_time.txt'));$f=(Get-Item 'Dockerfile').LastWriteTime;if($f-gt$img){exit 1}else{exit 0}"
+powershell -NoProfile -Command "$img=[DateTime]::Parse((Get-Content '%TEMP%\wc_img_time.txt'));$f=(Get-Item 'deploy\Dockerfile').LastWriteTime;if($f-gt$img){exit 1}else{exit 0}"
 
 if errorlevel 1 (
     echo.
@@ -169,10 +147,10 @@ echo.
 %WC% 706
 
 if "!DOCKER_ACTION!"=="build" (
-    docker compose up --build -d
+    docker compose -f deploy\docker-compose.yml up --build -d
     if errorlevel 1 goto :ERR_BACKEND_BUILD
 ) else (
-    docker compose up -d
+    docker compose -f deploy\docker-compose.yml up -d
     if errorlevel 1 goto :ERR_BACKEND_UP
 )
 
@@ -203,18 +181,7 @@ echo.
 
 cd /d "%FRONTEND_DIR%"
 
-if not exist "node_modules" (
-    %WC% 505
-    %WC% 730
-    echo.
-    call npm install --no-audit --no-fund
-    if errorlevel 1 goto :ERR_NPM_INSTALL
-    %WC% 311
-    echo.
-) else (
-    %WC% 312
-    echo.
-)
+echo [OK] Frontend deps install inside web container on first start.
 
 REM ====================================================================
 REM Step 5: Start frontend (Vite)
@@ -231,9 +198,7 @@ for /f "tokens=4 delims= " %%i in ('route print ^| findstr 0.0.0.0 ^| findstr /V
 %WC% 709
 echo.
 
-start "WebGIS Frontend" cmd /k "cd /d "%FRONTEND_DIR%" && npm run dev"
-
-timeout /t 5 /nobreak
+timeout /t 8 /nobreak >nul
 
 REM ====================================================================
 REM Step 6: Open browser
@@ -296,17 +261,6 @@ exit /b 0
 REM ====================================================================
 REM Error handlers (goto targets)
 REM ====================================================================
-:ERR_NODE
-%WC% 400
-%WC% 732
-pause
-exit /b 1
-
-:ERR_NPM
-%WC% 401
-pause
-exit /b 1
-
 :ERR_DOCKER
 %WC% 402
 %WC% 733
@@ -336,11 +290,5 @@ exit /b 1
 
 :ERR_BACKEND_UP
 %WC% 407
-pause
-exit /b 1
-
-:ERR_NPM_INSTALL
-%WC% 408
-%WC% 731
 pause
 exit /b 1

@@ -15,8 +15,8 @@
 
 ## 2. 十分钟跑起来
 
-1. clone 后**只看一个文件**：根 [`.env.example`](../../.env.example)（全部配置 key 的唯一权威清单，分层注释）。
-2. Windows 双击 `LocalDev.bat`：自动生成根 `.env.local`（若缺失）、跑门禁自检、起 Docker 后端 + Vite 前端并开浏览器。
+1. clone 后**只看一个文件**：[`deploy/.env.example`](../../deploy/.env.example)（全部配置 key 的唯一权威清单，分层注释）。
+2. Windows 双击 `LocalDev.bat`：自动生成 deploy/`.env.local`（若缺失）、跑门禁自检、起 Docker 后端 + Vite 前端并开浏览器。
 3. 默认账号：游客 `user/123`；管理员 `admin/123456`（本地 dev；生产密码 = HF Secrets 的 `SUPER_USER`）。
 4. 手动方式与 HF 生产部署 → [configuration.md](configuration.md)（含「HF Secrets 最小集合」复制清单）。
 
@@ -44,7 +44,7 @@ L3 HF Secrets（SUPER_USER / OAuth secret / SMTP 密码 / API Key）→ 只有�
 ```
 - 后端**唯一** `os.environ` 读取端：`backend/config/`（catalog 登记表 / load 快照 / runtime L2 覆盖 / public 公开配置）。`load.py` 先读 `.env`，再在读 `.env.local`（仅文件存在时，即本地开发）。
 - 前端**唯一** `import.meta.env` 读取端：`src/config/publicRuntime.ts`（基址派生 + 4 个 URL helper）。通过 `selectiveEnvPlugin` 按 mode 二选一：production 读 `.env`，development 读 `.env.local`。
-- **新增配置 key 流程**：先登记根 `.env.example` + `backend/config/catalog.py` → 再写代码 → 跑门禁。
+- **新增配置 key 流程**：先登记 `deploy/.env.example` + `backend/config/catalog.py` → 再写代码 → 跑门禁。
 
 ### 4.2 Cesium 统一图层管理（3D 数据 ↔ TOC）
 
@@ -92,8 +92,8 @@ L3 HF Secrets（SUPER_USER / OAuth secret / SMTP 密码 / API Key）→ 只有�
 
 ## 6. 门禁与提交流程（每次改动后）
 
-1. `python CheckConfigRegistry.py` —— 配置登记七项扫描（裸 getenv / 未登记 key / 散落 env 读取 / 硬编码域名），违规 exit 1。
-2. `python CheckStructureTree.py` —— 文件树与实际代码双向 diff（增删文件必同步 structure 文档）。
+1. `python Scripts/CheckConfigRegistry.py` —— 配置登记七项扫描（裸 getenv / 未登记 key / 散落 env 读取 / 硬编码域名），违规 exit 1。
+2. `python Scripts/CheckStructureTree.py` —— 文件树与实际代码双向 diff（增删文件必同步 structure 文档）。
 3. ESLint 改动文件；TS 文件跑 `npx tsc --noEmit`（存量错误见 §8，只看自己文件）。
 4. 按 `Force_command.md` 写维护日志（`Docs/LLM_record/YY-MM-DD/`，模板含症状/根因/方案/测试/文件清单）
    + README 版本三处 + CHANGELOG 条目（版本表只留最新三条，旧的归档 CHANGELOG）。

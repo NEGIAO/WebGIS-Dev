@@ -19,6 +19,8 @@ export function createMapUIEventHandlers({
     getCurrentHighlightedFeature,
     setCurrentHighlightedFeature,
     zoomToManagedFeature,
+    findManagedFeature,
+    getUserDataLayers,
     toggleGraticule,
     showDynamicSplitLinesRef,
     selectedLayerRef,
@@ -84,6 +86,78 @@ export function createMapUIEventHandlers({
         if (payload?.zoom) {
             zoomToManagedFeature?.({ layerId: payload.layerId, featureId: payload.featureId });
         }
+    }
+
+    /**
+     * 属性表：单元格编辑提交 → 写回 OL 要素属性并 bump revision 触发表格刷新
+     *
+     * 双数据源同步：userDataLayers[].features 是 serializeManagedFeatures 生成的
+     * GeoJSON-like 副本（属性表快照的唯一数据源），只改 OL Feature 实例不改这份副本，
+     * revision bump 后快照会用旧值把表格改回去——表现为"编辑没有生效"。
+     */
+    function handleAttributeTableCellEdit(payload) {
+        if (!payload?.layerId || !payload?.featureId || !payload?.field) return;
+        const feature = findManagedFeature?.(payload.layerId, payload.featureId);
+        if (feature) {
+            feature.setProperties({ [payload.field]: payload.value });
+        }
+
+        // 同步注册表中的序列化要素副本
+        const layerRec = (getUserDataLayers?.() || []).find((l) => l?.id === payload.layerId);
+        const serialized = (layerRec?.features || []).find(
+            (item) => String(item?.id || item?._gid || '') === String(payload.featureId),
+        );
+        if (serialized) {
+            serialized.properties = {
+                ...(serialized.properties || {}),
+                [payload.field]: payload.value,
+            };
+        }
+
+        if (!feature && !serialized) {
+            console.warn('[AttrTable] edit target feature not found:', payload.featureId);
+            return;
+        }
+        bumpLayerRevision(payload.layerId);
+    }
+
+    /**
+     * 属性表：删除要素 → 从托管源移除并同步图层树/属性表
+     *
+     * 与编辑同理需双数据源同步：仅从 OL source 移除而保留 userDataLayers[].features
+     * 副本的话，revision bump 后快照重建会让被删行在表格中"复活"。
+     */
+    function handleAttributeTableDeleteFeature(payload) {
+        if (!payload?.layerId || !payload?.featureId) return;
+        const feature = findManagedFeature?.(payload.layerId, payload.featureId);
+        const layerRec = (getUserDataLayers?.() || []).find((l) => l?.id === payload.layerId);
+        const source = layerRec?.layer?.getSource?.();
+        if (feature && source?.hasFeature?.(feature)) {
+            source.removeFeature(feature);
+        } else {
+            feature?.dispose?.();
+        }
+        // 同步移除注册表中的序列化副本
+        if (Array.isArray(layerRec?.features)) {
+            layerRec.features = layerRec.features.filter(
+                (item) => String(item?.id || item?._gid || '') !== String(payload.featureId),
+            );
+            layerRec.featureCount = layerRec.features.length;
+        }
+        bumpLayerRevision(payload.layerId);
+        const attrStore = attrStoreRef?.value ?? attrStoreRef;
+        if (String(attrStore?.selectedFeatureId || '') === String(payload.featureId)) {
+            attrStore.setSelectedFeature?.('');
+        }
+    }
+
+    /** 内部：递增图层修订号并触发属性表快照重建 */
+    function bumpLayerRevision(layerId) {
+        const rec = (getUserDataLayers?.() || []).find((l) => l?.id === layerId);
+        if (!rec) return;
+        rec.revision = (Number(rec.revision) || 0) + 1;
+        const attrStore = attrStoreRef?.value ?? attrStoreRef;
+        attrStore?.syncLayers?.(getUserDataLayers?.() || []);
     }
 
     /**
@@ -174,6 +248,8 @@ export function createMapUIEventHandlers({
         syncAttributeTableMapExtent,
         handleAttributeTableFocusFeature,
         handleAttributeTableHighlightFeature,
+        handleAttributeTableCellEdit,
+        handleAttributeTableDeleteFeature,
         handleToggleGraticule,
         updateViewByParams,
         handleJumpToCoordinates,

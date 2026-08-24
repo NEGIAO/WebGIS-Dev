@@ -19,7 +19,7 @@
 8. **不臆造、不谎报**：API 签名 / 字段 / 配置 key / 路径必须读代码确认，未确认标 `⚠️ 未验证`；未实机运行不得写"已测试通过"
 9. **新功能必须封装**为独立 `.js` / `.ts` 文件，组件内不堆叠业务逻辑（`MapContainer.vue` 等巨型文件只出不进）
 10. **新增代码必须有注释**（功能 / 参数 / 返回 / 核心逻辑）
-11. **新增配置 key 顺序恒为**：登记根 `.env.example` + `backend/config/catalog.py` → 再写读取代码 → 跑门禁
+11. **新增配置 key 顺序恒为**：登记 `deploy/.env.example` + `backend/config/catalog.py` → 再写读取代码 → 跑门禁
 
 ### 分层边界
 
@@ -63,15 +63,15 @@
 **两个门禁脚本为收尾必过项**（`LocalDev.bat` 启动时会自动跑一遍，改动收尾需手动复跑确认）：
 
 ```bash
-python CheckStructureTree.py     # 结构树漂移：磁盘文件 vs frontend-structure.md 双向 diff
-python CheckConfigRegistry.py    # 配置登记：禁裸读 env / key 必须登记 catalog + .env.example
+python Scripts/CheckStructureTree.py     # 结构树漂移：磁盘文件 vs frontend-structure.md 双向 diff
+python Scripts/CheckConfigRegistry.py    # 配置登记：禁裸读 env / key 必须登记 catalog + .env.example
 ```
 
 脚本非零退出即视为未通过，**必须修到通过或明确说明原因**，禁止无视。完整 DoD 清单见 [`Force_command.md` 第 7 节](../Force_command.md)。
 
 ```bash
 # 本地启动 —— Windows: 双击 LocalDev.bat
-#   自动：生成根 .env → 跑上述门禁 → docker-compose up（后端）+ npm run dev（前端）
+#   自动：生成 deploy/.env → 跑上述门禁 → docker compose -f deploy/docker-compose.yml up（api+web 双服务）
 
 # 或手动启动
 docker-compose up

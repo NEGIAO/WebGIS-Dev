@@ -113,6 +113,8 @@
         <AttributeTable
             @focus-feature="handleAttributeTableFocusFeature"
             @highlight-feature="handleAttributeTableHighlightFeature"
+            @cell-edit="handleAttributeTableCellEdit"
+            @delete-feature="handleAttributeTableDeleteFeature"
         />
 
         <div
@@ -692,7 +694,7 @@ const {
 });
 
 // 托管要素操作
-const { zoomToManagedFeature } = createManagedFeatureOperationsFeature({
+const { zoomToManagedFeature, findManagedFeature } = createManagedFeatureOperationsFeature({
     mapInstanceRef: mapInstance,
     userDataLayers,
     getCurrentHighlightedFeature,
@@ -962,6 +964,8 @@ const {
     syncAttributeTableMapExtent: syncAttributeTableMapExtentFromUI,
     handleAttributeTableFocusFeature,
     handleAttributeTableHighlightFeature,
+    handleAttributeTableCellEdit,
+    handleAttributeTableDeleteFeature,
     handleToggleGraticule,
     updateViewByParams,
     handleJumpToCoordinates,
@@ -976,6 +980,8 @@ const {
     getCurrentHighlightedFeature,
     setCurrentHighlightedFeature,
     zoomToManagedFeature,
+    findManagedFeature,
+    getUserDataLayers: () => userDataLayers,
     toggleGraticule: (...args) => toggleGraticule(...args),
     showDynamicSplitLinesRef: showDynamicSplitLines,
     selectedLayerRef: selectedLayer,
@@ -1864,7 +1870,7 @@ function activateInteraction(type) {
     }
 
     if (type === 'Clear') {
-        clearAllGraphics();
+        Promise.resolve(clearAllGraphics()).catch((e) => console.error('[Map] clearAllGraphics failed:', e));
         return;
     }
 

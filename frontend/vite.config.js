@@ -72,7 +72,7 @@ function selectiveEnvPlugin() {
     return {
         name: 'selective-env',
         config(config, { mode }) {
-            const envDir = fileURLToPath(new URL('..', import.meta.url));
+            const envDir = fileURLToPath(new URL('../deploy', import.meta.url)); // 环境文件已收敛至 deploy/
             const isProd = mode === 'production';
             const envFile = isProd ? '.env' : '.env.local';
             const env = parseEnvFile(path.resolve(envDir, envFile));
@@ -104,7 +104,7 @@ export default defineConfig(({ command, mode }) => {
     // 双 env 文件架构（两个文件都提交 git，L1 不涉密）：
     //   .env       → 部署环境（npm run build 读取）
     //   .env.local → 本地开发（npm run dev 读取）
-    const envDir = fileURLToPath(new URL('..', import.meta.url));
+    const envDir = fileURLToPath(new URL('../deploy', import.meta.url)); // 环境文件已收敛至 deploy/
     const isProd = mode === 'production';
     const activeEnvFile = isProd ? '.env' : '.env.local';
     const env = parseEnvFile(path.resolve(envDir, activeEnvFile));
@@ -137,7 +137,7 @@ export default defineConfig(({ command, mode }) => {
     return {
         base: baseUrl,
 
-        // env 文件目录 = 仓库根
+        // env 文件目录 = deploy/（环境文件统一收敛处）
         envDir,
 
         // 禁用 Vite 默认的 .env 加载（由 selectiveEnvPlugin 替代）
@@ -184,25 +184,38 @@ export default defineConfig(({ command, mode }) => {
             host: '0.0.0.0',
             port: 5173,
             cors: true,
-            proxy: {
-                // 1. 添加后端 Docker 服务的代理路径（按需要自定义前缀，如 /api）
-                '/api': {
-                    target: 'http://127.0.0.1:7860',
-                    // 转发给电脑本地 Docker 暴露的端口，适用于内网穿透、局域网调试等场景
-                    // 无需暴露后端端口到公网，避免安全风险
-                    changeOrigin: true,
-                    rewrite: (path) => path.replace(/^\/api/, ''), // 剥离 /api 前缀，直接传给后端
-                },
-                // 2. 高德 API 代理
-                '/amap-api': {
+            proxy: (() => {
+                // 与生产 nginx 同构的后端顶级段全部原样透传（零改写），
+                // 瓦片代理 URL 中的百分号编码因此无损到达后端。
+                // 本机原生 dev 默认指向本机 Docker 后端(7860)；
+                // 容器内 dev 由 compose 注入 VITE_DEV_PROXY_TARGET=http://api:7860
+                const backend = process.env.VITE_DEV_PROXY_TARGET || 'http://127.0.0.1:7860';
+                const routes = {};
+                for (const prefix of ['/api', '/proxy', '/tiles', '/monitor']) {
+                    routes[prefix] = { target: backend, changeOrigin: true };
+                }
+                // 高德 API 代理
+                routes['/amap-api'] = {
                     target: 'https://restapi.amap.com',
                     changeOrigin: true,
                     secure: true,
                     rewrite: (path) => path.replace(/^\/amap-api/, ''),
-                },
+                };
+                return routes;
+            })(),
+            // 允许任意 Host：局域网真机调试(手机连电脑 WiFi 用 IP 访问)、内网穿透等。
+            // 仅 dev server 本地工具链使用，不随生产构建走
+            allowedHosts: true,
+
+            // 文件监听：容器内 Windows bind mount 的 inotify 不触发，
+            // compose 注入 VITE_WATCH_USEPOLLING=1 启用轮询（原生 dev 保持事件模式）。
+            // 轮询跨挂载盘代价高：interval 放宽到秒级、排除大体积静态目录，
+            // 否则扫描风暴会拖慢所有请求（实测首页 17s）
+            watch: {
+                usePolling: process.env.VITE_WATCH_USEPOLLING === '1',
+                interval: Number(process.env.VITE_WATCH_INTERVAL || 300),
+                ignored: ['**/public/**', '**/dist/**', '**/node_modules/**', '**/.*'],
             },
-            allowedHosts: ['demo.negiao.cn', 'localhost', '127.0.0.1', 'negiao.cn', 'webgis.negiao.cn'],
-            // 允许局域网、内网穿透访问（如 ngrok、frp、Cf tunnel 等），便于移动端调试
         },
 
         // 排除 Cesium npm 包的预构建，避免与 CDN Cesium 产生双实例

@@ -1,5 +1,5 @@
 import { computed, ref, watch } from 'vue';
-import { useLocale } from '@common/app/useLocale';
+import { useLocale, translate as t } from '@common/app/useLocale';
 import { readStoredBoolean, writeStoredBoolean } from '../core/cesiumStorage';
 import {
     applyCloudQualityPreset,
@@ -14,6 +14,7 @@ import { createFluidModule } from './fluidModule';
 import { createShallowWaterModule } from './shallowWaterModule';
 import { createPlayerModule } from './playerModule';
 import { createPlanarRouteModule } from './planarRouteModule';
+import { createRouteFlyModule } from './routeFlyModule';
 import {
     createAnalysisModule,
     createAnalysisRuntime,
@@ -33,6 +34,8 @@ export function useCesiumToolModules({
     panelStorageKey = CESIUM_TOOL_PANEL_OPEN_KEY,
     /** 面状航线工作集注册桥（CesiumContainer 注入：写入 dataImport.loadedDataSources） */
     syncPlanarSource = null,
+    /** 路线漫游工作集注册桥（同上，type=wayline 复用删除分支） */
+    syncRouteFlySource = null,
 } = {}) {
     const { language } = useLocale();
     const toolPanelOpen = ref(readStoredBoolean(panelStorageKey, true));
@@ -84,6 +87,7 @@ export function useCesiumToolModules({
             {
                 cloudsEnabled: false,
                 quality: DEFAULT_CLOUD_QUALITY,
+                altitudeMode: 'absolute',
             },
             DEFAULT_CLOUD_QUALITY,
         ),
@@ -228,6 +232,188 @@ export function useCesiumToolModules({
         }
     }
 
+    // ========== 路线漫游（无头控制器，面板直驱；控制器按需懒创建） ==========
+    const routeFlyState = ref({
+        isDrawing: false,
+        pointCount: 0,
+        hasRoute: false,
+        isFlying: false,
+        isPaused: false,
+        multiplier: 30,
+        routeLengthText: '',
+        durationText: '',
+        lastPreset: 'third',
+        distance: 100,
+        heading: 0,
+        pitch: -30,
+        flyHeight: 50,
+        sampleStep: 20,
+        clampToBuildings: true,
+        showPath: true,
+        showMarkers: true,
+        showModel: true,
+        modelScale: 1,
+        modelHeadingOffset: 0,
+        modelUri: 'glb/drone.glb',
+        exportFormat: 'geojson',
+        errorText: '',
+    });
+
+    let routeFlyController = null;
+    let routeFlyControllerLoading = null;
+
+    /** 懒创建路线漫游控制器（模式同 planarRoute：首次交互才加载 chunk 并绑定宿主） */
+    function ensureRouteFlyController() {
+        if (routeFlyController) {
+            const viewer = getViewer();
+            if (viewer) {
+                try {
+                    routeFlyController.bind(viewer);
+                } catch {
+                    /* viewer 未就绪时由下次交互重试 */
+                }
+            }
+            return Promise.resolve(routeFlyController);
+        }
+        if (!routeFlyControllerLoading) {
+            routeFlyControllerLoading = import('../../modules/route-fly/firstPersonFlyController').then(
+                ({ FirstPersonFlyController }) => {
+                    routeFlyController = new FirstPersonFlyController({
+                        getViewer,
+                        getCesium,
+                        defaultSourceName: t('cesium.module.routeFly.sourceName'),
+                        onStateChange: (patch) => {
+                            routeFlyState.value = { ...routeFlyState.value, ...patch };
+                        },
+                        onWorkingSetChange: (info) => syncRouteFlySource?.(info),
+                    });
+                    routeFlyControllerLoading = null;
+                    const viewer = getViewer();
+                    if (viewer) {
+                        routeFlyController.bind(viewer);
+                    }
+                    return routeFlyController;
+                },
+            );
+        }
+        return routeFlyControllerLoading;
+    }
+
+    /** 路线漫游动作分发（含与人物漫游的时钟互斥：起飞前先停步行漫游） */
+    /** 路线漫游动作分发（含与人物漫游的时钟互斥：起飞前先停步行漫游） */
+    let routeImportInput = null;
+    let routeErrorTimer = null;
+
+    /**
+     * 打开路线导入文件框。
+     * 关键：input.click() 必须发生在用户手势的同步调用栈内——
+     * 若放在 await 懒加载之后，激活态过期会被浏览器静默拦截。
+     */
+    function openRouteImportDialog() {
+        if (!routeImportInput) {
+            routeImportInput = document.createElement('input');
+            routeImportInput.type = 'file';
+            routeImportInput.accept = '.geojson,.json,.kml,.kmz';
+            routeImportInput.onchange = () => {
+                const file = routeImportInput.files?.[0];
+                if (!file) return;
+                void ensureRouteFlyController()
+                    .then((controller) => controller?.applyImportFile(file))
+                    .catch((error) => {
+                        const code = String(error?.message || 'IMPORT_FAILED');
+                        setRouteFlyError(
+                            code === 'IMPORT_EMPTY'
+                                ? t('cesium.module.routeFly.err.importEmpty')
+                                : t('cesium.module.routeFly.err.importFailed', { msg: code }),
+                        );
+                    });
+            };
+        }
+        routeImportInput.click();
+    }
+
+    /** 写入错误文案并在 4 秒后自动清除 */
+    function setRouteFlyError(text) {
+        routeFlyState.value = { ...routeFlyState.value, errorText: text };
+        if (routeErrorTimer) clearTimeout(routeErrorTimer);
+        routeErrorTimer = setTimeout(() => {
+            routeFlyState.value = { ...routeFlyState.value, errorText: '' };
+            routeErrorTimer = null;
+        }, 4000);
+    }
+
+    async function dispatchRouteFlyAction(actionId) {
+        const controller = await ensureRouteFlyController();
+        if (!controller) return;
+
+        if (actionId === 'startFly') {
+            try {
+                _playerController?.stopPlayer?.();
+            } catch {
+                /* 步行漫游未激活时忽略 */
+            }
+        }
+
+        try {
+            switch (actionId) {
+                case 'drawRoute':
+                    if (routeFlyState.value.isDrawing) {
+                        controller.cancelDrawing();
+                    } else {
+                        controller.startDrawing();
+                    }
+                    break;
+                case 'startFly':
+                    routeFlyState.value = { ...routeFlyState.value, errorText: '' };
+                    await controller.startFly();
+                    break;
+                case 'suspend':
+                    controller.suspend();
+                    break;
+                case 'speedUp':
+                    controller.speedUp();
+                    break;
+                case 'speedDown':
+                    controller.speedDown();
+                    break;
+                case 'stop':
+                    controller.stop();
+                    break;
+                case 'importRoute':
+                    openRouteImportDialog();
+                    break;
+                case 'exportRoute': {
+                    try {
+                        controller.exportRoute();
+                    } catch (error) {
+                        const code = String(error?.message || 'NO_ROUTE');
+                        const key = code === 'NO_ROUTE' ? 'cesium.module.routeFly.err.noRoute' : null;
+                        setRouteFlyError(key ? t(key) : t('cesium.module.routeFly.err.generic', { msg: code }));
+                    }
+                    break;
+                }
+                case 'clearAll':
+                    controller.clearAll();
+                    routeFlyState.value = { ...routeFlyState.value, errorText: '' };
+                    break;
+            }
+        } catch (error) {
+            const code = String(error?.message || '');
+            const errKeys = {
+                DRAWING: 'cesium.module.routeFly.err.drawing',
+                NO_ROUTE: 'cesium.module.routeFly.err.noRoute',
+                ZERO_LENGTH: 'cesium.module.routeFly.err.zeroLength',
+            };
+            const text = errKeys[code] || t('cesium.module.routeFly.err.generic', { msg: code });
+            setRouteFlyError(text);
+        }
+    }
+
+    /** 外部删除托管数据源前复位控制器内部状态 */
+    function detachRouteFlyWorkingSet() {
+        routeFlyController?.detachForExternalRemoval();
+    }
+
     // ========== 工具模块定义（使用模块化工厂函数，聚合同类功能） ==========
     // language 依赖：语言切换时重建模块 title/label/tooltip
     const toolModules = computed(() => {
@@ -242,6 +428,7 @@ export function useCesiumToolModules({
             createPlayerModule(playerParams, _playerController),
             createAnalysisModule(analysisParams, analysisState),
             createPlanarRouteModule(planarRouteState),
+            createRouteFlyModule(routeFlyState),
         ];
     });
 
@@ -281,6 +468,17 @@ export function useCesiumToolModules({
                 saveKmz: () => void dispatchPlanarAction('saveKmz'),
                 clearAll: () => void dispatchPlanarAction('clearAll'),
             },
+            routeFly: {
+                drawRoute: () => void dispatchRouteFlyAction('drawRoute'),
+                startFly: () => void dispatchRouteFlyAction('startFly'),
+                suspend: () => void dispatchRouteFlyAction('suspend'),
+                speedUp: () => void dispatchRouteFlyAction('speedUp'),
+                speedDown: () => void dispatchRouteFlyAction('speedDown'),
+                stop: () => void dispatchRouteFlyAction('stop'),
+                importRoute: () => openRouteImportDialog(),
+                exportRoute: () => void dispatchRouteFlyAction('exportRoute'),
+                clearAll: () => void dispatchRouteFlyAction('clearAll'),
+            },
         };
 
         actionMap[moduleId]?.[actionId]?.();
@@ -300,6 +498,46 @@ export function useCesiumToolModules({
         if (moduleId === 'planarRoute') {
             void ensurePlanarRouteController().then((controller) => {
                 controller?.setParam(controlId, value);
+            });
+            return;
+        }
+
+        // 路线漫游控件（id → 控制器 setter 直驱；布尔/字符串/数值分流）
+        if (moduleId === 'routeFly') {
+            void ensureRouteFlyController().then((controller) => {
+                if (!controller) return;
+                switch (controlId) {
+                    case 'viewPreset':
+                        controller.applyViewPreset(String(value));
+                        break;
+                    case 'modelUri':
+                        controller.setModelUri(String(value));
+                        break;
+                    case 'showModel':
+                        controller.setModelShow(Boolean(value));
+                        break;
+                    case 'showPath':
+                        controller.setPathShow(Boolean(value));
+                        break;
+                    case 'showMarkers':
+                        controller.setShowMarkers(Boolean(value));
+                        break;
+                    case 'clampToBuildings':
+                        controller.setClampToBuildings(Boolean(value));
+                        break;
+                    default: {
+                        const numVal = Number(value);
+                        if (!Number.isFinite(numVal)) return;
+                        if (controlId === 'distance') controller.setDistance(numVal);
+                        else if (controlId === 'heading') controller.setHeading(numVal);
+                        else if (controlId === 'pitch') controller.setPitch(numVal);
+                        else if (controlId === 'flyHeight') controller.setFlyHeight(numVal);
+                        else if (controlId === 'speed') controller.setSpeed(numVal);
+                        else if (controlId === 'sampleStep') controller.setSampleStep(numVal);
+                        else if (controlId === 'modelScale') controller.setModelScale(numVal);
+                        else if (controlId === 'modelHeadingOffset') controller.setModelHeadingOffset(numVal);
+                    }
+                }
             });
             return;
         }
@@ -420,9 +658,15 @@ export function useCesiumToolModules({
                     'atmosphereStageEnabled',
                     'aerialStageEnabled',
                 ]);
+                // 字符串枚举键（select 控件），不能走 Number() 转换
+                const stringKeys = new Set(['altitudeMode']);
                 cloudParams.value = {
                     ...cloudParams.value,
-                    [controlId]: booleanKeys.has(controlId) ? Boolean(value) : Number(value),
+                    [controlId]: booleanKeys.has(controlId)
+                        ? Boolean(value)
+                        : stringKeys.has(controlId)
+                            ? String(value)
+                            : Number(value),
                 };
             }
         }
@@ -468,11 +712,15 @@ export function useCesiumToolModules({
         // 销毁面状航线控制器（测区/航线实体与全局 Viewer 引用全量释放）
         planarRouteController?.destroy();
         planarRouteController = null;
+        // 销毁路线漫游控制器（绘制/漫游实体、CZML 数据源与 clock 恢复）
+        routeFlyController?.destroy();
+        routeFlyController = null;
     }
 
     return {
         toolPanelOpen,
         planarRouteState,
+        routeFlyState,
         analysisParams,
         analysisState,
         advancedEffectControls,
@@ -492,5 +740,6 @@ export function useCesiumToolModules({
         detachPlanarWorkingSet: () => {
             planarRouteController?.detachForExternalRemoval();
         },
+        detachRouteFlyWorkingSet,
     };
 }

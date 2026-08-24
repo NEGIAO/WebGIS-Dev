@@ -9,12 +9,7 @@
 
 ```text
 backend/
-├── .dockerignore
-├── .env  # 部署环境配置（L1 不涉密，tracked，生产基线）
-├── .env.local  # 本地开发环境配置（L1 不涉密，tracked，覆盖 .env）
 ├── app.py  # FastAPI 主入口
-├── docker-compose.yml  # Docker Compose 配置
-├── Dockerfile  # Docker 构建文件（包含 sqlite3 CLI）
 ├── pyproject.toml  # Python 项目依赖
 ├── README.md  # 本文件
 ├── uv.lock  # uv 依赖锁定文件

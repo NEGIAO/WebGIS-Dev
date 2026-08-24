@@ -98,7 +98,7 @@ sqlite3 webgis_auth.db.corrupted ".recover" > repair.sql
 管理员不走数据库初始化：账号固定为 `admin`，密码来自 L3 环境变量 `SUPER_USER`
 （生产配在 HF Space Secrets；本地开发 `APP_ENV=development` 时缺省 `123456`）。
 角色由代码按用户名归一化（`normalize_role`），数据库中的管理员角色字段不被信任。
-分层与登记见根 [`.env.example`](../.env.example) 与 [`Docs/Guide/configuration.md`](../Docs/Guide/configuration.md)。
+分层与登记见 [`deploy/.env.example`](../deploy/.env.example) 与 [`Docs/Guide/configuration.md`](../Docs/Guide/configuration.md)。
 
 ### 1.3 认证相关接口
 
@@ -299,7 +299,7 @@ Google/GitHub OAuth 一键登录（回调地址自动推导，无需单独配置
 - BACKEND_PUBLIC_URL / FRONTEND_PUBLIC_URL（推导 OAuth 回调 `{base}/api/auth/oauth/{provider}/callback` 与前端回跳；可用 GOOGLE/GITHUB_OAUTH_REDIRECT_URI、FRONTEND_OAUTH_SUCCESS/FAILURE_URL 显式覆盖）
 - 第三方控制台 Authorized redirect URI 必须与推导/覆盖结果完全一致
 
-> 配置全集与三层安全模型（L1/L2/L3）权威清单见根目录 `.env.example`；统一读取入口为 `backend/config` 包。
+> 配置全集与三层安全模型（L1/L2/L3）权威清单见 `deploy/.env.example`；统一读取入口为 `backend/config` 包。
 > HF 生产环境 OAuth 完整配置操作手册（控制台逐步申请、Secrets 配置、验收自检、排错速查）见 [`Docs/Guide/oauth-deployment.md`](../Docs/Guide/oauth-deployment.md)。
 
 Agent 对话可选配置：
@@ -454,8 +454,8 @@ backend/        ──挂载──►               /app/
   ├── pyproject.toml                    ├── pyproject.toml
   └── uv.lock                           └── uv.lock
 
-.env (根目录)   ──挂载──►               /app/.env          ← 只读
-.env.local(根)  ──挂载──►               /app/.env.local    ← 只读
+deploy/.env     ──挂载──►               /app/.env          ← 只读
+deploy/.env.local ──挂载──►             /app/.env.local    ← 只读
 
                                         /app/.venv/        ← 匿名卷（隔离）
 ```
@@ -465,25 +465,25 @@ backend/        ──挂载──►               /app/
 | 宿主机路径 | 容器内路径 | 模式 | 说明 |
 |---|---|---|---|
 | `backend/` | `/app/` | 读写 | 代码实时同步，配合 `--reload` 自动重启 |
-| `../.env` | `/app/.env` | 只读 `:ro` | 项目根配置，容器内不可改 |
-| `../.env.local` | `/app/.env.local` | 只读 `:ro` | 本地开发覆盖配置 |
+| `../deploy/.env` | `/app/.env` | 只读 `:ro` | 部署基线配置（deploy/ 收敛处），容器内不可改 |
+| `../deploy/.env.local` | `/app/.env.local` | 只读 `:ro` | 本地开发覆盖配置 |
 | （匿名卷） | `/app/.venv/` | 读写 | 隔离容器内依赖，不映射宿主机 `.venv` |
 
 > 所有业务代码在容器内 `/app/` 下运行；`uvicorn` 启动命令为 `uv run uvicorn app:app --host 0.0.0.0 --port 7860 --reload`。
 
 ```bash
 # 项目根目录执行
-docker-compose up -d
+docker compose -f deploy/docker-compose.yml up -d
 
 # 检查服务状态
-docker-compose ps
+docker compose -f deploy/docker-compose.yml ps
 
 # 查看日志
-docker-compose logs -f backend
-docker-compose logs -f frontend
+docker compose -f deploy/docker-compose.yml logs -f api
+docker compose -f deploy/docker-compose.yml logs -f web
 
 # 停止服务
-docker-compose down
+docker compose -f deploy/docker-compose.yml down
 ```
 
 服务地址：

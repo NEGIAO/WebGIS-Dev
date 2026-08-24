@@ -79,6 +79,7 @@ let gisParserCache = null;
  * @returns {Promise<{decompressBuffer: Function, parseShpPartsToGeoJSON: Function}>}
  */
 export async function ensureGisParsers() {
+
     if (gisParserCache) return gisParserCache;
 
     const [{ decompressBuffer }, { parseShpPartsToGeoJSON }] = await Promise.all([
@@ -88,4 +89,37 @@ export async function ensureGisParsers() {
 
     gisParserCache = { decompressBuffer, parseShpPartsToGeoJSON };
     return gisParserCache;
+}
+
+/**
+ * 实体级贴地强制兜底（加载期 clampToGround 选项之外的第二道保险）：
+ * - 折线：clampToGround = true（GroundPolyline，随地形起伏）
+ * - 点/模型：heightReference = CLAMP_TO_GROUND
+ * - 面：清除显式高度与 perPositionHeight（走 GroundPrimitive 贴地分类）
+ *
+ * 背景：当源文件带 <altitudeMode>absolute</altitudeMode> 等显式声明时，
+ * Cesium 会优先尊重文件语义而绕过 load 期 clampToGround 选项；
+ * 项目要求「矢量数据全部贴地」，故在加载后统一强制。
+ *
+ * @param {Cesium.CustomDataSource|Cesium.GeoJsonDataSource|Cesium.KmlDataSource} dataSource
+ * @param {Cesium} Cesium - Cesium 命名空间
+ */
+export function forceDataSourceClampToGround(dataSource, Cesium) {
+    if (!dataSource?.entities || !Cesium?.HeightReference) return;
+    const clampRef = Cesium.HeightReference.CLAMP_TO_GROUND;
+    for (const entity of dataSource.entities.values) {
+        if (entity.polyline) {
+            entity.polyline.clampToGround = true;
+        }
+        if (entity.point) {
+            entity.point.heightReference = clampRef;
+        }
+        if (entity.model) {
+            entity.model.heightReference = clampRef;
+        }
+        if (entity.polygon) {
+            entity.polygon.perPositionHeight = false;
+            entity.polygon.height = undefined;
+        }
+    }
 }

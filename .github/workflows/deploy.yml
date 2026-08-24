@@ -230,9 +230,10 @@ jobs:
             echo "Pushing to Hugging Face..."
             git push --force "https://NEGIAO:${HF_TOKEN}@huggingface.co/spaces/NEGIAO/Web" master:main
             
-# ========================================== 
-  # 第五步：同步到 Hugging Face 
-  # (仅Backend后端代码)
+# ==========================================
+#   第五步：部署全栈到 Hugging Face Space（单容器：nginx + FastAPI）
+#   （Space 根与仓库根同构：{Dockerfile, deploy/, backend/, frontend/}，
+#    deploy/Dockerfile 内 COPY 路径在两侧完全一致）
 # ==========================================
   sync-to-huggingface:
       needs: build
@@ -240,42 +241,65 @@ jobs:
       steps:
         - name: Checkout Code
           uses: actions/checkout@v4
-          with:
-            fetch-depth: 0
 
-        - name: Push Backend Only to HF
+        - name: Verify fullstack build assets
+          run: |
+            echo "Checking fullstack build assets..."
+            test -f deploy/Dockerfile             || (echo "Missing deploy/Dockerfile" && exit 1)
+            test -f deploy/nginx.conf             || (echo "Missing deploy/nginx.conf" && exit 1)
+            test -f deploy/.env                   || (echo "Missing deploy/.env (L1)" && exit 1)
+            test -f backend/app.py                || (echo "Missing backend/app.py" && exit 1)
+            test -f frontend/package-lock.json    || (echo "Missing frontend/package-lock.json" && exit 1)
+            echo "All required fullstack build assets found ✓"
+
+        # 组装 Space 上下文（git archive 只取已追踪文件 → 天然排除
+        # node_modules/dist/tiles/.venv 等本地噪音；镜像内自行 npm ci + vite build）
+        - name: Assemble HF Space context
+          run: |
+            rm -rf hf_deploy && mkdir hf_deploy
+            git archive HEAD deploy backend frontend | tar -x -C hf_deploy
+            # HF 约定 Dockerfile 位于 Space 根；路径语义与本仓库根一致。
+            # BuildKit 按 <Dockerfile路径>.dockerignore 配对 → 必须同拷，
+            # 否则白名单失效，stats.html/tileset 等噪音全部进入构建上下文
+            cp deploy/Dockerfile hf_deploy/Dockerfile
+            cp deploy/Dockerfile.dockerignore hf_deploy/Dockerfile.dockerignore
+            cat > hf_deploy/README.md <<EOT
+            ---
+            title: WebGIS
+            emoji: 🌍
+            colorFrom: blue
+            colorTo: green
+            sdk: docker
+            app_port: 7860
+            pinned: false
+            ---
+            EOT
+
+        - name: Track large binaries with LFS
+          run: |
+            cd hf_deploy
+            git init -q
+            git lfs install
+            # HF 要求二进制走 LFS/Xet 存储，裸 blob 大文件会被 pre-receive 拒绝
+            git lfs track "*.webp" "*.png" "*.jpg" "*.jpeg" "*.gif" "*.ico"
+            git lfs track "*.glb" "*.gltf" "*.b3dm" "*.i3dm" "*.pnts" "*.cmpt"
+            git lfs track "*.bin" "*.wasm" "*.geojson" "*.kmz" "*.kml"
+            git lfs track "ShareData/**"
+
+        - name: Push Fullstack to Hugging Face Space
           env:
             HF_TOKEN: ${{ secrets.HF_TOKEN }}
           run: |
-            git config --global user.name "github-actions[bot]"
-            git config --global user.email "actions@github.com"
-
-            # 验证后端必要文件是否存在
-            echo "Checking backend files..."
-            test -f backend/app.py || (echo "Missing backend/app.py" && exit 1)
-            test -f backend/pyproject.toml || (echo "Missing backend/pyproject.toml" && exit 1)
-            test -f backend/Dockerfile || (echo "Missing backend/Dockerfile" && exit 1)
-            echo "All required backend files found ✓"
-
-            # 使用 git subtree 推送 backend 目录到 Hugging Face
-            # --force 参数确保覆盖远程分支，使用 :main 映射到 HF space 的 main 分支
-            echo "Pushing backend to Hugging Face Spaces..."
-
-            # subtree split 仅包含 backend/ 目录，根 README.md 不进入容器，否则后端直接死。
-            # 根 .env 是唯一的配置源（L1 非涉密），但 subtree split 只推送 backend/ 内容，
-            # 后端 config/loader 在容器内通过 BACKEND_ENV_FILE（/app/.env）兜底加载。
-            # 解决：把根 .env 复制进 backend/ 一并推送，容器内 /app/.env 存在，
-            # 后端能正确读取 GUEST_PASSWORD 等配置。
-            cp .env backend/.env
-            
-            # 关键：git subtree split 从 HEAD commit 读文件，不读工作区未提交修改。
-            # 必须 git add + commit 让 split 能看到复制的文件；push 后再 reset 保持主历史干净。
-            # -f 强制添加：backend/.env 被 .gitignore 忽略（L24/L88），必须 -f 才能 stage。
-            git add -f backend/.env
-            git commit -m "ci: inject root .env into backend/ for HF deploy"
-            git push --force "https://NEGIAO:${HF_TOKEN}@huggingface.co/spaces/NEGIAO/WebGIS" `git subtree split --prefix=backend HEAD`:main
-
-            # 撤销本地注入 commit，保持主历史干净（HEAD~1 回到推送前的状态）
-            git reset --hard HEAD~1
-
-            echo "Backend deployment to Hugging Face completed ✓"
+            cd hf_deploy
+            git add .gitattributes
+            git config user.name "github-actions[bot]"
+            git config user.email "actions@github.com"
+            git add -A
+            if git diff --staged --quiet; then
+              echo "No changes detected. Skipping push."
+              exit 0
+            fi
+            git commit -qm "deploy fullstack: ${GITHUB_SHA::7}"
+            echo "Pushing fullstack to Hugging Face Spaces..."
+            git push --force "https://NEGIAO:${HF_TOKEN}@huggingface.co/spaces/NEGIAO/WebGIS" HEAD:main
+            echo "Fullstack deployment to Hugging Face completed ✓"

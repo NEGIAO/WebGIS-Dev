@@ -1690,13 +1690,24 @@ onBeforeUnmount(() => {
     }
 
     .account-panel.is-fullscreen .panel-nav {
-        flex-direction: column;
+        /* 单行横滑：窄屏放不下全部页签时左右滑动，不换行堆叠 */
+        overflow-x: auto;
+        overscroll-behavior-x: contain;
+        -webkit-overflow-scrolling: touch;
+        scrollbar-width: none;
+    }
+
+    .account-panel.is-fullscreen .panel-nav::-webkit-scrollbar {
+        display: none;
     }
 
     .account-panel.is-fullscreen .nav-tab {
-        flex: none;
-        width: 100%;
-        justify-content: flex-start;
+        flex: 1 0 auto;
+        min-width: max-content;
+        white-space: nowrap;
+        justify-content: center;
+        padding: 11px 10px;
+        font-size: 12px;
     }
 
     .account-panel.is-fullscreen .panel-body {
@@ -1712,23 +1723,32 @@ onBeforeUnmount(() => {
 }
 
 @media (max-width: 480px) {
+    /* 保持单行：头像/信息在左、操作钮在右；窄屏只压缩中段文字而非换行堆叠 */
     .account-panel.is-fullscreen .panel-header {
-        flex-direction: column;
+        padding: 10px 12px;
         gap: 8px;
-        align-items: flex-start;
+        align-items: center;
     }
 
+    /* 中段可收缩：长邮箱/昵称走省略号，不把右侧按钮挤到下一行 */
     .account-panel.is-fullscreen .profile-main {
-        gap: 12px;
+        gap: 10px;
+        flex: 1;
+        min-width: 0;
+    }
+
+    .account-panel.is-fullscreen .header-btns {
+        flex-direction: row;
+        gap: 5px;
     }
 
     .account-panel.is-fullscreen .panel-nav {
-        padding: 0;
+        padding: 0 8px;
     }
 
     .account-panel.is-fullscreen .nav-tab {
-        border-radius: 0;
-        padding: 12px 16px;
+        padding: 10px 8px;
+        font-size: 11.5px;
     }
 }
 </style>

@@ -1,0 +1,38 @@
+# =====================================================================
+# deploy/Dockerfile 专属排除（BuildKit 按 <Dockerfile路径>.dockerignore 配对）
+# 构建上下文 = 仓库根 → 白名单模式：全排除后仅放行镜像所需最小集
+# =====================================================================
+
+**
+
+# ---- 后端源码（/app）----
+!backend/
+!backend/**
+
+# ---- 前端源码与锁文件（阶段一构建 dist）----
+!frontend/
+!frontend/**
+!frontend/package-lock.json
+
+# ---- 部署与环境文件 ----
+!deploy/
+!deploy/**
+!README.md
+
+# ==== 放行后再压回本地噪音 ====
+# 后端
+backend/.venv
+backend/__pycache__
+backend/.pytest_cache
+backend/data
+backend/.env
+backend/.env.local
+**/*.pyc
+# 前端
+**/node_modules
+frontend/dist
+frontend/dist-webgis-dev
+frontend/dist-webgis
+frontend/dist-posit
+frontend/stats.html
+frontend/public/tiles

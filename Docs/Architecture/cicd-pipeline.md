@@ -108,18 +108,19 @@ HF Docker Space"]
 
 **LFS 策略**：所有二进制资源（图片、3D 模型、瓦片、云纹理）走 Git LFS，避免仓库膨胀。
 
-### Job 5：sync-to-huggingface（后端 Docker 部署）
+### Job 5：sync-to-huggingface（全栈单容器部署）
 
 | 步骤 | 说明 |
 |------|------|
-| 完整 checkout | `fetch-depth: 0`（需要完整历史做 subtree split）|
-| 验证后端文件 | 检查 `backend/app.py`、`pyproject.toml`、`Dockerfile` 存在 |
-| `git subtree split --prefix=backend` | 将 `backend/` 目录拆分为独立子树 |
+| 验证全栈资产 | 检查 `deploy/Dockerfile`、`nginx.conf`、`.env`、`backend/app.py`、`frontend/package-lock.json` 存在 |
+| 组装 Space 上下文 | `git archive HEAD deploy backend frontend` 解包到 `hf_deploy/`（只取已追踪文件，天然排除 node_modules/dist/噪音） |
+| 注入 HF 约定文件 | `deploy/Dockerfile` + `Dockerfile.dockerignore` 拷到 Space 根；生成 `sdk: docker` 元数据 README |
+| LFS 追踪二进制 | webp/png/glb/b3dm/wasm/geojson/ShareData 等（HF 要求二进制走 LFS/Xet） |
 | Force push 到 HF | `NEGIAO/WebGIS` 的 `main` 分支 |
 
-**结果**：`https://negiao-webgis.hf.space`（HF Docker Space 自动重新构建容器）
+**结果**：`https://negiao-webgis.hf.space`（HF Docker Space 自动构建单容器镜像：nginx 前端静态 + FastAPI 同容器，单端口 7860）
 
-**关键设计**：使用 `git subtree split` 将后端子目录作为独立仓库推送，保持主仓库整洁的同时实现自动化部署。
+**关键设计**：Space 根与本仓库根同构（`{Dockerfile, deploy/, backend/, frontend/, README.md}`），`deploy/Dockerfile` 内 COPY 路径在两侧完全一致；镜像内自行 `npm ci + vite build + uv sync`，构建上下文经 dockerignore 白名单压到最小。
 
 ---
 
@@ -166,7 +167,7 @@ push to main
     ├──► deploy-frontend-to-hf ──────────► HF Static Space
     │
     └──► sync-to-huggingface ────────────► HF Docker Space
-            (git subtree split backend/)
+            (git archive 全栈 → 单容器镜像)
 ```
 
 ---

@@ -55,7 +55,7 @@ flowchart TB
     LOAD --> P3
 
     subgraph FE["前端（Vue 3 + Vite）"]
-        ENVF["构建期 env（L1 前端段 · 均在仓库根）<br/>根 .env（npm run build 读取）<br/>根 .env.local（npm run dev 读取）"]
+        ENVF["构建期 env（L1 前端段 · 统一收敛 deploy/）<br/>deploy/.env（npm run build 读取）<br/>deploy/.env.local（npm run dev 读取）"]
         PRT["src/config/publicRuntime.ts<br/>基址单点派生 + 4 个 URL helper<br/>全 src 唯一 import.meta.env 读取点"]
         CONS["axios client ｜ 底图 12 处 URL + 代理兜底 ｜ 下载超时"]
     end
@@ -65,12 +65,12 @@ flowchart TB
     P2 -. "运行时拉取" .-> FE
     P3 -. "Admin 面板徽章" .-> FE
 
-    GATE["CheckConfigRegistry.py（仓库根）<br/>7 项静态门禁 · 违规 exit 1"]
+    GATE["Scripts/CheckConfigRegistry.py<br/>7 项静态门禁 · 违规 exit 1"]
     GATE -. "守护登记一致性（不参与运行时）" .- CFG
 ```
 
-部署拓扑：GitHub Pages（前端静态产物）⇄ HF Space Docker（后端 :7860，SQLite 持久化于 `/data`）；
-本地：`LocalDev.bat` → vite :5173 ⇄ docker compose :7860（后端读 `.env.local` 覆盖为 localhost 开发值）。
+部署拓扑：GitHub Pages（前端静态产物）⇄ HF Space Docker（全栈单容器：nginx + FastAPI :7860，SQLite 持久化于 `/data`）；
+本地：`LocalDev.bat` → vite :5173 ⇄ docker compose :7860（后端读 `deploy/.env.local` 覆盖为 localhost 开发值）。
 
 ---
 
@@ -167,10 +167,10 @@ sequenceDiagram
 
 ## 8. 新增配置 key 的固定流程（门禁）
 
-1. 在根 `.env.example` 对应层段登记 key + 注释；
+1. 在 `deploy/.env.example` 对应层段登记 key + 注释；
 2. 在 `backend/config/catalog.py` 登记元数据（前端 `VITE_*` 只登记清单）；
 3. 业务代码经 `config` helper / `publicRuntime` 读取；
-4. 提交前运行 `python CheckConfigRegistry.py`（7 项扫描：后端裸 getenv、helper 未登记 key、
+4. 提交前运行 `python Scripts/CheckConfigRegistry.py`（7 项扫描：后端裸 getenv、helper 未登记 key、
    catalog⇄清单双向一致、前端散落 `import.meta.env`、VITE 未登记、硬编码域名；违规 exit 1）。
 
 ## 9. 版本足迹
@@ -185,5 +185,5 @@ sequenceDiagram
 
 ---
 
-*相关代码：`backend/config/`、`frontend/src/config/publicRuntime.ts`、`CheckConfigRegistry.py`；
+*相关代码：`backend/config/`、`frontend/src/config/publicRuntime.ts`、`Scripts/CheckConfigRegistry.py`；
 维护日志见 `Docs/LLM_record/26-07-26/`。*

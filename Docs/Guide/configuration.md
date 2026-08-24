@@ -1,6 +1,6 @@
 # WebGIS 配置指南（Clone 必读）
 
-> 权威配置清单：仓库根目录 [`.env.example`](../../.env.example)  
+> 权威配置清单：[`deploy/.env.example`](../../deploy/.env.example)  
 > 分阶段架构计划：[configuration-architecture-plan.md](configuration-architecture-plan.md)  
 > 返回 [根 README](../../README.md)
 
@@ -92,7 +92,7 @@ VITE_TILE_PROXY_MODE=fallback
 ### 3. 启动
 
 - 推荐：`LocalDev.bat`  
-- 或：后端 `backend/docker-compose.yml` + 前端 `npm run dev`
+- 或：`docker compose -f deploy/docker-compose.yml up -d`（api 后端热重载 + web 前端 HMR 双服务）
 
 ### 4. 默认账号
 
@@ -121,7 +121,7 @@ VITE_TILE_PROXY_MODE=fallback
 
 ### HF Secrets 最小集合（按功能勾选，可直接复制 key 名）
 
-与根 `.env.example` **[L3]** 段一一对应；不需要的功能可整组不配。
+与 `deploy/.env.example` **[L3]** 段一一对应；不需要的功能可整组不配。
 
 ```text
 # 必配（admin 后台）
@@ -154,7 +154,7 @@ LOG
 Variables（非密，可选）：`APP_ENV=production`、`BACKEND_PUBLIC_URL`、`FRONTEND_PUBLIC_URL`、`SMTP_HOST`、`SMTP_PORT`、`SMTP_USER`、`HF_RUN_LOGS_URL`、`HF_BUILD_LOGS_URL`。
 配好后看启动日志「[配置] [L3] ...」行或 admin 控制台「环境密钥状态」卡片自检。
 
-1. Space **Secrets** 只添加根 `.env.example` 中 **[L3]** 段（上表）。  
+1. Space **Secrets** 只添加 `deploy/.env.example` 中 **[L3]** 段（上表）。  
 2. 公开 URL 用 L1（代码常量或 Space Variables，与 Secrets 分离）：  
    - 后端：`https://<your-space>.hf.space`  
    - 前端 Pages：`https://negiao.github.io/WebGIS-Dev`（按你的仓库路径）  
@@ -242,12 +242,9 @@ https://<your-space>.hf.space/api/auth/oauth/huggingface/callback
 
 | 文件 | 角色 |
 |------|------|
-| [`.env.example`](../../.env.example) | 全集 key 目录 / registry（L1/L2/L3 均登记，非复制模板） |
-| [`.env`](../../.env) | 部署环境配置（git 追踪）：生产基线值，`npm run build` 与线上部署读取 |
-| [`.env.local`](../../.env.local) | 本地开发环境配置（git 追踪）：开发覆盖值，`npm run dev` 与本地后端读取 |
-| `backend/.env` | ignored 后端本地兼容覆盖入口；不要提交 |
-| `frontend/.env.example` | 指路存根（Vite 不再读取 frontend 目录 env） |
-| `backend/.env.example` | 后端摘要，指向根清单 |
+| [`deploy/.env.example`](../../deploy/.env.example) | 全集 key 目录 / registry（L1/L2/L3 均登记，非复制模板） |
+| [`deploy/.env`](../../deploy/.env) | 部署环境配置（git 追踪）：生产基线值，`npm run build` 与线上部署读取 |
+| [`deploy/.env.local`](../../deploy/.env.local) | 本地开发环境配置（git 追踪）：开发覆盖值，`npm run dev` 与本地后端读取 |
 | `frontend/src/components/UserCenter/AdminControlPanel.vue` | L2 配置 UI |
 | `backend/config/` | 统一读取入口：catalog 登记 / load L1+L3 / runtime L2 覆盖 / public 公开配置 |
 | `backend/api/auth/constants.py` | 认证常量（已收敛：经 `backend/config` 读取） |
@@ -256,7 +253,7 @@ https://<your-space>.hf.space/api/auth/oauth/huggingface/callback
 
 ## 新增配置时的门禁
 
-1. 先在根 `.env.example` 登记 key + 分层注释。  
+1. 先在 `deploy/.env.example` 登记 key + 分层注释。  
 2. 再写代码读取。  
 3. L3 不得进前端、不得明文进 DB 面板。  
 4. 更新本页「功能 → 必配项」如有新用户路径。

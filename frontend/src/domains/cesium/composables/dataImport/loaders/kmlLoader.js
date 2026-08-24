@@ -28,7 +28,7 @@ import {
     resolveProjectionOrDefault,
 } from '@common/data-import/crsAware.js';
 import { transform } from 'ol/proj';
-import { flyToEntity, revokeBlobUrl } from './utils.js';
+import { flyToEntity, forceDataSourceClampToGround, revokeBlobUrl } from './utils.js';
 
 
 const KML_MIME = 'application/vnd.google-earth.kml+xml';
@@ -129,7 +129,15 @@ async function reprojectKmlToWgs84(kmlText, sourceProjection) {
  */
 async function prepareKmlText(kmlText, label = 'KML') {
     // 1. 归一化 kml: 前缀命名空间(就算不需要重投影也要做，保证要素可解析)
-    const normalized = normalizeKmlNamespace(kmlText);
+    let normalized = normalizeKmlNamespace(kmlText);
+
+    // 1.5 贴地语义强制：剥掉显式 altitudeMode/extrude——
+    //     文件若声明 absolute/relativeToGround，Cesium 会优先尊重文件语义，
+    //     绕过 load 期 clampToGround 选项导致「埋地/悬浮」；项目要求矢量全部贴地。
+    normalized = normalized
+        .replace(/<gx:altitudeMode[\s\S]*?<\/gx:altitudeMode>/gi, '')
+        .replace(/<altitudeMode[\s\S]*?<\/altitudeMode>/gi, '')
+        .replace(/<extrude>[\s\S]*?<\/extrude>/gi, '');
 
     // 2. 检测投影(与 ol 管线同源)
     const hint = detectKmlProjectionHint(normalized);
@@ -198,9 +206,9 @@ export async function loadKML({ file, getCesium, getViewer, message, loadedDataS
     dataSource.name = file.name;
 
     await viewer.dataSources.add(dataSource);
-    // 贴地完全由加载期 clampToGround:true + KML 自身 altitudeMode 语义承担：
-    // clampToGround 图元走 GroundPrimitive，absolute/relative 高度被尊重，
-    // 地形切换由 Cesium 自动跟随，无需加载后处理
+    // 贴地双保险：加载期 clampToGround:true + 加载后实体级强制钳制
+    // （防文件显式 altitudeMode=absolute/relativeToGround 绕过贴地）
+    forceDataSourceClampToGround(dataSource, Cesium);
     flyToEntity(viewer, Cesium, dataSource, 'kml');
 
     const record = { id, name: file.name, type: 'kml', entity: dataSource };
@@ -244,7 +252,8 @@ export async function loadKMZ({ file, getCesium, getViewer, message, loadedDataS
         dataSource.name = file.name;
 
         await viewer.dataSources.add(dataSource);
-        // 贴地同 loadKML：完全由加载期 clampToGround:true + altitudeMode 语义承担
+        // 贴地双保险：同 loadKML，加载后实体级强制钳制
+        forceDataSourceClampToGround(dataSource, Cesium);
         flyToEntity(viewer, Cesium, dataSource, 'kmz');
 
         const record = {

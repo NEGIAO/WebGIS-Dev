@@ -6,6 +6,30 @@
 
 ## 版本记录
 
+### V3.5.29 补充 — nginx 瓦片磁盘缓存 (2026-08-24)
+ — nginx 瓦片磁盘缓存
+
+- **背景**：`/proxy/gcj2wgs`、`/proxy/wgs2gcj` 纠偏接口与 `/proxy/{url}`、`/tiles/ships66` 瓦片代理每次浏览地图均穿透 FastAPI；后端内部缓存仅免重算，请求仍占用 Python 进程。多人访问场景下热点区域重复回源。
+- **方案**（失效策略三选一，用户选定短 TTL 自愈）：`deploy/nginx.conf` http 块新增 `proxy_cache_path /tmp/nginx_cache/tiles`（2GB LRU、7 天 inactive）；透传段按缓存性拆分——`/tiles/ /proxy/` 走 `proxy_cache tiles`（仅缓存 200、TTL 1h、`proxy_ignore_headers Cache-Control Expires` 保证确定性、`proxy_buffering on`、新增 `X-Cache` 观测头），`/api/ /monitor/` 维持 SSE 关缓冲不缓存。
+- **关键核验**：三个代理接口路由实测自 `backend/api/proxy.py:415-587`（全 GET 幂等）；proxy.py:422 的 `Cache-Control: no-cache` 为发往上游的请求头，不影响 nginx 缓存决策。
+- **日志**：[2026-08-24-nginx-tile-cache](../LLM_record/26-08/2026-08-24/2026-08-24-nginx-tile-cache.md)
+- **验证**：nginx:1.27-alpine `nginx -t` 通过；待实机验证 X-Cache HIT 与纠偏参数变更 ≤1h 自愈。
+
+### V3.5.29 (2026-08-23 ~ 08-24) — 部署架构重组 Code Review 与修复：deploy/ 收敛链路对齐 + P0 构建期 env 路径修复
+
+- **背景**：暂存区完成部署架构重组（L3 已批准方案）——`backend/Dockerfile`/`backend/docker-compose.yml` 删除，新建全栈单容器 `deploy/Dockerfile`（nginx 前端静态 + FastAPI 同容器，单端口 7860，HF Space 与本地同源）；根 `.env`/`.env.local`/`.env.example` 迁入 `deploy/`；门禁脚本归档 `Scripts/`；`LocalDev.bat` 全容器化（Node 工具链不再必需）。本版本对该暂存变更做全面 Code Review 并修复发现的问题。
+- **审查结论**（nginx 透传段与后端路由实测吻合 ✅、compose env 挂载经 load.py 三级回退验证通过 ✅）：
+  - **P0**：`deploy/Dockerfile` 构建期 `COPY deploy/.env /src/.env`，但 vite `selectiveEnvPlugin` 的 envDir 固定解析 `<frontend>/../deploy`（容器内 `/src/deploy/.env`）——路径错位使构建期 env 读空，前端 API 基址回落 `http://localhost:7860` 硬编码默认值，HF 线上全部 API 请求必挂。已改为 `COPY deploy/.env /src/deploy/.env` 并同步 sed 路径。
+  - **P1**：vite.config.js 新增的 `VITE_DEV_PROXY_TARGET` / `VITE_WATCH_USEPOLLING` / `VITE_WATCH_INTERVAL` 未登记 → 违反配置门禁 F2。已在 `deploy/.env.example` 补登记（dev server 运行时开关段），CheckConfigRegistry 恢复全绿。
+  - **P1**：README「双轨部署」仍引用已删除的 `backend/Dockerfile`（手动构建命令必失败）且描述过时的 subtree 部署。已改写为 git archive 组装 + 单容器镜像手动等价命令。
+  - **P2**：CI「Assemble HF Space context」只拷 `Dockerfile` 未拷 `Dockerfile.dockerignore` —— BuildKit 按 `<Dockerfile路径>.dockerignore` 配对，缺配对则白名单失效，`stats.html`(1.7MB)、`tileset/`(33MB) 等噪音全部进入 HF 构建上下文。已补拷。
+  - **P3**：`LocalDev.bat` 死代码清理：`ERR_NODE`/`ERR_NPM`/`ERR_NPM_INSTALL` 无引用 goto 标签删除、重复 `FRONTEND_DIR` 赋值合并、「root .env」过时提示文案更正为 deploy/。
+- **文档同步**（subtree→git archive、根 .env→deploy/.env 全量对齐）：[project-structure.md](../../Docs/Guide/project-structure.md) 补 `Write-Color.ps1` 条目；[backend-structure.md](../../Docs/Guide/backend-structure.md) 死条目（.dockerignore/Dockerfile/docker-compose/env 三件）已随重组移除；[cicd-pipeline.md](../../Docs/Architecture/cicd-pipeline.md) Job 5 改写为全栈单容器部署流程 + 时序图更新；[deployment-relationship.md](../../Docs/Architecture/deployment-relationship.md) 与 [system-architecture.md](../../Docs/Architecture/system-architecture.md) 部署来源矩阵更新；[configuration-three-tier.md](../../Docs/Architecture/configuration-three-tier.md) Mermaid 图 env 路径与门禁脚本路径更新；[Force_command.md](../../Docs/Force_command.md) 门禁命令与配置 key 登记路径更新为 Scripts/ + deploy/。
+- **验证**：
+  - Agent 已执行：`python Scripts/CheckConfigRegistry.py` ✅（catalog 122 key · VITE 使用 12 个，F2 修复后 7 项全绿）；`python Scripts/CheckStructureTree.py` ✅（459=459，0 缺 0 多）；nginx 透传段 vs 后端路由逐段核对（/api /proxy /tiles /monitor + /health /docs /redoc /openapi.json 全部存在）✅。
+  - 待用户实机验证：① 本地 `docker compose -f deploy/docker-compose.yml up -d --build` 构建成功且 http://localhost:5173 HMR 正常、http://localhost:8080（--profile prod）页面 API 正常；② push main 后观察 GitHub Actions 五 Job 全绿、HF Space 构建成功且 https://negiao-webgis.hf.space 页面 API 基址为同源相对路径（浏览器 DevTools Network 无 localhost:7860 请求）。
+- 维护日志：[2026-08-23-deploy-restructure-code-review](../LLM_record/26-08/2026-08-23/2026-08-23-deploy-restructure-code-review.md)。
+
 ### V3.5.28 (2026-08-23) — 全站 UI 设计语言统一：ESRI 式图层交互 + 组件合并 + 浅色玻璃拟态换肤
 
 - **问题**：多会话并行迭代导致各面板 UI 风格割裂——文字字符充当图标（`▾ ▸ ▼ × ••• ▶ ⋮⋮ ok`）违反图标规范且跨平台渲染不一致；LayerControlPanel 深绿容器内白字输入框深浅混杂；行政区划树存在暗色主题残留色值；路线规划双面板 90% 代码重复；大量组件未引用已有的 toc-theme/theme 设计令牌。
@@ -16,6 +40,7 @@
   - **罗盘面板**：自绘拨动开关、模式分段控件、滑杆渐变填充 + m/km 智能格式化、颜色卡与状态 chip 圆点。
   - **地图浮层**：[LayerControlPanel](../../frontend/src/domains/ol/layer/components/LayerControlPanel.vue) 深绿容器→浅色玻璃拟态并恢复紧凑两行布局，全部文字字符图标化，图层显隐改眼睛开关，Cesium overlay 改 mini switch；[MapControlsBar](../../frontend/src/domains/ol/components/MapControlsBar.vue) 同步浅色换肤，内联 SVG→Copy/ChevronRight/House，主页按钮升级渐变实底圆钮（涟漪保留）；LocationSearch 图标 Search→Crosshair 并去除硬编码色。
   - **设计令牌**：`--brand-gradient` 绿主题调亮为同色系 `#5ec773→#35a44f`（蓝主题 `#64b5f6→#1e88e5`），全仓 12 处引用一次性受益。
+  - **路线漫游新模块**：新增 [RouteFly](../../frontend/src/domains/cesium/modules/route-fly/firstPersonFlyController.js)——手绘贴地线路（预览直连防掉帧、定稿 clampToGround 真贴地）加入统一图层管理，相机沿线路第一/第三人称漫游（表面三级采样 + CZML 累积距离时间轴 + lookAt 跟随），经 lil-gui 声明式控件接入 CesiumToolPanel 卡片体系，与人物漫游时钟互斥；支持路线 JSON/KML/KMZ 三格式导入导出；方案文档获批后实施。
 - **暂存区附带审查**（非本会话产物）：① 后端 Docker 瘦身三件套（移除 libgdal-dev/libgeos-dev/libgl1、supabase 依赖、.dockerignore 加 data/），已验证 backend 无任何 `import supabase`；② 体积云/shader 全链路——bundle-shaders.mjs 再生脚本逻辑健全，vite 求值期自动再生 + CI 门禁接线正确，**实跑 `shaders:check` 通过（5 个 shader 三副本零漂移）**，AtmospherePostProcess 曝光分支修复与 frag 地形感知分类均与文档一致。⚠️ 镜像构建与 GLSL 渲染观感待实机验证。
 - **验证**：`npm run lint` 全绿；`CheckStructureTree.py` ✅ 457=457；vue-tsc 抽查无新增报错。实机待回归：图层树显隐/菜单、公交驾车全流程、天气/罗盘/底图控制条交互、后端瘦身镜像 build+启动。
 - 维护日志：[2026-08-23-ui-unify-code-review](../LLM_record/26-08/2026-08-23/2026-08-23-ui-unify-code-review.md)。

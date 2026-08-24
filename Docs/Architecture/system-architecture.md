@@ -131,7 +131,7 @@ tiles.negiao.cc.cd"]
 | **GitHub Pages** | 个人主页 + WebGIS 前端 | 双仓库均触发 | `actions/deploy-pages` 直接部署 |
 | **Cloudflare Pages** | 个人主页 + WebGIS 主页仓库子目录 | 主页仓库触发 | CDN + DNS + R2 |
 | **Hugging Face Static** | WebGIS 前端（LFS） | WebGIS-Dev 直接推送 | `git push --force` 到 `NEGIAO/Web` |
-| **Hugging Face Docker** | 后端 API | WebGIS-Dev 直接推送 | `git subtree split` 推送 `NEGIAO/WebGIS` |
+| **Hugging Face Docker** | 全栈单容器（nginx 前端 + FastAPI） | WebGIS-Dev 直接推送 | `git archive` 组装 Space 推送 `NEGIAO/WebGIS` |
 | **Posit Connect Cloud** | 个人主页 + WebGIS | 主页仓库触发 | 静态托管 |
 | **Vercel** | 个人主页 + WebGIS | 主页仓库触发 | 快速部署 |
 

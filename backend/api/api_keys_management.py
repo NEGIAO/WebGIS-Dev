@@ -269,6 +269,11 @@ def _delete_api_key_backup_sync(key_name: str, backup_id: int) -> bool:
 
 
 def _backup_public_item(item: Dict[str, Any]) -> Dict[str, Any]:
+    """备份条目的公开形态。
+
+    安全约束：不携带 key_value 明文——历史备份明文随列表全量下发会显著扩大暴露面，
+    明文仅允许出现在当前密钥条目上（供管理员查看/复制）。
+    """
     return {
         "id": int(item.get("id") or 0),
         "priority": int(item.get("priority") or 0),
@@ -330,8 +335,9 @@ def _list_api_keys_sync() -> Dict[str, Any]:
     with _db_connection() as conn:
         rows = conn.execute(
             """
-            SELECT key_name, 
+            SELECT key_name,
                    CASE WHEN length(key_value) > 0 THEN 1 ELSE 0 END as is_set,
+                   key_value,
                    updated_at
             FROM api_keys
             ORDER BY key_name ASC
@@ -346,6 +352,7 @@ def _list_api_keys_sync() -> Dict[str, Any]:
         public_backups = [_backup_public_item(item) for item in backups]
         result[key_name] = {
             "is_set": bool(data.get("is_set", False)),
+            "key_value": str(data.get("key_value") or ""),
             "updated_at": str(data.get("updated_at") or ""),
             "backup_count": len(public_backups),
             "backups": public_backups,
@@ -358,6 +365,7 @@ def _list_api_keys_sync() -> Dict[str, Any]:
         public_backups = [_backup_public_item(item) for item in backups]
         result[key_name] = {
             "is_set": False,
+            "key_value": "",
             "updated_at": "",
             "backup_count": len(public_backups),
             "backups": public_backups,
@@ -412,13 +420,13 @@ def _assert_runtime_config_origin_allowed(request: Request) -> None:
 async def get_api_keys_status(
     _session: Dict[str, Any] = Depends(require_admin),
 ) -> Dict[str, Any]:
-    """获取所有 API 密钥配置状态（不返回密钥值）"""
+    """获取所有 API 密钥配置状态与明文值（仅管理员）"""
     keys_info = await asyncio.to_thread(_list_api_keys_sync)
     
     return {
         "status": "success",
         "data": keys_info,
-        "note": "此端点不返回密钥值，仅显示配置状态"
+        "note": "仅管理员可访问，返回密钥明文供管理面板查看/复制"
     }
 
 
