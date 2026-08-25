@@ -80,7 +80,7 @@
 
 ## 🎯 项目简介
 
-**NEGIAO's WebGIS** 是一个功能完整、架构清晰的前后端分离 WebGIS 平台（当前版本 V3.5.29），前端托管于 GitHub Pages（正式域名 webgis.negiao.cn），后端以 Docker 部署在 Hugging Face Spaces，通过 RESTful API 通信，支持独立扩展。
+**NEGIAO's WebGIS** 是一个功能完整、架构清晰的前后端分离 WebGIS 平台（当前版本 V3.5.30），前端托管于 GitHub Pages（正式域名 webgis.negiao.cn），后端以 Docker 部署在 Hugging Face Spaces，通过 RESTful API 通信，支持独立扩展。
 
 > 📚 本 README 仅保留核心概览与导航。完整文档已模块化至 [`Docs/Guide/`](Docs/Guide/)，详见下方「文档导航」。
 >
@@ -404,10 +404,9 @@ HF Spaces 在 24 小时无访问后自动休眠。本平台通过**双向互保�
 
 | 版本 | 日期 | 概要 |
 |------|------|------|
-| **V3.5.29** | 2026-08-23 | **部署架构重组 + nginx 瓦片边缘缓存**：**nginx 瓦片磁盘缓存**：deploy/nginx.conf 新增 /tiles/ /proxy/ 边缘缓存层（仅缓存 200、TTL 1h 短过期自愈、2GB LRU、忽略上游缓存指令保证确定性、X-Cache 头可观测）；透传段按缓存性拆分（api/monitor 保持 SSE 关缓冲不缓存）。热点瓦片二次访问由 nginx 直接吐盘，Python 进程零占用，与后端内部缓存形成分层互补。详见[完整更新日志](Docs/Guide/CHANGELOG.md)；全栈单容器镜像（deploy/Dockerfile：nginx+FastAPI 单端口 7860）与环境文件收敛 deploy/，修复 P0 构建期 env 路径错位、CI 补拷 dockerignore 配对、结构树/架构文档 subtree→git archive 全量对齐。详见[完整更新日志](Docs/Guide/CHANGELOG.md) |
-| **V3.5.28** | 2026-08-23 | **全站 UI 设计语言统一 + 路线漫游模块**：TOC 图层树/共享资源树/行政区划树对齐 ESRI 式交互（眼睛显隐、类型图标、拖拽把手、滑动胶囊 Tab）；BusPlanner+DrivingPlanner 合并为 RoutePlannerPanel（mode=bus/drive 双触发）；新增 RouteFly 路线漫游模块——手绘贴地线路入图层管理，相机第一/第三人称沿线漫游；天气/罗盘/底图控制条/地图坐标条换肤浅色玻璃拟态并全量 lucide 图标化；附带暂存区后端 Docker 瘦身与体积云 shader 防漂移链路审查。详见[完整更新日志](Docs/Guide/CHANGELOG.md) |
+| **V3.5.30** | 2026-08-25 | **在线服务子图层独立管理与双引擎点击查询**：WMS/ArcGIS/XYZ/WMTS 四协议统一注册 TOC；每个勾选子图层拆分为独立请求（客户端 zIndex 控制叠放，拖拽即时生效）；identify 弃用改用 `/{layerId}/query` 精确点查；属性表按子层精确拉取（`/{layerId}/query?outFields=*`）；TOC 子图层叶子独立显隐 + 右键移除 + 上移/下移排序；Cesium 适配器 viewer 就绪自愈挂载；会话态生命周期（刷新即清）。详见[完整更新日志](Docs/Guide/CHANGELOG.md) |
 
-更早版本（V3.5.26 及以前）请查阅 [完整更新日志 →](Docs/Guide/CHANGELOG.md)
+更早版本（V3.5.29 及以前）请查阅 [完整更新日志 →](Docs/Guide/CHANGELOG.md)
 
 ---
 
@@ -429,6 +428,6 @@ HF Spaces 在 24 小时无访问后自动休眠。本平台通过**双向互保�
 |:------:|:--------:|:--------:|
 | [GitHub](https://github.com/NEGIAO/WebGIS-Dev) | [webgis.negiao.cn](https://webgis.negiao.cn)（正式域名，GitHub Pages 托管） | [Hugging Face](https://NEGIAO-WebGIS.hf.space) |
 
-<sub>V3.5.29 · 开发中 · 最后更新 2026-08-24</sub>
+<sub>V3.5.30 · 开发中 · 最后更新 2026-08-25</sub>
 
 </div>

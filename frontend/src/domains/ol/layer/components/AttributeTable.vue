@@ -618,6 +618,23 @@ const OVERSCAN = 10;
 const MIN_WIDTH = 520;
 const MIN_HEIGHT = 280;
 
+// ==================== 移动端适配（≤768px 视口：全宽底部停靠，禁自由拖拽） ====================
+const MOBILE_MEDIA_QUERY = '(max-width: 768px)';
+const isMobileViewport = ref(
+    typeof window !== 'undefined' && !!window.matchMedia?.(MOBILE_MEDIA_QUERY).matches,
+);
+/** 视口跨过桌面/移动阈值（含手机旋转）时重算停靠布局 */
+const mobileMql: MediaQueryList | null =
+    typeof window !== 'undefined' ? window.matchMedia?.(MOBILE_MEDIA_QUERY) ?? null : null;
+
+function handleMobileQueryChange(event: MediaQueryListEvent) {
+    isMobileViewport.value = event.matches;
+    nextTick(() => {
+        ensureInitialPanelRect();
+        refreshViewportHeight();
+    });
+}
+
 const interaction = ref<{
     mode: 'drag' | 'resize';
     direction: ResizeDirection;
@@ -897,22 +914,36 @@ function clampRect(rect: { x: number; y: number; width: number; height: number }
 }
 
 function ensureInitialPanelRect() {
+    // 面板未挂载（v-if 隐藏）时宿主尺寸不可测 —— 必须跳过，
+    // 否则 getHostSize 落到 window 兜底会把「半屏」误写进初始矩形；
+    // 可见后由 isVisible 监听器以真实宿主（#map-container）重新初始化。
+    if (!panelRef.value) return;
+
     const host = getHostSize();
 
-    if (!store.panelRect.initialized) {
-        // 重写起始大小使它倾向于是个横向开阔的面版表格框，Arc经典比例一般是在主视觉窗口的偏下层区或者三分之一处
-        const width = Math.min(
-            Math.max(900, Math.round(host.width * 0.8)),
-            Math.max(480, host.width - 40),
+    // 移动端：全宽底部停靠面板（高度保留用户上次记忆，默认容器 55%）
+    if (isMobileViewport.value) {
+        const preferred = store.panelRect.initialized ? store.panelRect.height : Math.round(host.height * 0.55);
+        const height = Math.round(
+            Math.min(Math.max(preferred, 180), Math.max(180, host.height - 60)),
         );
-        const height = Math.min(
-            Math.max(340, Math.round(host.height * 0.4)),
-            Math.max(260, host.height - 30),
-        );
-        const x = Math.max(16, Math.round((host.width - width) / 2));
-        const y = Math.max(16, host.height - height - 16);
+        store.setPanelRect({
+            x: 0,
+            y: Math.max(0, host.height - height),
+            width: host.width,
+            height,
+            initialized: true,
+        });
+        return;
+    }
 
-        store.setPanelRect({ x, y, width, height, initialized: true });
+    if (!store.panelRect.initialized) {
+        // 桌面端默认占据 MapContainer 左半（中线垂直对半分，通高），
+        // 初始即为「地图右移半屏 + 属性表占左半」的 ArcGIS Pro 布局；
+        // 后续仍可自由拖拽标题栏与八向缩放。
+        const width = Math.max(320, Math.round(host.width / 2));
+        const height = Math.max(240, host.height);
+        store.setPanelRect({ x: 0, y: 0, width, height, initialized: true });
         return;
     }
 
@@ -982,6 +1013,8 @@ function onPointerMove(event: PointerEvent) {
 }
 
 function startDrag(event: PointerEvent) {
+    // 移动端为固定底部停靠面板：拖拽标题栏易与页面滚动手势冲突，直接禁用
+    if (isMobileViewport.value) return;
     const target = event.target as HTMLElement;
     // 判断规避原生行为及事件阻止点元素
     if (
@@ -1005,6 +1038,8 @@ function startDrag(event: PointerEvent) {
 }
 
 function startResize(direction: ResizeDirection, event: PointerEvent) {
+    // 移动端仅保留顶边热区（上下拖动调高度），其余方向热区禁用防误触
+    if (isMobileViewport.value && direction !== 'top') return;
     interaction.value = {
         mode: 'resize',
         direction,
@@ -1333,14 +1368,19 @@ watch(
 
 onMounted(() => {
     window.addEventListener('resize', handleWindowResize, { passive: true });
-    nextTick(() => {
-        ensureInitialPanelRect();
-        refreshViewportHeight();
-    });
+    mobileMql?.addEventListener?.('change', handleMobileQueryChange);
+    // 面板初始不可见时跳过（宿主未挂载），打开瞬间由 isVisible 监听器初始化
+    if (isVisible.value) {
+        nextTick(() => {
+            ensureInitialPanelRect();
+            refreshViewportHeight();
+        });
+    }
 });
 
 onBeforeUnmount(() => {
     window.removeEventListener('resize', handleWindowResize);
+    mobileMql?.removeEventListener?.('change', handleMobileQueryChange);
     stopInteraction();
     stopColResize();
     if (hoverFrameId !== null) {
@@ -2351,5 +2391,110 @@ onBeforeUnmount(() => {
 .pro-float-fade-leave-to {
     opacity: 0;
     transform: translateY(6px) scale(0.995); /* 原生窗口般干脆的轻微浮现 */
+}
+
+/* 触控设备基础：拖拽热区禁用浏览器手势接管，保证 pointermove 连续 */
+.pro-header,
+.resize-grip {
+    touch-action: none;
+}
+
+/* =====================================================
+   移动端适配（≤768px）：全宽底部停靠面板
+   - 顶栏只保留标题与关闭/最小化，禁自由拖拽（JS 已拦截）
+   - 工具栏图标化 + 横向滚动
+   - 仅顶边可拖调高度
+   ===================================================== */
+@media (max-width: 768px) {
+    .pro-float-window {
+        min-width: 0;
+        border-radius: 12px 12px 0 0;
+        border-left: none;
+        border-right: none;
+        border-bottom: none;
+        box-shadow:
+            0 -10px 28px rgba(15, 35, 20, 0.2),
+            inset 0 1px 0 rgba(255, 255, 255, 0.7);
+    }
+
+    /* 顶部拖拽条视觉提示（高度调节把手） */
+    .pro-header {
+        position: relative;
+        height: 42px;
+    }
+    .pro-title-wrap::before {
+        content: '';
+        position: absolute;
+        top: 4px;
+        left: 50%;
+        transform: translateX(-50%);
+        width: 36px;
+        height: 3px;
+        border-radius: 2px;
+        background: rgba(255, 255, 255, 0.45);
+    }
+    .pro-title {
+        font-size: 12px;
+    }
+    .win-btn {
+        width: 46px;
+    }
+
+    /* 工具栏：单行横向滚动 + 图标化（隐藏文字标签） */
+    .pro-toolbar {
+        flex-wrap: nowrap;
+        overflow-x: auto;
+        scrollbar-width: none;
+        padding-left: 8px;
+        padding-right: 8px;
+    }
+    .pro-toolbar::-webkit-scrollbar {
+        display: none;
+    }
+    .toolbar-group {
+        flex-shrink: 0;
+    }
+    .btn-label {
+        display: none;
+    }
+    .divider {
+        margin: 0 3px;
+    }
+    .pro-search-wrap {
+        width: 130px;
+        flex-shrink: 0;
+    }
+    .toggle-label {
+        max-width: 64px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        display: inline-block;
+    }
+
+    /* 行操作按钮放大触控面积 */
+    .row-act {
+        min-width: 32px;
+        min-height: 32px;
+    }
+
+    /* 隐藏被 JS 禁用的缩放热区，仅留顶边调高手感 */
+    .resize-grip.edge.s,
+    .resize-grip.edge.w,
+    .resize-grip.edge.e,
+    .resize-grip.corner {
+        display: none;
+    }
+    .resize-grip.edge.n {
+        height: 14px;
+        top: -6px;
+    }
+
+    /* 底部信息条紧凑化 */
+    .pro-footer-bar {
+        font-size: 10.5px;
+        padding: 4px 8px;
+        gap: 6px;
+    }
 }
 </style>

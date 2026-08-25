@@ -1,5 +1,22 @@
 import { computed, ref, watch } from 'vue';
 import { useSharedCustomBasemapUrl } from '@common/basemap/useSharedCustomBasemapUrl';
+import {
+    looksLikeWmsSourceUrl,
+    ensureWmsServiceInfo,
+    getCachedWmsInfo,
+    buildArcgisExportTemplate,
+    queryCandidateAtPoint,
+} from '@common/basemap/wmsService';
+import {
+    registerRemoteService,
+    useRemoteServices,
+    renderOrderedIds,
+} from '@common/basemap/remoteServices';
+import { createCesiumRemoteServiceAdapter } from '../../services/cesiumRemoteServiceAdapter';
+import {
+    buildIdentifyGroupsHtml,
+    composeIdentifyHeading,
+} from '@common/basemap/identifyPresentation';
 import { applyCesiumIonToken } from '../core/cesiumRuntime';
 import {
     readStoredBoolean,
@@ -59,6 +76,21 @@ function getWkidFromCrsString(value) {
     if (typeof value !== 'string') return null;
     const match = value.match(/(?:EPSG(?:\/0\/|:)|\/)(\d+)\/?$/i);
     return match ? Number(match[1]) : null;
+}
+
+/** 计算瓦片在 EPSG:3857 下的米制 BBOX（供 ArcGIS export 模板填充） */
+function arcgisBboxParts(z, x, y) {
+    const extentSize = (2 * WEB_MERCATOR_MAX) / 2 ** z;
+    const minx = -WEB_MERCATOR_MAX + x * extentSize;
+    const maxx = minx + extentSize;
+    const maxy = WEB_MERCATOR_MAX - y * extentSize;
+    const miny = maxy - extentSize;
+    return {
+        minx: minx.toFixed(2),
+        miny: miny.toFixed(2),
+        maxx: maxx.toFixed(2),
+        maxy: maxy.toFixed(2),
+    };
 }
 
 function detectI3SWkid(value, visited = new WeakSet()) {
@@ -297,6 +329,20 @@ export function useCesiumLayers({
     let customIonTilesetLoadId = 0;
     let customIonImageryLayer = null;
     let customIonTerrainProvider = null;
+
+    // 在线服务注册表 → Cesium ImageryLayer 渲染适配器（TOC「在线服务」分组的 3D 渲染端）
+    let cesiumRemoteAdapter = null;
+    function ensureRemoteServiceAdapter() {
+        if (cesiumRemoteAdapter) return cesiumRemoteAdapter;
+        if (!getViewer?.() || !getCesium?.()) return null;
+        try {
+            cesiumRemoteAdapter = createCesiumRemoteServiceAdapter({ getViewer, getCesium });
+        } catch (error) {
+            console.warn('[useCesiumLayers] 在线服务适配器创建失败:', error);
+        }
+        return cesiumRemoteAdapter;
+    }
+
     const customIonAssetId = ref(readStoredString('cesium_custom_ion_asset_id', '5115505'));
     const loadedAssetType = ref(null);
     const customIonHeightOffset = ref(0);
@@ -340,7 +386,7 @@ export function useCesiumLayers({
                 ...option,
                 description: customXyzBasemapUrl.value
                     ? customXyzBasemapUrl.value
-                    : '输入 XYZ 瓦片 URL 后启用',
+                    : '输入 XYZ / WMS 图源 URL 后启用',
                 source: 'custom',
                 disabled: !customXyzBasemapUrl.value,
             };
@@ -392,6 +438,24 @@ export function useCesiumLayers({
         if (!getViewer?.() || !getCesium?.()) return;
         applyBasemap(value);
     });
+
+    // ── 在线服务：注册表变化时自动同步 Cesium 图层 + 绑定点击查询 ──
+    // 无论用户从哪个入口加载服务（面板/TOC/Agent），都走同一条渲染和查询链路
+    watch(customXyzBasemapUrl, () => {
+        ensureRemoteServiceAdapter();
+        bindCesiumArcgisIdentify();
+    });
+
+    // ── 在线服务：无论从哪个入口加载，引擎就绪后自动挂载渲染适配器和点击查询 ──
+    // 轮询等待 viewer 就绪（Cesium viewer 创建是异步的），避免依赖特定操作路径触发
+    const rsvcInitTimer = setInterval(() => {
+        if (getViewer?.() && getCesium?.()) {
+            clearInterval(rsvcInitTimer);
+            ensureRemoteServiceAdapter();
+            bindCesiumArcgisIdentify();
+        }
+    }, 500);
+    setTimeout(() => clearInterval(rsvcInitTimer), 15000); // 15s 超时防泄漏
 
     watch(activeTerrain, async (value) => {
         if (!getViewer?.() || !getCesium?.()) return;
@@ -617,9 +681,263 @@ export function useCesiumLayers({
         ];
     }
 
+    /**
+     * ArcGIS 原生协议：动态 export 出图
+     * customTags 按瓦片坐标计算 EPSG:3857 米制 BBOX（与 OL 侧共用模板构建器）
+     */
+    function createCustomArcgisImageryProviders(Cesium, info, selectedLayer) {
+        const template = buildArcgisExportTemplate(info, selectedLayer);
+        return [
+            new Cesium.UrlTemplateImageryProvider({
+                url: template,
+                customTags: {
+                    minx: (_, x, y, z) => arcgisBboxParts(z, x, y).minx,
+                    miny: (_, x, y, z) => arcgisBboxParts(z, x, y).miny,
+                    maxx: (_, x, y, z) => arcgisBboxParts(z, x, y).maxx,
+                    maxy: (_, x, y, z) => arcgisBboxParts(z, x, y).maxy,
+                    w: () => 256,
+                    h: () => 256,
+                },
+                tilingScheme: new Cesium.WebMercatorTilingScheme(),
+                maximumLevel: 24,
+                enablePickFeatures: false,
+            }),
+        ];
+    }
+
+    /**
+     * 根据解析好的 WMS 元信息创建 ImageryProvider
+     * 服务仅支持经纬度坐标系时切换 GeographicTilingScheme，保证 BBOX 与 SRS 一致
+     * 用户已选择图层时优先生效（customWmsSelectedLayer）
+     */
+    function createCustomWmsImageryProviders(Cesium, info) {
+        if (!Cesium || typeof Cesium.WebMapServiceImageryProvider !== 'function') {
+            console.warn('[useCesiumLayers] 当前 Cesium 运行时不支持 WebMapServiceImageryProvider');
+            return [];
+        }
+        // ArcGIS 原生协议
+        if (info.arcgis) {
+            // 切片缓存：直连 /tile/{z}/{y}/{x}（缺失瓦片 404 按透明处理）
+            if (info.tileMode === 'tiles') {
+                return [
+                    new Cesium.UrlTemplateImageryProvider({
+                        url: `${String(info.endpoint).replace(/\/+$/, '')}/tile/{z}/{y}/{x}`,
+                        tilingScheme: new Cesium.WebMercatorTilingScheme(),
+                        maximumLevel: Number.isFinite(info.maxLevel) ? Number(info.maxLevel) : 24,
+                        enablePickFeatures: false,
+                    }),
+                ];
+            }
+            // 动态出图（export）
+            const selected = (info.layerOptions?.length && customWmsSelectedLayer) || '';
+            return createCustomArcgisImageryProviders(Cesium, info, selected);
+        }
+        const layers =
+            (info.layerOptions?.length && customWmsSelectedLayer) || info.layers;
+        const tilingScheme = info.mercator
+            ? new Cesium.WebMercatorTilingScheme()
+            : new Cesium.GeographicTilingScheme();
+        const crsParamName = String(info.version || '').startsWith('1.3') ? 'crs' : 'srs';
+        return [
+            new Cesium.WebMapServiceImageryProvider({
+                url: info.endpoint,
+                layers,
+                parameters: {
+                    service: 'WMS',
+                    version: info.version || '1.1.1',
+                    request: 'GetMap',
+                    styles: '',
+                    format: info.format || 'image/png',
+                    transparent: true,
+                    [crsParamName]: info.srs,
+                },
+                tilingScheme,
+                enablePickFeatures: false,
+            }),
+        ];
+    }
+
+    // 用户在工具面板选择的 WMS 图层名；URL 变化时重置
+    let customWmsSelectedLayer = '';
+    let customWmsLayerForUrl = '';
+
+    // ========== ArcGIS 要素点查（query → 原生 InfoBox，展示层与 OL 共用 identifyPresentation） ==========
+    let cesiumIdentifyHandler = null;
+    let cesiumIdentifyInfo = null;
+    let cesiumIdentifyEntity = null;
+
+    /** InfoBox 描述 HTML：统一由共享渲染器产出（转义/截断/空态文案与 OL 完全一致） */
+    function buildIdentifyDescription(groups) {
+        return buildIdentifyGroupsHtml(groups, { maxGroups: 8 });
+    }
+
+    /** 绑定/更新点击查询：监听常驻，候选 = 注册表可见可查服务 + 自定义底图流程服务 */
+    function bindCesiumArcgisIdentify(info) {
+        cesiumIdentifyInfo = info && info.queryable ? info : null;
+        const viewer = getViewer?.();
+        const Cesium = getCesium?.();
+        // 常驻绑定：候选集合动态收集（注册表 + 自定义流程），不依赖特定服务
+        if (!viewer || !Cesium || typeof Cesium.ScreenSpaceEventHandler !== 'function') {
+            return;
+        }
+        if (cesiumIdentifyHandler) return;
+
+        const remoteStore = useRemoteServices();
+
+        function collectCandidates() {
+            const candidates = [];
+            if (cesiumIdentifyInfo) {
+                candidates.push({ serviceTitle: cesiumIdentifyInfo.title || '自定义服务', info: cesiumIdentifyInfo });
+            }
+            for (const record of remoteStore.records.value) {
+                if (record.kind !== 'arcgis' || !record.visible || !record.queryable) continue;
+                // 每个勾选子图层展开为独立候选（/{layerId}/query 精确点查），按视觉叠放序排列；
+                // 标题不预拼子层名 —— 展示时由 [serviceTitle, layerName] 统一组合，避免重复
+                for (const name of renderOrderedIds(record)) {
+                    candidates.push({
+                        serviceTitle: record.title || record.url,
+                        info: { ...record, arcgis: true },
+                        subLayerName: name,
+                    });
+                }
+            }
+            return candidates;
+        }
+
+        cesiumIdentifyHandler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
+        cesiumIdentifyHandler.setInputAction(async ({ position }) => {
+            const candidates = collectCandidates();
+            if (!candidates.length) return;
+            const cartesian = viewer.camera.pickEllipsoid(position, viewer.scene.globe.ellipsoid);
+            const rect = viewer.camera.computeViewRectangle(viewer.scene.globe.ellipsoid);
+            if (!cartesian || !rect) return;
+
+            const carto = Cesium.Cartographic.fromCartesian(cartesian);
+            const lon = Cesium.Math.toDegrees(carto.longitude);
+            const lat = Cesium.Math.toDegrees(carto.latitude);
+
+            const extentDeg = [
+                Cesium.Math.toDegrees(rect.west),
+                Cesium.Math.toDegrees(rect.south),
+                Cesium.Math.toDegrees(rect.east),
+                Cesium.Math.toDegrees(rect.north),
+            ];
+            const canvas = viewer.scene.canvas;
+
+            // 并发查询全部候选，统一归一化为 { hits:[{layerName,attributes}] }
+            // （封装见 wmsService.queryCandidateAtPoint；失败抛错由 allSettled 收集）
+            const settled = await Promise.allSettled(
+                candidates.map((candidate) =>
+                    queryCandidateAtPoint(candidate, [lon, lat], {
+                        extent: extentDeg,
+                        width: canvas.clientWidth,
+                        height: canvas.clientHeight,
+                    }),
+                ),
+            );
+
+            // 全部候选都失败才报错（个别层 500/404 不打断其余层的展示）
+            const failures = settled.filter((entry) => entry.status === 'rejected');
+            if (failures.length && failures.length === settled.length) {
+                const reason = failures[0].reason?.message || '网络异常';
+                message.warning(`要素查询失败：${reason}`, { closable: true });
+                return;
+            }
+
+            const groups = [];
+            // ── 只取视觉最上层有命中的候选（与 ArcGIS Pro 行为一致）──
+            // candidates 按 renderOrderedIds 排序（头部=视觉最上层），
+            // 找到第一个有命中的候选后停止，不展示被遮挡的下层要素。
+            // 分组统一为 {heading, attributes} 模型，HTML 渲染由 identifyPresentation 统一产出。
+            for (const entry of settled) {
+                if (entry.status !== 'fulfilled') continue;
+                const { candidate, hits } = entry.value;
+                if (!hits?.length) continue;
+                for (const hit of hits.slice(0, 20)) {
+                    groups.push({
+                        heading: composeIdentifyHeading(candidate.serviceTitle, hit.layerName),
+                        attributes: hit.attributes || {},
+                    });
+                }
+                // 该候选有命中 → 即为视觉最上层有要素的层，停止向下搜索
+                break;
+            }
+
+            // 每次点选替换上一个标记实体，选中即弹出 InfoBox
+            if (cesiumIdentifyEntity) viewer.entities.remove(cesiumIdentifyEntity);
+            cesiumIdentifyEntity = viewer.entities.add({
+                position: Cesium.Cartesian3.fromDegrees(lon, lat),
+                point: { pixelSize: 10, color: Cesium.Color.LIME, disableDepthTestDistance: Number.POSITIVE_INFINITY },
+                name: '要素属性',
+                description: buildIdentifyDescription(groups),
+            });
+            viewer.selectedEntity = cesiumIdentifyEntity;
+        }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
+    }
+
+    function disposeCesiumArcgisIdentify() {
+        cesiumIdentifyInfo = null;
+        if (cesiumIdentifyHandler) {
+            try {
+                cesiumIdentifyHandler.destroy();
+            } catch {
+                /* ignore */
+            }
+            cesiumIdentifyHandler = null;
+        }
+        if (cesiumIdentifyEntity && getViewer?.()) {
+            getViewer().entities.remove(cesiumIdentifyEntity);
+            cesiumIdentifyEntity = null;
+        }
+    }
+
+    /** 相机飞到服务的地理范围（info.geographicBbox 为经纬度 [w,s,e,n]） */
+    function flyCameraToServiceExtent(info) {
+        const geo = info?.geographicBbox;
+        const viewer = getViewer?.();
+        const Cesium = getCesium?.();
+        if (!Array.isArray(geo) || geo.length !== 4 || !geo.every(Number.isFinite)) return;
+        if (!viewer?.camera || typeof Cesium?.Rectangle?.fromDegrees !== 'function') return;
+
+        try {
+            viewer.camera.flyTo({
+                destination: Cesium.Rectangle.fromDegrees(geo[0], geo[1], geo[2], geo[3]),
+                duration: 1.5,
+            });
+        } catch (error) {
+            console.warn('[useCesiumLayers] 相机定位服务范围失败:', error);
+        }
+    }
+
+    let wmsResolvingNotifiedUrl = '';
+    let wmsFailureNotifiedUrl = '';
+
     function createCustomXyzImageryProviders() {
         const Cesium = getCesium?.();
-        const config = normalizeCustomXyzUrl(customXyzBasemapUrl.value);
+        const rawUrl = customXyzBasemapUrl.value;
+
+        // 自定义 WMS 图源分支：capabilities 异步解析，未就绪前先回落天地图并等待重载
+        if (rawUrl && looksLikeWmsSourceUrl(rawUrl)) {
+            const cachedInfo = getCachedWmsInfo(rawUrl);
+            if (cachedInfo) {
+                return createCustomWmsImageryProviders(Cesium, cachedInfo);
+            }
+            if (wmsResolvingNotifiedUrl !== rawUrl) {
+                wmsResolvingNotifiedUrl = rawUrl;
+                message.info('正在解析 WMS 服务元数据，完成后自动加载', { duration: 3000 });
+            }
+            void ensureWmsServiceInfo(rawUrl).then((info) => {
+                if (info && activeBasemap.value === CUSTOM_XYZ_BASEMAP_ID) {
+                    applyBasemap(CUSTOM_XYZ_BASEMAP_ID, { forceReload: true });
+                } else if (!info && wmsFailureNotifiedUrl !== rawUrl) {
+                    wmsFailureNotifiedUrl = rawUrl;
+                    message.warning('WMS 图源元数据解析失败，请检查服务地址是否可访问', { closable: true });
+                }
+            });
+            return createTiandituImageryProviders();
+        }
+
+        const config = normalizeCustomXyzUrl(rawUrl);
         if (!config.valid) {
             message.warning(config.message, { closable: true });
             return createTiandituImageryProviders();
@@ -695,6 +1013,8 @@ export function useCesiumLayers({
     }
 
     function addBaseImageryLayers() {
+        // 引擎初始化路径挂载在线服务适配器（applyBasemap 未必在初始加载时被调用）
+        ensureRemoteServiceAdapter();
         // 同步叠加层（国界线 / 文字注记）
         syncTdtOverlayLayers();
         // 同步 Cesium OSM Buildings 与 Google 倾斜摄影
@@ -1536,6 +1856,9 @@ export function useCesiumLayers({
         const viewer = getViewer?.();
         if (!viewer || !getCesium?.()) return false;
 
+        // 首次可用时机挂载在线服务渲染适配器（viewer 就绪后自动 reconcile 注册表）
+        ensureRemoteServiceAdapter();
+
         // 先中断所有旧请求，实现快速切换
         abortAllDescriptorRequests();
         clearBaseImageryLayers();
@@ -1824,8 +2147,77 @@ export function useCesiumLayers({
         }
     }
 
-    function handleCustomBasemapSubmit({ url }) {
+    async function handleCustomBasemapSubmit({ url, wmsLayer }) {
         const normalizedUrl = String(url || '').trim();
+
+        // 自定义 WMS/ArcGIS 图源：先解析服务元数据校验可达性，再落库切换
+        if (normalizedUrl && looksLikeWmsSourceUrl(normalizedUrl)) {
+            const info = await ensureWmsServiceInfo(normalizedUrl);
+            if (!info || !info.layerOptions?.length) {
+                message.warning('无法解析该地图服务（REST 与 WMS 均不可达或无可用图层）', { closable: true });
+                return;
+            }
+
+            // 记录用户选择的图层；URL 变化时丢弃旧选择
+            if (customWmsLayerForUrl !== normalizedUrl) {
+                customWmsSelectedLayer = '';
+                customWmsLayerForUrl = normalizedUrl;
+            }
+            if (wmsLayer && info.layerOptions?.some((option) => option.name === wmsLayer)) {
+                customWmsSelectedLayer = wmsLayer;
+            }
+
+            const activeLayers =
+                customWmsSelectedLayer || (info.arcgis ? '全部可见图层' : info.layers);
+
+            customXyzBasemapUrl.value = normalizedUrl;
+            if (activeBasemap.value === CUSTOM_XYZ_BASEMAP_ID) {
+                applyBasemap(CUSTOM_XYZ_BASEMAP_ID, { forceReload: true });
+            } else {
+                activeBasemap.value = CUSTOM_XYZ_BASEMAP_ID;
+            }
+
+            // 小范围服务：相机自动飞到数据范围
+            flyCameraToServiceExtent(info);
+
+            // 开放 Query 能力的服务：启用点击查属性
+            if (info.arcgis && info.queryable) {
+                bindCesiumArcgisIdentify(info);
+            } else {
+                cesiumIdentifyInfo = null;
+            }
+
+            // 同步注册到「在线服务」注册表（TOC 统一管理；同 url+同图层去重更新）
+            const rsvcSelected = customWmsSelectedLayer || '';
+            registerRemoteService({
+                kind: info.arcgis ? 'arcgis' : 'wms',
+                url: normalizedUrl,
+                endpoint: info.endpoint || normalizedUrl,
+                title: info.title || normalizedUrl,
+                selectedLayerId: rsvcSelected,
+                layerLabel:
+                    info.layerOptions?.find((option) => option.name === rsvcSelected)?.title || '',
+                sublayers: (info.layerOptions || [])
+                    .filter((option) => option.name && !option.name.includes(','))
+                    .map((option) => ({ name: option.name, title: option.title, label: option.label })),
+                selectedIds: rsvcSelected ? rsvcSelected.split(',') : [],
+                layersParam: info.arcgis
+                    ? rsvcSelected
+                        ? `show:${rsvcSelected}`
+                        : ''
+                    : String(info.layers ?? ''),
+                tileMode: info.tileMode,
+                maxLevel: info.maxLevel,
+                format: info.format,
+                version: info.version,
+                srs: info.srs,
+                geographicBbox: info.geographicBbox,
+                queryable: info.queryable === true,
+            });
+            message.success(`已切换到自定义 WMS 图源（图层 ${activeLayers}）`);
+            return;
+        }
+
         const config = normalizeCustomXyzUrl(normalizedUrl);
         if (!config.valid) {
             message.warning(config.message, { closable: true });
@@ -1856,6 +2248,9 @@ export function useCesiumLayers({
         clearGooglePhotorealistic3DTilesLayer();
         clearCustomIonLayer();
         unbindLayerPickerStateSync();
+        disposeCesiumArcgisIdentify();
+        cesiumRemoteAdapter?.dispose?.();
+        cesiumRemoteAdapter = null;
     }
 
     return {

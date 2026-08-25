@@ -67,6 +67,8 @@ export type TileSourceFactoryOptions = {
 
 export type AutoDetectOptions = {
     adapters?: Record<string, NonStandardXYZAdapter>;
+    /** WMS 指定图层名（LAYERS）；不传时自动取 Capabilities 第一个命名图层 */
+    preferredLayers?: string;
 };
 
 export const DEFAULT_WMS_VERSION = '1.1.1';

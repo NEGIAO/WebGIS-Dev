@@ -1,9 +1,13 @@
 # 🛠️ WebGIS Agent 强制执行规范（Force Command）
 
 > **本文件是 AI Agent 在本仓库工作的最高行为准则。** 任何会话开始工作前必须完整读取本文件。
-> 定位：**规定 Agent 能做什么、不能做什么、必须交付什么**。不重复技术细节——技术约定见 [`Guide/dev-conventions.md`](Guide/dev-conventions.md)，项目认知见 [`Guide/handover.md`](Guide/handover.md)。
-> 适用范围：`frontend/`、`backend/`、`Docs/`、根级配置文件的一切增删改。
-> cesium相关的代码，参考这个skill：C:\Users\NEGIAO\.cc-switch\skills\cesium-skills，不知道api就别乱改，别臆想，实事求是
+>
+> **定位**：规定 Agent 能做什么、不能做什么、必须交付什么。不重复技术细节——技术约定见 [`Guide/dev-conventions.md`](Guide/dev-conventions.md)，项目认知见 [`Guide/handover.md`](Guide/handover.md)。
+>
+> **适用范围**：`frontend/`、`backend/`、`Docs/`、根级配置文件的一切增删改。
+>
+> **Cesium API**：相关代码参考 skill `cesium-skills`；不确定的 API 禁止臆造，以 [Cesium 官方文档](https://cesium.com/learn/cesiumjs/ref-doc/) 为准。
+
 ---
 
 ## 0. 冲突裁决与优先级
@@ -174,7 +178,7 @@ L2/L3 任务在会话结束前逐项核对，**任何一项未过必须显式说
 ```markdown
 ## 🔁 交接块
 - **本次版本**：V3.x.x（YYYY-MM-DD）
-- **任务等级**：L2
+- **任务等级**：L0 / L1 / L2 / L3
 - **一句话结论**：<做了什么，达成什么效果>
 - **改动文件**：<路径清单>
 - **日志路径**：Docs/LLM_record/YY-MM/YYYY-MM-DD/xxx.md
@@ -182,15 +186,19 @@ L2/L3 任务在会话结束前逐项核对，**任何一项未过必须显式说
 - **待用户操作**：<实机验证步骤 / 需用户执行的 git 命令 / 需补的密钥>
 - **遗留与风险**：<未解决问题、临时方案、已记入 TODO 的顺带发现>
 - **下一步建议**：<若继续推进，从哪个文件的哪一处入手>
-- **输出本次版本**：message给我，按照这样的格式message：
-                V3.5.24 
+```
 
-                summary:
-                ##########
+**Commit message 格式**（每次交接块末尾附带）：
 
-                1、- ########
-                2、- #########
-                3、- #########
+```
+V3.x.x
+
+summary:
+<一句话概述本次变更主题>
+
+1、- <变更项 1>
+2、- <变更项 2>
+3、- <变更项 3>
 ```
 
 ---

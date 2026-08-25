@@ -73,9 +73,9 @@ export default [
 
     // 7. Node.js 脚本和配置文件
     {
-        files: ['scripts/**/*.mjs', '**/*.cjs', 'vite.config.js', '*.config.{js,mjs,ts}'],
+        files: ['scripts/**/*.mjs', '**/*.cjs', 'vite.config.js', '*.config.{js,mjs,ts}', '.tmp-test/**/*.mjs'],
         languageOptions: {
-            globals: globals.node,
+            globals: { ...globals.node, ...globals.browser },
         },
         rules: {
             '@typescript-eslint/no-require-imports': 'off',

@@ -121,6 +121,14 @@ function buildTileProxyUrl(srcUrl: string): string | null {
     return `${TILE_PROXY_BASE_URL}/proxy/${srcUrl}`;
 }
 
+/**
+ * 通用请求代理地址构造器（点查等非瓦片 JSON 请求与瓦片共用同一兜底通道）。
+ * 代理关闭（off）或目标不可代理时返回 null，调用方按直连失败处理。
+ */
+export function buildRequestProxyUrl(srcUrl: string): string | null {
+    return buildTileProxyUrl(srcUrl);
+}
+
 async function requestTileAsBlobUrl(
     requestUrl: string,
     signal: AbortSignal,

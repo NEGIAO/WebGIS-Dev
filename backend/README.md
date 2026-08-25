@@ -61,6 +61,10 @@ sqlite3 webgis_auth.db.corrupted ".recover" > repair.sql
 
 > 后端完整版本历史与每次结构变更说明已统一维护于根目录 [更新日志 CHANGELOG](../Docs/Guide/CHANGELOG.md) 及 [`Docs/`](../Docs/) 下按日期归档的维护日志。
 
+### 0.1 HF Space 部署形态（V3.5.31+）
+
+全栈单容器（nginx :7860 对外总入口）：nginx 静态前端 + FastAPI(:8000) + GeoServer(:8080) 三服务同容器。其中 `/geoserver/*` 由 nginx 反代至容器内 Tomcat，反代段已做 `X-Forwarded-Proto/Host/Port` 归一化转发与安全响应头加固；GeoServer Proxy Base URL 在每次启动时由 start.sh 经 REST API 自动注入为 `https://negiao-webgis.hf.space/geoserver`（数据目录 ephemeral，需启动期重写；可用 `GEOSERVER_PUBLIC_URL` / `GEOSERVER_ADMIN_USER` / `GEOSERVER_ADMIN_PASSWORD` 环境变量覆盖）。⚠️ 禁止向 data_dir 手写预置 `global.xml`：XStream 反序列化缺失段落（如 `<jai>`）会使状态页渲染 NPE（V3.5.33），配置一律交由 GeoServer 首启自生成。详见 [deploy/Dockerfile](../deploy/Dockerfile) 与维护日志 `Docs/LLM_record/26-08/2026-08-24/`。
+
 ## 1. 认证系统
 
 ### 1.1 三类登录身份

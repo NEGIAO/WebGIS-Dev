@@ -11,12 +11,10 @@
 #
 # 容器内部拓扑（nginx 原样透传，零路径改写）：
 #   :7860 nginx ─┬─ 静态前端 dist
-#                ├─ /api/* /proxy/* /tiles/* /monitor/*
-#                │   /health /docs /redoc /openapi.json
-#                │   → http://127.0.0.1:8000（后端原生路径）
-#                └─ /geoserver/* → http://127.0.0.1:8080（GeoServer 探索部署）
+#                └─ /api/* /proxy/* /tiles/* /monitor/*
+#                   /health /docs /redoc /openapi.json
+#                   → http://127.0.0.1:8000（后端原生路径）
 #   :8000 uvicorn（仅容器内回环，不对外）
-#   :8080 GeoServer/Jetty（仅容器内回环，不对外；数据目录 ephemeral）
 # =====================================================================
 
 ########################  阶段一：前端构建  ########################
@@ -47,7 +45,7 @@ RUN sed -i "s|^VITE_BACKEND_URL=.*|VITE_BACKEND_URL=${DOCKER_VITE_BACKEND_URL}|"
 ########################  阶段二：运行时（python + nginx）  ########################
 FROM python:3.12-slim
 
-# 1. uv + 系统依赖（含 nginx、JRE——GeoServer 运行时；不装 libgl1——无 OpenGL 依赖，避免拖入 Mesa ~180MB）
+# 1. uv + 系统依赖（含 nginx；不装 libgl1——无 OpenGL 依赖，避免拖入 Mesa ~180MB）
 RUN pip install --no-cache-dir uv -i https://pypi.tuna.tsinghua.edu.cn/simple
 RUN sed -i 's/deb.debian.org/mirrors.tuna.tsinghua.edu.cn/g' /etc/apt/sources.list.d/debian.sources && \
     apt-get update && apt-get install -y --no-install-recommends \
@@ -59,8 +57,6 @@ RUN sed -i 's/deb.debian.org/mirrors.tuna.tsinghua.edu.cn/g' /etc/apt/sources.li
     cron \
     sudo \
     coreutils \
-    unzip \
-    default-jre-headless \
     && rm -rf /var/lib/apt/lists/*
 
 ENV TZ=Asia/Shanghai
@@ -88,32 +84,6 @@ COPY deploy/nginx.conf /etc/nginx/nginx.conf
 RUN chown -R user:user /usr/share/nginx/html /etc/nginx \
  && mkdir -p /tmp/nginx_cache && chown -R user:user /tmp/nginx_cache
 
-# 6) GeoServer（探索用第三服务：容器内 :8080 仅回环，由 nginx /geoserver/ 分流对外）
-#    官方 bin 发行版（内嵌 Jetty）；数据目录暂为容器内 ephemeral，
-#    HF 持久化（Persistent Storage / PostGIS + COG）待探索后另行设计
-#    下载源双路回退：download.geoserver.org 曾出现 DNS 故障（本地与 HF 构建
-#    环境均复现），SourceForge master 镜像为兜底（viasf=1 跳转签名镜像直链）
-ENV GEOSERVER_VERSION=2.26.2
-USER root
-RUN set -e; \
-    ok=""; \
-    for url in \
-      "https://download.geoserver.org/geoserver/${GEOSERVER_VERSION}/geoserver-${GEOSERVER_VERSION}-bin.zip" \
-      "https://master.dl.sourceforge.net/project/geoserver/GeoServer/${GEOSERVER_VERSION}/geoserver-${GEOSERVER_VERSION}-bin.zip?viasf=1"; \
-    do \
-      echo "[geoserver] trying: $url"; \
-      if curl -fsSL --connect-timeout 15 --retry 2 --max-time 900 "$url" -o /tmp/geoserver-bin.zip; then ok="$url"; break; fi; \
-      rm -f /tmp/geoserver-bin.zip; \
-    done; \
-    [ -n "$ok" ] || { echo "[geoserver] FATAL: all mirrors failed"; exit 1; }; \
-    echo "[geoserver] downloaded from: $ok"; \
-    unzip -q /tmp/geoserver-bin.zip -d /opt \
- && mv "/opt/geoserver-${GEOSERVER_VERSION}" /opt/geoserver \
- && mkdir -p /opt/geoserver/data_dir \
- && rm -f /tmp/geoserver-bin.zip \
- && chown -R user:user /opt/geoserver
-USER user
-
 # =================================================================-
 # KeepAlive 互活跃机制（HF Space 防 24h 休眠；本地 compose 会覆盖 CMD，不启用）
 # 发送端（主）：asyncio 任务随机间隔 GET 对端 /api/status
@@ -122,19 +92,11 @@ USER user
 # =================================================================-
 RUN echo '*/3 * * * * sleep $(shuf -i 0-180 -n 1) && /app/keepalive_send.sh >> /var/log/keepalive.log 2>&1' | crontab -
 
-# 启动脚本：cron 保活 + GeoServer(后台) + nginx(前台守护进程化后台运行) + uvicorn(主进程)
+# 启动脚本：cron 保活 + nginx(前台守护进程化后台运行) + uvicorn(主进程)
 RUN cat > /opt/start.sh << 'SCRIPT'
 #!/bin/sh
 set -e
 sudo /usr/sbin/cron 2>/dev/null || cron 2>/dev/null || true
-
-# GeoServer 后台启动：日志落 /tmp/geoserver.log；就绪约 20~40s，不阻塞主进程。
-# 崩溃不影响 nginx/后端——探索期容忍降级，后续按需加自动重启
-( cd /opt/geoserver \
-  && exec java -Xms256m -Xmx1g \
-       -DGEOSERVER_DATA_DIR=/opt/geoserver/data_dir \
-       -Djetty.port=8080 \
-       -jar start.jar ) >> /tmp/geoserver.log 2>&1 &
 
 nginx
 exec uv run uvicorn app:app --host 127.0.0.1 --port 8000 --no-access-log

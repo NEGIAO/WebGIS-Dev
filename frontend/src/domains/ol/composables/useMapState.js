@@ -779,9 +779,10 @@ export function useMapState(mapInstance, options = {}) {
 
             // zIndex 按显示带分配（见 @ol/layer/zIndexBands）：标注类底图恒置顶于数据带，
             // 其余底图瓦片落最低带。带基准固定、与底图数量无关 → 底图源增加不会压过数据层。
+            // 带内顺序与面板 UI 对齐：layerList 顶部（index 0）= 面板"置顶"目标 → 反向映射拿带内最高 z。
             const category = configs.find((cfg) => cfg?.id === item.id)?.category;
             const zBand = category === 'label' ? Z_BAND.LABEL : Z_BAND.BASEMAP;
-            const targetZIndex = zBand + index;
+            const targetZIndex = zBand + (layerList.length - 1 - index);
             if (layer.getZIndex() !== targetZIndex) {
                 layer.setZIndex(targetZIndex);
             }
@@ -896,8 +897,11 @@ export function useMapState(mapInstance, options = {}) {
 
         // 关键修复：在 refreshLayerInstances 之前，先强制清除所有即将隐藏的底图图层源。
         // 这样能彻底消除 OL 内部队列的阻塞和后台请求占槽。
+        // 例外：custom 层不清理 —— 其 source 由用户输入动态构建（WMS/ArcGIS export 模板），
+        // 清除后 ensureLayerSourceById 无法再生（工厂仅支持 XYZ 且无 customUrl 上下文），
+        // 导致「排序与显隐」重新勾选后图层永久空白。隐藏时保留 source 仅暂停渲染即可。
         layerList.forEach((item) => {
-            if (!item.visible) {
+            if (!item.visible && item.id !== 'custom') {
                 const cfg = configs.find((c) => c.id === item.id);
                 const category = cfg?.category;
                 const isBasemap =

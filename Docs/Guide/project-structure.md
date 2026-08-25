@@ -25,10 +25,10 @@ WebGIS_Dev/
 │   └── config/                        # 三层配置统一 loader（L1 env / L2 Admin+DB / L3 Secrets）
 │
 ├── deploy/                            # 部署编排与环境文件统一收敛处
-│   ├── Dockerfile                     # 全栈单镜像构建（nginx 前端静态 + FastAPI 同容器；HF Space 与本地同源）
+│   ├── Dockerfile                     # 全栈单镜像构建（nginx 前端静态 + FastAPI + GeoServer 三服务同容器；启动自动注入 GeoServer Proxy Base URL）
 │   ├── Dockerfile.dockerignore        # 全栈镜像构建上下文白名单（BuildKit 按 Dockerfile 路径配对）
 │   ├── docker-compose.yml             # 本地编排：api(后端热重载) + web(Vite HMR) + app(prod 仿真 profile)
-│   ├── nginx.conf                     # 全栈容器 nginx 主配置（后端顶级段原样透传 + 静态缓存策略）
+│   ├── nginx.conf                     # 全栈容器 nginx 主配置（后端顶级段原样透传 + 瓦片磁盘缓存 + /geoserver/ 反代协议头与安全头）
 │   ├── .env                           # 部署环境配置（L1 不涉密，tracked，生产基线：APP_ENV=production、线上 URL）
 │   ├── .env.local                     # 本地开发环境配置（L1 不涉密，tracked，覆盖 .env：APP_ENV=development、localhost URL）
 │   └── .env.example                   # 配置全集 registry（L1/L2/L3 权威入口，不再作为复制模板）

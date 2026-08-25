@@ -179,6 +179,7 @@ const emit = defineEmits([
     'coordinate-jump',
     'update-news-image',
     'feature-selected',
+    'service-feature-query',
     'user-layers-change',
     'graphics-overview',
     'base-layers-change',
@@ -226,6 +227,8 @@ import { createDeferredUserLayerApis } from '@ol/layer/composables/useDeferredUs
 import { createDistrictManagerFeature } from '@ol/spatial-analysis/composables/useDistrictManager';
 import { useLayerContextMenuActions } from '@common/layer-tree/actions/useLayerContextMenuActions';
 import { createLayerControlHandlers } from '@ol/layer/composables/useLayerControlHandlers';
+import { createOlRemoteServiceAdapter } from '@ol/services/olRemoteServiceAdapter';
+import { looksLikeWmsSourceUrl } from '@common/basemap/wmsService';
 import { createLayerMetadataNormalizationFeature } from '@ol/layer/composables/useLayerMetadataNormalization';
 import { createManagedFeatureHighlightFeature } from '@ol/layer/feature/useManagedFeatureHighlight';
 import { createManagedFeatureOperationsFeature } from '@ol/layer/feature/useManagedFeatureOperations';
@@ -363,6 +366,9 @@ const { customBasemapUrl: customMapUrl } = useSharedCustomBasemapUrl();
 
 watch(customMapUrl, (nextUrl, previousUrl) => {
     if (!nextUrl || nextUrl === previousUrl) return;
+    // 服务类地址（WMS/ArcGIS REST）由「在线服务」注册表 adapter 统一渲染，
+    // 不走 custom 底图实例 —— 否则无选择的全量 source 会覆盖注册表的子图层组合
+    if (looksLikeWmsSourceUrl(nextUrl)) return;
     if (selectedLayer.value === 'custom' && mapInstance.value) {
         void setCustomBasemapByUrl(nextUrl);
     }
@@ -844,7 +850,12 @@ const { handleLayerChange, handleLayerOrderUpdate } = createLayerControlHandlers
     message,
     mapInstanceRef: mapInstance,
     emitBaseLayersChange: emitBaseLayersChangeBatched,
+    // 在线服务点查命中 → 上抛 HomeView，复用左下角「属性信息」面板展示
+    onIdentifyResult: (payload) => emit('service-feature-query', payload),
 });
+
+// 在线服务注册表 → OL 图层渲染适配器（TOC「在线服务」分组的渲染端）
+const olRemoteServiceAdapter = createOlRemoteServiceAdapter({ mapInstanceRef: mapInstance });
 
 // 栅格值查询函数的 ref 包装（用于延迟初始化）
 const queryRasterValueAtCoordinateRef = ref(null);
@@ -868,6 +879,16 @@ async function setCustomBasemapByUrl(url) {
         return {
             success: false,
             message: '自定义 XYZ 底图 URL 不能为空',
+            layerId: 'custom',
+            layerIndex: customLayerIndex,
+        };
+    }
+
+    // 服务类地址（WMS/ArcGIS REST）由注册表 adapter 渲染，禁止以 XYZ 通道覆盖
+    if (looksLikeWmsSourceUrl(normalizedUrl)) {
+        return {
+            success: false,
+            message: '服务类地址已由「在线服务」分组接管，请通过 TOC 勾选子图层控制显示',
             layerId: 'custom',
             layerIndex: customLayerIndex,
         };
@@ -2002,6 +2023,7 @@ defineExpose({
     getMapSize,
     getOlView,
     setCustomBasemapByUrl,
+    zoomToRemoteService: (id) => olRemoteServiceAdapter?.zoomTo?.(id) ?? false,
     selectedLayer,
     customMapUrl,
 });

@@ -296,7 +296,7 @@
                                         type="text"
                                         inputmode="url"
                                         spellcheck="false"
-                                        placeholder="https://example.com/tiles/{z}/{x}/{y}.png"
+                                        placeholder="https://example.com/tiles/{z}/{x}/{y}.png 或 WMS 服务 URL"
                                     />
                                     <button
                                         class="custom-basemap-submit"
@@ -316,6 +316,31 @@
                                     class="custom-basemap-current"
                                 >
                                     {{ customBasemapUrl }}
+                                </div>
+                                <!-- WMS 图层选择器：输入 WMS 地址后自动枚举可选图层 -->
+                                <div
+                                    v-if="wmsLayersLoading || wmsLayerOptions.length"
+                                    class="wms-layer-picker"
+                                >
+                                    <label class="wms-layer-label">WMS 图层<span
+                                        v-if="wmsLayersLoading"
+                                        class="wms-layer-loading"
+                                    >（枚举中…）</span></label>
+                                    <select
+                                        v-if="!wmsLayersLoading && wmsLayerOptions.length"
+                                        v-model="selectedWmsLayer"
+                                        class="wms-layer-select"
+                                        @change="onWmsLayerChange"
+                                    >
+                                        <option
+                                            v-for="option in wmsLayerOptions"
+                                            :key="option.name"
+                                            :value="option.name"
+                                            :title="option.path || option.title"
+                                        >
+                                            {{ option.label }}
+                                        </option>
+                                    </select>
                                 </div>
                             </form>
                         </div>
@@ -1062,6 +1087,10 @@ import {
 } from '@lucide/vue';
 import LilGuiControls from './LilGuiControls.vue';
 import { useLocale } from '@common/app/useLocale';
+import {
+    looksLikeWmsSourceUrl,
+    ensureWmsServiceInfo,
+} from '@common/basemap/wmsService';
 import { useCesiumLayersStore } from '@cesium-domain/stores/cesiumLayers';
 
 const { t } = useLocale();
@@ -1284,6 +1313,44 @@ watch(
     },
 );
 
+// ========== WMS 图层枚举与选择 ==========
+const wmsLayerOptions = ref([]);
+const selectedWmsLayer = ref('');
+const wmsLayersLoading = ref(false);
+let wmsLayersFetchToken = 0; // 防止连续输入导致的竞态回填
+
+watch(customBasemapDraft, (draftUrl) => {
+    const trimmed = String(draftUrl || '').trim();
+    if (!trimmed || !looksLikeWmsSourceUrl(trimmed)) {
+        resetWmsLayerSelection();
+        return;
+    }
+    void fetchWmsLayerOptions(trimmed);
+});
+
+function resetWmsLayerSelection() {
+    wmsLayersFetchToken += 1;
+    wmsLayerOptions.value = [];
+    selectedWmsLayer.value = '';
+    wmsLayersLoading.value = false;
+}
+
+async function fetchWmsLayerOptions(url) {
+    const token = ++wmsLayersFetchToken;
+    wmsLayersLoading.value = true;
+    wmsLayerOptions.value = [];
+    selectedWmsLayer.value = '';
+
+    const info = await ensureWmsServiceInfo(url);
+    if (token !== wmsLayersFetchToken || !looksLikeWmsSourceUrl(customBasemapDraft.value)) return;
+
+    wmsLayersLoading.value = false;
+    if (info?.layerOptions?.length) {
+        wmsLayerOptions.value = info.layerOptions;
+        selectedWmsLayer.value = info.layers || info.layerOptions[0]?.name || '';
+    }
+}
+
 function submitRemoteService() {
     emit('remote-service-submit', {
         type: remoteServiceType.value,
@@ -1329,7 +1396,18 @@ function selectBasemapOption(option) {
 }
 
 function submitCustomBasemap() {
-    emit('custom-basemap-submit', { url: customBasemapDraft.value });
+    emit('custom-basemap-submit', {
+        url: customBasemapDraft.value,
+        // WMS 时携带用户选择的图层；未选择则由加载逻辑回退默认首层
+        wmsLayer: wmsLayerOptions.value.length ? selectedWmsLayer.value : undefined,
+    });
+}
+
+/** 切换 WMS 图层下拉框后立即应用，无需再点「加载」 */
+function onWmsLayerChange() {
+    if (wmsLayersLoading.value || !wmsLayerOptions.value.length) return;
+    if (!looksLikeWmsSourceUrl(customBasemapDraft.value)) return;
+    submitCustomBasemap();
 }
 
 function readStoredUiState() {
@@ -2086,6 +2164,40 @@ function emitSetMaterial(sourceId, mode) {
     font-size: 10px;
     color: rgba(var(--ctp-ice-text-rgb), 0.5);
     word-break: break-all;
+}
+
+/* ===== WMS 图层选择器 ===== */
+.wms-layer-picker {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.wms-layer-label {
+    color: rgba(var(--ctp-ice-text-rgb), 0.75);
+    font-size: 10px;
+    font-weight: 700;
+}
+
+.wms-layer-loading {
+    font-weight: 400;
+    opacity: 0.7;
+}
+
+.wms-layer-select {
+    width: 100%;
+    height: 26px;
+    padding: 0 6px;
+    border: 1px solid rgba(var(--ctp-ice-rgb), 0.2);
+    border-radius: 6px;
+    background: rgba(var(--ctp-white-rgb), 0.06);
+    color: inherit;
+    font-size: 11px;
+    outline: none;
+}
+
+.wms-layer-select:focus {
+    border-color: rgba(var(--ctp-ice-rgb), 0.55);
 }
 
 /* ========== 远程 3D 服务加载 ========== */

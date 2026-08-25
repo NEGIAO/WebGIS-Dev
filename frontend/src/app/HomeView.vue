@@ -23,6 +23,14 @@ import { getLayerCategory, getLayerGroup } from '@ol/basemap/constants/basemapRe
 import { createMapCommandBus } from '@common/chat/agent/MapCommandBus';
 import { createCesiumMapCommandAdapter, createOlMapCommandAdapter } from '@common/chat/agent/mapCommandAdapters';
 import { useSharedCustomBasemapUrl } from '@common/basemap/useSharedCustomBasemapUrl';
+import {
+    RSVC_NODE_PREFIX,
+    parseRsvcNodeId,
+    unregisterRemoteService,
+    setRemoteServiceVisible,
+    setRemoteServiceSublayer,
+    setRemoteServiceOpacity,
+} from '@common/basemap/remoteServices';
 import { importCesiumContainerWithRetry, loadSidePanelModule } from './composables/useLazyModules';
 
 const { getLayerIdByIndex, getLayerIndexById } = createBasemapUrlMappingFeature({
@@ -133,6 +141,8 @@ const activeSidePanelTab = ref('info'); // 'info' | 'chat' | 'toolbox' | 'bus' |
 const toolboxTab = ref('layers');
 const userLayers = ref([]);
 const featureQueryResult = ref(null);
+// 属性信息面板来源元信息：上传图层为空；在线服务点查时携带 { title: '服务 · 图层' }
+const featureQueryMeta = ref(null);
 const showQueryPanel = ref(false);
 const toolboxOverview = ref({ drawCount: 0, uploadCount: 0, layers: [] });
 const baseLayers = ref([]);
@@ -1137,6 +1147,16 @@ function handleInteraction(type) {
 }
 
 function handleToggleLayerVisibility({ layerId, visible }) {
+    if (String(layerId).startsWith(RSVC_NODE_PREFIX)) {
+        const { serviceId, subLayerName } = parseRsvcNodeId(layerId);
+        if (subLayerName) {
+            // 子图层勾选 = 调整 LAYERS 组合，不改服务整体显隐
+            setRemoteServiceSublayer(serviceId, subLayerName, !!visible);
+        } else {
+            setRemoteServiceVisible(serviceId, !!visible);
+        }
+        return;
+    }
     if (isDistrictLayer(layerId)) {
         handleDistrictLayerVisibility(layerId, visible);
         return;
@@ -1145,6 +1165,10 @@ function handleToggleLayerVisibility({ layerId, visible }) {
 }
 
 function handleChangeLayerOpacity({ layerId, opacity }) {
+    if (String(layerId).startsWith(RSVC_NODE_PREFIX)) {
+        setRemoteServiceOpacity(String(layerId).slice(RSVC_NODE_PREFIX.length), Number(opacity));
+        return;
+    }
     mapContainerRef.value?.setUserLayerOpacity(layerId, opacity);
 }
 
@@ -1161,6 +1185,11 @@ function handleToggleBaseLayerVisibility({ layerId, visible }) {
 }
 
 function handleZoomLayer(layerId) {
+    if (String(layerId).startsWith(RSVC_NODE_PREFIX)) {
+        const { serviceId } = parseRsvcNodeId(layerId);
+        mapContainerRef.value?.zoomToRemoteService?.(serviceId);
+        return;
+    }
     if (focusDistrictLayer(layerId)) return;
     mapContainerRef.value?.zoomToUserLayer(layerId);
 }
@@ -1171,6 +1200,16 @@ function handleViewLayer(layerId) {
 }
 
 function handleRemoveLayer(layerId) {
+    if (String(layerId).startsWith(RSVC_NODE_PREFIX)) {
+        const { serviceId, subLayerName } = parseRsvcNodeId(layerId);
+        if (subLayerName) {
+            // 子图层叶子"移除" = 从 LAYERS 组合中取消叠加
+            setRemoteServiceSublayer(serviceId, subLayerName, false);
+        } else {
+            unregisterRemoteService(serviceId);
+        }
+        return;
+    }
     if (handleDistrictLayerRemove(layerId)) return;
     mapContainerRef.value?.removeUserLayer(layerId);
     // 直接更新 Pinia store，不依赖 async 事件链
@@ -1293,6 +1332,19 @@ function handleSearchPoiSelected(poiPayload) {
 
 function closeQueryPanel() {
     showQueryPanel.value = false;
+    featureQueryMeta.value = null;
+}
+
+/**
+ * 在线服务点查结果 → 复用左下角「属性信息」面板（与上传图层要素共用同一 UI）。
+ * payload: { title: '服务名 · 图层名', attributes: { 别名字段: 值, ... } }
+ */
+function handleServiceFeatureQuery(payload) {
+    const attrs = payload?.attributes;
+    if (!attrs || typeof attrs !== 'object' || !Object.keys(attrs).length) return;
+    featureQueryResult.value = attrs;
+    featureQueryMeta.value = payload.title ? { title: payload.title } : null;
+    showQueryPanel.value = true;
 }
 
 /** 处理图层被选中事件 */
@@ -1538,6 +1590,7 @@ onMounted(async () => {
                             @location-change="handleLocationChange"
                             @search-poi-selected="handleSearchPoiSelected"
                             @feature-selected="handleFeatureSelected"
+                            @service-feature-query="handleServiceFeatureQuery"
                             @user-layers-change="handleUserLayersChange"
                             @graphics-overview="handleGraphicsOverview"
                             @upload-progress-change="handleUploadProgressChange"
@@ -1572,8 +1625,13 @@ onMounted(async () => {
                         </div>
 
                         <div class="eco-body">
-                            <!-- 统计小标签：模仿用户面板的浅绿色调 -->
+                            <!-- 统计小标签：模仿用户面板的浅绿色调；来源标签 = 在线服务点查时展示 -->
                             <div class="eco-stats">
+                                <span
+                                    v-if="featureQueryMeta?.title"
+                                    class="eco-tag eco-tag-source"
+                                    :title="featureQueryMeta.title"
+                                >{{ featureQueryMeta.title }}</span>
                                 <span class="eco-tag">{{ t('home.drawTag', { n: toolboxOverview.drawCount }) }}</span>
                                 <span class="eco-tag">{{ t('home.uploadTag', { n: toolboxOverview.uploadCount }) }}</span>
                             </div>
@@ -1957,6 +2015,14 @@ onMounted(async () => {
     font-size: 11px;
     font-weight: 600;
     border: 2px solid #e8f0e8;
+}
+
+/* 来源标签（在线服务点查）：长标题截断 */
+.eco-tag-source {
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 /* 属性列表 */

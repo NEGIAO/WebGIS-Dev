@@ -6,6 +6,8 @@
  * 分层方案（值越大越在上层）：
  * - 底图瓦片带  0~199   全部底图源（imagery/vector/terrain/theme/custom），
  *                       与底图数量无关，上限固定 → 底图源任意增加也不会压过数据带
+ *                       其中 100~149 为在线服务子带（REMOTE_SERVICES）：WMS/ArcGIS
+ *                       注册表图层恒高于常规底图、仍属底图语义；150~199 卷帘预留
  * - 数据图层带  200~799 用户操纵的一切图层（上传 TIF/矢量/绘制/路线/搜索聚合）。
  *                       不再按类型分带：TOC 数据管理中的拖拽顺序覆写默认层级——
  *                       由 useManagedLayerRegistry.refreshUserLayerZIndex 按
@@ -24,6 +26,7 @@
 /** 各显示带的基准值 */
 export const Z_BAND = {
     BASEMAP: 0, // 底图瓦片带 0~199
+    REMOTE_SERVICES: 100, // 在线服务子带 100~149（WMS/ArcGIS 注册表图层，容量 50）
     DATA: 200, // 数据图层统一带 200~799（TOC 拖拽顺序覆写类型分带）
     DISTRICT: 600, // 区划边界带（= DATA + 400，系统固定层）
     LABEL: 800, // 标注瓦片带 800~899

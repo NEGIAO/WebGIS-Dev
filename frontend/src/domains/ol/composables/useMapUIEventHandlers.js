@@ -1,3 +1,5 @@
+import { transformExtent } from 'ol/proj';
+
 /**
  * 地图 UI 事件处理统一库（Phase 18）
  *
@@ -71,6 +73,33 @@ export function createMapUIEventHandlers({
      */
     function handleAttributeTableFocusFeature(payload) {
         if (!payload?.layerId || !payload?.featureId) return;
+
+        // ── 在线服务属性表（数据集 id 前缀 rsvc-attr:）：无托管要素，
+        //    双击按行自带范围（EPSG:4326）定位视图 ──
+        if (String(payload.layerId).startsWith('rsvc-attr:')) {
+            const store = attrStoreRef?.value ?? attrStoreRef;
+            const row = store?.datasets?.[payload.layerId]?.rows?.find(
+                (item) => String(item.featureId) === String(payload.featureId),
+            );
+            const map = mapInstanceRef?.value;
+            if (!row?.extent || !map?.getView) return;
+            const view = map.getView();
+            let targetExtent;
+            try {
+                targetExtent = transformExtent(row.extent, 'EPSG:4326', view.getProjection());
+            } catch {
+                return;
+            }
+            if (!targetExtent.every(Number.isFinite)) return;
+            view.fit(targetExtent, {
+                size: map.getSize?.(),
+                padding: [80, 80, 80, 80],
+                maxZoom: 19,
+                duration: 600,
+            });
+            return;
+        }
+
         const mode = payload?.mode || 'replace';
         if (mode === 'range' && Array.isArray(payload?.featureIds) && payload.featureIds.length) {
             batchHighlightManagedFeatures?.({

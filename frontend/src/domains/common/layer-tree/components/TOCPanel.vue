@@ -607,6 +607,12 @@ import {
     handleLayerTreeContextAction,
 } from '@common/layer-tree';
 import { handleCesiumLayerTreeAction } from '@cesium-domain/layers/toc-adapters/cesiumTocActions';
+import { handleRemoteServiceTreeAction } from '@common/basemap/remoteServiceTocActions';
+import { RSVC_NODE_PREFIX, useRemoteServices, parseRsvcNodeId } from '@common/basemap/remoteServices';
+import {
+    fetchArcgisLayerAttributes,
+    mergeSublayerAttributes,
+} from '@common/basemap/arcgisAttributeQuery';
 import { useLayerStore, useAttrStore } from '@/stores';
 import { useCesiumLayersStore } from '@cesium-domain/stores/cesiumLayers';
 import { useStyleEditor } from '@ol/layer/style/useStyleEditor';
@@ -1304,7 +1310,107 @@ function triggerFolderUpload() {
     folderInputRef.value?.click();
 }
 
-function openAttributeTable(layerId) {
+async function openAttributeTable(layerId) {
+    // ── 在线服务：拉取 ArcGIS Query 属性 → 灌入 attrStore → 打开属性表 ──
+    if (String(layerId).startsWith(RSVC_NODE_PREFIX)) {
+        const { serviceId, subLayerName } = parseRsvcNodeId(layerId);
+        const store = useRemoteServices();
+        const record = store.getRemoteService(serviceId);
+
+        if (!record) {
+            message?.warning?.('该在线服务已不存在');
+            return;
+        }
+        if (record.kind !== 'arcgis' || !record.queryable) {
+            message?.warning?.('该服务未开放查询能力（仅 ArcGIS 动态服务支持属性表）');
+            return;
+        }
+
+        // 目标子图层集合：叶子节点=精确单层；服务节点=已勾选层（未勾选则全部）
+        const targetNames = subLayerName
+            ? [subLayerName]
+            : (record.selectedIds?.length
+                ? record.selectedIds
+                : (record.sublayers || []).map((item) => item.name));
+        if (!targetNames.length) {
+            message?.warning?.('未找到可查询的子图层');
+            return;
+        }
+
+        const titleOf = (name) =>
+            record.sublayers?.find((item) => item.name === name)?.title || String(name);
+        message?.info?.(`正在查询属性表（${targetNames.length} 个子图层）…`, { duration: 2500 });
+
+        try {
+            const results = await Promise.all(
+                targetNames.map(async (name) => {
+                    try {
+                        const result = await fetchArcgisLayerAttributes({
+                            endpoint: record.endpoint,
+                            layerId: name,
+                        });
+                        return { ...result, layerId: name, layerTitle: titleOf(name) };
+                    } catch (error) {
+                        console.warn('[RSVC] 子层属性查询失败:', name, error);
+                        return { error: error?.message || '查询失败', layerId: name, layerTitle: name };
+                    }
+                }),
+            );
+
+            const ok = results.filter((item) => !item.error && item.records?.length);
+            if (!ok.length) {
+                const firstError = results.find((item) => item.error);
+                throw new Error(firstError?.error || '所有子图层均无要素');
+            }
+
+            const merged = mergeSublayerAttributes(ok);
+            const datasetKey = `rsvc-attr:${serviceId}:${subLayerName || 'all'}`;
+            const datasetName = `${record.title}${subLayerName ? ` · ${titleOf(subLayerName)}` : ''}`;
+
+            attrStore.datasets[datasetKey] = {
+                id: datasetKey,
+                layerId: datasetKey,
+                layerName: datasetName,
+                sourceType: 'remote-service',
+                geometryType: 'unknown',
+                metadata: { endpoint: record.endpoint },
+                rows: merged.records.map((record2, index) => ({
+                    id: `${datasetKey}:${record2.featureId}`,
+                    featureId: record2.featureId,
+                    layerId: datasetKey,
+                    layerName: datasetName,
+                    sourceType: 'remote-service',
+                    geometryType: 'unknown',
+                    properties: record2.properties,
+                    rawAttributes: {},
+                    statistics: {},
+                    geometry: record2.geometry || null,
+                    extent: record2.extent || null,
+                    searchText: Object.values(record2.properties)
+                        .map((value) => String(value ?? ''))
+                        .join(' ')
+                        .toLowerCase(),
+                    __index: index,
+                })),
+                fieldConfig: Object.fromEntries(
+                    merged.fields.map((field) => [
+                        field.key,
+                        { key: field.key, alias: field.alias, visible: true, type: field.type },
+                    ]),
+                ),
+                statistics: {},
+            };
+
+            attrStore.openTable(datasetKey, datasetName);
+            if (merged.records.length >= 2000) {
+                message?.info?.('数据量较大，属性表仅显示前 2000 条', { duration: 3000 });
+            }
+        } catch (error) {
+            message?.error?.(`属性表查询失败：${error?.message || '未知错误'}`);
+        }
+        return;
+    }
+
     const targetLayer = (props.userLayers || []).find((item) => item.id === layerId);
     attrStore.openTable(layerId, targetLayer?.name || t('layer.unnamedLayer'));
     activeTab.value = 'layers';
@@ -1367,6 +1473,9 @@ function handleLayerTreeAction(evt) {
 
     // Cesium 三维数据节点（id 前缀 cesium:）：直调元数据店，2D 链零参与
     if (handleCesiumLayerTreeAction(evt, cesiumLayersStore)) return;
+
+    // 在线服务节点（id 前缀 rsvc: / 分组头）：直调注册表（服务显隐 + 子图层 LAYERS 组合）
+    if (handleRemoteServiceTreeAction(evt, useRemoteServices())) return;
 
     const contextHandled = handleLayerTreeContextAction({
         evt,

@@ -22,7 +22,7 @@ export const DEFAULT_BASEMAP_PRESET_ID = 'custom_China_Blender_preset_2';
 // ========== 配置2：底图预设 ==========
 export const BASEMAP_PRESETS: BasemapPresetDefinition[] = [
     { id: 'local_tiles_preset', label: '本地瓦片', stack: ['local_tiles'] },
-    { id: 'custom', label: '自定义URL', stack: ['custom'] },
+    { id: 'custom', label: 'WMS/WMTS/XYZ', stack: ['custom'] },
 
     // 天地图系列
     {

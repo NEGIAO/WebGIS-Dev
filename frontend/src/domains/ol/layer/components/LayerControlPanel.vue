@@ -219,6 +219,32 @@
             已识别: {{ detectedServiceInfo.name }}
         </div>
 
+        <!-- WMS 图层选择器：输入 WMS 地址后自动枚举可选图层 -->
+        <div
+            v-if="selectedLayer === 'custom' && (wmsLayersLoading || wmsLayerOptions.length)"
+            class="wms-layer-picker"
+        >
+            <label class="wms-layer-label">WMS 图层<span
+                v-if="wmsLayersLoading"
+                class="wms-layer-loading"
+            >（枚举中…）</span></label>
+            <select
+                v-if="!wmsLayersLoading && wmsLayerOptions.length"
+                v-model="selectedWmsLayer"
+                class="wms-layer-select"
+                @change="onWmsLayerChange"
+            >
+                <option
+                    v-for="option in wmsLayerOptions"
+                    :key="option.name"
+                    :value="option.name"
+                    :title="option.path || option.title"
+                >
+                    {{ option.label }}
+                </option>
+            </select>
+        </div>
+
         <Teleport
             v-if="engine === 'ol'"
             defer
@@ -407,6 +433,10 @@ import { BASEMAP_OPTIONS } from '@/constants';
 import { detectCustomTileServiceKind } from '@ol/tile-source/index';
 import { tileHDRendering, toggleTileHDRendering } from '@ol/basemap/basemapSystem';
 import { groupBasemapsByYear } from '@common/basemap/basemapRegistry';
+import {
+    looksLikeWmsSourceUrl,
+    ensureWmsServiceInfo,
+} from '@common/basemap/wmsService';
 
 // ========== 异步导入子组件 ==========
 /** 地名搜索组件，支持多个服务源（天地图、国际、高德） */
@@ -498,6 +528,10 @@ const draggingIndex = ref(-1);
 const customUrlInput = ref(props.customMapUrl || '');
 const layerManagerAnchor = ref({ top: 0, left: 0 });
 const detectedServiceInfo = ref(null); // 检测到的服务类型信息
+const wmsLayerOptions = ref([]); // WMS Capabilities 枚举出的可选图层列表
+const selectedWmsLayer = ref(''); // 用户选择的 WMS 图层名（LAYERS）
+const wmsLayersLoading = ref(false);
+let wmsLayersFetchToken = 0; // 防止连续输入导致的竞态回填
 const showLayerContextMenu = ref(false);
 const showUrlSubmenu = ref(false);
 const contextMenuLayer = ref(null);
@@ -676,16 +710,48 @@ watch(
 
 /**
  * 监听自定义 URL 输入，实时检测服务类型
+ * WMS 服务时异步拉取 Capabilities，枚举全部可选图层供用户挑选
  */
 watch(customUrlInput, (newUrl) => {
     if (!newUrl || !newUrl.trim()) {
         detectedServiceInfo.value = null;
+        resetWmsLayerSelection();
         return;
     }
 
     const detected = detectCustomTileServiceKind(newUrl);
     detectedServiceInfo.value = detected.kind === 'unknown' ? null : detected;
+
+    if (detected.kind === 'wms') {
+        void fetchWmsLayerOptions(newUrl.trim());
+    } else {
+        resetWmsLayerSelection();
+    }
 });
+
+function resetWmsLayerSelection() {
+    wmsLayersFetchToken += 1; // 使在途请求失效
+    wmsLayerOptions.value = [];
+    selectedWmsLayer.value = '';
+    wmsLayersLoading.value = false;
+}
+
+async function fetchWmsLayerOptions(url) {
+    const token = ++wmsLayersFetchToken;
+    wmsLayersLoading.value = true;
+    wmsLayerOptions.value = [];
+    selectedWmsLayer.value = '';
+
+    const info = await ensureWmsServiceInfo(url);
+    // 输入已变化或组件卸载后的迟到响应直接丢弃
+    if (token !== wmsLayersFetchToken || !looksLikeWmsSourceUrl(customUrlInput.value)) return;
+
+    wmsLayersLoading.value = false;
+    if (info?.layerOptions?.length) {
+        wmsLayerOptions.value = info.layerOptions;
+        selectedWmsLayer.value = info.layers || info.layerOptions[0]?.name || '';
+    }
+}
 
 /**
  * 获取当前地图范围（SW,NE）用于后端搜索裁剪。
@@ -727,7 +793,16 @@ function submitCustomUrl() {
         layerId: 'custom',
         source: 'custom-url',
         customUrl: customUrlInput.value,
+        // WMS 时携带用户选择的图层；未选择则由加载逻辑回退默认首层
+        wmsLayers: wmsLayerOptions.value.length ? selectedWmsLayer.value : undefined,
     });
+}
+
+/** 切换 WMS 图层下拉框后立即应用，无需再点「加载」 */
+function onWmsLayerChange() {
+    if (wmsLayersLoading.value || !wmsLayerOptions.value.length) return;
+    if (!looksLikeWmsSourceUrl(customUrlInput.value)) return;
+    submitCustomUrl();
 }
 
 function onDragStart(evt, index) {
@@ -1429,11 +1504,47 @@ onBeforeUnmount(() => {
     background: var(--toc-primary-bg);
     border-left: 3px solid var(--brand-primary);
     border-radius: 6px;
-    color: var(--brand-accent-dark);
+    color: white;
     font-size: 11px;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+}
+
+/* ===== WMS 图层选择器 ===== */
+.wms-layer-picker {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin-top: 4px;
+}
+
+.wms-layer-label {
+    color: wheat;
+    font-size: 11px;
+    font-weight: 600;
+    padding-left: 2px;
+}
+
+.wms-layer-loading {
+    font-weight: 400;
+    opacity: 0.7;
+}
+
+.wms-layer-select {
+    width: 100%;
+    height: 28px;
+    padding: 0 6px;
+    border: 1px solid rgba(var(--brand-primary-rgb), 0.25);
+    border-radius: 8px;
+    background: #fff;
+    color: var(--toc-text-primary, #333);
+    font-size: 12px;
+    outline: none;
+}
+
+.wms-layer-select:focus {
+    border-color: var(--brand-primary);
 }
 
 /* ===== 图层管理浮层 ===== */

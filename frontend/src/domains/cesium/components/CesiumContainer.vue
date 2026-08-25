@@ -1355,6 +1355,11 @@ function initViewer() {
     viewer.scene.debugShowFramesPerSecond = true;
     viewer.scene.globe.terrainExaggeration = 1;
     viewer.scene.globe.terrainExaggerationRelativeHeight = 0.0;
+    // 影像未加载/瓦片缺失时露出的球体底色：Cesium 默认深蓝，改白
+    viewer.scene.globe.baseColor = Cesium.Color.WHITE;
+    // 纯白画布背景：关闭默认深蓝星空盒，空间区域与透明瓦片底色统一为白色
+    if (viewer.scene.skyBox) viewer.scene.skyBox.show = false;
+    viewer.scene.backgroundColor = Cesium.Color.WHITE;
     configureBeijingTimeSystem(viewer, Cesium);
     configureSolarLighting(viewer);
     // 按需渲染管理器：逐帧特效经 acquire/release 计数接管，计数归零进入按需渲染

@@ -161,29 +161,48 @@ export function buildContextMenuItems({ node, capabilities = {}, selectionState 
 
     if (nodeType === 'folder') {
         const totalCount = Number(folderSelectionState.totalCount) || 0;
-        if (totalCount <= 0) return [];
+        if (totalCount <= 0 && !capabilities.canRemove) return [];
 
         const selection = [];
-        if (folderSelectionState.isAllSelected) {
-            selection.push({
-                key: TOC_MENU_COMMANDS.FOLDER_MULTI_SELECT_REMOVE,
-                label: `取消勾选文件夹 (${totalCount})`,
-            });
-        } else {
-            selection.push({
-                key: TOC_MENU_COMMANDS.FOLDER_MULTI_SELECT_ADD,
-                label: `勾选文件夹（递归）(${totalCount})`,
-            });
+        if (totalCount > 0) {
+            if (folderSelectionState.isAllSelected) {
+                selection.push({
+                    key: TOC_MENU_COMMANDS.FOLDER_MULTI_SELECT_REMOVE,
+                    label: `取消勾选文件夹 (${totalCount})`,
+                });
+            } else {
+                selection.push({
+                    key: TOC_MENU_COMMANDS.FOLDER_MULTI_SELECT_ADD,
+                    label: `勾选文件夹（递归）(${totalCount})`,
+                });
+            }
+
+            if (selectedLayerIds.length > 0) {
+                selection.push({
+                    key: TOC_MENU_COMMANDS.MULTI_SELECT_CLEAR,
+                    label: `清空多选 (${selectedLayerIds.length})`,
+                });
+            }
+        }
+        if (selection.length) groups.push(selection);
+
+        // 文件夹级移除（如在线服务节点）：由 node.actions.remove 显式声明，
+        // 普通分组文件夹（folder-draw 等，无 actions）不受影响
+        if (capabilities.canZoom) {
+            groups.push([
+                { key: TOC_MENU_COMMANDS.ZOOM, label: '缩放至图层' },
+            ]);
+        }
+        if (capabilities.canRemove) {
+            groups.push([
+                {
+                    key: TOC_MENU_COMMANDS.REMOVE,
+                    label: capabilities.removeLabel || '移除图层',
+                    danger: true,
+                },
+            ]);
         }
 
-        if (selectedLayerIds.length > 0) {
-            selection.push({
-                key: TOC_MENU_COMMANDS.MULTI_SELECT_CLEAR,
-                label: `清空多选 (${selectedLayerIds.length})`,
-            });
-        }
-
-        groups.push(selection);
         return flattenMenuGroups(groups);
     }
 

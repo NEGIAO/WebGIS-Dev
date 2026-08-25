@@ -42,10 +42,11 @@ export function createBasemapLayerBootstrap({
             const rawSource = config && item.visible ? config.createSource() : null;
             const source = rawSource ? prioritizeTileSourceRequest(rawSource) : null;
             // zIndex 按显示带分配（与 refreshLayerInstances 同构）：标注类底图归标注带，其余归底图带
+            // 带内顺序与面板 UI 对齐：列表顶部（index 0）= 面板"置顶"目标 → 反向映射拿带内最高 z
             const zBand = config?.category === 'label' ? Z_BAND.LABEL : Z_BAND.BASEMAP;
             const layer = createBasemapLayerFromSource(source, {
                 visible: item.visible,
-                zIndex: zBand + index,
+                zIndex: zBand + (list.length - 1 - index),
                 opacity: typeof item.opacity === 'number' ? item.opacity : 1,
             });
 

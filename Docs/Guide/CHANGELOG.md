@@ -6,6 +6,88 @@
 
 ## 版本记录
 
+### V3.5.30 (2026-08-25) — 在线服务子图层独立管理与双引擎点击查询
+
+> 本版本整合了 V3.5.30~V3.5.38 多个中间版本的在线服务功能开发，统一为一个提交。
+
+- **WMS/ArcGIS/XYZ/WMTS 四协议统一注册 TOC**：新增 remoteServices 注册表（会话态）+ remoteServiceNodeBuilder（TOC 节点构建）+ remoteServiceTocActions（TOC 动作分流），支持服务 folder + 子图层叶子两级树结构。
+- **ArcGIS 动态服务拆分渲染**：每个勾选子图层独立 export 请求（客户端 zIndex 控制叠放，拖拽即时生效）；`usesPerSublayerRequests` 判定 + `renderOrderedIds`/`visualOrderedSublayerIds` 视觉序。
+- **点击查询弃用 identify 改用 query**：`/{layerId}/query` 精确点查替代 `/identify`（消除 top/all 语义歧义）；按视觉叠放序取第一个有要素的子层展示。
+- **属性表精确拉取**：右键打开属性表按子层 `/{layerId}/query?outFields=*&returnGeometry=false` 拉取，字段别名映射、esri 类型转换、多子层合并含「子图层」来源列。
+- **Cesium 适配器**：per-sublayer split 渲染 + viewer 就绪自愈挂载 + 常驻点击查询监听 + restack 方向修正。
+- **OL adapter**：per-sublayer split 渲染 + splitZIndex 子带内排序 + custom 底图实例退位（渲染收口注册表）+ 地图就绪补挂 watch。
+- **TOC 集成**：buildRemoteServiceGroup 注入 layerStore.layerTree；handleRemoteServiceTreeAction 分流器直调注册表；LayerPanel rsvc folder 显隐原样上抛。
+- **会话态生命周期**：注册表不做 localStorage 持久化，刷新即清（对齐 cesiumLayers 容器卸载即清档模式）。
+
+### V3.5.29 及更早
+
+### V3.5.38 (2026-08-25) — 在线服务注册表 Code Review 修复与优化
+
+- **背景**：对暂存区「在线服务 XYZ/WMTS 统一接入」批次（V3.5.36/37）全面 Code Review，发现 2 个 P0 功能缺陷、4 个 P1 及多项结构问题。
+- **P0 修复**：① `computeLayersParam` 排除式分支 `kind !== 'wms'` 使 WMTS 记录误入 ArcGIS 分支被加 `show:` 前缀 → 双引擎 WMTS 渲染全失效；改为按 kind 显式枚举（arcgis export 才用 `show:` 语法），新增 kind 默认安全兜底。② Cesium zyx「占位符换位」基于对 UrlTemplateImageryProvider 具名替换机制的错误认知 → 换位反而破坏 `{z}/{y}/{x}` 模板致瓦片错位；删除换位逻辑原样传入。
+- **P1 修复**：③ Cesium restack 循环方向修正为头→尾（后注册者居上），与 OL zIndex 正向映射语义对齐。④ WMS「全不勾」语义裁决为空 LAYERS（不复活初始组合），修正字段注释矛盾。⑤ 结构树门禁补录 7 个漏登记文件至 frontend-structure.md 并跑至绿。⑥ 版本号治理：V3.5.35 下两条「同日补充」追认为 V3.5.36/V3.5.37 独立条目。
+- **结构优化（SSOT 收敛）**：`parseRsvcNodeId`（节点 id 协议解析）、`renderSignature`（渲染签名）、`RSVC_GROUP_NODE_ID`(分组 id) 下沉 remoteServices.ts 唯一实现——此前 id 解析三处重复、签名双份复制、常量双导出 + LayerPanel 字面量硬编码；双 adapter dispose 补 `unregisterRsvcEngineApi` 反注册消除引擎切换 stale closure；zoomTo 入参语义纯净化（serviceId 不再剥前缀）；detectTileYScheme 正则 Annex B 遗留写法 `[^]` → `[\s\S]`。
+- **验证**：vite build 通过；CheckStructureTree / CheckConfigRegistry 双门禁绿。
+- **日志**：[2026-08-25-remote-service-code-review-fixes](../LLM_record/26-08/2026-08-25/2026-08-25-remote-service-code-review-fixes.md)
+
+### V3.5.37 (2026-08-25) — 在线服务 XYZ/WMTS 统一接入 TOC（追认）
+
+> 原记录于 V3.5.35「同日补充 3」，按版本号规范（每个 L2 任务独立 +1 修订号）追认为独立版本。
+
+- **内容**：kind 扩展至四协议（`wms|arcgis|xyz|wmts`），新增纯 JS 解析模块 `xyzWmtsCapabilities.js`（行序判定 + WMTS Capabilities 解析）；OL/Cesium 双 adapter 各增 xyz/wmts 分支（OL WMTS 走异步建源 + 矩阵集投影三级匹配）；loadCustomMap 扩展注册分支并抽取 custom 实例退位复用函数；随 Cesium 渲染端落地移除引擎过滤及 `activeTocEngine` 死代码；清理调试残留 probe_check.ts 与根目录 nul。
+- **日志**：[2026-08-25-remote-service-xyz-wmts-toc](../LLM_record/26-08/2026-08-25/2026-08-25-remote-service-xyz-wmts-toc.md)
+- **同日补充**：WMS queryable 提取缺失 + GetFeatureInfo 未实现双断点修复（identify 链路扩展）。见 [2026-08-25-fix-remote-service-query-preserve](../LLM_record/26-08/2026-08-25/2026-08-25-fix-remote-service-query-preserve.md)；OL adapter 补 viewer 就绪自愈 watch。
+
+### V3.5.36 (2026-08-25) — 在线服务 TOC 架构加固（追认）
+
+> 原记录于 V3.5.35「同日补充 2」，按版本号规范（每个 L2 任务独立 +1 修订号）追认为独立版本。
+
+- **内容**：① 消除双通道重复渲染——WMS/ArcGIS 注册成功后 custom 底图实例退位，渲染统一收口注册表 adapter；② OL adapter 地图就绪补挂 watch；③ 新增 `activeTocEngine` 引擎过滤（V3.5.37 已随 Cesium 落地移除）；④ 函数签名格式修复。
+- **日志**：[2026-08-25-remote-service-toc-architecture-fixes](../LLM_record/26-08/2026-08-25/2026-08-25-remote-service-toc-architecture-fixes.md)
+
+### V3.5.35 (2026-08-25) — 图层面板层叠顺序反向修复
+
+- **背景**：图层控制面板中，列表顶部的底图/叠加图层在地图上反而被压在最底层，拖拽排序/右键"移到顶部"的实际渲染效果与面板显示顺序相反。
+- **根因**：两套 zIndex 分配语义不一致——TOC 数据托管图层（`refreshUserLayerZIndex`）用 `Z_BAND.DATA + (N - 1 - index)` 反向映射（index 0 = 顶部 = 最高 z，正确）；而底图/叠加列表面板的 `refreshLayerInstances`（useMapState.js）与 `initializeBasemapLayers`（useBasemapLayerBootstrap.js）用 `zBand + index` 正向映射，且面板 `v-for` 直接按数组序渲染、"移到顶部"即 `dropIndex: 0`，UI 语义与 z 语义相反 → 层叠颠倒。
+- **方案**：两处统一改为 `zBand + (list.length - 1 - index)` 反向映射，面板顶部 = 带内最高 zIndex = 地图最上层。显示带方案（zIndexBands.js SSOT：底图带 0~199 / 卷帘偏移 150~199 / 数据带 200~799 / 标注带 800~899 / 系统带 900+）不变，常规底图 z 上界仍为 N-1，不侵入卷帘带。
+- **验证**：多底图叠加时面板顶部层压盖最上；右键置顶/置底、拖拽排序实时跟随；TOC 数据图层排序、卷帘左右层级、标注恒顶于数据层等回归行为不变。
+- **日志**：[2026-08-25-fix-basemap-panel-zorder-reverse](../LLM_record/26-08/2026-08-25/2026-08-25-fix-basemap-panel-zorder-reverse.md)
+- **同日补充**：修复 HomeView.vue 对 `remoteServices.ts` 的具名导入错误（`setRemoteServiceVisibility` → 实际导出 `setRemoteServiceVisible`），消除启动期 ESM SyntaxError 白屏。日志见 [2026-08-25-fix-homeview-import-name-mismatch](../LLM_record/26-08/2026-08-25/2026-08-25-fix-homeview-import-name-mismatch.md)。同日的在线服务架构加固与 XYZ/WMTS 接入已独立为 V3.5.36/V3.5.37 条目。
+
+### V3.5.34 (2026-08-24) — GeoServer 探索部署整体移除
+
+- **背景**：GeoServer（V3.5.31~33 累计三层迭代：并入镜像 → 反代加固 → NPE 修复）经实际试用判定不符合当前需求——现有 FastAPI + OL 直连架构已覆盖数据服务场景，而 GeoServer 带来镜像 +700MB、JVM 常驻、HF ephemeral 数据持久化三重负担。
+- **内容**：`deploy/Dockerfile` 删除 geoserver-dist 阶段、Tomcat/OpenJDK 拷贝、RemoteIpValve 注入与 start.sh 两个后台子壳，apt 移除 unzip/libfreetype6/fontconfig/fonts-dejavu-core；`deploy/nginx.conf` 删除 /geoserver 分流段与 X-Forwarded map 归一化块。保留 server 级安全响应头等通用加固。
+- **回溯指引**：探索结论（COG/PostGIS 外部化形态建议、REST 配置接口完整对象图要求等）见 V3.5.31~33 各日志；重建时推荐直接采用外部化形态。
+
+### V3.5.33 (2026-08-24) — GeoServer 状态页 NPE 修复：废除手写预置 global.xml
+
+- **背景**：HF/本地部署访问 `/geoserver/web/` 服务器状态页报 `WicketRuntimeException`，根因 `NullPointerException: Cannot invoke "org.geoserver.config.JAIInfo.getJAI()" because "jaiInfo" is null`。
+- **根因**（已核对 GeoServer 2.26.2 源码）：deploy/Dockerfile 构建期预置的极简 `data_dir/global.xml`（仅 `<proxyBase>`）被启动时直接加载、不再生成默认配置；XStream 反序列化走 Unsafe 实例化（绕过构造器与字段初始化器），缺失节点即为 null，而 `GeoServerInfoImpl.readResolve()` 只回填 `settings` 不回填 `jai`/`coverageAccess` → StatusPanel 渲染必崩。
+- **方案**：
+  - 删除预置 global.xml 的 printf 行，空 data_dir 交由 GeoServer 首启自生成完整默认配置；原位置补警示注释禁止未来再手写预置。
+  - start.sh Proxy Base 注入改为「GET 完整 settings.xml → sed 改 `<proxyBaseUrl>` → PUT 整体回传」——直接 PUT 部分 payload 因配置对象图缺失被拒绝（实测 500）；整体回传保留完整对象图并触发全量持久化。Proxy Base 兜底链路不变（请求探测 + REST 注入）。
+  - （同日补充）apt 运行时依赖补 `libfreetype6`/`fontconfig`/`fonts-dejavu-core`：slim 基础镜像缺 libfreetype，状态页字体枚举触发 `libfontmanager.so` 加载即抛 `UnsatisfiedLinkError`（global.xml 修复后实测暴露）。
+- **验证**：start.sh 提取片段 `sh -n` 通过；Dockerfile `docker build --check` 无警告；待重建镜像后实测状态页渲染、容器内 global.xml 含 `<jai>`/`<coverageAccess>` 完整节点、proxyBaseUrl 注入日志。
+- **日志**：[2026-08-24-geoserver-global-xml-npe-fix](../LLM_record/26-08/2026-08-24/2026-08-24-geoserver-global-xml-npe-fix.md)
+
+### V3.5.32 (2026-08-24) — GeoServer 反代链路加固：Nginx 协议归一化转发 + 安全头 + Proxy Base URL 启动自动注入
+
+- **背景**：V3.5.31 将 GeoServer 并入全栈镜像后，HF 边缘终结 TLS、容器内 nginx 收到明文 HTTP，`/geoserver/` 段若透传 `$scheme`（或硬编码 https 牺牲本地调试）都会让 GeoServer 生成的重定向/表单/Capabilities 在线资源协议错误；且数据目录 ephemeral，后台手改 Proxy Base URL 重启即丢失。
+- **方案**：
+  - `deploy/nginx.conf`：http 块新增 `map $http_x_forwarded_proto/$http_x_forwarded_port` 归一化（有头采信边缘代理的 https/443，无头回落本机值，HF 生产与本地 compose 仿真双兼容）；`/geoserver/` 段改传 `$forwarded_proto` 并补 `X-Forwarded-Host $host`；段内显式补齐三条安全响应头（nosniff / SAMEORIGIN / Referrer-Policy，对冲 add_header 继承失效）。
+  - `deploy/Dockerfile`（start.sh）：新增后台注入子壳——就绪探测（轮询 `/geoserver/rest/about/version.json`，最长 ~150s）后经 REST API `PUT /rest/settings` 写入 `proxyBaseUrl=https://negiao-webgis.hf.space/geoserver`；支持 `GEOSERVER_PUBLIC_URL` / `GEOSERVER_ADMIN_USER` / `GEOSERVER_ADMIN_PASSWORD` 覆盖，失败仅记日志不阻塞主服务。
+- **关键裁定**：「Nginx 层强制 HTTPS」以语义强制落地（协议头归一化 + Proxy Base URL 固化 https），不做全局 301——否则会打挂容器内 `curl http://127.0.0.1:7860/health` 健康检查与本地 http 调试。
+- **验证**：nginx:1.27-alpine `nginx -t` 通过（syntax ok / test successful）；start.sh 片段 `sh -n` 通过；待实机验证 Proxy Base URL 回显与安全头。
+- **日志**：[2026-08-24-geoserver-proxy-base-url](../LLM_record/26-08/2026-08-24/2026-08-24-geoserver-proxy-base-url.md)
+
+### V3.5.31 (2026-08-24) — GeoServer 并入全栈镜像（探索部署）
+
+> 注：本条目为补录（上任务日志声称已追加但文件中缺失，V3.5.32 任务时发现并修复）。
+
+- **内容**：`deploy/Dockerfile` 新增 `geoserver-dist` 多阶段源——直接 `COPY --from docker.osgeo.org/geoserver:2.26.2` 取用 Tomcat + geoserver webapp + OpenJDK17，结构性规避 bin-zip 下载在部分构建环境的 DNS 污染/损坏包问题；start.sh 第三服务 catalina 后台启动（堆 256m~1g，日志 `/tmp/geoserver.log`）；`deploy/nginx.conf` 新增 `location = /geoserver` 301 与 `location ^~ /geoserver/` 反代 `127.0.0.1:8080`。原前端/FastAPI 行为零变化；数据目录暂 ephemeral（Space 重建即重置，探索期接受）。
+- **日志**：[2026-08-24-geoserver-hf-deploy](../LLM_record/26-08/2026-08-24/2026-08-24-geoserver-hf-deploy.md)
+
 ### V3.5.29 补充 — nginx 瓦片磁盘缓存 (2026-08-24)
  — nginx 瓦片磁盘缓存
 

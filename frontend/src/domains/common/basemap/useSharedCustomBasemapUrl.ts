@@ -1,4 +1,5 @@
 ﻿import { ref, watch, type Ref } from 'vue';
+import { looksLikeWmsSourceUrl } from './wmsService';
 
 /** OL/Cesium 共享的 custom/Wayback URL 持久化键。 */
 export const CUSTOM_BASEMAP_URL_STORAGE_KEY = 'webgis_custom_basemap_url';
@@ -7,11 +8,24 @@ const LEGACY_CESIUM_CUSTOM_BASEMAP_URL_STORAGE_KEY = 'cesium_custom_xyz_basemap_
 function readInitialUrl(): string {
     if (typeof window === 'undefined') return '';
     try {
-        return String(
+        const stored = String(
             window.localStorage.getItem(CUSTOM_BASEMAP_URL_STORAGE_KEY) ||
                 window.localStorage.getItem(LEGACY_CESIUM_CUSTOM_BASEMAP_URL_STORAGE_KEY) ||
                 '',
         ).trim();
+
+        // 历史污染治理：服务类地址（WMS/ArcGIS REST）归注册表管，
+        // 不属于 XYZ 通道 —— 发现即清除，杜绝"每次刷新自动复活加载"
+        if (stored && looksLikeWmsSourceUrl(stored)) {
+            try {
+                window.localStorage.removeItem(CUSTOM_BASEMAP_URL_STORAGE_KEY);
+                window.localStorage.removeItem(LEGACY_CESIUM_CUSTOM_BASEMAP_URL_STORAGE_KEY);
+            } catch {
+                /* ignore */
+            }
+            return '';
+        }
+        return stored;
     } catch {
         return '';
     }

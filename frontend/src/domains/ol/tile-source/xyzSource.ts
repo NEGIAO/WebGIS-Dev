@@ -26,7 +26,8 @@ import {
     toErrorMessage,
 } from './urlUtils';
 import { prioritizeTileSourceRequest } from './tileLifecycle';
-import { detectWmsByUrl, createTileWmsSource, createWmsSourceStrict } from './wmsSource';
+import { detectWmsByUrl, createTileWmsSource, createWmsSourceStrict, toOlProjection } from './wmsSource';
+import { matchArcgisRestServiceUrl } from '@common/basemap/wmsService';
 import { detectWmtsByUrl, createWmtsSourceStrict } from './wmtsSource';
 
 // ==================== Y 轴归一化 ====================
@@ -158,7 +159,11 @@ export function createConfiguredServiceSource(
         params.SRS = String(definition.wms?.srs || definition.wms?.crs || 'EPSG:3857');
     }
 
-    return createTileWmsSource({ url: endpoint, params });
+    return createTileWmsSource({
+        url: endpoint,
+        params,
+        projection: toOlProjection(params.CRS || params.SRS),
+    });
 }
 
 // ==================== 服务类型检测 ====================
@@ -188,6 +193,11 @@ export function detectCustomTileServiceKind(
     const parsed = parseUrlSafe(normalizedUrl);
     if (!parsed) {
         return { kind: 'unknown', name: '未知格式' };
+    }
+
+    // ArcGIS REST 服务端点（…/MapServer）：原生协议动态出图，可回退 WMS
+    if (matchArcgisRestServiceUrl(normalizedUrl)) {
+        return { kind: 'wms', name: 'ArcGIS 地图服务' };
     }
 
     if (detectWmsByUrl(parsed)) {
@@ -270,7 +280,9 @@ export async function createAutoTileSourceFromUrl(
     }
 
     try {
-        const wmsResult = await createWmsSourceStrict(normalizedUrl);
+        const wmsResult = await createWmsSourceStrict(normalizedUrl, {
+            preferredLayers: options.preferredLayers,
+        });
         return { ...wmsResult, source: prioritizeTileSourceRequest(wmsResult.source) };
     } catch (error) {
         errors.push(`WMS: ${toErrorMessage(error)}`);

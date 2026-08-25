@@ -132,6 +132,8 @@ frontend/src/
 │   │   ├── layers/
 │   │   │   └── toc-adapters/
 │   │   │       └── cesiumTocActions.js  # cesium: 前缀动作直调元数据店
+│   │   ├── services/
+│   │   │   └── cesiumRemoteServiceAdapter.js  # 在线服务注册表 → Cesium ImageryLayer 渲染适配器（WMS/WMTS/XYZ/ArcGIS Provider 构建 + 显隐/叠放同步）
 │   │   ├── modules/
 │   │   │   ├── analysis/
 │   │   │   │   ├── analysisMath.js  # 共享纯函数：拾取兜底/大圆推算/扇形顶点（零 turf 依赖）
@@ -296,6 +298,13 @@ frontend/src/
 │   │   │   ├── basemapPresets.ts  # 底图预设纯数据（BASEMAP_PRESETS + ALL_BASEMAP_PRESETS + URL_LAYER_OPTIONS，零 ol/cesium 依赖，自 ol 域迁入）
 │   │   │   ├── basemapOptions.ts  # 底图选项常量 + 公开 1-based URL 图层编号双向 helper
 │   │   │   ├── basemapRegistry.ts  # 双引擎底图选择规范化、旧路由兼容与历史年份分组
+│   │   │   ├── remoteServices.ts  # 在线服务注册表（wms/arcgis/xyz/wmts 元数据 SSOT：computeLayersParam/renderSignature/parseRsvcNodeId/引擎定位 API 注册）
+│   │   │   ├── remoteServiceNodeBuilder.ts  # 注册表记录 → TOC「在线服务」分组节点（folder + 子图层叶子）
+│   │   │   ├── remoteServiceTocActions.js  # rsvc: 前缀 TOC 动作分流器（显隐/子图层勾选/移除/引擎定位直调注册表）
+│   │   │   ├── arcgisAttributeQuery.js  # ArcGIS REST 属性查询（/{layerId}/query 点查 + 多子层合并 + esri 类型映射）
+│   │   │   ├── identifyPresentation.js  # 要素点查结果展示渲染（HTML 构建 + HTML 转义，OL/Cesium 双引擎共用）
+│   │   │   ├── wmsService.js  # WMS/ArcGIS 服务解析与查询（ensureWmsServiceInfo/identifyArcgisFeatures/export 模板构建）
+│   │   │   ├── xyzWmtsCapabilities.js  # XYZ 行序判定 + WMTS GetCapabilities 轻量解析（纯 JS 零 OL 依赖）
 │   │   │   └── useSharedCustomBasemapUrl.ts  # OL/Cesium 共用的 custom/Wayback URL 运行时 SSOT 与本机持久化
 │   │   ├── chat/
 │   │   │   ├── agent/
@@ -609,7 +618,8 @@ frontend/src/
 │       │   └── utils/
 │       │       └── coordinateInputHandler.js  # 坐标输入处理
 │       ├── services/
-│       │   └── DistrictManager.ts  # 行政区划管理器
+│       │   ├── DistrictManager.ts  # 行政区划管理器
+│       │   └── olRemoteServiceAdapter.js  # 在线服务注册表 → OL 图层渲染适配器（WMS/WMTS/XYZ/ArcGIS source 构建 + zIndex 子带同步）
 │       ├── spatial-analysis/
 │       │   └── composables/
 │       │       ├── useDistrictManager.js

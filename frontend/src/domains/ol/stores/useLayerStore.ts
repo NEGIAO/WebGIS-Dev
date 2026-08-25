@@ -5,6 +5,8 @@ import { useSwipeConfigStore } from './useSwipeConfigStore';
 import { useFeatureStyleStore } from './useFeatureStyleStore';
 import { useCesiumLayersStore } from '@cesium-domain/stores/cesiumLayers';
 import { buildCesiumDataGroup } from '@cesium-domain/stores/cesiumLayerNodeBuilder';
+import { useRemoteServices } from '@common/basemap/remoteServices';
+import { buildRemoteServiceGroup } from '@common/basemap/remoteServiceNodeBuilder';
 import type { LayerHandlers, LayerStoreLayer } from './layer';
 import {
     isRasterLayer,
@@ -20,6 +22,7 @@ export const useLayerStore = defineStore('layerStore', () => {
     const tocStore = useTOCStore();
     // Cesium 三维数据元数据店（统一图层管理：树顶拼「三维数据」分组）
     const cesiumLayersStore = useCesiumLayersStore();
+    const remoteServicesStore = useRemoteServices();
     const userLayers = ref<LayerStoreLayer[]>([]);
     const overview = ref<any>({ drawCount: 0, uploadCount: 0, layers: [] });
     const selectedDrawTool = ref('AttributeQuery');
@@ -107,8 +110,14 @@ export const useLayerStore = defineStore('layerStore', () => {
             cesiumLayersStore.records,
             layerTreeExpandedState.value,
         );
+        // 「在线服务」分组：WMS / ArcGIS / XYZ / WMTS 注册表记录（会话态，刷新即清；见 remoteServices.ts 生命周期说明）
+        const remoteServiceGroup = buildRemoteServiceGroup(
+            remoteServicesStore.records.value,
+            layerTreeExpandedState.value,
+        );
         return [
             ...cesiumGroup,
+            ...remoteServiceGroup,
             ...buildLayerTree({
                 drawLayers: drawLayers.value,
                 routeLayers: routeLayers.value,

@@ -78,6 +78,7 @@ import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import { FolderTree, Search, SearchX, Inbox, X } from '@lucide/vue';
 import { useLayerStore } from '@/stores';
 import TOCTreeItem from '@common/layer-tree/components/TOCTreeItem.vue';
+import { RSVC_NODE_PREFIX, RSVC_GROUP_NODE_ID } from '@common/basemap/remoteServices';
 
 defineProps({
     drawLayers: { type: Array, default: () => [] },
@@ -162,6 +163,13 @@ function handleTreeAction(evt) {
     }
 
     if (evt.type === 'toggle-folder-visibility') {
+        // 「在线服务」分组/服务节点：整体显隐语义必须原样上抛，
+        // 由 TOCPanel 的 rsvc 分流器直调注册表（展开成叶子会丢失服务级开关）
+        const nodeId = String(evt.nodeId || '');
+        if (nodeId.startsWith(RSVC_NODE_PREFIX) || nodeId === RSVC_GROUP_NODE_ID) {
+            emit('action', evt);
+            return;
+        }
         const leaves = layerStore.getLayerLeafNodesByFolder(evt.nodeId);
         leaves.forEach((leaf) => {
             emit('action', {

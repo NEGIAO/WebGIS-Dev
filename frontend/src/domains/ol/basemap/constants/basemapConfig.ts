@@ -36,17 +36,12 @@ import {
     prioritizeTileSourceRequest,
 } from '@ol/tile-source';
 // 后端/瓦片代理基址统一由 publicRuntime 派生，禁止硬编码域名与直接读取 import.meta.env
-import {
-    backendTilesUrl,
-    gcj2wgsProxyUrl,
-    tileProxyUrl,
-} from '@/config/publicRuntime';
+import { backendTilesUrl, gcj2wgsProxyUrl, tileProxyUrl } from '@/config/publicRuntime';
 
 // ========== 预设目录(已抽离至 basemapPresets.ts,原位 re-export 保持兼容) ==========
 // 抽离原因见 basemapPresets.ts 头注释(切断登录页入口 → ol 的打包链)。
 export { BASEMAP_PRESETS, DEFAULT_BASEMAP_PRESET_ID } from '@common/basemap/basemapPresets';
 export type { BasemapPresetDefinition } from '@common/basemap/basemapPresets';
-
 
 // ========== 类型定义 ==========
 export type LayerCategory = 'label' | 'imagery' | 'terrain' | 'vector' | 'theme' | 'custom';
@@ -123,7 +118,6 @@ export type LayerSourceDefinition = {
     createSource: (ctx: LayerFactoryContext) => TileSourceInstance;
 };
 
-
 export type UserEditableTileLayerConfig = ConfiguredTileServiceDefinition & {
     category?: LayerCategory;
     group?: LayerGroup;
@@ -197,10 +191,7 @@ function buildS2CloudlessDef(year: number): LayerSourceDefinition {
         group: '影像',
         url,
         serviceType: 'xyz',
-        createSource: () =>
-            prioritizeTileSourceRequest(
-                new XYZ({ url }),
-            ),
+        createSource: () => prioritizeTileSourceRequest(new XYZ({ url })),
     };
 }
 
@@ -285,51 +276,35 @@ export const LAYER_SOURCE_DEFINITIONS: LayerSourceDefinition[] = [
         id: 'amap_label',
         name: '高德注记无偏',
         group: '注记',
-        url: gcj2wgsProxyUrl('http://wprd02.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}'),
+        url: gcj2wgsProxyUrl(
+            'http://wprd02.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}',
+        ),
         serviceType: 'xyz',
         category: 'label',
         createSource: () =>
             withSkipHighResTile(
                 prioritizeTileSourceRequest(
                     new XYZ({
-                        url: gcj2wgsProxyUrl('http://wprd02.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}'),
+                        url: gcj2wgsProxyUrl(
+                            'http://wprd02.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}',
+                        ),
                     }),
                 ),
             ),
     },
     {
-        id: 'label_stamen_toner_lines',
-        name: 'Stamen线划',
-        category: 'label',
-        group: '注记',
-        url: 'https://tiles.stadiamaps.com/tiles/stamen_toner_lines/{z}/{x}/{y}.png?api_key=e5abf577-33b9-47f0-92b2-bd60f88d8c8d',
-        serviceType: 'xyz',
-        createSource: () =>
-            withSkipHighResTile(
-                prioritizeTileSourceRequest(
-                    new XYZ({
-                        url: 'https://tiles.stadiamaps.com/tiles/stamen_toner_lines/{z}/{x}/{y}.png?api_key=e5abf577-33b9-47f0-92b2-bd60f88d8c8d',
-                    }),
-                ),
-            ),
+        id: 'custom',
+        name: '自定义URL',
+        category: 'custom',
+        group: '自定义',
+        url: '',
+        adapters: NON_STANDARD_XYZ_ADAPTERS,
+        serviceType: 'custom',
+        createSource: ({ customUrl }) =>
+            customUrl
+                ? createXYZSourceFromUrl(customUrl, { adapters: NON_STANDARD_XYZ_ADAPTERS })
+                : null,
     },
-    {
-        id: 'label_stamen_toner_labels',
-        name: 'Stamen注记',
-        category: 'label',
-        group: '注记',
-        url: 'https://tiles.stadiamaps.com/tiles/stamen_toner_labels/{z}/{x}/{y}.png?api_key=e5abf577-33b9-47f0-92b2-bd60f88d8c8d',
-        serviceType: 'xyz',
-        createSource: () =>
-            withSkipHighResTile(
-                prioritizeTileSourceRequest(
-                    new XYZ({
-                        url: 'https://tiles.stadiamaps.com/tiles/stamen_toner_labels/{z}/{x}/{y}.png?api_key=e5abf577-33b9-47f0-92b2-bd60f88d8c8d',
-                    }),
-                ),
-            ),
-    },
-
     // 2、地形图层
     {
         id: 'terrain_gac',
@@ -416,7 +391,9 @@ export const LAYER_SOURCE_DEFINITIONS: LayerSourceDefinition[] = [
         createSource: () =>
             prioritizeTileSourceRequest(
                 new XYZ({
-                    url: gcj2wgsProxyUrl('http://webst01.is.autonavi.com/appmaptile?style=6&x={x}&y={y}&z={z}'),
+                    url: gcj2wgsProxyUrl(
+                        'http://webst01.is.autonavi.com/appmaptile?style=6&x={x}&y={y}&z={z}',
+                    ),
                 }),
             ),
     },
@@ -457,7 +434,7 @@ export const LAYER_SOURCE_DEFINITIONS: LayerSourceDefinition[] = [
         group: 'World',
         // url: 'https://services.arcgisonline.com/arcgis/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
         // arcgisonline的域名被墙；但是wayback的arcgis域名可以访问；所以使用wayback的arcgis域名
-        url:'https://wayback-a.maptiles.arcgis.com/arcgis/rest/services/World_Imagery/WMTS/1.0.0/default028mm/MapServer/tile/26334/{z}/{y}/{x}',
+        url: 'https://wayback-a.maptiles.arcgis.com/arcgis/rest/services/World_Imagery/WMTS/1.0.0/default028mm/MapServer/tile/26334/{z}/{y}/{x}',
         // id：26334是wayback的arcgis域名的服务id，对应的时间戳为最新的2026-08-05（仅部分地区，中国大陆部分的影像不会同步更新，但与大陆arcgisonline的影像相同，wayback的arcgis域名的服务更新更快，且可以访问）
         // 后续如果wayback的arcgis域名的服务id更新了，需要修改id为最新的服务id（参见后端api：/api/historical-imagery/esri-wayback/layers 为二次封装好的接口，可获取最新的服务id）
         serviceType: 'xyz',
@@ -465,7 +442,7 @@ export const LAYER_SOURCE_DEFINITIONS: LayerSourceDefinition[] = [
             prioritizeTileSourceRequest(
                 new XYZ({
                     // url: 'https://services.arcgisonline.com/arcgis/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
-                    url:'https://wayback-a.maptiles.arcgis.com/arcgis/rest/services/World_Imagery/WMTS/1.0.0/default028mm/MapServer/tile/26334/{z}/{y}/{x}',
+                    url: 'https://wayback-a.maptiles.arcgis.com/arcgis/rest/services/World_Imagery/WMTS/1.0.0/default028mm/MapServer/tile/26334/{z}/{y}/{x}',
                 }),
             ),
     },
@@ -479,7 +456,7 @@ export const LAYER_SOURCE_DEFINITIONS: LayerSourceDefinition[] = [
         createSource: () =>
             prioritizeTileSourceRequest(
                 new XYZ({
-                    url: 'https://mt0.google.com/vt/lyrs=m&x={x}&y={y}&z={z}&s=Ga'
+                    url: 'https://mt0.google.com/vt/lyrs=m&x={x}&y={y}&z={z}&s=Ga',
                 }),
             ),
     },
@@ -488,12 +465,16 @@ export const LAYER_SOURCE_DEFINITIONS: LayerSourceDefinition[] = [
         name: 'Google水系(WGS)',
         category: 'imagery',
         group: '影像',
-        url: gcj2wgsProxyUrl('https://mt0.google.com/vt/lyrs=m&x={x}&y={y}&z={z}&hl=zh-CN&apistyle=s.t:0%7Cp.v:off,s.t:6%7Cp.v:on'),
+        url: gcj2wgsProxyUrl(
+            'https://mt0.google.com/vt/lyrs=m&x={x}&y={y}&z={z}&hl=zh-CN&apistyle=s.t:0%7Cp.v:off,s.t:6%7Cp.v:on',
+        ),
         serviceType: 'xyz',
         createSource: () =>
             prioritizeTileSourceRequest(
                 new XYZ({
-                    url: gcj2wgsProxyUrl('https://mt0.google.com/vt/lyrs=m&x={x}&y={y}&z={z}&hl=zh-CN&apistyle=s.t:0%7Cp.v:off,s.t:6%7Cp.v:on'),
+                    url: gcj2wgsProxyUrl(
+                        'https://mt0.google.com/vt/lyrs=m&x={x}&y={y}&z={z}&hl=zh-CN&apistyle=s.t:0%7Cp.v:off,s.t:6%7Cp.v:on',
+                    ),
                 }),
             ),
     },
@@ -567,6 +548,38 @@ export const LAYER_SOURCE_DEFINITIONS: LayerSourceDefinition[] = [
                 new XYZ({
                     url: 'https://tiles.stadiamaps.com/tiles/alidade_satellite/{z}/{x}/{y}.jpg?api_key=e5abf577-33b9-47f0-92b2-bd60f88d8c8d',
                 }),
+            ),
+    },
+    {
+        id: 'label_stamen_toner_lines',
+        name: 'Stamen线划',
+        category: 'label',
+        group: '注记',
+        url: 'https://tiles.stadiamaps.com/tiles/stamen_toner_lines/{z}/{x}/{y}.png?api_key=e5abf577-33b9-47f0-92b2-bd60f88d8c8d',
+        serviceType: 'xyz',
+        createSource: () =>
+            withSkipHighResTile(
+                prioritizeTileSourceRequest(
+                    new XYZ({
+                        url: 'https://tiles.stadiamaps.com/tiles/stamen_toner_lines/{z}/{x}/{y}.png?api_key=e5abf577-33b9-47f0-92b2-bd60f88d8c8d',
+                    }),
+                ),
+            ),
+    },
+    {
+        id: 'label_stamen_toner_labels',
+        name: 'Stamen注记',
+        category: 'label',
+        group: '注记',
+        url: 'https://tiles.stadiamaps.com/tiles/stamen_toner_labels/{z}/{x}/{y}.png?api_key=e5abf577-33b9-47f0-92b2-bd60f88d8c8d',
+        serviceType: 'xyz',
+        createSource: () =>
+            withSkipHighResTile(
+                prioritizeTileSourceRequest(
+                    new XYZ({
+                        url: 'https://tiles.stadiamaps.com/tiles/stamen_toner_labels/{z}/{x}/{y}.png?api_key=e5abf577-33b9-47f0-92b2-bd60f88d8c8d',
+                    }),
+                ),
             ),
     },
 
@@ -1080,7 +1093,7 @@ export const LAYER_SOURCE_DEFINITIONS: LayerSourceDefinition[] = [
         category: 'theme',
         group: '专题',
         url: 'https://maps-for-free.com/layer/water/z{z}/row{y}/{z}_{x}-{y}.gif',
-        adapters: NON_STANDARD_XYZ_ADAPTERS ,
+        adapters: NON_STANDARD_XYZ_ADAPTERS,
         serviceType: 'xyz',
         createSource: () =>
             createXYZSourceFromUrl(
@@ -1094,7 +1107,7 @@ export const LAYER_SOURCE_DEFINITIONS: LayerSourceDefinition[] = [
         category: 'theme',
         group: '专题',
         url: 'https://maps-for-free.com/layer/admin/z{z}/row{y}/{z}_{x}-{y}.gif',
-        adapters: NON_STANDARD_XYZ_ADAPTERS ,
+        adapters: NON_STANDARD_XYZ_ADAPTERS,
         serviceType: 'xyz',
         createSource: () =>
             createXYZSourceFromUrl(
@@ -1108,7 +1121,7 @@ export const LAYER_SOURCE_DEFINITIONS: LayerSourceDefinition[] = [
         category: 'theme',
         group: '专题',
         url: 'https://maps-for-free.com/layer/streets/z{z}/row{y}/{z}_{x}-{y}.gif',
-        adapters: NON_STANDARD_XYZ_ADAPTERS ,
+        adapters: NON_STANDARD_XYZ_ADAPTERS,
         serviceType: 'xyz',
         createSource: () =>
             createXYZSourceFromUrl(
@@ -1350,12 +1363,16 @@ export const LAYER_SOURCE_DEFINITIONS: LayerSourceDefinition[] = [
         name: '高德地图(WGS)',
         category: 'vector',
         group: '矢量',
-        url: gcj2wgsProxyUrl('http://webrd01.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}'),
+        url: gcj2wgsProxyUrl(
+            'http://webrd01.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}',
+        ),
         serviceType: 'xyz',
         createSource: () =>
             prioritizeTileSourceRequest(
                 new XYZ({
-                    url: gcj2wgsProxyUrl('http://webrd01.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}'),
+                    url: gcj2wgsProxyUrl(
+                        'http://webrd01.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}',
+                    ),
                 }),
             ),
     },
@@ -1392,12 +1409,16 @@ export const LAYER_SOURCE_DEFINITIONS: LayerSourceDefinition[] = [
         name: 'Google简洁(wgs)',
         category: 'vector',
         group: '矢量',
-        url: gcj2wgsProxyUrl('https://mt0.google.com/vt/lyrs=p&x={x}&y={y}&z={z}&s=Ga&apistyle=s.e:l%7Cp.v:off,s.t:1%7Cs.e.g%7Cp.v:off,s.t:2%7Cs.e.g%7Cp.v:off'),
+        url: gcj2wgsProxyUrl(
+            'https://mt0.google.com/vt/lyrs=p&x={x}&y={y}&z={z}&s=Ga&apistyle=s.e:l%7Cp.v:off,s.t:1%7Cs.e.g%7Cp.v:off,s.t:2%7Cs.e.g%7Cp.v:off',
+        ),
         serviceType: 'xyz',
         createSource: () =>
             prioritizeTileSourceRequest(
                 new XYZ({
-                    url: gcj2wgsProxyUrl('https://mt0.google.com/vt/lyrs=p&x={x}&y={y}&z={z}&s=Ga&apistyle=s.e:l%7Cp.v:off,s.t:1%7Cs.e.g%7Cp.v:off,s.t:2%7Cs.e.g%7Cp.v:off'),
+                    url: gcj2wgsProxyUrl(
+                        'https://mt0.google.com/vt/lyrs=p&x={x}&y={y}&z={z}&s=Ga&apistyle=s.e:l%7Cp.v:off,s.t:1%7Cs.e.g%7Cp.v:off,s.t:2%7Cs.e.g%7Cp.v:off',
+                    ),
                 }),
             ),
     },
@@ -1469,7 +1490,9 @@ export const LAYER_SOURCE_DEFINITIONS: LayerSourceDefinition[] = [
         serviceType: 'xyz',
         createSource: () =>
             prioritizeTileSourceRequest(
-                new XYZ({ url: 'https://tiles.stadiamaps.com/tiles/stamen_toner/{z}/{x}/{y}.png?api_key=e5abf577-33b9-47f0-92b2-bd60f88d8c8d' }),
+                new XYZ({
+                    url: 'https://tiles.stadiamaps.com/tiles/stamen_toner/{z}/{x}/{y}.png?api_key=e5abf577-33b9-47f0-92b2-bd60f88d8c8d',
+                }),
             ),
     },
     {
@@ -1643,19 +1666,6 @@ export const LAYER_SOURCE_DEFINITIONS: LayerSourceDefinition[] = [
                     url: 'https://tiles.negiao.cc.cd/tiles/{z}/{x}/{y}.png',
                 }),
             ),
-    },
-    {
-        id: 'custom',
-        name: '自定义URL',
-        category: 'custom',
-        group: '自定义',
-        url: '', 
-        adapters: NON_STANDARD_XYZ_ADAPTERS ,
-        serviceType: 'custom',
-        createSource: ({ customUrl }) =>
-            customUrl
-                ? createXYZSourceFromUrl(customUrl, { adapters: NON_STANDARD_XYZ_ADAPTERS })
-                : null,
     },
     {
         id: 'google_Backend_Proxy',
