@@ -56,14 +56,7 @@
             class="panel-scroll"
         >
             <LayerPanel
-                :draw-layers="drawLayers"
-                :route-layers="routeLayers"
-                :search-layers="searchLayers"
-                :upload-layers="uploadLayers"
                 :selected-layer-ids="multiSelectedLayerIds"
-                :has-draw-card="hasDrawCard"
-                :overview="overview"
-                :is-raster-layer="isRasterLayer"
                 @action="handleLayerTreeAction"
             />
 
@@ -598,16 +591,6 @@ import { useMessage } from '@common/shell/useMessage';
 import { useLocale } from '@common/app/useLocale';
 import { useGisLoader } from '@common/data-import/useGisLoader';
 import { useGisDropZone } from '@common/data-import/useGisDropZone';
-import { useSharedResourceLoader } from '@common/data-import/useSharedResourceLoader';
-import { usePositionCodeTool } from '@ol/utils/usePositionCodeTool';
-import {
-    applyRecursiveSelection,
-    applyRecursiveSelectionChunked,
-    pruneSelectedLayerIds,
-    handleLayerTreeContextAction,
-} from '@common/layer-tree';
-import { handleCesiumLayerTreeAction } from '@cesium-domain/layers/toc-adapters/cesiumTocActions';
-import { handleRemoteServiceTreeAction } from '@common/basemap/remoteServiceTocActions';
 import { RSVC_NODE_PREFIX, useRemoteServices, parseRsvcNodeId } from '@common/basemap/remoteServices';
 import {
     fetchArcgisLayerAttributes,
@@ -616,20 +599,16 @@ import {
 import { useLayerStore, useAttrStore } from '@/stores';
 import { useCesiumLayersStore } from '@cesium-domain/stores/cesiumLayers';
 import { useStyleEditor } from '@ol/layer/style/useStyleEditor';
-import {
-    COORDINATE_FORMATS,
-    DECIMAL_PLACES,
-    formatCoordinate,
-    generatePointName,
-    processCoordinateInput,
-} from '@ol/utils/biz/index';
-import { apiAddressGeocode, apiReverseGeocodeWithFallback } from '@/api';
 import { getRuntimeMapTokensSync, loadRuntimeMapTokens } from '@common/services/runtimeMapTokens';
 import LayerPanel from '@common/layer-tree/components/LayerPanel.vue';
 import SharedResourceTreeItem from '@common/layer-tree/components/SharedResourceTreeItem.vue';
 import AmapAoiInjectDialog from '@ol/search/components/AmapAoiInjectDialog.vue';
 import MapDownloader from '@ol/components/MapDownloader.vue';
 import LayerPropertiesDialog from '@common/layer-tree/components/LayerPropertiesDialog.vue';
+import { useGeocoding } from '../composables/useGeocoding';
+import { useFileUpload, MAX_FILE_SIZE_MB } from '../composables/useFileUpload';
+import { useSharedResources } from '../composables/useSharedResources';
+import { useTreeActionDispatcher } from '../composables/useTreeActionDispatcher';
 
 const props = defineProps({
     userLayers: { type: Array, default: () => [] },
@@ -638,6 +617,8 @@ const props = defineProps({
     uploadProgress: { type: Object, default: () => ({ phase: 'idle' }) },
     latestSearchPoi: { type: Object, default: () => ({}) },
     defaultTab: { type: String, default: 'layers' },
+    // 当前渲染引擎：'ol' | 'cesium'（在线服务动作按此优先分发）
+    activeEngine: { type: String, default: 'ol' },
 });
 
 const emit = defineEmits([
@@ -653,8 +634,6 @@ const emit = defineEmits([
     'edit-layer',
     'reorder-user-layers',
     'solo-layer',
-    'set-base-layer',
-    'toggle-base-layer-visibility',
     'toggle-layer-label-visibility',
     'apply-style-template',
     'update-draw-style',
@@ -666,7 +645,6 @@ const emit = defineEmits([
     'toggle-layer-crs',
     'export-layer-data',
     'rename-layer',
-    'show-layer-properties',
 ]);
 
 const fileInputRef = ref(null);
@@ -674,13 +652,13 @@ const folderInputRef = ref(null);
 const message = useMessage();
 const { t } = useLocale();
 const gisLoader = useGisLoader();
-const sharedLoader = useSharedResourceLoader();
 const layerStore = useLayerStore();
 const attrStore = useAttrStore();
 // Cesium 三维数据店：TOC「三维数据」分组的动作直调目标
 const cesiumLayersStore = useCesiumLayersStore();
 const styleEditor = useStyleEditor();
 const activeTab = ref('layers');
+const tiandituTk = ref(getRuntimeMapTokensSync().tiandituTk);
 
 const tabItems = [
     { value: 'layers', label: 'layer.tabLayers', icon: Layers },
@@ -693,30 +671,62 @@ const tabIndex = computed(() =>
     Math.max(0, tabItems.findIndex((item) => item.value === activeTab.value)),
 );
 
-const lastScanAttempted = ref(false);
-const coordInputLon = ref('');
-const coordInputLat = ref('');
-const coordInputCRS = ref('wgs84');
-const coordInputError = ref('');
-const coordInputP = ref('');
-const coordInputPError = ref('');
-const geocodeAddressInput = ref('');
-const geocodeCityInput = ref('');
-const geocodeToolError = ref('');
-const manualAoiPoiId = ref('');
-const manualAoiJsonText = ref('');
-const manualAoiError = ref('');
-const manualAoiDialogVisible = ref(false);
-const manualAoiSourceLayerName = ref('');
-const multiSelectedLayerIds = ref([]);
-let recursiveSelectionToken = 0;
-const isDecodePBusy = ref(false);
-const isGeocodeBusy = ref(false);
+// 图层属性弹窗（show-layer-properties 动作经 dispatcher 写入，模板 LayerPropertiesDialog 消费）
 const propertiesDialogVisible = ref(false);
 const propertiesDialogLayer = ref(null);
-const MB = 1024 * 1024;
-const MAX_FILE_SIZE_MB = 200;
-const tiandituTk = ref(getRuntimeMapTokensSync().tiandituTk);
+
+// ══════ P2 拆分：以下逻辑抽离至 composables（见 unified-layer-management-refactor-plan.md）══════
+const {
+    coordInputLon, coordInputLat, coordInputCRS, coordInputError,
+    coordInputP, coordInputPError,
+    geocodeAddressInput, geocodeCityInput,
+    manualAoiPoiId, manualAoiJsonText, manualAoiError,
+    manualAoiDialogVisible, manualAoiSourceLayerName, manualAoiDetailUrl,
+    isDecodePBusy, isGeocodeBusy,
+    copyLayerCoordinates,
+    closeManualAoiDialog, openManualAoiDetailLink, openManualAoiDialogByPoi,
+    drawAmapAoiFromManualJson, drawPointByCoordinates, drawPointByPositionCode,
+    drawPointByGeocodeAddress, startReverseGeocodePick,
+} = useGeocoding({ t, message, emit, tiandituTk });
+
+const {
+    uploadProgressView, shouldShowUploadProgress, uploadProgressPercent, uploadProgressLabel,
+    triggerFileUpload, triggerFolderUpload, handleFileUpload, handleDirectoryUpload,
+} = useFileUpload({
+    t, message, emit,
+    props,
+    getGisLoader: () => gisLoader,
+    getFileInputRef: () => fileInputRef.value,
+    getFolderInputRef: () => folderInputRef.value,
+});
+
+const {
+    sharedLoader, lastScanAttempted, scanSharedResources, loadSharedResource,
+} = useSharedResources({
+    t, message, emit,
+    getGisLoader: () => gisLoader,
+});
+
+const {
+    multiSelectedLayerIds, handleLayerTreeAction, syncUserLayers,
+} = useTreeActionDispatcher({
+    layerStore,
+    cesiumLayersStore,
+    useRemoteServices,
+    // 整个响应式 props 直传：activeEngine 等字段随引擎切换保持最新（快照会导致 P0-2 回归）
+    props,
+    emit,
+    message,
+    t,
+    uiState: { propertiesDialogVisible, propertiesDialogLayer },
+    deps: {
+        openAttributeTable,
+        setStyleTarget,
+        copyLayerCoordinates,
+        openManualAoiDialogByPoi,
+    },
+});
+
 const {
     isDragging: isUploadDragging,
     handleDragEnter: handleUploadDragEnter,
@@ -726,6 +736,7 @@ const {
 } = useGisDropZone({
     onUpload: (payload) => emit('upload-data', payload),
 });
+// ══════ P2 拆分结束 ══════
 
 function normalizeTab(value) {
     const normalized = String(value || '').trim();
@@ -741,11 +752,6 @@ watch(
     { immediate: true },
 );
 
-const { decodePositionCodeToPointPayload } = usePositionCodeTool({
-    tiandituTk,
-    reverseGeocode: apiReverseGeocodeWithFallback,
-});
-
 onMounted(async () => {
     const tokens = await loadRuntimeMapTokens();
     const nextTiandituTk = String(tokens?.tiandituTk || '').trim();
@@ -753,32 +759,6 @@ onMounted(async () => {
         tiandituTk.value = nextTiandituTk;
     }
 });
-
-function buildAmapDetailUrl(rawPoiId) {
-    const poiId = normalizeManualAoiPoiId(rawPoiId, { keepRawFallback: true });
-    return poiId
-        ? `https://www.amap.com/detail/get/detail?id=${encodeURIComponent(poiId)}`
-        : 'https://www.amap.com/';
-}
-
-const manualAoiDetailUrl = computed(() => {
-    return buildAmapDetailUrl(manualAoiPoiId.value);
-});
-
-const COORD_STORAGE_KEYS = {
-    FORMAT_ID: 'gis_coord_format_id',
-    DECIMAL_PLACES: 'gis_coord_decimal_places',
-};
-
-function getCurrentFormatConfig() {
-    const rawFormatId = String(localStorage.getItem(COORD_STORAGE_KEYS.FORMAT_ID) || 'format_6');
-    const rawPlaces = Number(localStorage.getItem(COORD_STORAGE_KEYS.DECIMAL_PLACES) || 6);
-
-    const formatId = COORDINATE_FORMATS[rawFormatId] ? rawFormatId : 'format_6';
-    const decimalPlaces = DECIMAL_PLACES[rawPlaces] ? rawPlaces : 6;
-
-    return { formatId, decimalPlaces };
-}
 
 const styleTemplates = styleEditor.styleTemplates;
 
@@ -799,455 +779,14 @@ const selectedEditLayerId = computed({
         layerStore.setStyleTarget(value);
     },
 });
-const drawLayers = computed(() => layerStore.drawLayers);
-const uploadLayers = computed(() => layerStore.uploadLayers);
-const routeLayers = computed(() => layerStore.routeLayers);
-const searchLayers = computed(() => layerStore.searchLayers);
-const hasDrawCard = computed(() => layerStore.hasDrawCard);
 const editableLayers = computed(() => layerStore.editableLayers);
-
-const uploadProgressView = computed(() => {
-    const raw = props.uploadProgress || {};
-    return {
-        phase: String(raw.phase || 'idle'),
-        total: Math.max(0, Number(raw.total) || 0),
-        current: Math.max(0, Number(raw.current) || 0),
-        success: Math.max(0, Number(raw.success) || 0),
-        failed: Math.max(0, Number(raw.failed) || 0),
-        warnings: Math.max(0, Number(raw.warnings) || 0),
-        errors: Math.max(0, Number(raw.errors) || 0),
-        message: String(raw.message || ''),
-    };
-});
-
-const shouldShowUploadProgress = computed(() => uploadProgressView.value.phase !== 'idle');
-
-const uploadProgressPercent = computed(() => {
-    const total = uploadProgressView.value.total;
-    const current = uploadProgressView.value.current;
-    if (!total) {
-        if (uploadProgressView.value.phase === 'done') return 100;
-        if (uploadProgressView.value.phase === 'error') return 100;
-        return 12;
-    }
-    return Math.max(0, Math.min(100, Math.round((current / total) * 100)));
-});
-
-const uploadProgressLabel = computed(() => {
-    const phase = uploadProgressView.value.phase;
-    if (phase === 'validating') return t('layer.importValidating');
-    if (phase === 'dispatching') return t('layer.importDispatching');
-    if (phase === 'importing') return t('layer.importImporting');
-    if (phase === 'done') return t('layer.importDone');
-    if (phase === 'error') return t('layer.importError');
-    return t('layer.importWaiting');
-});
-
-// 复制图层经纬度信息到剪贴板
-// 应当识别当前用户选择的格式，进行转化后复制
-async function copyLayerCoordinates(layer) {
-    if (!(Number.isFinite(layer?.longitude) && Number.isFinite(layer?.latitude))) {
-        message.warning(t('layer.noCopyableCoords'));
-        return;
-    }
-
-    const { formatId, decimalPlaces } = getCurrentFormatConfig();
-    const lon = Number(layer.longitude);
-    const lat = Number(layer.latitude);
-    const text = formatCoordinate(lon, lat, formatId, decimalPlaces);
-
-    if (!text) {
-        message.warning(t('layer.coordFormatFailed'));
-        return;
-    }
-
-    try {
-        if (navigator?.clipboard?.writeText) {
-            await navigator.clipboard.writeText(text);
-        } else {
-            const textarea = document.createElement('textarea');
-            textarea.value = text;
-            textarea.style.position = 'fixed';
-            textarea.style.opacity = '0';
-            document.body.appendChild(textarea);
-            textarea.focus();
-            textarea.select();
-            document.execCommand('copy');
-            document.body.removeChild(textarea);
-        }
-        message.success(t('layer.coordsCopied', { text }));
-    } catch {
-        message.error(t('layer.copyPoiIdFailed'));
-    }
-}
-
-function clearCoordinateInput() {
-    coordInputLon.value = '';
-    coordInputLat.value = '';
-    coordInputError.value = '';
-}
-
-function clearPositionCodeInput() {
-    coordInputP.value = '';
-    coordInputPError.value = '';
-}
-
-function _clearGeocodeInput() {
-    geocodeAddressInput.value = '';
-    geocodeCityInput.value = '';
-    geocodeToolError.value = '';
-}
-
-function normalizeManualAoiPoiId(rawValue, options = {}) {
-    const keepRawFallback = options?.keepRawFallback !== false;
-    const rawText = String(rawValue || '').trim();
-    if (!rawText) return '';
-
-    const unwrapped = rawText
-        .replace(/^\{+|\}+$/g, '')
-        .replace(/^['"]+|['"]+$/g, '')
-        .trim();
-    if (!unwrapped) return '';
-
-    if (/^https?:\/\//i.test(unwrapped)) {
-        try {
-            const url = new URL(unwrapped);
-            const idFromUrl = String(
-                url.searchParams.get('id') || url.searchParams.get('poiid') || '',
-            ).trim();
-            if (idFromUrl) return idFromUrl;
-        } catch {
-            // noop
-        }
-    }
-
-    const inlineIdMatch = unwrapped.match(/[?&](?:id|poiid)=([^&#\s]+)/i);
-    if (inlineIdMatch?.[1]) {
-        return String(decodeURIComponent(inlineIdMatch[1])).trim();
-    }
-
-    try {
-        const parsed = JSON.parse(unwrapped);
-        const idFromJson = String(
-            parsed?.data?.base?.poiid ||
-                parsed?.base?.poiid ||
-                parsed?.data?.base?.id ||
-                parsed?.pois?.[0]?.id ||
-                parsed?.id ||
-                '',
-        ).trim();
-        if (idFromJson) return idFromJson;
-    } catch {
-        // noop
-    }
-
-    return keepRawFallback ? unwrapped : '';
-}
-
-function closeManualAoiDialog() {
-    manualAoiDialogVisible.value = false;
-    manualAoiJsonText.value = '';
-    manualAoiError.value = '';
-    manualAoiSourceLayerName.value = '';
-}
-
-function openManualAoiDetailLink() {
-    manualAoiError.value = '';
-    const poiId = normalizeManualAoiPoiId(manualAoiPoiId.value, { keepRawFallback: true });
-    if (poiId) {
-        manualAoiPoiId.value = poiId;
-    }
-
-    const detailUrl = buildAmapDetailUrl(manualAoiPoiId.value);
-    if (typeof window !== 'undefined') {
-        const popup = window.open(detailUrl, '_blank', 'noopener,noreferrer');
-        if (!popup) {
-            message.warning(t('layer.popupBlocked'));
-        }
-    }
-}
-
-function openManualAoiDialogByPoi(payload = {}, options = {}) {
-    const poiId = normalizeManualAoiPoiId(payload?.poiid, { keepRawFallback: false });
-    const layerName = String(payload?.layerName || '').trim();
-    const shouldResetContent = !manualAoiDialogVisible.value || poiId !== manualAoiPoiId.value;
-
-    manualAoiPoiId.value = poiId || '';
-    if (shouldResetContent) {
-        manualAoiJsonText.value = '';
-        manualAoiError.value = '';
-    }
-    manualAoiSourceLayerName.value = layerName;
-    manualAoiDialogVisible.value = true;
-
-    if (!poiId && options?.showMissingIdHint) {
-        message.info(t('layer.poiMissingIdHint'));
-    }
-
-    if (options?.autoOpenDetail) {
-        openManualAoiDetailLink();
-    }
-
-    return true;
-}
-
-// 解析用户输入的高德详情 JSON，尝试从中提取 POI ID，并触发绘制事件
-function drawAmapAoiFromManualJson() {
-    manualAoiError.value = '';
-    const jsonText = String(manualAoiJsonText.value || '').trim();
-    if (!jsonText) {
-        manualAoiError.value = t('layer.pasteAmapJsonFirst');
-        message.warning(manualAoiError.value);
-        return;
-    }
-
-    const inputPoiId = normalizeManualAoiPoiId(manualAoiPoiId.value);
-    const poiId = inputPoiId || normalizeManualAoiPoiId(jsonText, { keepRawFallback: false });
-    if (poiId) {
-        manualAoiPoiId.value = poiId;
-    }
-
-    emit('draw-amap-aoi-from-json', {
-        poiid: poiId,
-        jsonText,
-        sourceLayerName: manualAoiSourceLayerName.value,
-    });
-
-    // closeManualAoiDialog();
-    // 取消自动关闭，允许用户继续修改 JSON 或 POI ID 以调整绘制结果
-}
-
-function buildReverseGeocodeProperties(reverseResult) {
-    const formattedAddress = String(reverseResult?.formattedAddress || '').trim();
-    const province = String(reverseResult?.province || '').trim();
-    const city = String(reverseResult?.city || '').trim();
-    const district = String(reverseResult?.district || '').trim();
-    const township = String(reverseResult?.township || '').trim();
-    const provider = String(reverseResult?.provider || '').trim();
-    const businessAreaText = Array.isArray(reverseResult?.businessAreas)
-        ? reverseResult.businessAreas
-              .map((item) => String(item?.name || '').trim())
-              .filter(Boolean)
-              .join('、')
-        : '';
-
-    return {
-        逆地理编码地址: formattedAddress || '未解析',
-        逆地理编码省: province || '未知',
-        逆地理编码市: city || '未知',
-        逆地理编码区县: district || '未知',
-        逆地理编码乡镇: township || '未知',
-        逆地理编码商圈: businessAreaText || '无',
-        逆地理编码服务: provider || 'unknown',
-    };
-}
-
-function drawPointByCoordinates() {
-    coordInputError.value = '';
-    const crsType = String(coordInputCRS.value || 'wgs84').toLowerCase();
-    const result = processCoordinateInput(coordInputLon.value, coordInputLat.value, crsType);
-
-    if (!result.valid) {
-        coordInputError.value = result.message;
-        message.warning(result.message);
-        return;
-    }
-
-    emit('draw-point-by-coordinates', {
-        lng: result.lng,
-        lat: result.lat,
-        crsType,
-        displayName: generatePointName(result.lng, result.lat, crsType),
-    });
-
-    clearCoordinateInput();
-}
-
-async function drawPointByPositionCode() {
-    coordInputPError.value = '';
-    const code = String(coordInputP.value || '').trim();
-
-    isDecodePBusy.value = true;
-    try {
-        const decodeResult = await decodePositionCodeToPointPayload(code);
-        if (!decodeResult?.ok) {
-            coordInputPError.value = String(
-                decodeResult?.error || t('layer.pDecodeFailed'),
-            );
-            message.warning(coordInputPError.value);
-            return;
-        }
-
-        emit('draw-point-by-coordinates', {
-            ...decodeResult.payload,
-        });
-
-        message.success(t('layer.pPointDrawn', { name: decodeResult.layerName }));
-        clearPositionCodeInput();
-    } finally {
-        isDecodePBusy.value = false;
-    }
-}
-
-async function drawPointByGeocodeAddress() {
-    geocodeToolError.value = '';
-
-    const inputAddress = String(geocodeAddressInput.value || '').trim();
-    const inputCity = String(geocodeCityInput.value || '').trim();
-    if (!inputAddress) {
-        geocodeToolError.value = t('layer.geocodeAddressRequired');
-        message.warning(geocodeToolError.value);
-        return;
-    }
-
-    isGeocodeBusy.value = true;
-    try {
-        const geocodeResponse = await apiAddressGeocode(inputAddress, inputCity, { silent: true });
-        const geocodeResult = geocodeResponse?.data || null;
-        if (
-            !geocodeResult ||
-            !Number.isFinite(geocodeResult.lng) ||
-            !Number.isFinite(geocodeResult.lat)
-        ) {
-            throw new Error(t('layer.geocodeNoCoords'));
-        }
-        let reverseResult = null;
-        try {
-            const reverseResponse = await apiReverseGeocodeWithFallback(
-                geocodeResult.lng,
-                geocodeResult.lat,
-                {
-                    tiandituTk: tiandituTk.value,
-                    silent: true,
-                },
-            );
-            reverseResult = reverseResponse?.data || null;
-        } catch {
-            reverseResult = null;
-        }
-
-        emit('draw-point-by-coordinates', {
-            lng: geocodeResult.lng,
-            lat: geocodeResult.lat,
-            crsType: 'wgs84',
-            displayName: inputAddress,
-            label: inputAddress,
-            layerName: inputAddress,
-            properties: {
-                来源: '地理编码',
-                输入地址: inputAddress,
-                城市限定: inputCity || '无',
-                地理编码地址: String(geocodeResult?.formattedAddress || '').trim() || inputAddress,
-                地理编码级别: String(geocodeResult?.level || '').trim() || 'unknown',
-                地理编码ADCODE: String(geocodeResult?.adcode || '').trim() || 'unknown',
-                ...buildReverseGeocodeProperties(reverseResult),
-            },
-        });
-
-        message.success(t('layer.geocodeSuccess', { address: inputAddress }));
-    } catch (error) {
-        const detail = error instanceof Error ? error.message : t('layer.geocodeFailed');
-        geocodeToolError.value = detail;
-        message.error(t('layer.geocodeFailedDetail', { detail }));
-    } finally {
-        isGeocodeBusy.value = false;
-    }
-}
-
-function startReverseGeocodePick() {
-    geocodeToolError.value = '';
-    emit('interaction', 'ReverseGeocodePick');
-}
-
-function isRasterLayer(layer) {
-    return layerStore.isRasterLayer(layer);
-}
-
-const availableLayerIds = computed(() =>
-    (props.userLayers || []).map((layer) => String(layer?.id || '').trim()).filter(Boolean),
-);
-
-const layerActionMap = computed(() => {
-    const map = new Map();
-
-    const walk = (nodes = []) => {
-        (nodes || []).forEach((node) => {
-            if (!node) return;
-
-            if (node.type === 'layer') {
-                const nodeId = String(node.id || '').trim();
-                if (nodeId) {
-                    map.set(nodeId, node.actions || {});
-                }
-            }
-
-            if (Array.isArray(node.children) && node.children.length > 0) {
-                walk(node.children);
-            }
-        });
-    };
-
-    walk(layerStore.layerTree || []);
-    return map;
-});
-
-function resolveLayerActionsById(layerId) {
-    const id = String(layerId || '').trim();
-    if (!id) return null;
-    return layerActionMap.value.get(id) || null;
-}
-
-function pruneMultiSelectedLayerIds() {
-    multiSelectedLayerIds.value = pruneSelectedLayerIds(
-        multiSelectedLayerIds.value,
-        availableLayerIds.value,
-    );
-}
-
-function setNodeRecursiveSelection(nodeId, checked) {
-    multiSelectedLayerIds.value = applyRecursiveSelection({
-        selectedLayerIds: multiSelectedLayerIds.value,
-        treeNodes: layerStore.layerTree || [],
-        targetNodeId: nodeId,
-        checked,
-        availableLayerIds: availableLayerIds.value,
-    });
-}
-
-function addMultiSelectedLayer(layerId) {
-    setNodeRecursiveSelection(layerId, true);
-}
-
-function removeMultiSelectedLayer(layerId) {
-    setNodeRecursiveSelection(layerId, false);
-}
-
-function setFolderRecursiveSelection(nodeId, checked) {
-    const currentToken = ++recursiveSelectionToken;
-    applyRecursiveSelectionChunked({
-        selectedLayerIds: multiSelectedLayerIds.value,
-        treeNodes: layerStore.layerTree || [],
-        targetNodeId: nodeId,
-        checked,
-        availableLayerIds: availableLayerIds.value,
-        chunkSize: 180,
-        shouldCancel: () => currentToken !== recursiveSelectionToken,
-    }).then((nextSelection) => {
-        if (currentToken !== recursiveSelectionToken) return;
-        multiSelectedLayerIds.value = nextSelection;
-    });
-}
-
-function clearMultiSelectedLayers() {
-    multiSelectedLayerIds.value = [];
-}
 
 watch(
     () => props.userLayers,
     (layers) => {
-        layerStore.syncLayers(layers || [], props.overview || {});
+        // layerStore 同步与多选修剪由 dispatcher.syncUserLayers 统一处理
+        syncUserLayers(layers || [], props.overview || {});
         attrStore.syncLayers(layers || []);
-        pruneMultiSelectedLayerIds();
     },
     { immediate: true },
 );
@@ -1301,14 +840,6 @@ onBeforeUnmount(() => {
     // 无参调用 bindHandlers 将所有回调设为 undefined，清除事件绑定
     layerStore.bindHandlers();
 });
-
-function triggerFileUpload() {
-    fileInputRef.value?.click();
-}
-
-function triggerFolderUpload() {
-    folderInputRef.value?.click();
-}
 
 async function openAttributeTable(layerId) {
     // ── 在线服务：拉取 ArcGIS Query 属性 → 灌入 attrStore → 打开属性表 ──
@@ -1416,114 +947,6 @@ async function openAttributeTable(layerId) {
     activeTab.value = 'layers';
 }
 
-function handleFileUpload(event) {
-    const files = Array.from(event.target.files || []);
-    if (!files.length) return;
-
-    // Check file sizes
-    const oversized = files.filter((file) => file.size / MB > MAX_FILE_SIZE_MB);
-    if (oversized.length) {
-        message.error(
-            t('layer.fileOversizeSelected', {
-                count: oversized.length,
-                size: MAX_FILE_SIZE_MB,
-                names: oversized.map((f) => f.name).join(', '),
-            }),
-        );
-        event.target.value = '';
-        return;
-    }
-
-    emit('upload-data', gisLoader.createUploadPayloadsFromFiles(files));
-
-    event.target.value = '';
-}
-
-function handleDirectoryUpload(event) {
-    const files = Array.from(event.target.files || []);
-    if (!files.length) return;
-
-    const oversized = files.filter((file) => file.size / MB > MAX_FILE_SIZE_MB);
-    if (oversized.length) {
-        message.warning(
-            t('layer.fileOversizeFolder', {
-                count: oversized.length,
-                size: MAX_FILE_SIZE_MB,
-            }),
-            { duration: 5200 },
-        );
-    }
-
-    emit('upload-data', gisLoader.createUploadPayloadFromFolder(files));
-
-    event.target.value = '';
-}
-
-function onDragStart(layerId) {
-    layerStore.onDragStart(layerId);
-}
-
-function onDrop(targetLayerId) {
-    layerStore.onDrop(targetLayerId);
-}
-
-function handleLayerTreeAction(evt) {
-    const type = evt?.type;
-    if (!type) return;
-
-    // Cesium 三维数据节点（id 前缀 cesium:）：直调元数据店，2D 链零参与
-    if (handleCesiumLayerTreeAction(evt, cesiumLayersStore)) return;
-
-    // 在线服务节点（id 前缀 rsvc: / 分组头）：直调注册表（服务显隐 + 子图层 LAYERS 组合）
-    if (handleRemoteServiceTreeAction(evt, useRemoteServices())) return;
-
-    const contextHandled = handleLayerTreeContextAction({
-        evt,
-        selectedLayerIds: multiSelectedLayerIds.value,
-        availableLayerIds: availableLayerIds.value,
-        addMultiSelectedLayer,
-        removeMultiSelectedLayer,
-        clearMultiSelectedLayers,
-        setFolderRecursiveSelection,
-        emit,
-        message,
-        openAttributeTable,
-        setStyleTarget,
-        copyLayerCoordinates,
-        openManualAoiDialogByPoi,
-        onDragStart,
-        onDrop,
-        resolveLayerActionsById,
-    });
-    if (contextHandled) return;
-
-    if (type === 'layer-selected') {
-        // 图层行被选中，可用于高亮地图上的图层等操作
-        emit('layer-selected', evt.layerId);
-        return;
-    }
-    if (type === 'toggle-layer-visibility') {
-        emit('toggle-layer-visibility', { layerId: evt.layerId, visible: !!evt.visible });
-        return;
-    }
-    if (type === 'rename-layer') {
-        emit('rename-layer', { layerId: evt.layerId, newName: evt.newName });
-        return;
-    }
-    if (type === 'change-layer-opacity') {
-        emit('change-layer-opacity', { layerId: evt.layerId, opacity: evt.opacity });
-        return;
-    }
-    if (type === 'show-layer-properties') {
-        const node = layerStore.findLayerTreeNodeById(evt.layerId);
-        if (node) {
-            propertiesDialogLayer.value = node;
-            propertiesDialogVisible.value = true;
-        }
-        return;
-    }
-}
-
 function setStyleTarget(layerId) {
     layerStore.setStyleTarget(layerId);
     activeTab.value = 'style';
@@ -1567,62 +990,6 @@ function applyStyle() {
     }
     if (selectedEditLayerId.value) {
         emit('update-layer-style', { layerId: selectedEditLayerId.value, styleConfig: payload });
-    }
-}
-
-/**
- * 扫描共享资源目录
- * 此方法触发一次性扫描，结果存储在 sharedLoader 的反应式状态中
- */
-async function scanSharedResources() {
-    try {
-        await sharedLoader.scanResources();
-        lastScanAttempted.value = true;
-        if (sharedLoader.hasResources.value) {
-            message.success(
-                t('layer.sharedFound', { count: sharedLoader.resources.value.length }),
-            );
-        } else {
-            message.info(t('layer.sharedEmpty'));
-        }
-    } catch (error) {
-        message.error(t('layer.sharedScanFailed', { error: String(error) }));
-        // 上方 message.error 已提示用户,此处不再重复 console.error
-        // console.error('Error scanning shared resources:', error);
-    }
-}
-
-/**
- * 加载选中的共享资源
- * 复用现有的上传逻辑来导入数据
- *
- * @param {Object} resource - 共享资源对象
- */
-async function loadSharedResource(resource) {
-    if (!resource || !resource.path) {
-        message.warning(t('layer.sharedIncomplete'));
-        return;
-    }
-
-    try {
-        // 使用共享加载器将资源转换为 File 对象
-        const files = await sharedLoader.loadResourceAsFiles(resource.path);
-
-        if (!files || files.length === 0) {
-            message.warning(t('layer.sharedLoadFailed'));
-            return;
-        }
-
-        // 显示加载中的提示
-        message.info(t('layer.sharedLoading', { name: resource.name }), { duration: 2000 });
-
-        // 复用上传逻辑来处理资源导入
-        // 这样可以保证共享资源与手动上传的资源拥有完全相同的处理流程
-        emit('upload-data', gisLoader.createUploadPayloadsFromFiles(files));
-    } catch (error) {
-        message.error(t('layer.sharedLoadError', { error: String(error) }));
-        // 上方 message.error 已提示用户,此处不再重复 console.error
-        // console.error('Error loading shared resource:', error);
     }
 }
 </script>

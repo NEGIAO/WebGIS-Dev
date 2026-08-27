@@ -187,7 +187,9 @@ export function handleLayerTreeContextAction({
     }
 
     if (type === 'drop-layer') {
-        onDrop?.(evt.layerId);
+        // TOCTreeItem 新载荷 { layerId: 拖拽源, targetId: 放置目标 }；
+        // 兼容旧载荷（layerId 即目标）
+        onDrop?.(evt.targetId ?? evt.layerId);
         return true;
     }
 

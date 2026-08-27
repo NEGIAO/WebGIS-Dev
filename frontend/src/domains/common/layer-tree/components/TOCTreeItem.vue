@@ -186,6 +186,41 @@
                         />
                         <span class="opacity-value">{{ Math.round((item.opacity ?? 1) * 100) }}%</span>
                     </div>
+                    <div
+                        v-else-if="item.key === 'set-height'"
+                        class="menu-opacity-item"
+                    >
+                        <span class="menu-item-label">{{ item.label }}</span>
+                        <input
+                            type="range"
+                            class="opacity-slider"
+                            :min="item.slider?.min ?? 0"
+                            :max="item.slider?.max ?? 0"
+                            :step="item.slider?.step || 1"
+                            :value="item.value ?? 0"
+                            @input="handleHeightChange($event.target.value)"
+                        />
+                        <span class="opacity-value">{{ Math.round(item.value ?? 0) }}m</span>
+                    </div>
+                    <div
+                        v-else-if="item.key === 'set-material'"
+                        class="menu-opacity-item"
+                    >
+                        <span class="menu-item-label">{{ item.label }}</span>
+                        <select
+                            class="menu-material-select"
+                            :value="item.value"
+                            @change="handleMaterialChange($event.target.value)"
+                        >
+                            <option
+                                v-for="choice in item.choices || []"
+                                :key="choice.value"
+                                :value="choice.value"
+                            >
+                                {{ choice.label }}
+                            </option>
+                        </select>
+                    </div>
                     <button
                         v-else
                         class="menu-item"
@@ -228,6 +263,7 @@ import {
     ListX,
     MapPin,
     MoreHorizontal,
+    Mountain,
     Paintbrush,
     Pencil,
     PencilLine,
@@ -322,6 +358,14 @@ const menuCapabilities = computed(() => {
         canRemove: !!actions.remove,
         removeLabel: actions.removeTip || '移除图层',
         currentOpacity: props.node?.opacity ?? 1,
+        // 三维数据专属（cesium:* 节点扩展字段）
+        canSetHeight: !!actions.setHeight && !!props.node?.heightRange,
+        canSetMaterial: !!actions.setMaterial,
+        canReposition: !!actions.reposition,
+        canStretchHeight: !!actions.stretchHeight,
+        heightRange: props.node?.heightRange || null,
+        currentHeight: props.node?.baseHeight ?? 0,
+        materialMode: props.node?.materialMode || 'baimo',
     };
 });
 
@@ -339,6 +383,8 @@ const MENU_ICONS = {
     properties: Info,
     zoom: ZoomIn,
     remove: Trash2,
+    reposition: MapPin,
+    'stretch-height': Mountain,
     'batch-show': Eye,
     'batch-hide': EyeOff,
     'multi-select-add': ListPlus,
@@ -498,14 +544,28 @@ function handleOpacityChange(value) {
     emitAction('change-layer-opacity', { layerId: props.node.id, opacity });
 }
 
-function handleDragStart() {
+/** 三维数据：调整 3D Tiles 基座高程（滑杆连续交互，不经命令分发） */
+function handleHeightChange(value) {
+    const height = Math.round(Number(value) || 0);
+    emitAction('data-set-height', { layerId: props.node.id, height });
+}
+
+/** 三维数据：切换 3D Tiles 材质模式 */
+function handleMaterialChange(mode) {
+    emitAction('data-set-material', { layerId: props.node.id, mode });
+}
+
+function handleDragStart(evt) {
     if (!props.node.draggable) return;
+    // 携带拖拽源 id，供 drop 目标识别来源
+    evt.dataTransfer?.setData('text/plain', props.node.id);
     emitAction('drag-layer-start', { layerId: props.node.id });
 }
 
-function handleDrop() {
+function handleDrop(evt) {
     if (!props.node.droppable) return;
-    emitAction('drop-layer', { layerId: props.node.id });
+    const dragId = evt?.dataTransfer?.getData('text/plain') || '';
+    emitAction('drop-layer', { layerId: dragId || props.node.id, targetId: props.node.id });
 }
 
 // 注册全局点击监听器：点击菜单外部时自动关闭
@@ -931,5 +991,18 @@ defineExpose({ closeContextMenu });
     text-align: right;
     font-size: 11px;
     color: var(--toc-text-secondary);
+}
+
+.menu-material-select {
+    flex: 1;
+    min-width: 0;
+    height: 24px;
+    border: 1px solid var(--toc-border, #d9d9d9);
+    border-radius: 6px;
+    background: transparent;
+    color: inherit;
+    font-size: 12px;
+    padding: 0 4px;
+    cursor: pointer;
 }
 </style>

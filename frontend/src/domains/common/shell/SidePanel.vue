@@ -78,13 +78,12 @@
                     :default-tab="toolboxTab"
                     :upload-progress="uploadProgress"
                     :latest-search-poi="latestSearchPoi"
+                    :active-engine="activeEngine"
                     @close="$emit('switch-tab', 'info')"
                     @upload-data="$emit('upload-data', $event)"
                     @interaction="$emit('interaction', $event)"
                     @toggle-layer-visibility="$emit('toggle-layer-visibility', $event)"
                     @change-layer-opacity="$emit('change-layer-opacity', $event)"
-                    @set-base-layer="$emit('set-base-layer', $event)"
-                    @toggle-base-layer-visibility="$emit('toggle-base-layer-visibility', $event)"
                     @toggle-layer-label-visibility="$emit('toggle-layer-label-visibility', $event)"
                     @zoom-layer="$emit('zoom-layer', $event)"
                     @view-layer="$emit('view-layer', $event)"
@@ -101,8 +100,6 @@
                     @draw-amap-aoi-from-json="$emit('draw-amap-aoi-from-json', $event)"
                     @toggle-layer-crs="$emit('toggle-layer-crs', $event)"
                     @export-layer-data="$emit('export-layer-data', $event)"
-                    @request-download-extent="$emit('request-download-extent')"
-                    @clear-download-extent="$emit('clear-download-extent')"
                     @rename-layer="$emit('rename-layer', $event)"
                     @layer-selected="$emit('layer-selected', $event)"
                 />
@@ -377,6 +374,11 @@ const props = defineProps({
         type: Object,
         default: () => ({}),
     },
+    // 当前渲染引擎：'ol' | 'cesium'（TOC 动作按此分发到对应引擎）
+    activeEngine: {
+        type: String,
+        default: 'ol',
+    },
     activeFeature: {
         type: Object,
         default: () => ({ key: 'info', label: '' }),
@@ -482,8 +484,6 @@ defineEmits([
     'interaction',
     'toggle-layer-visibility',
     'change-layer-opacity',
-    'set-base-layer',
-    'toggle-base-layer-visibility',
     'toggle-layer-label-visibility',
     'zoom-layer',
     'view-layer',
@@ -500,8 +500,6 @@ defineEmits([
     'draw-amap-aoi-from-json',
     'toggle-layer-crs',
     'export-layer-data',
-    'request-download-extent',
-    'clear-download-extent',
     'rename-layer',
     'layer-selected',
 ]);

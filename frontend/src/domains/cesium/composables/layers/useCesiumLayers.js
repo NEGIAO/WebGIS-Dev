@@ -17,6 +17,7 @@ import {
     buildIdentifyGroupsHtml,
     composeIdentifyHeading,
 } from '@common/basemap/identifyPresentation';
+import { setCapabilitiesProxyBuilder } from '@common/basemap/capabilitiesProxy';
 import { applyCesiumIonToken } from '../core/cesiumRuntime';
 import {
     readStoredBoolean,
@@ -313,6 +314,15 @@ export function useCesiumLayers({
     cesiumIonToken,
     dataImport,
 }) {
+    // 能力文档代理兜底：内网自签/CORS 服务直连失败时经后端 /proxy 重试（与 OL 引擎同语义）。
+    // 按 owner 注册：3D 容器卸载时注销 'cesium' 键，自动回落常驻 OL 构造器
+    setCapabilitiesProxyBuilder(
+        (url) =>
+            backendBaseUrl
+                ? `${String(backendBaseUrl).replace(/\/+$/, '')}/proxy/${url}`
+                : null,
+        'cesium',
+    );
     let tdtBoundaryLayer = null;
     let tdtTextLabelLayer = null;
     let osmBuildingsTileset = null;
@@ -2251,6 +2261,8 @@ export function useCesiumLayers({
         disposeCesiumArcgisIdentify();
         cesiumRemoteAdapter?.dispose?.();
         cesiumRemoteAdapter = null;
+        // 注销 3D 侧代理构造器：能力文档拉取回落常驻 OL 构造器（含 TILE_PROXY_MODE 门控）
+        setCapabilitiesProxyBuilder(null, 'cesium');
     }
 
     return {
@@ -2263,6 +2275,8 @@ export function useCesiumLayers({
         basemapOptions,
         terrainOptions,
         overlayOptions,
+        /** 在线服务定位：委托 cesiumRemoteAdapter.flyTo（未挂载返回 false） */
+        zoomToRemoteService: (serviceId) => cesiumRemoteAdapter?.flyTo?.(String(serviceId || '')) ?? false,
         createImageryProviderViewModels,
         createTerrainProviderViewModels,
         getSelectedImageryProviderViewModel,

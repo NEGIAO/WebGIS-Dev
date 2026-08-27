@@ -12,6 +12,8 @@
  * 注意：common 域不得反向依赖 @ol，此处用 DOMParser 自行解析最小化字段。
  */
 
+import { getCapabilitiesProxyBuilder } from './capabilitiesProxy';
+
 const WMS_INFO_CACHE = new Map();
 const CAPABILITIES_FETCH_TIMEOUT_MS = 10000;
 
@@ -73,12 +75,26 @@ export function looksLikeWmsSourceUrl(rawUrl) {
 }
 
 /**
+ * 由 REST 地址生成候选探测路径（含 /rest/ 段缺失时的标准变体）：
+ * 1. 原样路径（可能已是完整 REST 路径，或站点把 REST 直接挂在 /services 上）
+ * 2. 未含 /rest/ 段时插入：/arcgis/services/X → /arcgis/rest/services/X
+ *    （ArcGIS Site 标准目录形态，用户粘贴的地址常省略 rest 段）
+ */
+function buildArcgisProbePaths(servicePath) {
+    const paths = [servicePath];
+    const restVariant = servicePath.replace(/\/services\//i, '/rest/services/');
+    if (restVariant !== servicePath) paths.push(restVariant);
+    return paths;
+}
+
+/**
  * 由 REST 地址生成候选 WMS 端点（按命中率排序）：
  * 1. <ctx>/rest/services/X/MapServer → <ctx>services/X/MapServer/WmsServer（Esri 规范路径）
- * 2. 原地址 + /WMSServer（新版 ArcGIS 在启用 WMS 后开放）
- * 3. 原地址 + /WmsServer
+ * 2. 原地址 + /WMSServer、+ /WmsServer
+ * 3. 缺 /rest/ 段时补插 rest 变体后再追加（覆盖 /arcgis/services/X 粘贴形态）
  */
 function buildArcgisWmsCandidates(servicePath) {
+    const paths = [];
     const restMatch = servicePath.match(/^(.*\/)rest\/(services\/.+)$/i);
     if (restMatch) {
         return [
@@ -87,7 +103,12 @@ function buildArcgisWmsCandidates(servicePath) {
             `${servicePath}/WmsServer`,
         ];
     }
-    return [`${servicePath}/WmsServer`, `${servicePath}/WMSServer`];
+    paths.push(`${servicePath}/WmsServer`, `${servicePath}/WMSServer`);
+    const restVariant = servicePath.replace(/\/services\//i, '/rest/services/');
+    if (restVariant !== servicePath) {
+        paths.push(`${restVariant}/WmsServer`, `${restVariant}/WMSServer`);
+    }
+    return paths;
 }
 
 function appendCapabilitiesParams(urlStr) {
@@ -253,7 +274,10 @@ async function requestServiceJson(url, options = {}) {
             const reason = directError?.name === 'AbortError' ? '请求超时' : '网络不可达或跨域被拦截(CORS)';
             throw new Error(reason);
         }
-        const viaProxy = await fetchJsonText(proxiedUrl, timeoutMs);
+        const viaProxy = await fetchJsonText(proxiedUrl, timeoutMs).catch((proxyError) => {
+            const reason = proxyError?.name === 'AbortError' ? '请求超时' : (proxyError?.message || '不可达');
+            throw new Error(`直连失败且后端代理亦不可用（${reason}）`);
+        });
         if (!viaProxy.ok) throw new Error(`服务响应异常（HTTP ${viaProxy.status}，代理通道）`);
         try {
             return JSON.parse(viaProxy.text);
@@ -861,6 +885,20 @@ async function fetchCapabilitiesText(capabilitiesUrl) {
         const response = await fetch(capabilitiesUrl, { signal: controller.signal });
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         return await response.text();
+    } catch (directError) {
+        // 直连失败（自签证书 / CORS / 断网）→ 后端代理兜底重试一次（与瓦片同通道）
+        const buildProxyUrl = getCapabilitiesProxyBuilder();
+        const proxiedUrl = buildProxyUrl?.(capabilitiesUrl);
+        if (!proxiedUrl || proxiedUrl === capabilitiesUrl) throw directError;
+        const retryController = new AbortController();
+        const retryTimeout = setTimeout(() => retryController.abort(), CAPABILITIES_FETCH_TIMEOUT_MS);
+        try {
+            const response = await fetch(proxiedUrl, { signal: retryController.signal });
+            if (!response.ok) throw directError; // 代理也失败 → 维持原始直连错误语义
+            return await response.text();
+        } finally {
+            clearTimeout(retryTimeout);
+        }
     } finally {
         clearTimeout(timeoutId);
     }
@@ -904,15 +942,19 @@ export async function ensureWmsServiceInfo(rawUrl) {
 
         // 场景2：ArcGIS REST 端点（…/MapServer）
         // 优先原生协议（f=json 元数据 + export 动态出图，与 ArcGIS Pro 同源，仅需 Map 能力）；
-        // 失败时回退 WMS 端点探测
+        // 原样与「插入 /rest/ 段」两个路径变体逐一探测；均失败时回退 WMS 端点探测
         if (!info && matchArcgisRestServiceUrl(source)) {
             const matched = matchArcgisRestServiceUrl(source);
-            const serviceBase = `${matched.origin}${matched.servicePath}`;
-            try {
-                const jsonText = await fetchCapabilitiesText(`${serviceBase}?f=json`);
-                info = parseArcgisServiceJson(jsonText, serviceBase);
-            } catch (jsonError) {
-                console.warn('[wmsService] ArcGIS 原生协议不可用，尝试 WMS 探测:', jsonError?.message);
+            const probePaths = buildArcgisProbePaths(matched.servicePath);
+            for (const path of probePaths) {
+                const serviceBase = `${matched.origin}${path}`;
+                try {
+                    const jsonText = await fetchCapabilitiesText(`${serviceBase}?f=json`);
+                    info = parseArcgisServiceJson(jsonText, serviceBase);
+                    break; // 该变体可达且元数据有效 → endpoint 固定为此基址
+                } catch (jsonError) {
+                    console.warn('[wmsService] ArcGIS f=json 探测失败，尝试下一变体:', path, jsonError?.message);
+                }
             }
             if (!info) {
                 const probed = await probeArcgisWmsEndpoint(source);

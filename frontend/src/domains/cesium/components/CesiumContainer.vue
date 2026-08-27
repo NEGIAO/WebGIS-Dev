@@ -63,23 +63,15 @@
         :custom-basemap-url="customXyzBasemapUrl"
         :custom-ion-tileset-ready="customIonTilesetReady"
         :modules="toolModules"
-        :loaded-data-sources="loadedDataSourcesForPanel"
         @module-action="handleToolAction"
         @control-change="handleToolControlChange"
         @overlay-toggle="handleOverlayToggle"
         @custom-basemap-submit="handleCustomBasemapSubmit"
         @remote-service-submit="handleRemoteServiceSubmit"
         @data-import="handleDataImport"
-        @data-remove="handleDataRemove"
-        @data-clear-all="handleDataClearAll"
-        @data-flyto="handleDataFlyTo"
-        @data-reposition="handleDataReposition"
-        @data-stretch-height="handleDataStretchHeight"
-        @data-set-height="handleDataSetHeight"
         @import-tileset-zip="handleImportTilesetZip"
         @import-tileset-folder="handleImportTilesetFolder"
         @import-tileset-sample="(payload) => handleImportTilesetSample(payload)"
-        @data-set-material="handleDataSetMaterial"
     />
 
     <!-- 人物漫游操作提示面板 -->
@@ -176,6 +168,8 @@ import { useCesiumDataImport } from '../composables/dataImport/useCesiumDataImpo
 import { createCesiumDataOpsHandlers } from '../composables/dataImport/useCesiumDataOpsHandlers';
 import { useCesiumToolModules } from '../composables/toolModules/useCesiumToolModules';
 import { useCesiumLayersStore } from '@cesium-domain/stores/cesiumLayers';
+import { registerEngineHandlers, unregisterEngineHandlers } from '@common/layer-tree/actions/unifiedActionRouter';
+import { getCesiumGroundResolution } from '@common/utils/viewScale/browserAdapter';
 import { readCachedPreferredBasemap } from '@common/user/stores/useUserPreferencesStore';
 import { setRecordVisible, setRecordOpacity } from '../composables/dataImport/dataSourceDisplay';
 import { setupCloudIntegration } from '@cesium-domain/modules/cloud';
@@ -263,7 +257,26 @@ const {
     handleCustomBasemapSubmit,
     handleRemoteServiceSubmit,
     cleanupLayers,
+    zoomToRemoteService,
 } = layers;
+
+// 统一 Action Router：注册 Cesium 引擎处理器（HomeView 高频操作按引擎分发）。
+// 用户图层 id 带 'cesium:' 前缀时剥除后直调注册表 store；无前缀按原样尝试。
+registerEngineHandlers('cesium', {
+    setUserLayerVisibility: ({ layerId, visible }) => {
+        cesiumLayersStore.setVisible(stripCesiumPrefix(layerId), !!visible);
+    },
+    setUserLayerOpacity: ({ layerId, opacity }) => {
+        cesiumLayersStore.setOpacity(stripCesiumPrefix(layerId), Number(opacity));
+    },
+    removeUserLayer: ({ layerId }) => {
+        cesiumLayersStore.remove(stripCesiumPrefix(layerId));
+    },
+    zoomToUserLayer: ({ layerId }) => {
+        cesiumLayersStore.flyTo(stripCesiumPrefix(layerId));
+    },
+    zoomToRemoteService: ({ serviceId }) => zoomToRemoteService(serviceId),
+});
 
 // 监听 activeBasemap 变化兜底：CesiumToolPanel 等其它入口也能触发 URL 同步
 watch(activeBasemap, (next, prev) => {
@@ -276,7 +289,7 @@ const { coordinateDisplay, setupInteractions, cleanupInteractions } = useCesiumI
     getCesium,
 });
 
-const { installCreditHider, cleanupCreditHider } = useCesiumCreditHider({ getViewer });
+const { installCreditHider, cleanupCreditHider, restoreCreditDisplay } = useCesiumCreditHider({ getViewer });
 const { initNavigation, cleanupNavigation } = useCesiumNavigation({ getViewer, getCesium });
 const {
     restoreCameraFromUrl,
@@ -355,6 +368,12 @@ const attrViewExtentSync = createCesiumAttrViewExtentSync({ getViewer, getCesium
 // ==========================================
 const cesiumLayersStore = useCesiumLayersStore();
 
+/** 剥离 TOC 节点 id 的 cesium: 前缀（无前缀原样返回） */
+function stripCesiumPrefix(layerId) {
+    const raw = String(layerId || '');
+    return raw.startsWith('cesium:') ? raw.slice(7) : raw;
+}
+
 /** 按 id 查 loadedDataSources 句柄记录 */
 function findImportRecord(id) {
     return (dataImport.loadedDataSources.value || []).find((item) => item.id === id) || null;
@@ -365,14 +384,36 @@ watch(
     () => dataImport.loadedDataSources.value,
     (list) => {
         cesiumLayersStore.syncFromImport(
-            (list || []).map((item) => ({ id: item.id, name: item.name, type: item.type })),
+            (list || []).map((item) => {
+                const base = { id: item.id, name: item.name, type: item.type };
+                if (item.type === '3dtiles') {
+                    // 建档初值：高程滑杆范围以当前基座高 ±100m（对齐原 data tab 逻辑）
+                    const rawInitial = Number.isFinite(item.currentBaseHeight)
+                        ? item.currentBaseHeight
+                        : Number(item.tilesetGeo?.initialBaseHeight ?? item.tilesetGeo?.bottomH);
+                    const center = Number.isFinite(rawInitial) ? rawInitial : 0;
+                    base.baseHeight = center;
+                    base.heightRange = {
+                        min: Math.max(Math.floor(center - 100), -10),
+                        max: Math.max(Math.ceil(center + 100), Math.floor(center - 100) + 1),
+                    };
+                    base.materialMode = String(item.materialMode || 'baimo');
+                }
+                return base;
+            }),
         );
     },
     { immediate: true, deep: false },
 );
 
 // 注册场景操作 adapter（store action → 句柄）
-cesiumLayersStore.registerAdapter({
+    // 惰性引用：ops 处理器在后方解构，adapter 方法调用时已就绪
+    let _rsvcSetHeight = null;
+    let _rsvcSetMaterial = null;
+    let _rsvcReposition = null;
+    let _rsvcStretchHeight = null;
+
+    cesiumLayersStore.registerAdapter({
     setVisible(id, visible) {
         const record = findImportRecord(id);
         if (!record) {
@@ -411,6 +452,19 @@ cesiumLayersStore.registerAdapter({
             detachRouteFlyWorkingSet?.();
         }
         dataImport.removeDataSource(id);
+    },
+    setBaseHeight(id, height) {
+        // useCesiumDataOpsHandlers 的处理器为对象解构签名，必须以 { id, height } 下发
+        _rsvcSetHeight?.({ id, height });
+    },
+    setMaterialMode(id, mode) {
+        _rsvcSetMaterial?.({ id, mode });
+    },
+    reposition(id) {
+        _rsvcReposition?.({ id });
+    },
+    stretchToHeight(id) {
+        _rsvcStretchHeight?.({ id });
     },
 });
 
@@ -860,6 +914,20 @@ async function toggleReverseGeocodePick() {
     }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
 }
 
+/**
+ * 统一导入入口（3D 模式下 SidePanel 上传/共享资源/拖拽的落点）：
+ * 接收 gisLoader 载荷（resources 即原始 File[]），转入 Cesium 导入管线。
+ * 导入成功后经 syncFromImport 自动建档 → TOC「三维数据」分组接管管理。
+ * @param {{resources?: File[], name?: string}} data
+ * @returns {Promise<boolean>} 是否接受了载荷
+ */
+async function importUserData(data) {
+    const files = Array.isArray(data?.resources) ? data.resources : [];
+    if (!files.length) return false;
+    await handleDataImport({ files });
+    return true;
+}
+
 defineExpose({
     getViewer,
     getCesium,
@@ -876,13 +944,39 @@ defineExpose({
     focusDistrictByAdcode,
     isReverseGeocodePickMode,
     toggleReverseGeocodePick,
+    zoomToRemoteService,
+    importUserData,
+    /** 射线实测当前视角地面分辨率（米/像素）；Precision 校正与 §44 误差报告数据源 */
+    measureGroundResolution: () =>
+        getCesiumGroundResolution(viewer)?.groundResolution ?? null,
+    /** 当前相机海拔（米）；Precision 校正环读取用 */
+    getCameraHeight() {
+        const v = typeof viewer === 'object' ? viewer : null;
+        const h = v?.camera?.positionCartographic?.height;
+        return Number.isFinite(h) ? h : null;
+    },
+    /** 保持当前姿态，仅调整相机海拔（Precision 校正回写用） */
+    setCameraHeightKeepOrientation(heightMeters) {
+        const v = typeof viewer === 'object' ? viewer : null;
+        const C = getCesium?.();
+        if (!v?.camera || !C || !Number.isFinite(Number(heightMeters))) return;
+        const carto = C.Cartographic.fromCartesian(v.camera.position);
+        if (!carto) return;
+        v.camera.setView({
+            destination: C.Cartesian3.fromRadians(carto.longitude, carto.latitude, Number(heightMeters)),
+            orientation: {
+                heading: v.camera.heading,
+                pitch: v.camera.pitch,
+                roll: v.camera.roll,
+            },
+        });
+    },
 });
 
 /**
  * 响应式转发：使用 computed 包装 loadedDataSources，
  * 避免在模板里写 dataImport.loadedDataSources.value（解包时不会响应化）。
  */
-const loadedDataSourcesForPanel = computed(() => dataImport.loadedDataSources.value);
 const pendingGltfFile = computed(() => dataImport.pendingGltfFile.value);
 const repositionTarget = computed(() => dataImport.repositionTarget?.value);
 
@@ -1314,12 +1408,30 @@ function resetCesiumViewerForRetry() {
     // 清理已加载数据源（释放 Blob URL 等）
     dataImport.clearAllDataSources();
     if (!viewer) return;
+    // 恢复 creditDisplay 原生方法，避免 destroy 链中断后渲染循环带着空 _scene 残留
+    restoreCreditDisplay(viewer);
     try {
         viewer.destroy();
     } catch (error) {
         console.warn('Cesium viewer retry cleanup warning:', error);
+        haltViewerRenderLoop(viewer);
     }
     viewer = null;
+}
+
+/**
+ * 强制停掉 viewer 内部渲染循环。
+ * destroy() 中途抛异常时 destroyObject 未执行、isDestroyed() 仍返回 false，
+ * 渲染循环会在下一帧 resize() 里读已销毁的 _scene 而崩溃（Rendering has stopped）。
+ */
+function haltViewerRenderLoop(v) {
+    try {
+        const widget = v?.cesiumWidget || v?._cesiumWidget;
+        if (widget && !widget.isDestroyed()) {
+            widget._useDefaultRenderLoop = false;
+            widget._renderLoopRunning = false;
+        }
+    } catch { /* ignore */ }
 }
 
 /** 体积云集成清理函数 */
@@ -1360,6 +1472,9 @@ function initViewer() {
     // 纯白画布背景：关闭默认深蓝星空盒，空间区域与透明瓦片底色统一为白色
     if (viewer.scene.skyBox) viewer.scene.skyBox.show = false;
     viewer.scene.backgroundColor = Cesium.Color.WHITE;
+    // 地面大气效果：Cesium 库默认开启（globe.showGroundAtmosphere 初始 true），
+    // 按需求默认改为关闭；如需开启可在「高级效果」面板动态切换
+    viewer.scene.globe.showGroundAtmosphere = false;
     configureBeijingTimeSystem(viewer, Cesium);
     configureSolarLighting(viewer);
     // 按需渲染管理器：逐帧特效经 acquire/release 计数接管，计数归零进入按需渲染
@@ -1425,9 +1540,6 @@ onMounted(() => {
 // 面板/拖拽/GLTF 弹窗事件 → useCesiumDataImport 的转发层，容器只做一次装配。
 const {
     handleDataImport,
-    handleDataRemove,
-    handleDataFlyTo,
-    handleDataClearAll,
     handleDataReposition,
     handleDataStretchHeight,
     handleDataSetHeight,
@@ -1444,12 +1556,19 @@ const {
     isComponentUnmounted: () => componentUnmounted,
 });
 
+// 惰性引用回填：adapter 闭包在调用时通过这些引用触达 ops 处理器
+_rsvcSetHeight = handleDataSetHeight;
+_rsvcSetMaterial = handleDataSetMaterial;
+_rsvcReposition = handleDataReposition;
+_rsvcStretchHeight = handleDataStretchHeight;
+
 onUnmounted(() => {
     componentUnmounted = true;
     hideLoading();
     _cancelInitialSceneWait?.();
     _cancelInitialSceneWait = null;
     cesiumReady.value = false;
+    unregisterEngineHandlers('cesium');
 
     // 统一图层管理：注销 adapter 并清档（TOC「三维数据」分组随之消失）
     try { cesiumLayersStore.unregisterAdapter(); } catch { /* ignore */ }
@@ -1491,10 +1610,12 @@ onUnmounted(() => {
     cleanupNavigation();
     dataImport.clearAllDataSources();
     if (viewer) {
+        restoreCreditDisplay(viewer);
         try {
             viewer.destroy();
         } catch (e) {
             console.warn('Cesium viewer destroy warning:', e);
+            haltViewerRenderLoop(viewer);
         }
         viewer = null;
     }

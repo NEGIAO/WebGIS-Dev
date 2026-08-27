@@ -1,4 +1,5 @@
 import { TOC_MENU_COMMANDS, normalizeTocLayerIdList } from '../protocol';
+import { RSVC_NODE_PREFIX } from '@common/basemap/remoteServices';
 
 function flattenMenuGroups(groups = []) {
     const flattened = [];
@@ -156,11 +157,43 @@ export function buildContextMenuItems({ node, capabilities = {}, selectionState 
             });
         if (ops.length) groups.push(ops);
 
+        // 三维数据专属（cesium:* 节点）：高程滑杆/材质切换/重定位/拉伸
+        // 高程滑杆复用菜单内嵌滑杆模式（同透明度），min/max 来自节点 heightRange
+        const threeD = [];
+        if (capabilities.canSetHeight) {
+            threeD.push({
+                key: TOC_MENU_COMMANDS.SET_HEIGHT,
+                label: '调整高程',
+                slider: capabilities.heightRange,
+                value: capabilities.currentHeight ?? 0,
+            });
+        }
+        if (capabilities.canSetMaterial) {
+            threeD.push({
+                key: TOC_MENU_COMMANDS.MATERIAL,
+                label: '材质模式',
+                choices: [
+                    { value: 'pureWhite', label: '纯白' },
+                    { value: 'baimo', label: '白膜' },
+                    { value: 'heightStyle', label: '高度着色' },
+                    { value: 'gradient', label: '渐变' },
+                    { value: 'none', label: '原始' },
+                ],
+                value: capabilities.materialMode || 'baimo',
+            });
+        }
+        if (capabilities.canReposition)
+            threeD.push({ key: TOC_MENU_COMMANDS.REPOSITION, label: '调整位置' });
+        if (capabilities.canStretchHeight)
+            threeD.push({ key: TOC_MENU_COMMANDS.STRETCH_HEIGHT, label: '拉伸至高程' });
+        if (threeD.length) groups.push(threeD);
+
         return flattenMenuGroups(groups);
     }
 
     if (nodeType === 'folder') {
         const totalCount = Number(folderSelectionState.totalCount) || 0;
+        const folderNodeId = String(node?.id || '').trim();
         if (totalCount <= 0 && !capabilities.canRemove) return [];
 
         const selection = [];
@@ -194,13 +227,26 @@ export function buildContextMenuItems({ node, capabilities = {}, selectionState 
             ]);
         }
         if (capabilities.canRemove) {
-            groups.push([
-                {
-                    key: TOC_MENU_COMMANDS.REMOVE,
-                    label: capabilities.removeLabel || '移除图层',
-                    danger: true,
-                },
-            ]);
+            // 在线服务文件夹本身可移除（注销该服务）；普通分组文件夹无此语义，
+            // 仅提供「清空图层」批量项（由 TOCPanel 清空分支逐叶子走移除链路）
+            if (folderNodeId.startsWith(RSVC_NODE_PREFIX)) {
+                groups.push([
+                    {
+                        key: TOC_MENU_COMMANDS.REMOVE,
+                        label: capabilities.removeLabel || '移除图层',
+                        danger: true,
+                    },
+                ]);
+            }
+            if (totalCount > 0) {
+                groups.push([
+                    {
+                        key: TOC_MENU_COMMANDS.FOLDER_CLEAR_LAYERS,
+                        label: `清空图层 (${totalCount})`,
+                        danger: true,
+                    },
+                ]);
+            }
         }
 
         return flattenMenuGroups(groups);

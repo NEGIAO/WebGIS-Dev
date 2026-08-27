@@ -31,6 +31,10 @@ const TYPE_LABELS: Record<string, string> = {
 /** 单条记录 → TOC layer 节点（形状对齐 toLayerNode 输出） */
 function toCesiumLayerNode(record: CesiumLayerRecord): any {
     const nodeId = `${CESIUM_NODE_PREFIX}${record.id}`;
+    const is3DTiles = record.type === '3dtiles';
+    const isGltf = record.type === 'gltf';
+    const isTif = record.type === 'tif';
+
     return {
         id: nodeId,
         name: record.name,
@@ -53,6 +57,10 @@ function toCesiumLayerNode(record: CesiumLayerRecord): any {
         parentId: CESIUM_GROUP_NODE_ID,
         draggable: false,
         droppable: false,
+        // 扩展能力标记（供 TOC 右键菜单渲染条件控件）
+        heightRange: record.heightRange ?? undefined,
+        baseHeight: Number.isFinite(record.baseHeight) ? record.baseHeight : 0,
+        materialMode: record.materialMode ?? undefined,
         actions: {
             attribute: false,
             edit: false,
@@ -77,6 +85,13 @@ function toCesiumLayerNode(record: CesiumLayerRecord): any {
             removePayload: { layerId: nodeId },
             soloEvent: '',
             soloPayload: { layerId: nodeId },
+            // 3D Tiles 独有：高程调节 + 材质模式
+            setHeight: is3DTiles,
+            setMaterial: is3DTiles,
+            // GLTF 独有：重定位
+            reposition: isGltf,
+            // TIF 独有：拉伸
+            stretchHeight: isTif,
         },
     };
 }
@@ -105,5 +120,10 @@ export function buildCesiumDataGroup(
         children,
         expanded: expandedState[CESIUM_GROUP_NODE_ID] !== false,
         showCheckbox: children.length > 0,
+        // 组头右键能力：清空全部三维数据（folder-clear-layers 由 cesiumTocActions 消费）
+        actions: {
+            remove: records.length > 0,
+            removeTip: '清空全部数据',
+        },
     }];
 }

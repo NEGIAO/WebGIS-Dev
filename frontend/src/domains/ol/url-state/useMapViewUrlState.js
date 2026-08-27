@@ -13,21 +13,6 @@ export { CAMERA_VIEW_PARAM_KEY, MAP_VIEW_CESIUM, MAP_VIEW_OL, normalizeMapView }
 import { readHashQueryValue, getCurrentQuerySnapshot } from '@common/url-state/urlQueryReader';
 
 const DEFAULT_CESIUM_URL_HEIGHT = '6000000.00';
-const MIN_CAMERA_HEIGHT = 1;
-const MAX_CAMERA_HEIGHT = 50000000;
-
-/**
- * 判断 z 参数是否应替换为 Cesium 默认相机高度。
- * 当 z 为空、非有限数、≤0 或超过最大高度时返回 true。
- * @param {*} z - URL z 参数值
- * @returns {boolean}
- */
-function shouldUseDefaultCesiumHeight(z) {
-    if (z === null || z === undefined || z === '') return true;
-    const num = Number(z);
-    if (!Number.isFinite(num)) return true;
-    return num < MIN_CAMERA_HEIGHT || num >= MAX_CAMERA_HEIGHT;
-}
 
 /**
  * 判断两个 query 快照是否完全一致。
@@ -71,7 +56,6 @@ export function useMapViewUrlState() {
             view: normalizedView,
         };
 
-        const currentView = getCurrentMapView();
         if (normalizedView === MAP_VIEW_OL) {
             delete nextQuery[CAMERA_VIEW_PARAM_KEY];
             delete nextQuery.heading;
@@ -79,11 +63,12 @@ export function useMapViewUrlState() {
             delete nextQuery.roll;
         } else if (
             normalizedView === MAP_VIEW_CESIUM &&
-            currentView !== normalizedView &&
-            (!queryPatch || !Object.prototype.hasOwnProperty.call(queryPatch, 'z')) &&
-            shouldUseDefaultCesiumHeight(nextQuery.z)
+            !Object.prototype.hasOwnProperty.call(queryPatch, 'z')
         ) {
             // 视图从 OL 切到 Cesium 时不能复用 OL 缩放级别 z，必须改成 Cesium 相机高度。
+            // 必须无条件替换：queryPatch 缺 z 意味着换算失败（视图未就绪等），
+            // 此时现有 z 在 view=ol 语境下是「缩放级别」（常见 4~18），若被当作
+            // 相机高度（米）复用，Cesium 将以个位数米级高度开机，表现为极近视角。
             nextQuery.z = DEFAULT_CESIUM_URL_HEIGHT;
         }
 

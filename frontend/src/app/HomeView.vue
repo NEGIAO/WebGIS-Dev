@@ -13,7 +13,12 @@ import { Leaf } from '@lucide/vue';
 import { storeToRefs } from 'pinia';
 import { useMessage } from '@common/shell/useMessage';
 import { MAP_VIEW_CESIUM, MAP_VIEW_OL, useMapViewUrlState } from '@ol/url-state/useMapViewUrlState';
-import { olZoomToCesiumHeight, cesiumHeightToOlZoom } from '@common/utils/viewScaleConverter';
+import {
+    convertOlViewToCesium,
+    convertCesiumViewToOl,
+    canonicalScaleToOlView,
+    nearlyEqual,
+} from '@common/utils/viewScale';
 import { encodeCesiumPoseState } from '@common/url-state/crypto';
 import { readQueryValue as readQueryFromSnapshot } from '@common/url-state/urlQueryReader';
 import { useRoute } from 'vue-router';
@@ -30,6 +35,7 @@ import {
     setRemoteServiceVisible,
     setRemoteServiceSublayer,
     setRemoteServiceOpacity,
+    removeRemoteServiceSublayer,
 } from '@common/basemap/remoteServices';
 import { importCesiumContainerWithRetry, loadSidePanelModule } from './composables/useLazyModules';
 
@@ -47,6 +53,7 @@ import {
     useLayerStore,
 } from '@/stores';
 import { showLoading, hideLoading } from '@common/ui/loading';
+import { dispatchLayerAction } from '@common/layer-tree/actions/unifiedActionRouter';
 import { scheduleCesiumWarmup } from '@common/data-import/cesiumWarmup';
 import { apiLogVisit } from '@/api/backend';
 import { useLocale } from '@common/app/useLocale';
@@ -864,12 +871,12 @@ function handleCesiumLoadFailed() {
 /**
  * 将 URL 传输链路中的 z 参数格式化为统一两位小数字符串。
  * @param {*} value - OL zoom 或 Cesium height 数值
- * @returns {string|null} 两位小数字符串，或无效时返回 null
+ * @returns {string|null} 六位小数字符串（保证双向互逆的序列化精度），或无效时返回 null
  */
 function formatZParam(value) {
     const numberValue = Number(value);
     if (!Number.isFinite(numberValue)) return null;
-    return numberValue.toFixed(2);
+    return numberValue.toFixed(6);
 }
 
 /**
@@ -877,16 +884,52 @@ function formatZParam(value) {
  * 同时写入 l（底图预设索引），确保 Cesium 启动时能从 URL 恢复同一底图。
  * @returns {Record<string,string>|null} 可直接合并到 URL 的 query patch
  */
+let lastOlToCesiumTarget = null; // { canonicalResolution, analyticHeight }（模块级，跨 await 传递）
+
 function buildCesiumQueryPatchFromOl() {
     const state = mapContainerRef.value?.getCurrentViewState?.();
-    if (!state || !Number.isFinite(state.lng) || !Number.isFinite(state.lat)) return null;
+    if (!state || !Number.isFinite(state.lng) || !Number.isFinite(state.lat)) {
+        // 视图未就绪时也必须给出米制 z —— 否则 URL 会残留 OL 缩放级别，
+        // 被 Cesium 当作相机高度复用后表现为极近视角
+        return {
+            z: formatZParam(6000000),
+            layerId: '',
+            customUrl: '',
+        };
+    }
 
-    const height = olZoomToCesiumHeight({
-        view: state.view,
+    // Canonical 链路：zoom → resolution → G → 相机高度（规范 §34）
+    // earthModel:'sphere' —— 与反向射线实测同几何，保证 2D↔3D 往返 z 严格可逆
+    const converted = convertOlViewToCesium({
         zoom: state.zoom,
-        mapSize: state.size,
-        centerLat: state.lat,
+        resolution: state.resolution,
+        center: { longitude: state.lng, latitude: state.lat },
+        viewport: state.size ? { width: state.size[0], height: state.size[1] } : undefined,
+        targetPitch: -90,
+        targetHeading: 0,
+        targetRoll: 0,
+        earthModel: 'sphere',
     });
+    const height = converted ? converted.cesium.height : null;
+    lastOlToCesiumTarget = converted
+        ? { canonicalResolution: converted.canonicalResolution, analyticHeight: height }
+        : null;
+
+    if (globalThis.localStorage?.getItem('__zdebug') === '1') {
+        const __cesiumCanvas = cesiumContainerRef.value?.getViewer?.()?.scene?.canvas;
+        const __fovy = cesiumContainerRef.value?.getViewer?.()?.camera?.frustum?.fovy;
+        console.info('[zdebug][FWD OL→3D]', {
+            olZoom: state.zoom,
+            olResolution: state.resolution,
+            G_target: converted?.canonicalResolution ?? null,
+            h_out: height,
+            olViewportH: state.size?.[1] ?? null,
+            cesiumCanvasH: __cesiumCanvas?.clientHeight ?? null,
+            cesiumFovyRad: __fovy ?? null,
+            earthModel: 'sphere',
+        });
+    }
+
     const poseCode = encodeCesiumPoseState({ heading: 0, pitch: -90, roll: 0 });
     const patch = {
         lng: Number(state.lng).toFixed(6),
@@ -913,15 +956,41 @@ function syncOlFromCesiumPayload(payload = {}) {
     let equivalent = directEquivalent;
 
     if (!equivalent && camera) {
-        const olView = mapContainerRef.value?.getOlView?.();
-        const zoom = cesiumHeightToOlZoom({
-            view: olView,
+        // Canonical 链路：射线实测（Precision）优先，解析模型兜底（Realtime）
+        const conv = convertCesiumViewToOl({
             height: camera.height,
-            mapSize: mapContainerRef.value?.getMapSize?.(),
-            centerLat: camera.lat,
+            pitch: camera.pitch,
+            viewport: (() => {
+                const size = mapContainerRef.value?.getMapSize?.();
+                return Array.isArray(size) && size.length === 2
+                    ? { width: size[0], height: size[1] }
+                    : undefined;
+            })(),
+            measureGroundResolution: () =>
+                cesiumContainerRef.value?.measureGroundResolution?.() ?? null,
         });
-        if (zoom !== null) {
-            equivalent = { lng: camera.lng, lat: camera.lat, zoom };
+        if (conv) {
+            const olSeg = canonicalScaleToOlView({
+                canonicalResolution: conv.canonicalResolution,
+                latitude: camera.lat,
+            });
+            if (olSeg) {
+                equivalent = { lng: camera.lng, lat: camera.lat, zoom: olSeg.zoom };
+            }
+        }
+
+        if (globalThis.localStorage?.getItem('__zdebug') === '1') {
+            const __cesiumCanvas = cesiumContainerRef.value?.getViewer?.()?.scene?.canvas;
+            console.info('[zdebug][REV 3D→OL]', {
+                camHeight: camera.height,
+                camPitchDeg: camera.pitch,
+                camLatDeg: camera.lat,
+                G_measured: conv?.canonicalResolution ?? null,
+                measuredByRay: conv?.measured ?? null,
+                zoom_recovered: equivalent?.zoom ?? null,
+                prev_zoom: latestCesiumOlEquivalent.value?.zoom ?? null,
+                cesiumCanvasH: __cesiumCanvas?.clientHeight ?? null,
+            });
         }
     }
 
@@ -1001,6 +1070,33 @@ async function setMapView(view, { writeUrl = true } = {}) {
             return false;
         }
         is3DMode.value = true;
+
+        // ═══ 规范 §34 步骤9~12：Precision 校正环 ═══
+        // 解析高度在数百万米级受地球曲率影响（真实中心分辨率 ≈ 解析值×(R+h)/h），
+        // 以射线实测为准做一次比例校正，消除 2D↔3D 视觉尺度差
+        const target = lastOlToCesiumTarget;
+        if (target && target.analyticHeight > 0) {
+            await nextTick();
+            const targetG = target.canonicalResolution;
+            const measured = cesiumContainerRef.value?.measureGroundResolution?.();
+            // 相对容差 1e-6 判定收敛；绝对容差不设防（近距视角 G≪1 m/px，
+            // 若给米级绝对容差会吞掉全部校正需求）
+            if (Number.isFinite(measured) && measured > 0 && !nearlyEqual(measured, targetG, 1e-9, 1e-6)) {
+                const curH = cesiumContainerRef.value?.getCameraHeight?.();
+                const correctedH = Number(curH) * (targetG / measured);
+                cesiumContainerRef.value?.setCameraHeightKeepOrientation?.(correctedH);
+                console.info('[ViewScale][Report]', JSON.stringify({
+                    source: 'ol', target: 'cesium',
+                    sourceZoom: readQueryValue("z"),
+                    sourceResolution: null,
+                    canonicalResolution: targetG,
+                    analyticCameraHeight: target.analyticHeight,
+                    measuredGroundResolution: measured,
+                    scaleError: measured / targetG,
+                    correctedCameraHeight: correctedH,
+                }));
+            }
+        }
     } else {
         if (latestCesiumOlEquivalent.value) {
             mapContainerRef.value?.syncViewFromCesium?.(latestCesiumOlEquivalent.value);
@@ -1135,6 +1231,13 @@ function handleActivateMagic(effectName) {
 async function handleUploadData(data) {
     showLoading(t('loading.gisImport'));
     try {
+        // 载荷 {resources: File[]} 对两引擎同构：
+        // 3D → Cesium 导入管线（建档后进 TOC「三维数据」分组）；
+        // 2D → OL addUserDataLayer（进「二维数据」各分组）。
+        if (is3DMode.value) {
+            await Promise.resolve(cesiumContainerRef.value?.importUserData?.(data));
+            return;
+        }
         await Promise.resolve(mapContainerRef.value?.addUserDataLayer(data));
     } finally {
         hideLoading();
@@ -1161,37 +1264,50 @@ function handleToggleLayerVisibility({ layerId, visible }) {
         handleDistrictLayerVisibility(layerId, visible);
         return;
     }
-    mapContainerRef.value?.setUserLayerVisibility(layerId, visible);
+    // plain id 必为 OL 命名空间（cesium:* / rsvc:* 节点已被上游分流器全量消费），
+    // MapContainer 常驻（3D 下 v-show 隐藏）→ 固定路由 OL，勿按当前引擎分发
+    dispatchLayerAction({
+        method: 'setUserLayerVisibility',
+        payload: { layerId, visible },
+        engine: 'ol',
+    });
 }
+
 
 function handleChangeLayerOpacity({ layerId, opacity }) {
     if (String(layerId).startsWith(RSVC_NODE_PREFIX)) {
         setRemoteServiceOpacity(String(layerId).slice(RSVC_NODE_PREFIX.length), Number(opacity));
         return;
     }
-    mapContainerRef.value?.setUserLayerOpacity(layerId, opacity);
+    dispatchLayerAction({
+        method: 'setUserLayerOpacity',
+        payload: { layerId, opacity },
+        engine: 'ol',
+    });
 }
+
 
 function handleRenameLayer({ layerId, newName }) {
     layerStore.renameLayer(layerId, newName);
 }
 
-function handleSetBaseLayer(layerId) {
-    mapContainerRef.value?.setBaseLayerActive(layerId);
-}
-
-function handleToggleBaseLayerVisibility({ layerId, visible }) {
-    mapContainerRef.value?.setLayerVisibility(layerId, visible);
-}
-
 function handleZoomLayer(layerId) {
     if (String(layerId).startsWith(RSVC_NODE_PREFIX)) {
         const { serviceId } = parseRsvcNodeId(layerId);
-        mapContainerRef.value?.zoomToRemoteService?.(serviceId);
+        if (is3DMode.value) {
+            cesiumContainerRef.value?.zoomToRemoteService?.(serviceId);
+        } else {
+            mapContainerRef.value?.zoomToRemoteService?.(serviceId);
+        }
         return;
     }
     if (focusDistrictLayer(layerId)) return;
-    mapContainerRef.value?.zoomToUserLayer(layerId);
+    // plain id = OL 命名空间（理由同上），固定路由 OL
+    dispatchLayerAction({
+        method: 'zoomToUserLayer',
+        payload: { layerId },
+        engine: 'ol',
+    });
 }
 
 function handleViewLayer(layerId) {
@@ -1203,15 +1319,16 @@ function handleRemoveLayer(layerId) {
     if (String(layerId).startsWith(RSVC_NODE_PREFIX)) {
         const { serviceId, subLayerName } = parseRsvcNodeId(layerId);
         if (subLayerName) {
-            // 子图层叶子"移除" = 从 LAYERS 组合中取消叠加
-            setRemoteServiceSublayer(serviceId, subLayerName, false);
+            // 子图层叶子"移除" = 从注册表剔除该条目（删至最后自动注销服务）
+            removeRemoteServiceSublayer(serviceId, subLayerName);
         } else {
             unregisterRemoteService(serviceId);
         }
         return;
     }
     if (handleDistrictLayerRemove(layerId)) return;
-    mapContainerRef.value?.removeUserLayer(layerId);
+    // plain id = OL 命名空间（理由同上）；先路由 OL 卸图层，再同步 store 元数据
+    dispatchLayerAction({ method: 'removeUserLayer', payload: { layerId }, engine: 'ol' });
     // 直接更新 Pinia store，不依赖 async 事件链
     layerStore.removeLayerById(layerId);
 }
@@ -1711,6 +1828,7 @@ onMounted(async () => {
                     :is-collapsed="isSidePanelCollapsed"
                     :active-tab="activeSidePanelTab"
                     :toolbox-tab="toolboxTab"
+                    :active-engine="is3DMode ? 'cesium' : 'ol'"
                     :active-feature="activeFeature"
                     :user-layers="userLayers"
                     :custom-basemap-url="sharedCustomBasemapUrl"
@@ -1734,8 +1852,6 @@ onMounted(async () => {
                     @toggle-layer-visibility="handleToggleLayerVisibility"
                     @change-layer-opacity="handleChangeLayerOpacity"
                     @rename-layer="handleRenameLayer"
-                    @set-base-layer="handleSetBaseLayer"
-                    @toggle-base-layer-visibility="handleToggleBaseLayerVisibility"
                     @toggle-layer-label-visibility="handleToggleLayerLabelVisibility"
                     @zoom-layer="handleZoomLayer"
                     @view-layer="handleViewLayer"

@@ -698,219 +698,6 @@
                         </form>
                     </div>
 
-                    <!-- 已加载数据列表 -->
-                    <div
-                        v-if="localDataSources.length"
-                        class="data-source-section"
-                    >
-                        <div class="data-source-head">
-                            <span class="data-source-count">
-                                {{ t('cesium.loadedDataSources', { count: localDataSources.length }) }}
-                            </span>
-                            <button
-                                class="clear-all-btn"
-                                type="button"
-                                :title="t('cesium.clearAllTitle')"
-                                @click="emitClearAll"
-                            >
-                                <Trash2
-                                    :size="12"
-                                    stroke-width="2"
-                                />
-                                <span>{{ t('cesium.clearAll') }}</span>
-                            </button>
-                        </div>
-
-                        <!-- 独立卡片化列表 -->
-                        <div class="data-source-list">
-                            <div
-                                v-for="source in displaySources"
-                                :key="source.id"
-                                class="data-source-card"
-                                :class="{ 'is-hidden': !isSourceVisible(source) }"
-                            >
-                                <!-- 卡片头部：显隐 + 图标 + 标题/标签 + 操作按钮 -->
-                                <div class="card-header">
-                                    <button
-                                        class="action-icon-btn visibility"
-                                        type="button"
-                                        :title="isSourceVisible(source) ? t('cesium.hideLayer') : t('cesium.show')"
-                                        @click.stop="toggleSourceVisible(source)"
-                                    >
-                                        <Eye
-                                            v-if="isSourceVisible(source)"
-                                            :size="14"
-                                            stroke-width="2"
-                                        />
-                                        <EyeOff
-                                            v-else
-                                            :size="14"
-                                            stroke-width="2"
-                                        />
-                                    </button>
-                                    <div class="card-type-icon">
-                                        <component
-                                            :is="getFormatIcon(source.type)"
-                                            :size="15"
-                                            stroke-width="2"
-                                        />
-                                    </div>
-                                    <div
-                                        class="card-info"
-                                        :title="source.meta?.name || source.name"
-                                    >
-                                        <input
-                                            v-if="renamingSourceId === source.id"
-                                            v-model="renameDraft"
-                                            class="card-rename-input"
-                                            type="text"
-                                            maxlength="60"
-                                            @keyup.enter="commitRenameSource"
-                                            @keyup.esc="cancelRenameSource"
-                                            @blur="commitRenameSource"
-                                            @click.stop
-                                        />
-                                        <span
-                                            v-else
-                                            class="card-title"
-                                            :title="t('cesium.rename')"
-                                            @dblclick.stop="startRenameSource(source)"
-                                        >{{ source.meta?.name || source.name }}</span>
-                                        <span class="card-tag">{{ formatLabel(source.type) }}</span>
-                                    </div>
-                                    <div class="card-actions">
-                                        <button
-                                            class="action-icon-btn flyto"
-                                            type="button"
-                                            :title="t('cesium.locate')"
-                                            @click.stop="emitFlyTo(source.id)"
-                                        >
-                                            <Crosshair
-                                                :size="14"
-                                                stroke-width="2"
-                                            />
-                                        </button>
-                                        <button
-                                            v-if="source.type === 'gltf'"
-                                            class="action-icon-btn reposition"
-                                            type="button"
-                                            :title="t('cesium.adjustPosition')"
-                                            @click.stop="emitReposition(source.id)"
-                                        >
-                                            <MapPin
-                                                :size="14"
-                                                stroke-width="2"
-                                            />
-                                        </button>
-                                        <button
-                                            v-if="source.type === 'tif'"
-                                            class="action-icon-btn stretch-height"
-                                            type="button"
-                                            :title="t('cesium.extrudeToElevation')"
-                                            @click.stop="emitStretchHeight(source.id)"
-                                        >
-                                            <Mountain
-                                                :size="14"
-                                                stroke-width="2"
-                                            />
-                                        </button>
-                                        <button
-                                            class="action-icon-btn remove"
-                                            type="button"
-                                            :title="t('cesium.remove')"
-                                            @click.stop="emitRemove(source.id)"
-                                        >
-                                            <X
-                                                :size="14"
-                                                stroke-width="2"
-                                            />
-                                        </button>
-                                    </div>
-                                </div>
-
-                                <!-- 透明度（tif / gltf / 3dtiles，统一图层管理元数据驱动） -->
-                                <div
-                                    v-if="source.meta?.supportsOpacity"
-                                    class="card-extended-controls"
-                                >
-                                    <div class="control-row">
-                                        <span
-                                            class="control-label"
-                                            :title="t('cesium.layerOpacity')"
-                                        >{{ t('cesium.transparency') }}</span>
-                                        <div class="slider-wrapper">
-                                            <input
-                                                type="range"
-                                                class="tileset-slider"
-                                                min="0"
-                                                max="1"
-                                                step="0.05"
-                                                :value="source.meta?.opacity ?? 1"
-                                                @input="onSourceOpacityInput(source, $event.target.value)"
-                                            />
-                                        </div>
-                                        <span class="control-value">
-                                            {{ Math.round((source.meta?.opacity ?? 1) * 100) }}%
-                                        </span>
-                                    </div>
-                                </div>
-
-                                <!-- 卡片底部扩展项：仅 3D Tiles 显式展示（独占整栏，不占用顶部空间） -->
-                                <div
-                                    v-if="source.type === '3dtiles'"
-                                    class="card-extended-controls"
-                                >
-                                    <!-- 高程滑杆 -->
-                                    <div
-                                        v-if="getTilesetHeightRange(source)"
-                                        class="control-row"
-                                    >
-                                        <span
-                                            class="control-label"
-                                            :title="t('cesium.heightAdjust')"
-                                        >{{ t('cesium.elevation') }}</span>
-                                        <div class="slider-wrapper">
-                                            <input
-                                                type="range"
-                                                class="tileset-slider"
-                                                :min="getTilesetHeightRange(source).min"
-                                                :max="getTilesetHeightRange(source).max"
-                                                :step="1"
-                                                :value="getTileHeight(source)"
-                                                @input="emitSetHeight(source.id, $event.target.value)"
-                                            />
-                                        </div>
-                                        <span class="control-value">
-                                            {{ Math.round(getTileHeight(source)) }}m
-                                        </span>
-                                    </div>
-
-                                    <!-- 材质选择器 -->
-                                    <div class="control-row">
-                                        <span class="control-label">{{ t('cesium.material') }}</span>
-                                        <select
-                                            class="material-select"
-                                            :value="source.materialMode || 'baimo'"
-                                            @change="emitSetMaterial(source.id, $event.target.value)"
-                                        >
-                                            <option value="pureWhite">{{ t('cesium.materials.pureWhite') }}</option>
-                                            <option value="baimo">{{ t('cesium.materials.baimo') }}</option>
-                                            <option value="heightStyle">{{ t('cesium.materials.heightStyle') }}</option>
-                                            <option value="gradient">{{ t('cesium.materials.gradient') }}</option>
-                                            <option value="none">{{ t('cesium.materials.none') }}</option>
-                                        </select>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div
-                        v-else
-                        class="empty-state"
-                    >
-                        {{ t('cesium.noImportedData') }}
-                    </div>
                 </section>
 
                 <!-- 4. 模块 Tab (精细化工作流卡片设计) -->
@@ -928,7 +715,7 @@
                             class="module-card"
                             :class="{
                                 expanded: isModuleExpanded(module.id),
-                                active: module.statusTone === 'success' || module.statusTone === 'success'
+                                active: module.statusTone === 'success' || module.statusTone === 'info'
                             }"
                         >
                             <!-- 模块头部（可点击展开/收起） -->
@@ -1048,17 +835,14 @@ import {
     Download,
     Droplets,
     Eye,
-    EyeOff,
     FastForward,
     FileArchive,
     FileDown,
-    FileJson,
     FileUp,
     Flag,
     FolderOpen,
     Globe,
     Home,
-    Image,
     Layers,
     Link,
     LocateFixed,
@@ -1091,7 +875,6 @@ import {
     looksLikeWmsSourceUrl,
     ensureWmsServiceInfo,
 } from '@common/basemap/wmsService';
-import { useCesiumLayersStore } from '@cesium-domain/stores/cesiumLayers';
 
 const { t } = useLocale();
 
@@ -1109,71 +892,8 @@ const props = defineProps({
     modules: { type: Array, default: () => [] },
     // modules: { type: Array, default: () => [] },
     storageKey: { type: String, default: 'cesium_tool_panel_ui' },
-    loadedDataSources: { type: Array, default: () => [] },
 });
 
-const localDataSources = ref(Array.isArray(props.loadedDataSources) ? props.loadedDataSources : []);
-
-// ==========================================
-// 统一图层管理：元数据店（可见性/透明度/重命名，与 TOC「三维数据」分组同源）
-// ==========================================
-const cesiumLayersStore = useCesiumLayersStore();
-
-/** 卡片渲染源：句柄记录（特化字段）+ 元数据（visible/opacity/显示名）合并视图 */
-const displaySources = computed(() => {
-    // 依赖 tileHeightMap：用户拖动高程滑杆时触发重算，使滑杆位置与实际值同步
-    const heightMap = tileHeightMap.value;
-    return localDataSources.value.map((source) => ({
-        ...source,
-        _height: heightMap[source.id],
-        meta: cesiumLayersStore.getRecord(source.id) || null,
-    }));
-});
-
-/** 当前处于重命名编辑态的数据源 id 与草稿 */
-const renamingSourceId = ref('');
-const renameDraft = ref('');
-
-function isSourceVisible(source) {
-    return source?.meta ? source.meta.visible !== false : true;
-}
-
-function toggleSourceVisible(source) {
-    cesiumLayersStore.setVisible(source.id, !isSourceVisible(source));
-}
-
-function onSourceOpacityInput(source, rawValue) {
-    cesiumLayersStore.setOpacity(source.id, Number(rawValue));
-}
-
-function startRenameSource(source) {
-    renamingSourceId.value = source.id;
-    renameDraft.value = String(source.meta?.name || source.name || '');
-}
-
-function commitRenameSource() {
-    if (renamingSourceId.value) {
-        cesiumLayersStore.rename(renamingSourceId.value, renameDraft.value);
-    }
-    renamingSourceId.value = '';
-    renameDraft.value = '';
-}
-
-function cancelRenameSource() {
-    renamingSourceId.value = '';
-    renameDraft.value = '';
-}
-
-watch(
-    () => props.loadedDataSources,
-    (next) => {
-        const arr = Array.isArray(next) ? next : [];
-        if (arr !== localDataSources.value) {
-            localDataSources.value = arr;
-        }
-    },
-    { immediate: true },
-);
 
 const emit = defineEmits([
     'update:open',
@@ -1186,18 +906,10 @@ const emit = defineEmits([
     'remote-service-submit',
     'update:customIonHeightOffset',
     'data-import',
-    'data-remove',
-    'data-clear-all',
-    'data-flyto',
-    'data-reposition',
-    'data-stretch-height',
-    'data-set-height',
     'import-tileset-zip',
     'import-tileset-folder',
     'import-tileset-sample',
-    'data-set-material',
     // 异步请求：请求拥有 viewer 的上下文对给定 region 进行地形采样并回填 setSampledRange
-    'request-range-sample',
 ]);
 
 const UI_STATE_VERSION = 3;
@@ -1275,7 +987,7 @@ const activeOverlayCount = computed(() => props.overlayOptions.filter(o => !!o.a
 
 // 远程 3D 服务加载
 const remoteServiceType = ref('ion');
-const remoteServiceUrl = ref('5115505');
+const remoteServiceUrl = ref('');
 
 const panelTabs = computed(() => [
     { id: 'scene', label: t('cesium.scene'), icon: Navigation },
@@ -1501,36 +1213,14 @@ function emitOverlayToggle(overlay) {
     emit('overlay-toggle', { overlayId: overlay.value, value: !overlay.active });
 }
 
-function getFormatIcon(type) {
-    const icons = {
-        geojson: FileJson,
-        json: FileJson,
-        kml: Globe,
-        kmz: Globe,
-        shp: Layers,
-        gltf: Box,
-        czml: FileJson,
-        '3dtiles': Box,
-        tif: Image,
-        wayline: MapPin,
-    };
-    return icons[type] || FileJson;
+// ── 叠加层扩展操作（当前 overlay 数据无 hasLocation 字段，按钮不会渲染；预留实现防 undefined） ──
+function emitOverlayFlyTo(overlay) {
+    console.warn('[CesiumToolPanel] 叠加层定位未实现:', overlay?.value);
 }
-
-function formatLabel(type) {
-    const labels = {
-        geojson: 'GeoJSON',
-        json: 'JSON',
-        kml: 'KML',
-        kmz: 'KMZ',
-        shp: 'Shapefile',
-        gltf: 'GLTF',
-        czml: 'CZML',
-        '3dtiles': '3D Tiles',
-        tif: 'GeoTIFF',
-        wayline: t('cesium.dataFormat.wayline'),
-    };
-    return labels[type] || type.toUpperCase();
+function updateOverlayOpacity(overlay, event) {
+    const value = Number(event?.target?.value ?? event);
+    if (!Number.isFinite(value)) return;
+    emit('overlay-toggle', { overlayId: overlay.value, value: true, opacity: value });
 }
 
 function handleFileSelect(event) {
@@ -1542,150 +1232,6 @@ function handleFileSelect(event) {
     }
 }
 
-function emitRemove(id) { emit('data-remove', { id }); }
-function emitFlyTo(id) { emit('data-flyto', { id }); }
-function emitReposition(id) { emit('data-reposition', { id }); }
-function emitStretchHeight(id) { emit('data-stretch-height', { id }); }
-function emitClearAll() { emit('data-clear-all'); }
-
-const tileHeightMap = ref({});
-// 采样结果缓存：在采样完成后可通过组件外（拥有 viewer 的上下文）调用 setSampledRange 填充本缓存
-const sampledRangeMap = ref({});
-// 避免重复触发采样请求
-const scheduledSampling = new Set();
-
-function deriveRegionFromSource(source) {
-    const tg = source.tilesetGeo || {};
-    // 常见 region 表示为数组 [west, south, east, north]（度）
-    if (Array.isArray(tg.region) && tg.region.length >= 4) {
-        const [west, south, east, north] = tg.region;
-        return { west, south, east, north };
-    }
-    if (tg.region && typeof tg.region === 'object' && 'west' in tg.region) {
-        const { west, south, east, north } = tg.region;
-        return { west, south, east, north };
-    }
-    // 其他常见字段名：bbox
-    if (Array.isArray(tg.bbox) && tg.bbox.length >= 4) {
-        const [west, south, east, north] = tg.bbox;
-        return { west, south, east, north };
-    }
-    // boundingSphere 退化处理：通过中心经纬度与半径近似一个矩形范围（经度按纬度缩放）
-    if (tg.boundingSphere && tg.boundingSphere.center && tg.boundingSphere.radius) {
-        const c = tg.boundingSphere.center;
-        let lon = null;
-        let lat = null;
-        if (Array.isArray(c) && c.length >= 2) {
-            lon = c[0];
-            lat = c[1];
-        } else if (typeof c === 'object' && ('lon' in c || 'longitude' in c)) {
-            lon = c.lon ?? c.longitude;
-            lat = c.lat ?? c.latitude;
-        }
-        if (Number.isFinite(lon) && Number.isFinite(lat)) {
-            const r = Number(tg.boundingSphere.radius) || 0;
-            const degLat = r / 111000; // 约 111km per degree latitude
-            const degLon = r / (111000 * Math.max(0.0001, Math.cos((lat * Math.PI) / 180)));
-            return { west: lon - degLon, south: lat - degLat, east: lon + degLon, north: lat + degLat };
-        }
-    }
-    return null;
-}
-
-function requestRangeSampleIfNeeded(source) {
-    if (scheduledSampling.has(source.id)) return;
-    const region = deriveRegionFromSource(source);
-    if (!region) return;
-    scheduledSampling.add(source.id);
-    // 发出请求事件，由拥有 Cesium viewer 的上层或 store 触发实际采样并回填 setSampledRange
-    emit('request-range-sample', { id: source.id, region });
-}
-
-function setSampledRange(sourceId, range) {
-    if (!range || typeof range !== 'object') return;
-    // 确保至少满足最小约束 -10
-    const min = Math.max(Number(range.min ?? -Infinity), -10);
-    const max = Number(range.max ?? (min + 1));
-    sampledRangeMap.value = { ...sampledRangeMap.value, [sourceId]: { min, max: Math.max(max, min + 1) } };
-    scheduledSampling.delete(sourceId);
-}
-// 暴露 setSampledRange 以便外部（拥有 viewer 的上下文）调用：在 <script setup> 中使用 defineExpose
-defineExpose({ setSampledRange });
-
-function getTilesetHeightRange(source) {
-    // 优先使用采样缓存结果（如果存在）
-    const cached = sampledRangeMap.value[source.id];
-    if (cached) {
-        return { min: cached.min, max: cached.max };
-    }
-
-    // 备用策略（原有逻辑）：在没有采样结果时使用 terrainElevation 或 baseHeight ±500，并把下界限制为 -10
-    const baseHeight = Number(
-        source.tilesetGeo?.initialBaseHeight
-        ?? source.currentBaseHeight
-        ?? source.tilesetGeo?.bottomH,
-    );
-
-    if (source.terrainElevation) {
-        const lo =
-            Math.min(
-                source.terrainElevation.min,
-                Number.isFinite(baseHeight) ? baseHeight : Infinity,
-            ) - 30;
-        const hi =
-            Math.max(
-                source.terrainElevation.max,
-                Number.isFinite(baseHeight) ? baseHeight : -Infinity,
-            ) + 30;
-        const min = Math.max(Math.floor(lo), -10); // 最低限制 -10m
-        let max = Math.ceil(hi);
-        if (max < min + 1) max = min + 1;
-        // 异步触发更精细的地形采样（采样结果会回填到 sampledRangeMap）
-        requestRangeSampleIfNeeded(source);
-        return { min, max };
-    }
-
-    if (!Number.isFinite(baseHeight)) return null;
-
-    const min = Math.max(Math.floor(baseHeight - 100), -10);
-    let max = Math.ceil(baseHeight + 100);
-    if (max < min + 1) max = min + 1;
-    requestRangeSampleIfNeeded(source);
-    return { min, max };
-}
-
-function getTileHeight(source) {
-    // 优先用 tileHeightMap（用户拖动后的值）
-    if (source._height !== undefined) return source._height;
-    // 否则优先使用已应用的 currentBaseHeight
-    if (source.currentBaseHeight !== undefined) return source.currentBaseHeight;
-    // 没有已应用偏移时，优先使用 tilesetGeo 中记录的初始基座高（导入时计算得到的 bottomH / initialBaseHeight）
-    const initial = Number(source.tilesetGeo?.initialBaseHeight ?? source.tilesetGeo?.bottomH);
-    if (Number.isFinite(initial)) return initial;
-    // 若存在地形采样中心高度则可用作回退
-    if (source.terrainElevation?.centerHeight !== undefined) return source.terrainElevation.centerHeight;
-    return 0;
-}
-
-function emitSetHeight(sourceId, height) {
-    const num = Number(height);
-    if (!Number.isFinite(num)) return;
-    // 找到对应 source 以便获取范围进行 clamp
-    const source = localDataSources.value.find(s => s.id === sourceId) || null;
-    let final = num;
-    if (source) {
-        const range = getTilesetHeightRange(source);
-        if (range) {
-            final = Math.max(range.min, Math.min(range.max, num));
-        }
-    }
-    tileHeightMap.value = { ...tileHeightMap.value, [sourceId]: final };
-    emit('data-set-height', { id: sourceId, height: final });
-}
-
-function emitSetMaterial(sourceId, mode) {
-    emit('data-set-material', { id: sourceId, mode });
-}
 </script>
 
 <style scoped>
@@ -1715,6 +1261,7 @@ function emitSetMaterial(sourceId, mode) {
 .tool-launcher,
 .cesium-tool-panel {
     pointer-events: auto;
+    height: auto;
 }
 
 .tool-launcher {
@@ -2676,201 +2223,6 @@ function emitSetMaterial(sourceId, mode) {
     transform: translateX(2px) scale(0.98);
 }
 
-/* 统一图层管理：隐藏态卡片降透明呈现（不移除，保留操作入口） */
-.data-source-card.is-hidden {
-    opacity: 0.55;
-}
-
-.data-source-card.is-hidden .card-title {
-    color: var(--acc-text-soft, #5d7f6a);
-}
-
-/* 显隐按钮沿用 action-icon-btn 家族，强调色区分 */
-.action-icon-btn.visibility {
-    color: var(--brand-primary, #2f9a57);
-}
-
-/* 双击重命名的行内输入框 */
-.card-rename-input {
-    width: 100%;
-    box-sizing: border-box;
-    border: 1px solid rgba(var(--brand-primary-rgb, 47, 154, 87), 0.5);
-    border-radius: 6px;
-    background: var(--ctp-white-solid);
-    color: var(--ctp-ink-neutral);
-    font-size: 12px;
-    padding: 2px 6px;
-    outline: none;
-}
-
-.data-source-section {
-    display: grid;
-    gap: 8px;
-}
-
-.data-source-head {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-}
-
-.data-source-count {
-    color: rgba(var(--ctp-ice-text-rgb), 0.6);
-    font-size: 11px;
-    font-weight: 700;
-}
-
-.clear-all-btn {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    border: none;
-    background: transparent;
-    color: rgba(var(--ctp-danger-mid-rgb), 0.85);
-    font-size: 11px;
-    cursor: pointer;
-    padding: 2px 6px;
-    border-radius: 4px;
-}
-
-.clear-all-btn:hover {
-    background: rgba(var(--ctp-danger-rgb), 0.15);
-    color: var(--ctp-danger-soft-solid);
-}
-
-.data-source-list {
-    display: grid;
-    gap: 8px;
-}
-
-.data-source-card {
-    border: 1px solid rgba(var(--ctp-ice-rgb), 0.16);
-    border-radius: 8px;
-    background: rgba(var(--ctp-white-rgb), 0.04);
-    overflow: hidden;
-    transition: border-color 0.18s ease;
-}
-
-.data-source-card:hover {
-    border-color: rgba(var(--ctp-ice-rgb), 0.35);
-    background: rgba(var(--ctp-white-rgb), 0.06);
-}
-
-.card-header {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 8px 10px;
-    min-height: 40px;
-}
-
-.card-type-icon {
-    width: 28px;
-    height: 28px;
-    flex: 0 0 auto;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    border-radius: 6px;
-    background: rgba(var(--ctp-chip-bg-alt-rgb), 0.8);
-    border: 1px solid rgba(var(--ctp-ice-rgb), 0.2);
-    color: var(--ctp-green);
-}
-
-.card-info {
-    flex: 1 1 auto;
-    min-width: 0;
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    gap: 2px;
-}
-
-.card-title {
-    overflow: hidden;
-    color: var(--ctp-title);
-    font-size: 12px;
-    font-weight: 700;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
-.card-tag {
-    display: inline-block;
-    align-self: flex-start;
-    padding: 1px 4px;
-    border-radius: 3px;
-    background: rgba(var(--ctp-ice-rgb), 0.12);
-    color: rgba(var(--ctp-ice-text-rgb), 0.6);
-    font-size: 9px;
-    font-weight: 600;
-    line-height: 1.1;
-    letter-spacing: 0.3px;
-}
-
-.card-actions {
-    flex: 0 0 auto;
-    display: flex;
-    align-items: center;
-    gap: 2px;
-}
-
-.action-icon-btn {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 24px;
-    height: 24px;
-    border: none;
-    border-radius: 5px;
-    background: transparent;
-    cursor: pointer;
-    transition: all 0.15s ease;
-}
-
-.action-icon-btn.flyto {
-    color: rgba(var(--ctp-cyan-rgb), 0.6);
-}
-
-.action-icon-btn.flyto:hover {
-    color: var(--ctp-cyan);
-    background: rgba(var(--ctp-cyan-rgb), 0.15);
-}
-
-.action-icon-btn.reposition {
-    color: rgba(var(--ctp-warning-rgb), 0.6);
-}
-
-.action-icon-btn.reposition:hover {
-    color: var(--ctp-warning-solid);
-    background: rgba(var(--ctp-warning-rgb), 0.15);
-}
-
-.action-icon-btn.stretch-height {
-    color: rgba(var(--ctp-green-alt-rgb), 0.6);
-}
-
-.action-icon-btn.stretch-height:hover {
-    color: var(--ctp-green-alt);
-    background: rgba(var(--ctp-green-alt-rgb), 0.15);
-}
-
-.action-icon-btn.remove {
-    color: rgba(var(--ctp-danger-soft-rgb), 0.5);
-}
-
-.action-icon-btn.remove:hover {
-    color: var(--ctp-danger-soft-solid);
-    background: rgba(var(--ctp-danger-rgb), 0.18);
-}
-
-.card-extended-controls {
-    display: grid;
-    gap: 6px;
-    padding: 6px 10px 8px 10px;
-    border-top: 1px solid rgba(var(--ctp-ice-rgb), 0.1);
-    background: rgba(var(--ctp-shadow-rgb), 0.18);
-}
 
 .control-row {
     display: flex;
@@ -2891,32 +2243,6 @@ function emitSetMaterial(sourceId, mode) {
     align-items: center;
 }
 
-.tileset-slider {
-    width: 100%;
-    height: 4px;
-    -webkit-appearance: none;
-    appearance: none;
-    background: rgba(var(--ctp-white-rgb), 0.15);
-    border-radius: 2px;
-    outline: none;
-}
-
-.tileset-slider::-webkit-slider-thumb {
-    -webkit-appearance: none;
-    appearance: none;
-    width: 10px;
-    height: 10px;
-    border-radius: 50%;
-    background: var(--ctp-green);
-    cursor: pointer;
-    transition: transform 0.12s;
-}
-
-.tileset-slider::-webkit-slider-thumb:hover {
-    transform: scale(1.25);
-    background: var(--ctp-green-bright);
-}
-
 .control-value {
     flex: 0 0 32px;
     text-align: right;
@@ -2925,27 +2251,6 @@ function emitSetMaterial(sourceId, mode) {
     font-variant-numeric: tabular-nums;
 }
 
-.material-select {
-    flex: 1;
-    height: 24px;
-    background: rgba(var(--ctp-white-rgb), 0.08);
-    color: var(--ctp-text);
-    border: 1px solid rgba(var(--ctp-ice-rgb), 0.18);
-    border-radius: 4px;
-    padding: 0 6px;
-    font-size: 11px;
-    outline: none;
-    cursor: pointer;
-}
-
-.material-select:hover {
-    border-color: rgba(var(--ctp-green-alt-rgb), 0.5);
-}
-
-.material-select option {
-    background: var(--ctp-option-bg);
-    color: var(--ctp-text);
-}
 
 /* ==========================================================================
    1. 基础容器与外层 Shell（关键：全链路高度约束与 min-height: 0）
@@ -3013,7 +2318,7 @@ function emitSetMaterial(sourceId, mode) {
 .cesium-tool-panel {
     width: min(380px, calc(100vw - 24px));
     /* 关键 1: 严格限制面板整体最大高度，留出上下边距 */
-    max-height: calc(100vh - 100px); 
+    /* max-height: calc(100vh - 100px);  */
     display: flex;
     flex-direction: column;
     overflow: hidden;

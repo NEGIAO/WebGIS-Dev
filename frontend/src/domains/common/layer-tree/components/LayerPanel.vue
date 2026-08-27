@@ -81,14 +81,7 @@ import TOCTreeItem from '@common/layer-tree/components/TOCTreeItem.vue';
 import { RSVC_NODE_PREFIX, RSVC_GROUP_NODE_ID } from '@common/basemap/remoteServices';
 
 defineProps({
-    drawLayers: { type: Array, default: () => [] },
-    routeLayers: { type: Array, default: () => [] },
-    searchLayers: { type: Array, default: () => [] },
-    uploadLayers: { type: Array, default: () => [] },
     selectedLayerIds: { type: Array, default: () => [] },
-    hasDrawCard: { type: Boolean, default: false },
-    overview: { type: Object, default: () => ({ drawCount: 0 }) },
-    isRasterLayer: { type: Function, required: true },
 });
 
 const emit = defineEmits(['action']);

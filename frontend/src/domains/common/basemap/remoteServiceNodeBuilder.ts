@@ -12,7 +12,11 @@
  */
 
 import type { RemoteServiceRecord } from './remoteServices';
-import { RSVC_NODE_PREFIX, RSVC_GROUP_NODE_ID } from './remoteServices';
+import {
+    RSVC_NODE_PREFIX,
+    RSVC_GROUP_NODE_ID,
+    effectiveSelectedIds,
+} from './remoteServices';
 
 /** kind → 展示元信息（layerType / 格式标签），服务节点与子图层叶子共用 */
 const KIND_META: Record<string, { layerType: string; formatLabel: string }> = {
@@ -55,7 +59,9 @@ function toRemoteServiceNode(record: RemoteServiceRecord, expandedState: Record<
     // 有声明时按视觉叠放顺序排列，勾选叶子可拖拽调整 LAYERS 叠放次序
     const hasSublayerOrdering = record.kind === 'wms' || (record.kind === 'arcgis' && record.tileMode !== 'tiles');
     const children = orderedSublayers(record).map((sub) => {
-        const checked = (record.selectedIds || []).includes(sub.name);
+        // 勾选判定走 effectiveSelectedIds：WMS 默认模式（从未触碰选择集）视为全选，
+        // 存量空选记录无需重注册即在 TOC 全亮
+        const checked = effectiveSelectedIds(record).includes(sub.name);
         const leafId = sublayerLeafNodeId(record.id, sub.name);
         return {
             id: leafId,
@@ -86,9 +92,10 @@ function toRemoteServiceNode(record: RemoteServiceRecord, expandedState: Record<
                 zoom: true,
                 zoomEvent: 'zoom-layer',
                 zoomPayload: { layerId: leafId },
-                // 每个子图层叶子都可"移除"（= 从 LAYERS 组合中取消叠加）
+                // 子图层叶子「移除」= 从注册表剔除该条目（区别于勾选显隐）；
+                // 删至最后一个时自动注销整条服务
                 remove: true,
-                removeTip: '取消叠加',
+                removeTip: '移除图层',
                 removeEvent: 'remove-layer',
                 removePayload: { layerId: leafId },
             },
@@ -170,5 +177,10 @@ export function buildRemoteServiceGroup(
         children,
         expanded: expandedState[RSVC_GROUP_NODE_ID] !== false,
         showCheckbox: children.length > 0,
+        // 组头右键能力：清空全部在线服务（folder-clear-layers 由 remoteServiceTocActions 消费）
+        actions: {
+            remove: records.length > 0,
+            removeTip: '清空全部服务',
+        },
     }];
 }

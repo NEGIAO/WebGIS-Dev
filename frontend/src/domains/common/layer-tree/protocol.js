@@ -8,6 +8,7 @@ export const TOC_MENU_COMMANDS = Object.freeze({
     MULTI_SELECT_CLEAR: 'multi-select-clear',
     FOLDER_MULTI_SELECT_ADD: 'folder-multi-select-add',
     FOLDER_MULTI_SELECT_REMOVE: 'folder-multi-select-remove',
+    FOLDER_CLEAR_LAYERS: 'folder-clear-layers',
     BATCH_SHOW: 'batch-show',
     BATCH_HIDE: 'batch-hide',
     BATCH_REMOVE: 'batch-remove',
@@ -34,6 +35,11 @@ export const TOC_MENU_COMMANDS = Object.freeze({
     RENAME: 'rename',
     OPACITY: 'opacity',
     PROPERTIES: 'properties',
+    // 三维数据专属（cesium:* 节点，由 cesiumTocActions 消费）
+    SET_HEIGHT: 'set-height',
+    MATERIAL: 'set-material',
+    REPOSITION: 'reposition',
+    STRETCH_HEIGHT: 'stretch-height',
 });
 
 export function normalizeTocLayerId(id) {

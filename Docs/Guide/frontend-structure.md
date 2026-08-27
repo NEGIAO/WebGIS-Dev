@@ -303,6 +303,7 @@ frontend/src/
 │   │   │   ├── remoteServiceTocActions.js  # rsvc: 前缀 TOC 动作分流器（显隐/子图层勾选/移除/引擎定位直调注册表）
 │   │   │   ├── arcgisAttributeQuery.js  # ArcGIS REST 属性查询（/{layerId}/query 点查 + 多子层合并 + esri 类型映射）
 │   │   │   ├── identifyPresentation.js  # 要素点查结果展示渲染（HTML 构建 + HTML 转义，OL/Cesium 双引擎共用）
+│   │   │   ├── capabilitiesProxy.ts  # 能力文档拉取的后端代理兜底注入器（自签证书/CORS 直连失败时经 /proxy 重试）
 │   │   │   ├── wmsService.js  # WMS/ArcGIS 服务解析与查询（ensureWmsServiceInfo/identifyArcgisFeatures/export 模板构建）
 │   │   │   ├── xyzWmtsCapabilities.js  # XYZ 行序判定 + WMTS GetCapabilities 轻量解析（纯 JS 零 OL 依赖）
 │   │   │   └── useSharedCustomBasemapUrl.ts  # OL/Cesium 共用的 custom/Wayback URL 运行时 SSOT 与本机持久化
@@ -428,6 +429,12 @@ frontend/src/
 │   │   │   ├── protocol.js  # 图层树协议常量
 │   │   │   ├── actions/
 │   │   │   │   ├── contextActionManager.js  # 右键菜单动作调度
+│   │   │   │   └── unifiedActionRouter.js  # 统一图层操作路由器（OL/Cesium 双引擎处理器注册 + 按引擎分发）
+│   │   │   ├── composables/
+│   │   │   │   ├── useGeocoding.js  # 坐标工具/地理编码/高德 AOI 对话框逻辑（自 TOCPanel 抽离，已接线）
+│   │   │   │   ├── useTreeActionDispatcher.js  # TOC 树动作分发 + 多选集 + 拖拽排序（已接线）
+│   │   │   │   ├── useSharedResources.js  # 共享资源扫描/加载（包装 useSharedResourceLoader）
+│   │   │   │   ├── useFileUpload.js  # 文件/文件夹上传触发与进度视图（已接线）
 │   │   │   │   ├── exportService.js  # KML 导出
 │   │   │   │   ├── layerExportService.js  # 图层导出服务
 │   │   │   │   ├── selectionManager.js  # 选择状态管理
@@ -436,7 +443,7 @@ frontend/src/
 │   │   │   │   ├── LayerPanel.vue
 │   │   │   │   ├── LayerPropertiesDialog.vue  # 图层属性弹窗
 │   │   │   │   ├── SharedResourceTreeItem.vue  # 共享资源树节点
-│   │   │   │   ├── TOCPanel.vue
+│   │   │   │   ├── TOCPanel.vue  # TOC 宿主面板（P2 拆分后 ~2330 行：接线 composables + 属性表 + 样式编辑）
 │   │   │   │   └── TOCTreeItem.vue  # 递归树节点
 │   │   │   ├── menu/
 │   │   │   │   ├── commandDispatcher.js  # 菜单命令分发
@@ -501,7 +508,17 @@ frontend/src/
 │   │   │   ├── normalize.ts  # 二值标记规范化
 │   │   │   ├── pathUtils.js  # 路径工具
 │   │   │   ├── useMarkdownRenderer.js
-│   │   │   └── viewScaleConverter.js  # OL zoom ↔ Cesium height 换算（纯数学零依赖，自 ol 域迁入）
+│   │   │   ├── viewScaleConverter.js  # 兼容入口（再导出 viewScale/ 模块；旧 API 签名不变）
+│   │   │   ├── viewScale/
+│   │   │   │   ├── constants.js  # 双引擎尺度系统常量（地球半径/容差/FOV 默认/相机高度与 OL zoom 边界，含兼容别名）
+│   │   │   │   ├── constants-and-precision.js  # 常量+浮点工具聚合（兼容入口）
+│   │   │   │   ├── precision.js  # nearlyEqual 浮点判定 + 负零归一化 + 边界钳制
+│   │   │   │   ├── webMercator.js  # EPSG:3857 zoom↔resolution + 纬度修正（groundResolution）
+│   │   │   │   ├── openlayersScale.js  # OL 尺度归一化（resolution 优先，zoom 推导兜底）
+│   │   │   │   ├── cesiumScale.js  # Cesium 解析模型（nadir/倾斜）+ 射线测量注入式封装 + 二分求解
+│   │   │   │   ├── conversion.js  # 高层转换：convertOlViewToCesium / convertCesiumViewToOl（UnifiedViewState）
+│   │   │   │   ├── compat.js  # 旧 API 兼容层（olZoomToCesiumHeight/cesiumHeightToOlZoom）
+│   │   │   │   └── browserAdapter.js  # 浏览器端射线测量适配（pickRay/globe.pick 注入）
 │   │   └── weather/
 │   │       ├── components/
 │   │       │   ├── WeatherChartPanel.vue

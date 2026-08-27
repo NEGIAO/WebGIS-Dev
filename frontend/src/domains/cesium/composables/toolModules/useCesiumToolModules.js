@@ -51,7 +51,7 @@ export function useCesiumToolModules({
     // 基础大气参数（只开启晨昏半球，其余全部关闭）
     const baseAtmosphereParams = ref({
         enableLighting: true,       // 晨昏线 - 开启
-        showGroundAtmosphere: true, // 地面大气 - 开启（晨昏线必需）
+        showGroundAtmosphere: false, // 地面大气 - 关闭（与 initViewer 默认值一致，可在面板动态开启）
         dynamicAtmosphereLighting: true,
         dynamicAtmosphereLightingFromSun: true,
         atmosphereLightIntensity: 5.5,

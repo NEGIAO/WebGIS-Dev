@@ -64,6 +64,12 @@ export function dispatchContextMenuCommand({ key, node, selectedLayerIds = [] } 
         return events;
     }
 
+    // 文件夹级批量清空：由各 TOC 面板收集叶子后走既有单层移除链路
+    if (commandKey === TOC_MENU_COMMANDS.FOLDER_CLEAR_LAYERS) {
+        events.push({ type: 'folder-clear-layers', payload: { nodeId } });
+        return events;
+    }
+
     if (
         commandKey === TOC_MENU_COMMANDS.BATCH_SHOW ||
         commandKey === TOC_MENU_COMMANDS.BATCH_HIDE
@@ -214,6 +220,17 @@ export function dispatchContextMenuCommand({ key, node, selectedLayerIds = [] } 
 
     if (commandKey === TOC_MENU_COMMANDS.PROPERTIES) {
         events.push({ type: 'show-layer-properties', payload: { layerId: nodeId } });
+        return events;
+    }
+
+    // 三维数据专属：重定位（GLTF）/ 拉伸至高程（TIF）——由 cesiumTocActions 消费
+    if (commandKey === TOC_MENU_COMMANDS.REPOSITION) {
+        events.push({ type: 'data-reposition', payload: { layerId: nodeId } });
+        return events;
+    }
+
+    if (commandKey === TOC_MENU_COMMANDS.STRETCH_HEIGHT) {
+        events.push({ type: 'data-stretch-height', payload: { layerId: nodeId } });
         return events;
     }
 

@@ -18,6 +18,7 @@ import {
     parseRsvcNodeId,
     setRemoteServiceVisible,
     setRemoteServiceSublayer,
+    removeRemoteServiceSublayer,
     reorderRemoteServiceSublayers,
     reorderRemoteServices,
     unregisterRemoteService,
@@ -35,9 +36,15 @@ function isSubLayerNodeId(nodeId) {
 }
 
 /** 引擎定位：优先注册了 zoomTo 的引擎，逐个尝试直到成功 */
-function zoomViaEngine(serviceId) {
+/**
+ * 引擎定位：按当前引擎优先分发（3D 模式下隐藏的 OL 地图不得抢走定位），
+ * 优先引擎失败（未声明范围等）时回退另一引擎兜底。
+ */
+function zoomViaEngine(serviceId, preferredEngine = 'ol') {
     const { warning } = useMessage();
-    const apis = [rsvcEngineApi.ol, rsvcEngineApi.cesium].filter(Boolean);
+    const preferred = preferredEngine === 'cesium' ? rsvcEngineApi.cesium : rsvcEngineApi.ol;
+    const fallback = preferredEngine === 'cesium' ? rsvcEngineApi.ol : rsvcEngineApi.cesium;
+    const apis = [preferred, fallback].filter(Boolean);
     if (!apis.length) {
         warning('当前引擎不支持在线服务定位', { duration: 2500 });
         return true;
@@ -53,25 +60,48 @@ function zoomViaEngine(serviceId) {
     return true;
 }
 
-export function handleRemoteServiceTreeAction(evt, store) {
+/**
+ * 处理在线服务节点动作
+ * @param {object} evt TOC 动作事件
+ * @param {object} store useRemoteServices() 实例
+ * @param {{ engine?: 'ol'|'cesium' }} [options] 当前引擎（zoom 定位优先分发）
+ * @returns {boolean} true = 已消费
+ */
+export function handleRemoteServiceTreeAction(evt, store, options = {}) {
     const type = String(evt?.type || '');
-    if (type) console.debug('[RSVC][TOC]', type, evt.nodeId ?? evt.layerId ?? '');
     if (!type) return false;
+
+    // ---- 文件夹级批量清空：组头=注销全部服务；单服务文件夹=注销该服务 ----
+    if (type === 'folder-clear-layers') {
+        const nodeId = String(evt?.nodeId ?? '').trim();
+        if (nodeId === RSVC_GROUP_NODE_ID) {
+            [...store.records.value].forEach((record) => unregisterRemoteService(record.id));
+            return true;
+        }
+        if (nodeId.startsWith(RSVC_NODE_PREFIX)) {
+            const { serviceId, subLayerName } = parseRsvcNodeId(nodeId);
+            if (!subLayerName) {
+                unregisterRemoteService(serviceId);
+                return true;
+            }
+        }
+        return false;
+    }
 
     // ---- 引擎定位（缩放至图层）：服务节点 / 子图层叶子均支持，定位到服务范围 ----
     if (type === 'zoom-layer') {
         const nodeId = extractNodeId(evt);
         if (!nodeId.startsWith(RSVC_NODE_PREFIX)) return false;
         const { serviceId } = parseRsvcNodeId(nodeId);
-        return zoomViaEngine(serviceId);
+        return zoomViaEngine(serviceId, options.engine);
     }
 
-    // ---- 移除：叶子=取消叠加；服务=注销整条记录（双引擎 adapter 自动卸载）----
+    // ---- 移除：叶子=从注册表剔除该子图层条目；服务=注销整条记录（双引擎 adapter 自动卸载）----
     if (type === 'remove-layer') {
         const nodeId = extractNodeId(evt);
         if (!nodeId.startsWith(RSVC_NODE_PREFIX)) return false;
         const { serviceId, subLayerName } = parseRsvcNodeId(nodeId);
-        if (subLayerName) setRemoteServiceSublayer(serviceId, subLayerName, false);
+        if (subLayerName) removeRemoteServiceSublayer(serviceId, subLayerName);
         else unregisterRemoteService(serviceId);
         return true;
     }
@@ -114,7 +144,8 @@ export function handleRemoteServiceTreeAction(evt, store) {
 
     if (type === 'drop-layer') {
         const fromNodeId = String(handleRemoteServiceTreeAction.__rsvcDraggingNodeId || '');
-        const toNodeId = extractNodeId(evt);
+        // 新载荷 layerId=源 / targetId=目标；兼容旧载荷（layerId 即目标）
+        const toNodeId = String(evt?.targetId ?? extractNodeId(evt));
         handleRemoteServiceTreeAction.__rsvcDraggingNodeId = '';
         if (!fromNodeId || !toNodeId.startsWith(RSVC_NODE_PREFIX)) return false;
         const fromParsed = parseRsvcNodeId(fromNodeId);

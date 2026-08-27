@@ -18,9 +18,10 @@ import {
 
 const HomeView = () => import('./lazyHomeViewLoader').then((mod) => mod.loadHomeView());
 
-// 首屏 Loading 隐藏延迟：map-core-ready（首张瓦片就绪）后遮罩再停留 1s，
+//首屏延迟map，遮罩，避免网络不好白屏
+// 首屏 Loading 隐藏延迟：map-core-ready（首张瓦片就绪）后遮罩再停留 3s，
 // 作为过渡缓冲，避免遮罩消失瞬间视口其余瓦片尚未铺满露出白底。
-const MAP_ENGINE_LOADING_HIDE_DELAY_MS = 1000;
+const MAP_ENGINE_LOADING_HIDE_DELAY_MS = 3000;
 
 const router = createRouter({
     history: createWebHashHistory(),

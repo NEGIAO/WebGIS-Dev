@@ -30,6 +30,12 @@ export interface CesiumLayerRecord {
     opacity: number;           // 0~1
     supportsOpacity: boolean;
     createdAt: number;
+    /** 3D Tiles 高程范围（min/max 米），由 CesiumContainer 采样回填 */
+    heightRange?: { min: number; max: number };
+    /** 当前基座高程（米，3dtiles 专用，TOC 高程滑杆值源） */
+    baseHeight?: number;
+    /** 当前材质模式（3dtiles 专用） */
+    materialMode?: string;
 }
 
 /** 场景操作适配器（由 CesiumContainer 挂载时注册） */
@@ -38,6 +44,14 @@ export interface CesiumLayerAdapter {
     setOpacity: (id: string, opacity: number) => void;
     flyTo: (id: string) => void;
     remove: (id: string) => void;
+    /** 3D Tiles 高程调节（可选） */
+    setBaseHeight?: (id: string, height: number) => void;
+    /** 3D Tiles 材质模式切换（可选） */
+    setMaterialMode?: (id: string, mode: string) => void;
+    /** GLTF 重定位（打开坐标弹窗，可选） */
+    reposition?: (id: string) => void;
+    /** GeoTIFF 单波段拉伸至高程（可选） */
+    stretchToHeight?: (id: string) => void;
 }
 
 export const useCesiumLayersStore = defineStore('cesiumLayers', () => {
@@ -55,9 +69,18 @@ export const useCesiumLayersStore = defineStore('cesiumLayers', () => {
     /**
      * 与 loadedDataSources 差量同步（CesiumContainer watch 调用）：
      * 新增建档（默认可见/不透明），消失删档，已有记录保留用户改过的元数据。
-     * @param sources 导入层记录投影 [{ id, name, type }]
+     * @param sources 导入层记录投影 [{ id, name, type, baseHeight?, heightRange?, materialMode? }]
      */
-    function syncFromImport(sources: Array<{ id: string; name?: string; type?: string }> = []): void {
+    function syncFromImport(
+        sources: Array<{
+            id: string;
+            name?: string;
+            type?: string;
+            baseHeight?: number;
+            heightRange?: { min: number; max: number };
+            materialMode?: string;
+        }> = [],
+    ): void {
         const now = Date.now();
         const nextIds = new Set(sources.map((item) => String(item.id)));
         const kept = records.value.filter((item) => nextIds.has(item.id));
@@ -76,6 +99,13 @@ export const useCesiumLayersStore = defineStore('cesiumLayers', () => {
                     opacity: 1,
                     supportsOpacity: OPACITY_SUPPORTED_TYPES.has(type),
                     createdAt: now,
+                    baseHeight:
+                        type === '3dtiles' && Number.isFinite(item.baseHeight)
+                            ? item.baseHeight
+                            : undefined,
+                    heightRange: type === '3dtiles' ? item.heightRange : undefined,
+                    materialMode:
+                        type === '3dtiles' && item.materialMode ? String(item.materialMode) : undefined,
                 };
             });
 
@@ -129,6 +159,30 @@ export const useCesiumLayersStore = defineStore('cesiumLayers', () => {
         adapter?.remove(id);
     }
 
+    /** 3D Tiles 高程调节（回写 record 供 TOC 滑杆取值） */
+    function setBaseHeight(id: string, height: number): void {
+        const record = getRecord(id);
+        if (record) record.baseHeight = height;
+        adapter?.setBaseHeight?.(id, height);
+    }
+
+    /** 3D Tiles 材质模式切换（回写 record 供 TOC 下拉取值） */
+    function setMaterialMode(id: string, mode: string): void {
+        const record = getRecord(id);
+        if (record) record.materialMode = mode;
+        adapter?.setMaterialMode?.(id, mode);
+    }
+
+    /** GLTF 重定位：经 adapter 打开坐标弹窗（弹窗 UI 挂在 CesiumContainer） */
+    function requestReposition(id: string): void {
+        adapter?.reposition?.(id);
+    }
+
+    /** GeoTIFF 单波段拉伸至高程 */
+    function requestStretchHeight(id: string): void {
+        adapter?.stretchToHeight?.(id);
+    }
+
     function registerAdapter(next: CesiumLayerAdapter): void {
         adapter = next;
     }
@@ -149,6 +203,10 @@ export const useCesiumLayersStore = defineStore('cesiumLayers', () => {
         rename,
         flyTo,
         remove,
+        setBaseHeight,
+        setMaterialMode,
+        requestReposition,
+        requestStretchHeight,
         registerAdapter,
         unregisterAdapter,
     };

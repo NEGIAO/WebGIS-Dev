@@ -33,6 +33,7 @@ export const useLayerStore = defineStore('layerStore', () => {
     const draggingLayerId = ref('');
     const handlers = ref<LayerHandlers>({});
     const layerTreeExpandedState = ref<Record<string, boolean>>({
+        'folder-2d': true,
         'folder-draw': true,
         'folder-route': true,
         'folder-search': true,

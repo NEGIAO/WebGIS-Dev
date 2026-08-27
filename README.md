@@ -80,7 +80,7 @@
 
 ## 🎯 项目简介
 
-**NEGIAO's WebGIS** 是一个功能完整、架构清晰的前后端分离 WebGIS 平台（当前版本 V3.5.30），前端托管于 GitHub Pages（正式域名 webgis.negiao.cn），后端以 Docker 部署在 Hugging Face Spaces，通过 RESTful API 通信，支持独立扩展。
+**NEGIAO's WebGIS** 是一个功能完整、架构清晰的前后端分离 WebGIS 平台（当前版本 V3.5.31），前端托管于 GitHub Pages（正式域名 webgis.negiao.cn），后端以 Docker 部署在 Hugging Face Spaces，通过 RESTful API 通信，支持独立扩展。
 
 > 📚 本 README 仅保留核心概览与导航。完整文档已模块化至 [`Docs/Guide/`](Docs/Guide/)，详见下方「文档导航」。
 >
@@ -404,7 +404,10 @@ HF Spaces 在 24 小时无访问后自动休眠。本平台通过**双向互保�
 
 | 版本 | 日期 | 概要 |
 |------|------|------|
+| **V3.5.31** | 2026-08-26 | **统一图层管理 P0~P2 全链落地 + OL↔Cesium 视图尺度系统**（整合原 V3.5.31~34 多批次）：统一 Action Router 双引擎分发、TOCPanel 拆分四个组合式函数瘦身 22%、三维数据收编统一 TOC 右键管理；viewScale/ 八模块 Canonical Ground Resolution 架构 + 射线实测 Precision 校正，URL z 序列化 6dp 字符串级往返恒等。详见[完整更新日志](Docs/Guide/CHANGELOG.md) |
 | **V3.5.30** | 2026-08-25 | **在线服务子图层独立管理与双引擎点击查询**：WMS/ArcGIS/XYZ/WMTS 四协议统一注册 TOC；每个勾选子图层拆分为独立请求（客户端 zIndex 控制叠放，拖拽即时生效）；identify 弃用改用 `/{layerId}/query` 精确点查；属性表按子层精确拉取（`/{layerId}/query?outFields=*`）；TOC 子图层叶子独立显隐 + 右键移除 + 上移/下移排序；Cesium 适配器 viewer 就绪自愈挂载；会话态生命周期（刷新即清）。详见[完整更新日志](Docs/Guide/CHANGELOG.md) |
+
+> 注：V3.5.30 之前的多批次内容已整合进对应版本条目（见 CHANGELOG「追认」小节），故演进表保持两行实义摘要。
 
 更早版本（V3.5.29 及以前）请查阅 [完整更新日志 →](Docs/Guide/CHANGELOG.md)
 
@@ -428,6 +431,6 @@ HF Spaces 在 24 小时无访问后自动休眠。本平台通过**双向互保�
 |:------:|:--------:|:--------:|
 | [GitHub](https://github.com/NEGIAO/WebGIS-Dev) | [webgis.negiao.cn](https://webgis.negiao.cn)（正式域名，GitHub Pages 托管） | [Hugging Face](https://NEGIAO-WebGIS.hf.space) |
 
-<sub>V3.5.30 · 开发中 · 最后更新 2026-08-25</sub>
+<sub>V3.5.31 · 开发中 · 最后更新 2026-08-26</sub>
 
 </div>

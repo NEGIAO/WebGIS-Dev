@@ -228,6 +228,13 @@ import { createDistrictManagerFeature } from '@ol/spatial-analysis/composables/u
 import { useLayerContextMenuActions } from '@common/layer-tree/actions/useLayerContextMenuActions';
 import { createLayerControlHandlers } from '@ol/layer/composables/useLayerControlHandlers';
 import { createOlRemoteServiceAdapter } from '@ol/services/olRemoteServiceAdapter';
+import {
+    registerEngineHandlers,
+    unregisterEngineHandlers,
+} from '@common/layer-tree/actions/unifiedActionRouter';
+// 能力文档拉取的代理兜底注入（WMS/WMTS/ArcGIS f=json 直连失败时与瓦片同通道）
+import { setCapabilitiesProxyBuilder } from '@common/basemap/capabilitiesProxy';
+import { buildRequestProxyUrl } from '@ol/tile-source';
 import { looksLikeWmsSourceUrl } from '@common/basemap/wmsService';
 import { createLayerMetadataNormalizationFeature } from '@ol/layer/composables/useLayerMetadataNormalization';
 import { createManagedFeatureHighlightFeature } from '@ol/layer/feature/useManagedFeatureHighlight';
@@ -853,6 +860,10 @@ const { handleLayerChange, handleLayerOrderUpdate } = createLayerControlHandlers
     // 在线服务点查命中 → 上抛 HomeView，复用左下角「属性信息」面板展示
     onIdentifyResult: (payload) => emit('service-feature-query', payload),
 });
+
+// 能力文档代理兜底：WMS/WMTS/ArcGIS f=json 直连失败时经后端 /proxy 重试
+// （按 owner 注册；MapContainer 常驻，3D 卸载注销 cesium 键后自动回落本构造器）
+setCapabilitiesProxyBuilder((url) => buildRequestProxyUrl(url), 'ol');
 
 // 在线服务注册表 → OL 图层渲染适配器（TOC「在线服务」分组的渲染端）
 const olRemoteServiceAdapter = createOlRemoteServiceAdapter({ mapInstanceRef: mapInstance });
@@ -2027,6 +2038,19 @@ defineExpose({
     selectedLayer,
     customMapUrl,
 });
+
+// 统一 Action Router：注册 OL 引擎处理器（HomeView 高频操作按引擎分发）
+registerEngineHandlers('ol', {
+    setUserLayerVisibility: ({ layerId, visible }) =>
+        setUserLayerVisibility(layerId, visible),
+    setUserLayerOpacity: ({ layerId, opacity }) =>
+        setUserLayerOpacity(layerId, opacity),
+    removeUserLayer: ({ layerId }) => removeUserLayer(layerId),
+    zoomToUserLayer: ({ layerId }) => zoomToUserLayer(layerId),
+    zoomToRemoteService: ({ serviceId }) =>
+        olRemoteServiceAdapter?.zoomTo?.(serviceId) ?? false,
+});
+onUnmounted(() => unregisterEngineHandlers('ol'));
 </script>
 
 <style scoped>

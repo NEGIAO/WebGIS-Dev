@@ -9,6 +9,8 @@
  * 非标准矩阵集在解析阶段即被跳过并记录原因。
  */
 
+import { getCapabilitiesProxyBuilder } from './capabilitiesProxy';
+
 /** 判定是否为可直接注册的 WMTS 服务地址 */
 export function looksLikeWmtsUrl(rawUrl) {
     const url = String(rawUrl || '');
@@ -27,6 +29,32 @@ export function detectTileYScheme(rawUrl) {
 }
 
 const capsCache = new Map(); // 归一化地址 → Promise<info>
+
+/** 带超时与代理兜底的文本拉取（直连失败 → 后端 /proxy/{url} 重试一次） */
+async function fetchCapsText(url) {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10000);
+    try {
+        const res = await fetch(url, { signal: controller.signal });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        return await res.text();
+    } catch (directError) {
+        const buildProxyUrl = getCapabilitiesProxyBuilder();
+        const proxiedUrl = buildProxyUrl?.(url);
+        if (!proxiedUrl || proxiedUrl === url) throw directError;
+        const retryController = new AbortController();
+        const retryTimeout = setTimeout(() => retryController.abort(), 10000);
+        try {
+            const res2 = await fetch(proxiedUrl, { signal: retryController.signal });
+            if (!res2.ok) throw new Error(`HTTP ${res2.status}`);
+            return await res2.text();
+        } finally {
+            clearTimeout(retryTimeout);
+        }
+    } finally {
+        clearTimeout(timeoutId);
+    }
+}
 
 function textOf(parent, tag) {
     const node = parent?.getElementsByTagName?.(tag)?.[0];
@@ -63,9 +91,7 @@ export async function ensureWmtsServiceInfo(rawUrl) {
         capsCache.set(
             capsUrl,
             (async () => {
-                const res = await fetch(capsUrl);
-                if (!res.ok) throw new Error(`WMTS GetCapabilities HTTP ${res.status}`);
-                const text = await res.text();
+                const text = await fetchCapsText(capsUrl);
                 const doc = new DOMParser().parseFromString(text, 'text/xml');
                 if (doc.getElementsByTagName('Exception')[0]) {
                     throw new Error(textOf(doc, 'ExceptionText') || 'WMTS 服务返回异常');

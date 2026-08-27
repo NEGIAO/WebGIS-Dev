@@ -14,7 +14,7 @@ import {
     createCapabilitiesUrl,
     fetchTextWithTimeout,
 } from './urlUtils';
-import { prioritizeTileSourceRequest } from './tileLifecycle';
+import { prioritizeTileSourceRequest, buildRequestProxyUrl } from './tileLifecycle';
 import { createXYZSourceFromUrl } from './xyzSource';
 
 export function detectWmtsByUrl(urlObj: URL): boolean {
@@ -95,7 +95,15 @@ export async function createWmtsSourceStrict(
     }
 
     const capabilitiesUrl = createCapabilitiesUrl(rawUrl, 'WMTS', DEFAULT_WMTS_VERSION);
-    const xmlText = await fetchTextWithTimeout(capabilitiesUrl);
+    let xmlText: string;
+    try {
+        xmlText = await fetchTextWithTimeout(capabilitiesUrl);
+    } catch (directError) {
+        // 直连失败（自签证书/CORS）→ 后端代理兜底重试一次
+        const proxiedUrl = buildRequestProxyUrl(capabilitiesUrl);
+        if (!proxiedUrl || proxiedUrl === capabilitiesUrl) throw directError;
+        xmlText = await fetchTextWithTimeout(proxiedUrl);
+    }
     const parser = new WMTSCapabilities();
     const capabilities = parser.read(xmlText);
 

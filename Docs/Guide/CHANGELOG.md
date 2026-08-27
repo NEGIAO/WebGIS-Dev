@@ -6,6 +6,45 @@
 
 ## 版本记录
 
+### V3.5.31 (2026-08-26) — 统一图层管理 P0~P2 全链落地 + OL↔Cesium 视图尺度系统
+
+> 本版本整合原多批次中间提交（曾临时编号 V3.5.31~V3.5.34）为单一版本。计划文档：Docs/TODO/unified-layer-management-refactor-plan.md（L3，用户批准执行）、Docs/TODO/ol2cesium.md。
+
+#### 一、统一图层管理架构（P0/P1）
+- **P0-1 引擎状态贯通**：HomeView → SidePanel → TOCPanel 新增 active-engine prop 链（'ol' | 'cesium'），TOC 首次感知当前引擎。
+- **P0-2 zoom 按引擎分发**：zoomViaEngine 支持优先引擎参数——3D 模式下在线服务定位走 cesiumRemoteAdapter.flyTo，不再误飞 v-show 隐藏的 OL 地图；失败自动回退另一引擎。
+- **P0-3 identify 常驻绑定确认**：rsvcInitTimer 轮询 + 无早退守卫已由前置批次落地（本轮核验）。
+- **P0-4 :L: 复合 id 移除：跳过** —— 与现状路由协议冲突，依赖「子图层独立记录」专项先行，见 remote-service-sublayer-independent-layers-plan.md。
+- **P1 统一 Action Router**：新增 common/layer-tree/actions/unifiedActionRouter.js（registerEngineHandlers / unregisterEngineHandlers / dispatchLayerAction），MapContainer 与 CesiumContainer 各自注册处理器并在 onUnmounted 反注册；HomeView 四个高频 handler（显隐/透明度/移除/定位）切换按引擎路由。
+- **同批审查修复**：CesiumContainer adapter 调用签名修正（ops 处理器为对象解构签名，位置传参导致调用空转）；TOCTreeItem drag/drop 载荷变更兼容（contextActionManager 与 rsvc 分流器补 targetId ?? layerId 兼容读取）。
+
+#### 二、统一图层管理拆分与收编（P2 两批次）
+- **组合式函数产出**：useGeocoding.js（坐标三件套/地理编码+逆编码属性拼装/AOI 对话框状态机）、useTreeActionDispatcher.js（树动作分发+多选集递归/分块+拖拽排序委托）、useFileUpload.js（上传触发+200MB 校验+进度视图）、useSharedResources.js（共享资源扫描/加载包装）。
+- **TOCPanel 宿主接线**：2977 → 2327 行瘦身 22%；dispatcher 暴露 syncUserLayers 由宿主 watch 转调保持原同步语义。
+- **死代码清理**：LayerPanel 删 7 个死 props、TOCPanel 删 3 个死 emits（show-layer-properties 改经 dispatcher 直写 uiState）、SidePanel 删 4 个死事件中继（request/clear-download-extent 等，MapDownloader 实际不发出）。
+- **文件夹级「清空图层」全类型接入**：protocol 新增 FOLDER_CLEAR_LAYERS；contextMenu 文件夹分支渲染危险项；remoteServiceTocActions（组头=注销全部/单服务=注销该服务）、cesiumTocActions、TOCPanel 普通分组三路消费；三大分组组头补 actions.remove 能力声明。
+- **子图层叶子「取消叠加」升级为「移除」**：remoteServices 新增 removeRemoteServiceSublayer（sublayers/selectedIds/layerOrder 三处剔除，删至最后一个自动注销）；effectiveSelectedIds 消费端唯一入口——WMS/ArcGIS 动态服务默认全选语义 + 存量空选记录自愈（selectionTouched 触碰标记）。
+- **三维数据收编统一 TOC**：CesiumToolPanel data tab 只留导入（删除「已加载数据列表」整块 UI 与无人消费的 request-range-sample 采样链）；管理动作全部走 TOC 右键菜单——「调整高程」（菜单内嵌滑杆，范围=基座高±100m）、「材质模式」（五选一下拉）、「调整位置」（GLTF 重定位复用既有坐标弹窗）、「拉伸至高程」（GeoTIFF）；cesiumLayers store 补 baseHeight/heightRange/materialMode 建档与 setBaseHeight/setMaterialMode/requestReposition/requestStretchHeight 双向回写；syncFromImport 投影高程初值回退链。
+- **i18n**：补齐 layer.nothingToClear / layer.folderCleared 中英文案。
+
+#### 三、OL↔Cesium 视图尺度系统（Canonical Ground Resolution）
+- **模块化架构**：common/utils/viewScale/ 八模块——constants（常量 SSOT）/ precision / webMercator / openlayersScale / cesiumScale / conversion / compat / browserAdapter + index 桶式入口；旧 viewScaleConverter.js 降级为兼容再导出 shim。
+- **解析模型**：nadir 精确式 G=2h·tan(fovY/2)/vh；任意 pitch 斜距近似及逆变换；正俯视球面弦长闭式解 measureNadirSphereChord + 一次比例迭代将平面/球面系统差压至 ULP 级。
+- **射线测量（Precision）**：pickRay→globe.pick 相邻像素距离采样（中心+四邻候选回退），Terrain 自动生效；solveCameraHeightBinary 二分求解供 Terrain 场景数值收敛；模式切换结束做一次比例校正消除曲率系统差。
+- **HomeView 接入**：buildCesiumQueryPatchFromOl → convertOlViewToCesium（earthModel:'sphere'）；syncOlFromCesiumPayload → convertCesiumViewToOl（注入射线实测优先）；URL z 序列化三处统一 toFixed(6) 字符串级往返恒等；负零归一化杜绝 '-0.00'。
+- **启动白屏修复**：constants.js 补齐 MIN_CESIUM_HEIGHT/MAX_CESIUM_HEIGHT/MIN_OL_ZOOM/MAX_OL_ZOOM 兼容导出，修复 ESM 具名导出缺失导致的 main.js SyntaxError。
+- **OL→Cesium 极近视角修复**：切引擎时换算失败不再残留 OL 缩放级别 z——useMapViewUrlState 无条件写入默认相机高度 + buildCesiumQueryPatchFromOl 失败兜底米制补丁。
+- **验收**：z=4 往返 400 轮字符串级恒等（max|Δzoom|=0）；小数 zoom（5.32/8.716/12.00453）×20 轮稳定；详见[维护日志](../LLM_record/26-08/26-08-26/2026-08-26-ol-cesium-z4-roundtrip-acceptance.md)。
+
+#### 四、整合会话 Code Review 修复（本批次）
+- **P1 射线实测双重解包**：HomeView.syncOlFromCesiumPayload 对 cesiumContainerRef.measureGroundResolution()（已返回 number）再取 `.groundResolution` 恒为 undefined → 3D→OL Precision 链路完全失效，静默退化为解析模型。已去除多余解包。
+- **P1 compat 层旧签名回归**：viewScale 模块化后 olZoomToCesiumHeight 仅认 viewportHeight/fovY，而 mapCommandAdapters.js 仍传 mapSize/cesiumFovy/clamp → 视口高度恒回落 768、Cesium 实际 fovy 被忽略、clamp 失效。compat.js 补齐三个旧参数别名支持并恢复严格互逆（cesiumHeightToOlZoom 同步改走带纬度钳制的 groundResolutionToWebMercatorResolution）。Node 实测新旧两签名往返均零漂移。
+- **P2 Precision 校正环容差失真**：setMapView 校正判定 nearlyEqual(measured, targetG, 1, 1e-6) 的绝对容差 1 m/px 在近距视角（G≈0.1~1 m/px）会吞掉全部校正需求，改为纯相对判定（1e-9, 1e-6）。
+- **P2 SSOT 死代码清理**：删除 viewScale/canonicalScale.js——全仓零引用且与 conversion.js 存在同名导出（canonicalScaleToCesiumView/OlView），双事实源隐患。
+- **P3**：precision.js 钳制函数改用 constants SSOT 边界（值不变）；useCesiumToolModules showGroundAtmosphere 注释与取值对齐（false=关闭）。
+
+---
+
 ### V3.5.30 (2026-08-25) — 在线服务子图层独立管理与双引擎点击查询
 
 > 本版本整合了 V3.5.30~V3.5.38 多个中间版本的在线服务功能开发，统一为一个提交。

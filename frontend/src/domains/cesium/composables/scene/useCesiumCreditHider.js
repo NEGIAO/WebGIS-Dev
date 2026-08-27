@@ -58,9 +58,32 @@ export function useCesiumCreditHider({ getViewer }) {
         });
 
         if (viewer.scene && viewer.scene.frameState && viewer.scene.frameState.creditDisplay) {
-            viewer.scene.frameState.creditDisplay.hasCredits = () => false;
-            viewer.scene.frameState.creditDisplay.destroy = () => {};
+            const creditDisplay = viewer.scene.frameState.creditDisplay;
+            if (!creditDisplay._originalHasCredits) {
+                creditDisplay._originalHasCredits = creditDisplay.hasCredits;
+                creditDisplay._originalDestroy = creditDisplay.destroy;
+            }
+            creditDisplay.hasCredits = () => false;
+            // destroy 不能置空：viewer.destroy() 销毁链依赖原生 destroy 完成 scene 资源回收，
+            // 若跳过则 _scene 已置空但 isDestroyed() 仍为 false，渲染循环残留并在 resize() 崩溃
+            creditDisplay.hasCreditsPatched = true;
         }
+    }
+
+    /**
+     * 恢复被 hideCreditsAggressive 补丁过的 CreditDisplay 原生方法。
+     * 必须在 viewer.destroy() 之前调用，否则销毁链会因补丁残留而中断。
+     */
+    function restoreCreditDisplay(viewer) {
+        try {
+            const creditDisplay = viewer?.scene?.frameState?.creditDisplay;
+            if (!creditDisplay || !creditDisplay.hasCreditsPatched) return;
+            if (creditDisplay._originalHasCredits) creditDisplay.hasCredits = creditDisplay._originalHasCredits;
+            if (creditDisplay._originalDestroy) creditDisplay.destroy = creditDisplay._originalDestroy;
+            delete creditDisplay.hasCreditsPatched;
+            delete creditDisplay._originalHasCredits;
+            delete creditDisplay._originalDestroy;
+        } catch { /* ignore */ }
     }
 
     function cleanupCreditHider() {
@@ -81,5 +104,6 @@ export function useCesiumCreditHider({ getViewer }) {
     return {
         installCreditHider,
         cleanupCreditHider,
+        restoreCreditDisplay,
     };
 }

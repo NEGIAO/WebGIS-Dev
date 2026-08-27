@@ -17,10 +17,15 @@ L2
 ## 修改内容（本次审查新增修复）
 
 1. **arcgisAttributeQuery.js — mapEsriType 大小写失配（P1）**：ESRI 类型为驼峰字面量，`.toLowerCase()` 后查表永不命中 → 全部字段退化为 `string`，属性表数值格式化/统计失效。改为 trim 后精确匹配。
-2. **arcgisAttributeQuery.js — 头注释漂移**：文档写 `returnGeometry=false`，实现为 `true`（几何随行返回供定位）。修正注释。
-3. **wmsService.js / remoteServices.ts — 调试日志清理**：移除 `[Identify][req]/[res]/[proxy]` 与 `[RSVC] register` 的 console.debug；保留失败路径 console.warn。
-4. **useMapUIEventHandlers.js**：解构参数坍缩行（`flyToView,    getLayerIndexById,`）恢复标准换行。
-5. **deploy/nginx.conf**：`server {        listen ...` 坍缩行恢复标准换行。
+2. **wmsService.js — ArcGIS 地址缺 `/rest/` 段解析失败（P1，用户实报）**：形如 `https://host/arcgis/services/X/MapServer` 的地址只探原样 `?f=json` 与原样 `/WmsServer`，不尝试标准 `/arcgis/rest/services/X` 变体 → 整链全灭。新增 `buildArcgisProbePaths`（f=json 双变体逐一探测，endpoint 固定为可达基址）并扩展 WMS 候选含 rest 插入变体。
+3. **wmsService.js — 代理重试异常未包装**：直连失败后代理通道自身的网络错误以原始 TypeError 抛出，改为可读的「直连失败且后端代理亦不可用」。
+4. **wmsService.js / remoteServices.ts — 调试日志清理**：移除 `[Identify][req]/[res]/[proxy]` 与 `[RSVC] register` 的 console.debug；保留失败路径 console.warn。
+5. **arcgisAttributeQuery.js — 头注释漂移**：文档写 `returnGeometry=false`，实现为 `true`（几何随行返回供定位）。修正注释。
+6. **useMapUIEventHandlers.js**：解构参数坍缩行恢复标准换行。
+7. **deploy/nginx.conf**：`server {        listen ...` 坍缩行恢复标准换行。
+8. **WMS 初始叠放反转（P1，用户实报）**：注册种子化 `layerOrder` 直接拷贝文档序 selectedIds，与「头部=视觉上层」约定拧反 → 默认加载 world 置顶、cities 沉底。注册时按约定反转种子化。
+9. **WMS 默认模式全选（P1，用户实报）**：空 `selectedIds` 经重构后 LAYERS 为空、TOC 叶子全灭。新增 `effectiveSelectedIds` 消费端归一（WMS 未触碰选择集 = 全选）+ `selectionTouched` 触碰标记（显式全关不复活），存量旧记录免重注册自愈；nodeBuilder/adapter 全部切换该入口。
+10. **ArcGIS 三形态接入 + 能力拉取代理兜底**：识别矩阵验证 MapServer / MapServer/WMTS / MapServer/tile/{z}/{y}/{x} 三种标准 URL 分别落 arcgis/wmts/xyz(zyx) 分支；新增 capabilitiesProxy.ts 注入器，OL(MapContainer) 与 Cesium(useCesiumLayers) 启动时注入后端 /proxy 构造器——自签证书/CORS 内网服务的 GetCapabilities/f=json 直连失败自动走代理重试（wmsService.fetchCapabilitiesText、xyzWmtsCapabilities、ol wmtsSource strict 三处消费）。
 
 ## 修改原因
 

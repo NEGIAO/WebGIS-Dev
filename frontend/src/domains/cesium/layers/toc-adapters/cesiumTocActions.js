@@ -7,27 +7,34 @@
  * 2D 图层动作原路放行，HomeView 事件链零改动。
  */
 
-import { CESIUM_NODE_PREFIX } from '@cesium-domain/stores/cesiumLayerNodeBuilder';
+import { CESIUM_NODE_PREFIX, CESIUM_GROUP_NODE_ID } from '@cesium-domain/stores/cesiumLayerNodeBuilder';
 
-/** 从动作事件中提取 layerId（兼容 payload 包裹与直挂两种形态） */
+/** 从动作事件中提取目标 id（emitAction 将 payload 平铺为 evt 顶层，兼容直挂形态） */
 function extractLayerId(evt) {
-    return String(evt?.layerId ?? evt?.payload?.layerId ?? '').trim();
+    return String(evt?.layerId ?? evt?.payload?.layerId ?? evt?.nodeId ?? '').trim();
 }
 
 /**
  * 处理 Cesium 节点动作
- * @param {object} evt - TOCTreeItem 冒泡的动作事件 { type, layerId?, payload?, ... }
+ * @param {object} evt - TOCTreeItem 冒泡的动作事件 { type, layerId?, nodeId?, payload?, ... }
  * @param {object} cesiumStore - useCesiumLayersStore() 实例
  * @returns {boolean} true = 已消费（调用方直接 return）
  */
 export function handleCesiumLayerTreeAction(evt, cesiumStore) {
     const nodeId = extractLayerId(evt);
-    if (!nodeId.startsWith(CESIUM_NODE_PREFIX)) return false;
+    const isGroupNode = nodeId === CESIUM_GROUP_NODE_ID;
+    if (!isGroupNode && !nodeId.startsWith(CESIUM_NODE_PREFIX)) return false;
 
-    const id = nodeId.slice(CESIUM_NODE_PREFIX.length);
+    const id = nodeId.startsWith(CESIUM_NODE_PREFIX)
+        ? nodeId.slice(CESIUM_NODE_PREFIX.length)
+        : '';
     const type = String(evt?.type || '');
 
     switch (type) {
+        case 'folder-clear-layers':
+            // 「三维数据」组头清空：逐条走 remove（adapter 清场景 → syncFromImport 删档）
+            [...(cesiumStore.records || [])].forEach((record) => cesiumStore.remove(record.id));
+            return true;
         case 'toggle-layer-visibility':
             cesiumStore.setVisible(id, !!evt.visible);
             return true;
@@ -44,11 +51,23 @@ export function handleCesiumLayerTreeAction(evt, cesiumStore) {
         case 'remove-layer':
             cesiumStore.remove(id);
             return true;
+        case 'data-set-height':
+            cesiumStore.setBaseHeight(id, Number(evt.height ?? 0));
+            return true;
+        case 'data-set-material':
+            cesiumStore.setMaterialMode(id, String(evt.mode || 'none'));
+            return true;
+        case 'data-reposition':
+            // 打开 GLTF 坐标弹窗（弹窗 UI 挂在 CesiumContainer，由 adapter 触发）
+            cesiumStore.requestReposition?.(id);
+            return true;
+        case 'data-stretch-height':
+            // GeoTIFF 单波段拉伸至高程
+            cesiumStore.requestStretchHeight?.(id);
+            return true;
         case 'layer-selected':
-            // 选中高亮暂无 3D 语义，静默消费防止 2D 链误处理
             return true;
         default:
-            // 其余（导出/属性表等）能力已在节点 actions 关闭，理论不可达；兜底消费
             return true;
     }
 }

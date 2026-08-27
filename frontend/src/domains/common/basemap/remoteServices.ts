@@ -39,6 +39,13 @@ export interface RemoteServiceRecord {
     /** 勾选的子图层名集合；全不勾 = 空 LAYERS（不渲染任何子图层），仅在 sublayers 为空时回退 layersParam 兜底 */
     selectedIds: string[];
     /**
+     * 用户是否显式操作过子图层勾选。
+     * false（默认）时 WMS 记录的空 selectedIds 按「全选」消费 —— 默认模式加载
+     * 即整卷可见 + TOC 全勾，且存量旧记录无需重注册即可自愈；
+     * 一经 setRemoteServiceSublayer 操作即置 true，此后空集 = 用户明确全关。
+     */
+    selectionTouched?: boolean;
+    /**
      * 勾选子图层的叠放顺序（TOC 拖拽维护；数组头部 = 视觉上层）。
      * WMS LAYERS 语义：列表首层画在最底，故渲染端需反转此数组。
      * 仅含已勾选 id 的排列；新勾选的子图层追加到尾部（= 最底层之上、其余之下视反转方向而定，约定：追加 = 画在已选集合最上）。
@@ -110,13 +117,30 @@ export function computeLayersParam(record: RemoteServiceRecord): string {
 /**
  * 勾选集合 → 视觉顺序（头部 = 视觉上层）。
  * layerOrder 头部 = 视觉上层；未入序的新勾选项按勾选先后追加在视觉最上。
+ * 输入经 effectiveSelectedIds 归一化（WMS 默认模式：空选 = 全选）。
  */
 export function renderOrderedIds(record: RemoteServiceRecord): string[] {
-    const checked = new Set(record.selectedIds || []);
+    const checked = new Set(effectiveSelectedIds(record));
     if (!checked.size) return [];
     const orderedVisibleTopFirst = (record.layerOrder || []).filter((id) => checked.has(id));
     const unorderedNewcomers = [...checked].filter((id) => !orderedVisibleTopFirst.includes(id));
     return [...unorderedNewcomers.reverse(), ...orderedVisibleTopFirst];
+}
+
+/**
+ * 有效勾选集（消费端唯一入口）：
+ * - 已显式选择 / 用户操作过 → 原样
+ * - WMS / ArcGIS 动态服务记录从未触碰过选择集且声明了子图层 → 全选
+ *   （默认模式语义：MapServer/WMS 默认加载整卷可见，存量旧记录自愈）
+ */
+export function effectiveSelectedIds(record: RemoteServiceRecord): string[] {
+    const ids = record.selectedIds || [];
+    if (ids.length || record.selectionTouched) return ids;
+    const defaultAllKind = record.kind === 'wms' || (record.kind === 'arcgis' && record.tileMode !== 'tiles');
+    if (defaultAllKind && record.sublayers?.length) {
+        return record.sublayers.map((item) => item.name);
+    }
+    return ids;
 }
 
 /**
@@ -195,10 +219,28 @@ export function registerRemoteService(payload: {
 }): string {
 
     const normalizedUrl = String(payload.url || '').trim();
+
+    // 默认模式：未显式勾选任何子图层时全选（按服务文档序）。
+    // 覆盖 WMS 与 ArcGIS 动态服务（tiles 缓存无 LAYERS 概念，不参与）——
+    // 保证「输入 MapServer 地址直接加载」= 整卷可见 + TOC 叶子全部勾选。
+    let selectedIds = Array.isArray(payload.selectedIds) ? [...payload.selectedIds] : [];
+    const defaultAllKind =
+        payload.kind === 'wms' || (payload.kind === 'arcgis' && payload.tileMode !== 'tiles');
+    if (!selectedIds.length && defaultAllKind && Array.isArray(payload.sublayers)) {
+        selectedIds = payload.sublayers.map((item) => item.name);
+    }
     const existing = records.value.find((item) => item.url === normalizedUrl);
 
     if (existing) {
-        Object.assign(existing, { ...payload, url: normalizedUrl });
+        // 重注册不覆写用户已显式操作过的选择集：空 selectedIds 拉平为全选仅适用于新注册，
+        // 对已触碰记录直接覆盖会把用户勾掉的选择悄悄改回全选
+        const preserveSelection = existing.selectionTouched && !selectedIds.length;
+        const { selectedIds: _ignoredSelection, ...restPayload } = payload;
+        Object.assign(existing, restPayload, { url: normalizedUrl });
+        if (!preserveSelection) {
+            existing.selectedIds = selectedIds;
+            if (selectedIds.length) existing.selectionTouched = true;
+        }
         // 更新路径不覆盖 layerOrder：保留用户已拖拽的顺序，仅裁掉已不存在的子图层
         const validNames = new Set((existing.sublayers || []).map((s) => s.name));
         existing.layerOrder = (existing.layerOrder || []).filter((name) => validNames.has(name));
@@ -209,8 +251,16 @@ export function registerRemoteService(payload: {
         ...payload,
         url: normalizedUrl,
         sublayers: Array.isArray(payload.sublayers) ? payload.sublayers : [],
-        selectedIds: Array.isArray(payload.selectedIds) ? payload.selectedIds : [],
-        layerOrder: Array.isArray(payload.selectedIds) ? [...payload.selectedIds] : [],
+        selectedIds,
+        // 显式选择（含下拉默认全卷串）即视为已触碰；仅空选注册保持未触碰，
+        // 使消费端按 WMS 默认全选拉平
+        selectionTouched: selectedIds.length > 0,
+        // layerOrder 约定：头部 = 视觉最上层。两种来源的目录语义相反，需分别对齐：
+        // - ArcGIS REST f=json 的 layers 数组 = 地图文档自上而下（首层=视觉最上）→ 原序即约定
+        // - WMS Capabilities 文档序 = 首层画最底（自底向上）→ 反转成头部=视觉上层
+        layerOrder: selectedIds.length
+            ? (payload.kind === 'arcgis' ? [...selectedIds] : [...selectedIds].reverse())
+            : [],
         id: makeId(),
         visible: true,
         opacity: 1,
@@ -241,7 +291,9 @@ export function setRemoteServiceOpacity(id: string, opacity: number): void {
 export function setRemoteServiceSublayer(id: string, layerName: string, checked: boolean): void {
     const target = records.value.find((item) => item.id === id);
     if (!target || !layerName) return;
-    const set = new Set(target.selectedIds || []);
+    // 用户显式操作勾选集：此后空集 = 明确全关，不再享受 WMS 默认全选
+    target.selectionTouched = true;
+    const set = new Set(effectiveSelectedIds(target));
     if (checked) {
         set.add(layerName);
         // 新勾选 = 画在已选集合最上（头部插入），与「列表上方 = 视觉上层」的 TOC 惯例一致
@@ -252,6 +304,29 @@ export function setRemoteServiceSublayer(id: string, layerName: string, checked:
         set.delete(layerName);
     }
     target.selectedIds = [...set];
+}
+
+/**
+ * 移除单个子图层（TOC 叶子「移除」语义，区别于勾选显隐）：
+ * - 从 sublayers / selectedIds / layerOrder 三处彻底剔除该条目
+ * - 视为用户显式操作（selectionTouched = true）
+ * - 若服务已无任何子图层 → 自动注销整条记录
+ * @param id 服务记录 id
+ * @param layerName 子图层名
+ */
+export function removeRemoteServiceSublayer(id: string, layerName: string): void {
+    const target = records.value.find((item) => item.id === id);
+    if (!target || !layerName) return;
+    const drop = (list: string[] | undefined) => (list || []).filter((name) => name !== layerName);
+    target.sublayers = (target.sublayers || []).filter((item) => item.name !== layerName);
+    // 剔除前先经 effectiveSelectedIds 展开：存量记录可能空选未触碰（WMS 默认全选语义），
+    // 直接 drop 空数组会让「移除一项」变成「其余全部消失」
+    target.selectedIds = drop(effectiveSelectedIds(target));
+    target.layerOrder = drop(target.layerOrder);
+    target.selectionTouched = true;
+    if (!target.sublayers.length) {
+        unregisterRemoteService(id);
+    }
 }
 
 /**

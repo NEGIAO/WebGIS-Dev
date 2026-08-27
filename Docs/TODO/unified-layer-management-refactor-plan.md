@@ -1,6 +1,6 @@
 # 统一图层管理架构重构（OL / Cesium 双引擎）
 
-> 起草：2026-08-25 ｜ 状态：**待实施** ｜ 前置：无（独立专项）
+> 起草：2026-08-25 ｜ 状态：**P0/P1 已实施（V3.5.31）· P2 已实施（2026-08-26）** ｜ 前置：无（独立专项）
 > 预估：P0 半天 / P1 一天 / P2 一天 ｜ 触碰 ~15 文件
 
 ---
@@ -265,6 +265,21 @@ registerEngineHandlers('cesium', {
 - LayerPanel 6 个死 props
 - TOCPanel 3 个死 emits（`set-base-layer`, `toggle-base-layer-visibility`, `show-layer-properties`）
 - SidePanel 2 个死事件中继（`request-download-extent`, `clear-download-extent`）
+
+#### P2 实施记录（2026-08-26）
+
+| 计划项 | 实际落地 |
+|---|---|
+| `composables/useFileUpload.js` | ✓ 含进度视图模型；改为接收响应式 `props`，导出 `MAX_FILE_SIZE_MB` |
+| `composables/useGeocoding.js` | ✓ 坐标三件套 + 高德 AOI 对话框状态机 |
+| `composables/useTreeActionDispatcher.js` | ✓ 树分发 + 多选集 + 拖拽；暴露 `syncUserLayers` 供宿主 watch 转调 |
+| AOI 手动对话框 | 复用既有 `@ol/search/components/AmapAoiInjectDialog.vue`，状态机在 useGeocoding 内，不再另建 AoiManualDialog.vue |
+| 共享资源扫描 | 新增 `composables/useSharedResources.js` 包装既有 `@common/data-import/useSharedResourceLoader` |
+| LayerPanel 死 props | 实际清理 **7** 个（仅保留 `selectedLayerIds`） |
+| TOCPanel 死 emits | ✓ 3 个已移除 |
+| SidePanel 死中继 | ✓ 另同批移除 `set-base-layer`/`toggle-base-layer-visibility` 中继 |
+
+验证：ESLint 0 错误，`vite build` 通过。TOCPanel 由 ~2977 行降至 ~2330 行。
 
 ---
 

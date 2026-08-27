@@ -69,6 +69,12 @@ export function folderNode({
         expanded: expandedState[id] !== false,
         level,
         showCheckbox: total > 0,
+        // 文件夹右键能力：清空本组全部图层（folder-clear-layers）；
+        // 单独的 REMOVE 语义对文件夹无意义，由 TOCPanel 清空分支统一消费
+        actions: {
+            remove: true,
+            removeTip: '清空图层',
+        },
     };
 }
 
@@ -433,7 +439,46 @@ export function toLayerNode(layer: LayerStoreLayer, level: number, group: string
 }
 
 /**
- * 构建完整的图层树
+ * 将一组顶层节点整体降一级并包入父文件夹（三大类归组的通用手段）。
+ * 递归提升 level 以保持 TOC 行缩进正确。
+ */
+function promoteLevels(nodes: any[], delta: number): any[] {
+    return nodes.map((node) => ({
+        ...node,
+        level: (Number(node.level) || 0) + delta,
+        children:
+            Array.isArray(node.children) && node.children.length
+                ? promoteLevels(node.children, delta)
+                : node.children,
+    }));
+}
+
+/**
+ * 把普通分组包装为「二维数据」父分组：
+ * - 全部为空时不产出节点（与三维/服务分组的空态语义一致）
+ * - 组头勾选/清空经既有递归链路天然覆盖全部二级分组
+ */
+export function build2dDataGroup({
+    groups,
+    expandedState,
+}: {
+    groups: any[];
+    expandedState: Record<string, boolean>;
+}): any | null {
+    if (!groups.length) return null;
+    return folderNode({
+        id: 'folder-2d',
+        name: '二维数据',
+        level: 0,
+        children: promoteLevels(groups, 1),
+        expandedState,
+    });
+}
+
+/**
+ * 构建完整的图层树（二维域）：
+ * 绘制/路线/搜索/上传/行政区划五个分组统一归入「二维数据」父分组，
+ * 与「三维数据」「在线服务」构成三大顶层分类。
  */
 export function buildLayerTree({
     drawLayers,
@@ -518,5 +563,6 @@ export function buildLayerTree({
         );
     }
 
-    return tree;
+    const group2d = build2dDataGroup({ groups: tree, expandedState });
+    return group2d ? [group2d] : [];
 }
