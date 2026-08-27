@@ -4,6 +4,7 @@
  */
 
 import { AGENT_BASEMAP_PRESET_IDS, formatAgentBasemapPresetCatalog } from '@common/chat/agent/agentMapPresets';
+import { DEFAULT_SEARCH_ZOOM } from '@common/utils/mapDefaults';
 
 const DURATION_PROPERTY = {
     type: 'number',
@@ -99,7 +100,7 @@ export const AGENT_TOOLS = [
                 properties: {
                     query: { type: 'string', minLength: 1, description: '地名、地址或 POI。' },
                     city: { type: 'string', description: '可选城市限定（仅 Amap 引擎生效）。', default: '' },
-                    zoom: { type: 'number', minimum: 0, maximum: 22, description: '目标缩放级别；3D 会转换为相机高度。', default: 16 },
+                    zoom: { type: 'number', minimum: 0, maximum: 22, description: '目标缩放级别；3D 会转换为相机高度。', default: DEFAULT_SEARCH_ZOOM },
                     engine: {
                         type: 'string',
                         enum: ['auto', 'amap', 'nominatim'],

@@ -408,7 +408,7 @@ def _is_guest_allow_request(request: Request) -> bool:
 
 
 # ─── 管理员密码常量 ───
-DEV_DEFAULT_ADMIN_PASSWORD = "123456"  # 仅开发环境且未设置 SUPER_USER 时生效
+# 开发兜底密码 DEV_DEFAULT_ADMIN_PASSWORD 单源于 config/catalog.py（经 config/load.py 消费）。
 
 
 def _get_admin_password() -> str:

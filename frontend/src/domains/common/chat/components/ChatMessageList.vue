@@ -255,6 +255,7 @@ import {
 import 'highlight.js/styles/github-dark-dimmed.css';
 import 'katex/dist/katex.min.css';
 import { useMarkdownRenderer } from '@common/utils/useMarkdownRenderer';
+import { formatTimeShort } from '@common/utils/datetime';
 import { useLocale } from '@common/app/useLocale';
 
 const props = defineProps({
@@ -355,14 +356,8 @@ watch(
     () => scrollToBottom(false),
 );
 
-/** 时间戳格式化为 HH:MM */
-function formatTime(ts) {
-    const d = new Date(Number(ts) || 0);
-    if (Number.isNaN(d.getTime()) || !ts) return '';
-    const hh = String(d.getHours()).padStart(2, '0');
-    const mm = String(d.getMinutes()).padStart(2, '0');
-    return `${hh}:${mm}`;
-}
+/** 时间戳格式化为 HH:MM（单源实现在 @common/utils/datetime） */
+const formatTime = formatTimeShort;
 
 /** 跨天时在消息前插入日期分隔线 */
 function needDayDivider(index) {

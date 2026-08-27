@@ -37,7 +37,16 @@ export function dispatchLayerAction(action) {
         return false;
     }
     try {
-        return api[method](action.payload || {}) !== false;
+        const result = api[method](action.payload || {});
+        // handler 可能返回 Promise：同步 catch 捕不到 rejection，
+        // 这里吞掉 rejection 并视为未处理，同时避免 unhandledrejection 逃逸
+        if (result && typeof result.then === 'function') {
+            result.catch((error) => {
+                console.warn(`[ActionRouter] ${engine}.${method} 异步执行失败:`, error);
+            });
+            return true;
+        }
+        return result !== false;
     } catch (error) {
         console.warn(`[ActionRouter] ${engine}.${method} 执行失败:`, error);
         return false;

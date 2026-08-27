@@ -161,7 +161,7 @@
    便于进行项目的维护和升级
    避免臃肿和职责混乱 
 */
-import { ref, onMounted, onUnmounted, shallowRef, watch } from 'vue';
+import { ref, onMounted, onUnmounted, shallowRef, watch, defineAsyncComponent } from 'vue';
 
 // 父组件持有跨引擎共享的 custom URL；本组件用本地 ref 镜像，避免可写
 // computed 在 emit 后、父级下一次渲染前仍读到旧 prop。
@@ -315,7 +315,8 @@ import { createLayerExporter, isVectorManagedLayer } from '@common/layer-tree/ac
 import LayerControlPanel from '@ol/layer/components/LayerControlPanel.vue';
 import MapSwipeController from './MapSwipeController.vue';
 import MapControlsBar from './MapControlsBar.vue';
-import AttributeTable from '@ol/layer/components/AttributeTable.vue';
+// 异步加载：属性表（约 1400 行含虚拟表格）仅打开时才需要，不进首屏 chunk
+const AttributeTable = defineAsyncComponent(() => import('@ol/layer/components/AttributeTable.vue'));
 import FengShuiCompassSvg from '@common/compass/svg/feng-shui-compass-svg.vue';
 import PalaceExplanationPanel from '@common/compass/components/PalaceExplanationPanel.vue';
 

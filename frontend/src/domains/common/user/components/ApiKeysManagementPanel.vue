@@ -641,6 +641,7 @@ import { computed, onMounted, ref } from 'vue';
 import { AlertTriangle } from '@lucide/vue';
 import { useMessage } from '@common/shell/useMessage';
 import { useLocale } from '@common/app/useLocale';
+import { formatDateTime } from '@common/utils/datetime';
 import { useAgentConfig } from '@common/chat/composables/useAgentConfig';
 import {
     apiAdminGetApiKeysStatus,
@@ -772,20 +773,12 @@ const defaultAIDraft = ref({
 });
 
 function formatTime(isoString) {
-    if (!isoString) return t('apiKeys.neverSet');
-    try {
-        const date = new Date(isoString);
-        return date.toLocaleString(language.value || undefined, {
-            year: 'numeric',
-            month: '2-digit',
-            day: '2-digit',
-            hour: '2-digit',
-            minute: '2-digit',
-            second: '2-digit',
-        });
-    } catch (_e) {
-        return isoString;
-    }
+    return formatDateTime(isoString, {
+        locale: language.value || undefined,
+        withSeconds: true,
+        emptyText: t('apiKeys.neverSet'),
+        invalidText: null,
+    });
 }
 
 function normalizeKeyStatus(raw = {}) {

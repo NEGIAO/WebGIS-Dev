@@ -20,6 +20,10 @@ import {
 } from './webMercator.js';
 import { normalizeNegativeZero, clampCesiumHeight } from './precision.js';
 import { DEFAULT_VIEWPORT_HEIGHT, DEFAULT_FOVY_RAD } from './constants.js';
+import {
+    groundResolutionToCesiumHeight,
+    cesiumNadirHeightToGroundResolution,
+} from './cesiumScale.js';
 
 /**
  * 解析视口高度：viewportHeight → viewport.height → mapSize[1] → mapSize[0] → 默认值
@@ -59,7 +63,12 @@ export function olZoomToCesiumHeight(o = {}) {
     // 纬度修正：centerLat（度）缺省视为 0°（不做修正）；严禁把 cos 值传入纬度形参
     const ground = webMercatorResolutionToGroundResolution(res, Number.isFinite(Number(o.centerLat)) ? Number(o.centerLat) : 0);
     const vh = resolveViewportHeight(o);
-    const height = (ground * vh) / (2 * Math.tan(resolveFovY(o) / 2));
+    // nadir 公式复用 cesiumScale 单源实现（勿再内联：fovY/视口语义变更时必须同步）
+    const height = groundResolutionToCesiumHeight({
+        groundResolution: ground,
+        fovY: resolveFovY(o),
+        viewportHeight: vh,
+    });
     return o.clamp ? clampCesiumHeight(height) : height;
 }
 
@@ -71,7 +80,11 @@ export function olZoomToCesiumHeight(o = {}) {
 export function cesiumHeightToOlZoom(o = {}) {
     const h = Number(o.height);
     if (!Number.isFinite(h) || h <= 0) return null;
-    const ground = (h * 2 * Math.tan(resolveFovY(o) / 2)) / resolveViewportHeight(o);
+    const ground = cesiumNadirHeightToGroundResolution({
+        height: h,
+        fovY: resolveFovY(o),
+        viewportHeight: resolveViewportHeight(o),
+    });
     const res = groundResolutionToWebMercatorResolution(
         ground,
         Number.isFinite(Number(o.centerLat)) ? Number(o.centerLat) : 0,

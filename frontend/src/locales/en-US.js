@@ -511,7 +511,7 @@ export default {
         importError: 'Import failed',
         importWaiting: 'Waiting to import',
         nothingToClear: 'No layers to clear in this folder',
-        folderCleared: 'Cleared {n} layer(s)',
+        folderCleared: 'Clearing {n} layer(s)…',
         unnamedLayer: 'Unnamed layer',
         // TOCPanel script toasts / form errors (V3.4.82)
         noCopyableCoords: 'This layer has no copyable longitude/latitude',

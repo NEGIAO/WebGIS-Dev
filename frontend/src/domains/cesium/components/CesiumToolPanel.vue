@@ -824,7 +824,7 @@
 </template>
 
 <script setup>
-import { computed, ref, watch } from 'vue';
+import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import {
     Box,
     Building,
@@ -957,12 +957,30 @@ watch(sceneSampleMenuOpen, (open) => {
 });
 
 /** 点击菜单外区域 → 关闭场景 Tab 样例菜单 */
+let sceneMenuListenerTimer = null;
 watch(sceneSampleMenuOpen, (open) => {
     if (open) {
-        setTimeout(() => document.addEventListener('click', closeSceneSampleMenu), 0);
+        if (sceneMenuListenerTimer) clearTimeout(sceneMenuListenerTimer);
+        sceneMenuListenerTimer = setTimeout(() => {
+            sceneMenuListenerTimer = null;
+            document.addEventListener('click', closeSceneSampleMenu);
+        }, 0);
     } else {
+        if (sceneMenuListenerTimer) {
+            clearTimeout(sceneMenuListenerTimer);
+            sceneMenuListenerTimer = null;
+        }
         document.removeEventListener('click', closeSceneSampleMenu);
     }
+});
+
+// 面板卸载时若菜单开着，document 监听器会常驻——卸载前强制收口
+onBeforeUnmount(() => {
+    if (sceneMenuListenerTimer) {
+        clearTimeout(sceneMenuListenerTimer);
+        sceneMenuListenerTimer = null;
+    }
+    document.removeEventListener('click', closeSceneSampleMenu);
 });
 
 function closeSceneSampleMenu(e) {

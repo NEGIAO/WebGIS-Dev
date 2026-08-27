@@ -485,6 +485,14 @@ function bindFrameUpdates(viewer, Cesium) {
     const scene = viewer?.scene;
     if (!scene) return;
 
+    // 每帧冗余写入门控：requestRenderMode 下相机静止时 preRender 不应反复
+    // 赋值 uniform/scene 属性（写入本身会打断脏检查与省电），仅在变化时写
+    let lastFogEnabled = null;
+    let lastFogFactor = NaN;
+    let lastHbaoEnabled = null;
+    let lastTiltStateKey = '';
+    let lastAtmoHeight = NaN;
+
     preRenderListener = scene.preRender.addEventListener(() => {
         const height = getCameraHeight(viewer);
         const pitch = Number(viewer?.camera?.pitch ?? -1.2);
@@ -498,36 +506,53 @@ function bindFrameUpdates(viewer, Cesium) {
         }
 
         if (fogStage) {
-            fogStage.enabled = fogEnabled.value;
-            fogStage.uniforms.cameraHeightFactor = normalizeHeight(height, 150.0, 12000.0);
-            fogStage.uniforms.fogDensity =
-                0.00055 + (1.0 - fogStage.uniforms.cameraHeightFactor) * 0.00125;
+            if (lastFogEnabled !== fogEnabled.value) {
+                fogStage.enabled = fogEnabled.value;
+                lastFogEnabled = fogEnabled.value;
+            }
+            const factor = normalizeHeight(height, 150.0, 12000.0);
+            if (!(Math.abs(factor - lastFogFactor) < 1e-4)) {
+                fogStage.uniforms.cameraHeightFactor = factor;
+                fogStage.uniforms.fogDensity = 0.00055 + (1.0 - factor) * 0.00125;
+                lastFogFactor = factor;
+            }
         }
 
-        if (ambientOcclusionStage) {
+        if (ambientOcclusionStage && lastHbaoEnabled !== hbaoEnabled.value) {
             ambientOcclusionStage.enabled = hbaoEnabled.value;
+            lastHbaoEnabled = hbaoEnabled.value;
         }
 
         if (tiltShiftStage) {
             const lowAngleTrigger = pitch > -0.62;
             const blurStrength = lowAngleTrigger ? clamp01((pitch + 0.62) / 0.5) : 0;
-            tiltShiftStage.enabled = tiltShiftEnabled.value && lowAngleTrigger;
-            tiltShiftStage.uniforms.blurStrength = blurStrength;
+            const stateKey = `${tiltShiftEnabled.value && lowAngleTrigger}|${blurStrength.toFixed(4)}`;
+            if (stateKey !== lastTiltStateKey) {
+                tiltShiftStage.enabled = tiltShiftEnabled.value && lowAngleTrigger;
+                tiltShiftStage.uniforms.blurStrength = blurStrength;
+                lastTiltStateKey = stateKey;
+            }
         }
 
         if (atmosphereEnabled.value) {
             // 高度阈值：低于 800m 时自动关闭大气增强，避免与晨昏半球冲突
             const ATMOSPHERE_MIN_HEIGHT = 80000;
             if (height >= ATMOSPHERE_MIN_HEIGHT) {
-                applyAtmosphereEnhancement(viewer, Cesium, height);
+                const atmoH = normalizeHeight(height, 500.0, 120000.0);
+                if (!(Math.abs(atmoH - lastAtmoHeight) < 1e-3)) {
+                    applyAtmosphereEnhancement(viewer, Cesium, height);
+                    lastAtmoHeight = atmoH;
+                }
                 atmosphereRestoredOnce = false;
             } else if (!atmosphereRestoredOnce) {
                 restoreAtmosphereState(viewer);
                 atmosphereRestoredOnce = true;
+                lastAtmoHeight = NaN;
             }
         } else if (!atmosphereRestoredOnce) {
             restoreAtmosphereState(viewer);
             atmosphereRestoredOnce = true; // 标记已恢复，避免每帧重复
+            lastAtmoHeight = NaN;
         }
     });
 }

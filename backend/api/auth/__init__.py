@@ -95,6 +95,7 @@ from .dependencies import (
     require_api_access_or_guest,
     require_api_access_or_guest_noconsume,
     require_login,
+    resolve_optional_session,
 )
 
 # ─── 路由 ───
@@ -162,6 +163,7 @@ __all__ = [
     "require_api_access_or_guest",
     "require_api_access_or_guest_noconsume",
     "require_admin",
+    "resolve_optional_session",
     # 路由
     "router",
 ]

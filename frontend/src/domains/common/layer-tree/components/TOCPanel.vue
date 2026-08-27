@@ -565,7 +565,7 @@
 </template>
 
 <script setup>
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import {
     CircleDot,
     Crosshair,
@@ -603,7 +603,8 @@ import { getRuntimeMapTokensSync, loadRuntimeMapTokens } from '@common/services/
 import LayerPanel from '@common/layer-tree/components/LayerPanel.vue';
 import SharedResourceTreeItem from '@common/layer-tree/components/SharedResourceTreeItem.vue';
 import AmapAoiInjectDialog from '@ol/search/components/AmapAoiInjectDialog.vue';
-import MapDownloader from '@ol/components/MapDownloader.vue';
+// 异步加载：下载器仅切到 download 标签页时才需要，不随 TOC 首次渲染加载
+const MapDownloader = defineAsyncComponent(() => import('@ol/components/MapDownloader.vue'));
 import LayerPropertiesDialog from '@common/layer-tree/components/LayerPropertiesDialog.vue';
 import { useGeocoding } from '../composables/useGeocoding';
 import { useFileUpload, MAX_FILE_SIZE_MB } from '../composables/useFileUpload';

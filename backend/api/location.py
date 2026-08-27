@@ -22,8 +22,7 @@ from config import get_str
 
 from api.auth import (
     get_auth_db_connection,
-    _extract_token,
-    _get_session_sync,
+    resolve_optional_session,
 )
 from services import ip_geo_service
 from gcj_rectify.transform import wgs2gcj
@@ -31,25 +30,6 @@ from gcj_rectify.transform import wgs2gcj
 logger = logging.getLogger(__name__)
 
 _visit_tracking_table_ready = False
-
-
-async def require_api_access_optional(request: Request) -> Optional[Dict[str, Any]]:
-    """
-    可选的身份验证依赖
-    如果提供了有效的令牌，返回用户会话；否则返回 None
-    """
-    import asyncio
-    
-    token = _extract_token(request)
-    if not token:
-        return None
-    
-    try:
-        session = await asyncio.to_thread(_get_session_sync, token)
-        return session
-    except Exception:
-        logger.debug("可选鉴权：会话查询失败", exc_info=True)
-        return None
 
 # ==================== 配置 ====================
 
@@ -227,7 +207,7 @@ router = APIRouter(prefix="/api/v1", tags=["location"])
 async def ip_locate(
     request_data: IpLocateRequest,
     request: Request,
-    current_user: Optional[Dict[str, Any]] = Depends(require_api_access_optional),
+    current_user: Optional[Dict[str, Any]] = Depends(resolve_optional_session),
 ):
     """
     统一 IP 定位接口
@@ -290,7 +270,7 @@ async def ip_locate(
 async def reverse_geocode(
     request_data: ReverseGeocodeRequest,
     request: Request,
-    current_user: Optional[Dict[str, Any]] = Depends(require_api_access_optional),
+    current_user: Optional[Dict[str, Any]] = Depends(resolve_optional_session),
 ):
     """
     反向地理编码接口，支持多个服务
@@ -346,7 +326,7 @@ async def reverse_geocode(
 async def track_visit(
     request_data: TrackVisitRequest,
     request: Request,
-    current_user: Optional[Dict[str, Any]] = Depends(require_api_access_optional),
+    current_user: Optional[Dict[str, Any]] = Depends(resolve_optional_session),
 ):
     """
     记录用户访问时的位置信息

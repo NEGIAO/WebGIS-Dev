@@ -13,6 +13,7 @@
  */
 
 import { getCapabilitiesProxyBuilder } from './capabilitiesProxy';
+import { formatDateEpoch } from '@common/utils/datetime';
 
 const WMS_INFO_CACHE = new Map();
 const CAPABILITIES_FETCH_TIMEOUT_MS = 10000;
@@ -327,18 +328,7 @@ function buildDateFieldSet(data) {
     return set;
 }
 
-/** 日期型字段值（epoch 毫秒）→ YYYY-MM-DD HH:mm:ss；非法值原样字符串返回 */
-function formatDateEpoch(value) {
-    const ms = Number(value);
-    if (!Number.isFinite(ms)) return String(value ?? '');
-    const date = new Date(ms);
-    if (Number.isNaN(date.getTime())) return String(value ?? '');
-    const pad = (n) => String(n).padStart(2, '0');
-    return (
-        `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ` +
-        `${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`
-    );
-}
+// formatDateEpoch 单源实现见 @common/utils/datetime
 
 /**
  * 属性键名对齐为服务端声明的业务别名（如 tbbm → 图斑编号）；

@@ -7,10 +7,10 @@
  *   3. `messages` 始终指向活动会话的消息数组（同一引用），容器/组件既有 API 零破坏
  *   4. 经济上下文构建、自动修剪、欢迎语维护、重新生成准备（均作用于活动会话）
  *
- * 用法: const session = createChatSession(); 需在 setup 上下文中调用（内部使用 watch）。
+ * 用法: const session = createChatSession(); 需在 setup 上下文中调用（内部使用 onScopeDispose）。
  */
 
-import { ref, watch, onScopeDispose } from 'vue';
+import { ref, onScopeDispose } from 'vue';
 
 /** localStorage 键名：多会话存储（v2） */
 const SESSIONS_STORAGE_KEY = 'chat:sessions:v2';
@@ -145,13 +145,17 @@ export function createChatSession() {
             persist();
         }, 300);
     }
-    watch([sessions, activeSessionId], schedulePersist, { deep: true });
+    // 不用 deep watch：流式回复期间逐字改写 messages 会触发整棵会话树深遍历，
+    // 改为各离散变更点显式调用 schedulePersist；组件在流结束边界自行通知。
 
     // 组件作用域销毁时清理持久化定时器
     onScopeDispose(() => {
         if (persistTimer) {
+            // 卸载瞬间的防抖窗口内若有未落盘变更，先同步持久化再清理，
+            // 避免关闭面板/刷新页面时丢最近一次改动
             clearTimeout(persistTimer);
             persistTimer = null;
+            persist();
         }
     });
 
@@ -194,6 +198,7 @@ export function createChatSession() {
         evictIfNeeded();
         activeSessionId.value = created.id;
         messages.value = created.messages;
+        schedulePersist();
         return created.id;
     }
 
@@ -207,6 +212,7 @@ export function createChatSession() {
         if (!target || id === activeSessionId.value) return false;
         activeSessionId.value = target.id;
         messages.value = target.messages;
+        schedulePersist();
         return true;
     }
 
@@ -221,6 +227,7 @@ export function createChatSession() {
         if (!target || !normalized) return;
         target.title = normalized;
         target.updatedAt = Date.now();
+        schedulePersist();
     }
 
     /**
@@ -232,6 +239,7 @@ export function createChatSession() {
         const exists = findSession(id);
         if (!exists) return;
         sessions.value = sessions.value.filter((s) => s.id !== id);
+        schedulePersist();
 
         if (id === activeSessionId.value) {
             const next = [...sessions.value].sort((a, b) => b.updatedAt - a.updatedAt)[0];
@@ -255,9 +263,10 @@ export function createChatSession() {
             messages.value = target.messages;
             if (target.messages.length === 0) {
                 target.messages.push(withTime(buildWelcome()));
+                schedulePersist();
             }
         } else {
-            createSession(buildWelcome);
+            createSession(buildWelcome); // 内部已 schedulePersist
         }
     }
 
@@ -270,12 +279,14 @@ export function createChatSession() {
             if (auto) current.title = auto;
         }
         touchActive();
+        schedulePersist();
     }
 
     /** 追加 assistant 消息，返回其索引 */
     function pushAssistant(content = '', extra = {}) {
         const index = messages.value.push(withTime({ role: 'assistant', content, ...extra })) - 1;
         touchActive();
+        schedulePersist();
         return index;
     }
 
@@ -286,6 +297,7 @@ export function createChatSession() {
         current.messages.splice(0, current.messages.length, withTime(buildWelcome()));
         current.title = DEFAULT_SESSION_TITLE;
         current.updatedAt = Date.now();
+        schedulePersist();
         // messages 与 current.messages 为同一引用，无需重新指向
     }
 
@@ -293,6 +305,7 @@ export function createChatSession() {
     function updateWelcomeIfNeeded(buildWelcome) {
         if (messages.value.length === 0) {
             messages.value.push(withTime(buildWelcome()));
+            schedulePersist();
             return;
         }
         const first = messages.value[0];
@@ -308,6 +321,7 @@ export function createChatSession() {
 
         if (shouldReplace) {
             messages.value.splice(0, 1, withTime(buildWelcome()));
+            schedulePersist();
         }
     }
 
@@ -342,6 +356,7 @@ export function createChatSession() {
             .slice(-2);
 
         messages.value.splice(0, messages.value.length, welcome, ...recentDialogue);
+        schedulePersist();
         return true;
     }
 
@@ -381,6 +396,7 @@ export function createChatSession() {
         if (lastUserIdx < 0) return '';
         const content = String(messages.value[lastUserIdx].content || '');
         messages.value.splice(lastUserIdx + 1);
+        schedulePersist();
         return content;
     }
 
@@ -402,5 +418,7 @@ export function createChatSession() {
         prepareRegenerate,
         userTurnsCount,
         exportAsMarkdown,
+        /** 供组件在流式结束边界（完成/出错/停止）显式通知持久化 */
+        schedulePersist,
     };
 }

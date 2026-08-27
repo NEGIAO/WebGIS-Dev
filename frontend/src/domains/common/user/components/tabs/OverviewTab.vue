@@ -11,6 +11,7 @@
 import { computed, ref } from 'vue';
 
 import { useLocale } from '@common/app/useLocale';
+import { formatDateTime as formatDateTimeUtil } from '@common/utils/datetime';
 
 const props = defineProps({
     /** Personal statistics object (registered_at, login_count, etc.) */
@@ -177,21 +178,11 @@ const quotaPercent = computed(() => {
 const quotaWarning = computed(() => quotaPercent.value !== null && quotaPercent.value >= 80);
 
 function formatDateTime(value) {
-    const raw = String(value || '').trim();
-    if (!raw) return '-';
-
-    const parsed = new Date(raw);
-    if (Number.isNaN(parsed.getTime())) {
-        return raw;
-    }
-
-    return parsed.toLocaleString(intlLocale.value, {
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit',
-        hour: '2-digit',
-        minute: '2-digit',
-        hour12: false,
+    // 空值显示占位符 '-'，非法值原样展示（模板多处引用此名，保留本地包装）
+    return formatDateTimeUtil(value, {
+        locale: intlLocale.value,
+        emptyText: '-',
+        invalidText: null,
     });
 }
 

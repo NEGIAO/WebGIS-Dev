@@ -379,71 +379,81 @@ export function createCesiumDrawMeasureFeature({ getCesium, getViewer, cesiumLay
             trackStyle(handle, entity, kind, hexColor, baseAlpha);
         };
 
-        if (type === 'Point') {
-            const dot = viewer.entities.add({
-                position: positions[0],
-                point: {
-                    pixelSize: 10,
-                    color: colorOf(styleParams.strokeColor, 1),
-                    outlineColor: getC().Color.WHITE,
-                    outlineWidth: 2,
-                    heightReference: clampHeightReference(),
-                    disableDepthTestDistance: Number.POSITIVE_INFINITY,
-                },
-            });
-            pushEntity(dot, 'point', styleParams.strokeColor, 1);
-        } else if (type === 'LineString' || type === 'MeasureDistance') {
-            if (positions.length < 2) return;
-            const line = viewer.entities.add({
-                polyline: {
-                    positions,
-                    width: styleParams.strokeWidth,
-                    material: colorOf(styleParams.strokeColor, styleParams.strokeOpacity),
-                    clampToGround: true,
-                },
-            });
-            pushEntity(line, 'polyline', styleParams.strokeColor, styleParams.strokeOpacity);
-            const totalMeters = polylineLengthMeters(positions);
-            pushEntity(
-                makeLabelEntity(
-                    formatDistanceMeasure(totalMeters),
-                    positions[positions.length - 1],
-                ),
-                'label',
-                '#000000',
-                0.55,
-            );
-        } else {
-            // Polygon / MeasureArea
-            if (positions.length < 3) return;
-            const C = getC();
-            const polygon = viewer.entities.add({
-                polygon: {
-                    hierarchy: new C.PolygonHierarchy(positions),
-                    material: colorOf(styleParams.fillColor, styleParams.fillOpacity),
-                },
-            });
-            pushEntity(polygon, 'polygon', styleParams.fillColor, styleParams.fillOpacity);
-            // 地面多边形不支持轮廓线材质，补贴地描边折线保证边界清晰
-            const ring = [...positions, positions[0]];
-            const border = viewer.entities.add({
-                polyline: {
-                    positions: ring,
-                    width: styleParams.strokeWidth,
-                    material: colorOf(styleParams.strokeColor, styleParams.strokeOpacity),
-                    clampToGround: true,
-                },
-            });
-            pushEntity(border, 'polyline', styleParams.strokeColor, styleParams.strokeOpacity);
-            if (type === 'MeasureArea') {
-                const area = polygonAreaSqMeters(positions);
+        try {
+            if (type === 'Point') {
+                const dot = viewer.entities.add({
+                    position: positions[0],
+                    point: {
+                        pixelSize: 10,
+                        color: colorOf(styleParams.strokeColor, 1),
+                        outlineColor: getC().Color.WHITE,
+                        outlineWidth: 2,
+                        heightReference: clampHeightReference(),
+                        disableDepthTestDistance: Number.POSITIVE_INFINITY,
+                    },
+                });
+                pushEntity(dot, 'point', styleParams.strokeColor, 1);
+            } else if (type === 'LineString' || type === 'MeasureDistance') {
+                if (positions.length < 2) return;
+                const line = viewer.entities.add({
+                    polyline: {
+                        positions,
+                        width: styleParams.strokeWidth,
+                        material: colorOf(styleParams.strokeColor, styleParams.strokeOpacity),
+                        clampToGround: true,
+                    },
+                });
+                pushEntity(line, 'polyline', styleParams.strokeColor, styleParams.strokeOpacity);
+                const totalMeters = polylineLengthMeters(positions);
                 pushEntity(
-                    makeLabelEntity(formatAreaMeasure(area), centroidOf(positions)),
+                    makeLabelEntity(
+                        formatDistanceMeasure(totalMeters),
+                        positions[positions.length - 1],
+                    ),
                     'label',
                     '#000000',
                     0.55,
                 );
+            } else {
+                // Polygon / MeasureArea
+                if (positions.length < 3) return;
+                const C = getC();
+                const polygon = viewer.entities.add({
+                    polygon: {
+                        hierarchy: new C.PolygonHierarchy(positions),
+                        material: colorOf(styleParams.fillColor, styleParams.fillOpacity),
+                    },
+                });
+                pushEntity(polygon, 'polygon', styleParams.fillColor, styleParams.fillOpacity);
+                // 地面多边形不支持轮廓线材质，补贴地描边折线保证边界清晰
+                const ring = [...positions, positions[0]];
+                const border = viewer.entities.add({
+                    polyline: {
+                        positions: ring,
+                        width: styleParams.strokeWidth,
+                        material: colorOf(styleParams.strokeColor, styleParams.strokeOpacity),
+                        clampToGround: true,
+                    },
+                });
+                pushEntity(border, 'polyline', styleParams.strokeColor, styleParams.strokeOpacity);
+                if (type === 'MeasureArea') {
+                    const area = polygonAreaSqMeters(positions);
+                    pushEntity(
+                        makeLabelEntity(formatAreaMeasure(area), centroidOf(positions)),
+                        'label',
+                        '#000000',
+                        0.55,
+                    );
+                }
             }
+        } catch (error) {
+            // 中途抛异常时移除已加入场景的实体：否则它们不在 registry，
+            // 「清空绘制」永远清不掉，成为场景孤儿
+            for (const entity of handle.entities) {
+                try { viewer.entities.remove(entity); } catch { /* 已随异常销毁则忽略 */ }
+            }
+            console.warn('[CesiumDraw] 成品落盘失败，已回滚半成品:', error);
+            return;
         }
 
         registry.set(id, handle);
@@ -598,6 +608,12 @@ export function createCesiumDrawMeasureFeature({ getCesium, getViewer, cesiumLay
     /** viewer 重建 / 容器卸载时复位全部状态（旧实体随旧 viewer 销毁，无需逐个移除） */
     function reset() {
         cancelActive();
+        // viewer 重试重建链路（不经过 unregisterAdapter 全量清档）：
+        // 句柄表随旧 viewer 销毁，TOC 档案须同步清理，否则 syncFromImport 的
+        // MANAGED_CATEGORIES 剪枝豁免会让 cesium-draw-* 沦为 no-op 僵尸记录
+        for (const id of registry.keys()) {
+            try { cesiumLayersStore.purgeRecord(id); } catch { /* store 未就绪时忽略 */ }
+        }
         registry.clear();
         orderIds.length = 0;
     }

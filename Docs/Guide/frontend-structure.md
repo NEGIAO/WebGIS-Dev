@@ -257,7 +257,6 @@ frontend/src/
 │   │   │       ├── decodeWorkerPool.js  # 通用解码 Worker 池（LERC/天地图共用：Transferable + 失效回退）
 │   │   │       ├── geoTerrainDecode.worker.js  # 天地图瓦片解码 Worker（pako inflate + 高程编码）
 │   │   │       ├── GeoTerrainProvider.js  # 天地图地形（inflate+编码下放 Worker，失败回退主线程）
-│   │   │       ├── GeoWTFS.js  # WMTS 地形
 │   │   │       ├── lercDecode.worker.js  # LERC 瓦片解码 Worker（主线程卡顿修复）
 │   │   │       └── util.js  # 工具函数
 │   │   ├── stores/
@@ -408,7 +407,6 @@ frontend/src/
 │   │   │   ├── useKmzLoader.js
 │   │   │   ├── useSharedResourceLoader.ts
 │   │   │   ├── vectorUtils.js  # 矢量工具（文本解码/类型归一）
-│   │   │   ├── vectorWorkerUtils.js  # 矢量 Worker 工具
 │   │   │   ├── webglRasterRenderer.js  # WebGL 栅格渲染
 │   │   │   ├── crs/
 │   │   │   │   ├── coordTransform.js  # 坐标转换（GCJ-02/WGS84）
@@ -421,8 +419,7 @@ frontend/src/
 │   │   │   │   ├── kmlParser.ts  # KML/KMZ 解析
 │   │   │   │   ├── kmlStyleParser.js  # KML 样式解析
 │   │   │   │   ├── shpParser.ts  # Shapefile 解析
-│   │   │   │   ├── tifLoader.ts  # GeoTIFF 加载
-│   │   │   │   └── universalAmapParser.js  # 通用高德解析
+│   │   │   │   └── tifLoader.ts  # GeoTIFF 加载
 │   │   │   └── stores/
 │   │   │       └── useDownloadStore.ts  # 下载任务状态
 │   │   ├── data-protocol/
@@ -508,7 +505,9 @@ frontend/src/
 │   │   │   ├── abortManager.js  # 请求中断管理器
 │   │   │   ├── browserDownload.ts  # 浏览器下载触发工具（Blob / URL 两种模式）
 │   │   │   ├── clipboard.ts  # 剪贴板工具（复制文本，降级 execCommand）
+│   │   │   ├── datetime.js  # 日期时间格式化单源（parseDateValue/formatDateTime/formatTimeShort/formatDateEpoch）
 │   │   │   ├── labelValidator.ts  # 标签校验
+│   │   │   ├── mapDefaults.js  # 跨域地图默认参数单源（DEFAULT_SEARCH_ZOOM/MAX_SEARCH_ZOOM）
 │   │   │   ├── normalize.ts  # 二值标记规范化
 │   │   │   ├── pathUtils.js  # 路径工具
 │   │   │   ├── useMarkdownRenderer.js
@@ -562,12 +561,10 @@ frontend/src/
 │       │   ├── MapControlsBar.vue  # 地图控件栏（缩放/旋转/重置）
 │       │   ├── MapDownloader.vue  # 底图下载器（框选范围 + 任务提交）
 │       │   ├── MyDownloadTasks.vue  # 我的下载任务列表（查看/取消/下载）
-│       │   ├── MapEasterEgg.vue  # 地图彩蛋（隐藏交互）
 │       │   ├── MapSwipeController.vue  # 卷帘对比控制器
 │       │   ├── MeasurePanel.vue
 │       │   └── SpatialAnalysisPanel.vue
 │       ├── composables/
-│       │   ├── interactionHandlers.js
 │       │   ├── useMapEventHandlers.js
 │       │   ├── useMapInteractionPickers.js
 │       │   ├── useMapState.js
@@ -601,7 +598,6 @@ frontend/src/
 │       │   │   └── LayerControlPanel.vue
 │       │   ├── composables/
 │       │   │   ├── useCreateManagedVectorLayer.js
-│       │   │   ├── useDataManager.js
 │       │   │   ├── useDeferredUserLayerApis.js
 │       │   │   ├── useLayerControlHandlers.js
 │       │   │   ├── useLayerMetadataNormalization.js
@@ -624,8 +620,6 @@ frontend/src/
 │       │   │   ├── useRouteRendering.js  # 路线渲染（天地图驾车/公交）
 │       │   │   ├── useRouteStepInteraction.js
 │       │   │   └── useRouteStepStyles.js
-│       │   ├── services/
-│       │   │   └── routeService.js  # 路线服务（re-export + 步骤交互）
 │       │   └── utils/
 │       │       ├── drawTransitRoute.ts  # 公交路线绘制
 │       │       ├── driveXmlParser.ts  # 驾车路线 XML 解析
@@ -660,7 +654,6 @@ frontend/src/
 │       │       └── layerTreeBuilder.ts  # 图层树构建器
 │       ├── tile-source/
 │       │   ├── index.ts  # barrel export
-│       │   ├── loadTiandituSdk.js  # 天地图 SDK 加载
 │       │   ├── tileLifecycle.ts  # 瓦片生命周期（AbortController 中断）
 │       │   ├── tileSourceAdapters.ts  # 非标准瓦片源适配器
 │       │   ├── types.ts  # 类型定义

@@ -310,6 +310,7 @@ function stopGeneration() {
     if (last?.role === 'assistant' && !last.isToolStatus && !String(last.content || '').trim()) {
         last.content = t('chat.stopped');
     }
+    session.schedulePersist();
     message.info(t('chat.stopGenerate'));
 }
 
@@ -538,6 +539,8 @@ async function dispatchSend(rawText, { skipUserPush = false } = {}) {
         if (seq === requestSeq) {
             isLoading.value = false;
             messageListRef.value?.scrollToBottom(false);
+            // 正常完成/出错均在此统一持久化（流式逐字期间不再触发序列化）
+            session.schedulePersist();
         }
     }
 }

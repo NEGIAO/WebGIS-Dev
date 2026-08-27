@@ -620,7 +620,7 @@ export default {
         importError: '导入失败',
         importWaiting: '等待导入',
         nothingToClear: '该文件夹内没有可清空的图层',
-        folderCleared: '已清空 {n} 个图层',
+        folderCleared: '已开始清空 {n} 个图层',
         unnamedLayer: '未命名图层',
         // TOCPanel 脚本 toast / 表单错误（V3.4.82）
         noCopyableCoords: '当前图层未提供可复制的经纬度信息',

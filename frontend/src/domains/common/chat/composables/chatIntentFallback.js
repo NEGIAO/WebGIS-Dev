@@ -6,6 +6,8 @@
  * Agent 底图回退只返回稳定 presetId，不接受或转发任意 URL。
  */
 
+import { DEFAULT_SEARCH_ZOOM } from '@common/utils/mapDefaults';
+
 /** 底图关键词 → 稳定预设 ID */
 const BASEMAP_PRESET_MAPPING = Object.freeze({
     '高德卫星': { presetId: 'imagery_amap_preset', name: '高德影像' },
@@ -61,7 +63,7 @@ export function detectGISIntent(userMsg) {
         if (match && match[1] && match[1].length >= 2) {
             const query = match[1].trim();
             if (!SEARCH_EXCLUDE_WORDS.includes(query)) {
-                return { name: 'search_and_zoom', arguments: { query, zoom: 16 } };
+                return { name: 'search_and_zoom', arguments: { query, zoom: DEFAULT_SEARCH_ZOOM } };
             }
         }
     }

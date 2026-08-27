@@ -6,7 +6,7 @@
  * 各格式的具体加载逻辑已拆分至 loaders/ 目录下。
  */
 
-import { ref, toRaw } from 'vue';
+import { ref, shallowRef, toRaw } from 'vue';
 import { getExtension, flyToEntity, revokeBlobUrl, detachEntityFromScene } from './loaders/utils.js';
 import { loadGeoJSON } from './loaders/geojsonLoader.js';
 import { loadKML, loadKMZ } from './loaders/kmlLoader.js';
@@ -33,7 +33,10 @@ const MAX_MESH_SIZE = 200;
  */
 export function useCesiumDataImport({ getViewer, getCesium, message, heightSampler }) {
     /** @type {import('vue').Ref<Array>} */
-    const loadedDataSources = ref([]);
+    // shallowRef：记录内持有 Cesium DataSource/tileset/entity 原生句柄，
+    // 深代理会让同一对象在场景与 Vue 侧出现双身份（下游被迫处处 toRaw），
+    // 且所有写入点均为整组替换（loaders/filter/同步），无深度响应依赖
+    const loadedDataSources = shallowRef([]);
     const pendingGltfFile = ref(null);
     const repositionTarget = ref(null);
 
@@ -544,6 +547,7 @@ export function useCesiumDataImport({ getViewer, getCesium, message, heightSampl
                     } else {
                         viewer.dataSources.remove(entity, true);
                     }
+                    console.warn('[CesiumDataImport] 数据源句柄未命中场景宿主容器，已回退 type 分支处理', { id: record.id, type });
                 }
             } catch (e) {
                 console.warn('[CesiumDataImport] 清除数据源失败:', e);

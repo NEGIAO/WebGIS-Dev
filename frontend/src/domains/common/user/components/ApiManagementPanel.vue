@@ -473,6 +473,7 @@ import {
     apiAdminUpdateApiQuota,
 } from '@/api/backend';
 import { useMessage } from '@common/shell/useMessage';
+import { formatDateTime } from '@common/utils/datetime';
 import ApiKeysManagementPanel from './ApiKeysManagementPanel.vue';
 
 const message = useMessage();
@@ -645,19 +646,12 @@ const apiQuota = ref({ guest: 100, registered: 1000 });
 const loadingQuota = ref(false);
 
 function formatTime(isoString) {
-    try {
-        const date = new Date(isoString);
-        return date.toLocaleString('zh-CN', {
-            year: 'numeric',
-            month: '2-digit',
-            day: '2-digit',
-            hour: '2-digit',
-            minute: '2-digit',
-            second: '2-digit',
-        });
-    } catch (_e) {
-        return isoString;
-    }
+    // 管理面板无 i18n，维持中文环境格式
+    return formatDateTime(isoString, {
+        locale: 'zh-CN',
+        withSeconds: true,
+        invalidText: null,
+    });
 }
 
 function formatEndpoint(endpoint) {

@@ -463,9 +463,12 @@ export function createCesiumRouteFeature({ getCesium, getViewer, cesiumLayersSto
         if (handle?.positions?.length) flyToSphere(boundingSphereOf(handle.positions));
     }
 
-    /** 容器卸载 / viewer 重建时复位（旧实体随旧 viewer 销毁） */
+    /** 容器卸载 / viewer 重建时复位（旧实体随旧 viewer 销毁；route 档案同步清，防僵尸记录） */
     function reset() {
         clearPreview();
+        for (const handle of routeHandles.values()) {
+            try { cesiumLayersStore.purgeRecord(handle.id); } catch { /* store 未就绪时忽略 */ }
+        }
         routeHandles.clear();
         settlePendingPick(null);
     }

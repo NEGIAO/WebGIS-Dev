@@ -2,6 +2,7 @@
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { apiDismissAnnouncement, apiGetCurrentAnnouncement } from '@/api/backend';
 import { useMessage } from '@common/shell/useMessage';
+import { formatDateTime } from '@common/utils/datetime';
 
 const message = useMessage();
 
@@ -55,20 +56,8 @@ function normalizeAnnouncement(payload) {
 }
 
 function formatTimeLabel(raw) {
-    const text = String(raw || '').trim();
-    if (!text) return '';
-
-    const date = new Date(text);
-    if (Number.isNaN(date.getTime())) return text;
-
-    return date.toLocaleString('zh-CN', {
-        hour12: false,
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit',
-        hour: '2-digit',
-        minute: '2-digit',
-    });
+    // 公告面向中文用户，固定 zh-CN；非法输入原样展示
+    return formatDateTime(String(raw || '').trim(), { locale: 'zh-CN', invalidText: null });
 }
 
 async function refreshAnnouncement({ silent = false } = {}) {

@@ -106,7 +106,7 @@ export function detachEntityFromScene({ viewer, Cesium, entity, type }) {
         (typeof Cesium?.TerrainProvider === 'function' && entity instanceof Cesium.TerrainProvider) ||
         (typeof Cesium?.EllipsoidTerrainProvider === 'function' &&
             entity instanceof Cesium.EllipsoidTerrainProvider);
-    if (isTerrainProvider && viewer.scene) {
+    if (isTerrainProvider && viewer.scene && typeof Cesium?.EllipsoidTerrainProvider === 'function') {
         viewer.scene.terrainProvider = new Cesium.EllipsoidTerrainProvider();
         return true;
     }

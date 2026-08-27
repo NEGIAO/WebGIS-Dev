@@ -6,7 +6,7 @@ import asyncio
 import logging
 import secrets
 from datetime import timedelta
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 from fastapi import HTTPException, Request, status
 
@@ -114,6 +114,19 @@ async def require_login(request: Request) -> Dict[str, Any]:
 
     _mark_active_safe(session)
     return session
+
+
+async def resolve_optional_session(request: Request) -> Optional[Dict[str, Any]]:
+    """可选鉴权：token 有效返回会话；无 token/会话失效/查询异常一律返回 None。
+    供访问追踪等"有身份更好、没身份也行"的端点使用，不消耗配额。"""
+    token = _extract_token(request)
+    if not token:
+        return None
+    try:
+        return await asyncio.to_thread(_get_session_sync, token)
+    except Exception:
+        logger.debug("可选鉴权：会话查询失败", exc_info=True)
+        return None
 
 
 async def require_api_access(request: Request) -> Dict[str, Any]:

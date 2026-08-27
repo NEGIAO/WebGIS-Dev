@@ -7,6 +7,7 @@
 
 import { apiAddressGeocode } from '@/api/index.js';
 import { searchWithNominatim } from '@/api/locationSearch.js';
+import { DEFAULT_SEARCH_ZOOM, MAX_SEARCH_ZOOM } from '@common/utils/mapDefaults';
 
 export function createGISCommander({ commandBus } = {}) {
     function execute(command, params) {
@@ -62,20 +63,20 @@ export function createGISCommander({ commandBus } = {}) {
      * @param {Object} params
      * @param {string} params.query - 地名、地址或 POI
      * @param {string} [params.city=''] - 城市限定（仅 Amap 生效）
-     * @param {number} [params.zoom=16] - 目标缩放级别
+     * @param {number} [params.zoom=DEFAULT_SEARCH_ZOOM] - 目标缩放级别（单源见 @common/utils/mapDefaults）
      * @param {'auto'|'amap'|'nominatim'} [params.engine='auto'] - 地理编码引擎：
      *   - 'auto': 优先 Amap（国内），无结果时降级到 Nominatim（国际）
      *   - 'amap': 强制使用高德（仅国内有效）
      *   - 'nominatim': 强制使用 Nominatim（国际地名推荐）
      * @returns {Promise<Object>}
      */
-    async function searchAndZoom({ query, city = '', zoom = 16, engine = 'auto' } = {}) {
+    async function searchAndZoom({ query, city = '', zoom = DEFAULT_SEARCH_ZOOM, engine = 'auto' } = {}) {
         const normalizedQuery = String(query || '').trim();
         if (!normalizedQuery) {
             return { success: false, code: 'INVALID_ARGUMENT', message: 'Search query cannot be empty' };
         }
 
-        const targetZoom = Math.min(Math.max(Number(zoom) || 16, 0), 22);
+        const targetZoom = Math.min(Math.max(Number(zoom) || DEFAULT_SEARCH_ZOOM, 0), MAX_SEARCH_ZOOM);
 
         /**
          * 执行地图定位（公共逻辑）。

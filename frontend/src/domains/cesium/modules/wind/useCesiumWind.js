@@ -7,7 +7,7 @@
  * - 运行时参数面板通过 updateOptions() 动态更新
  * - 按需加载：用户点击「启用风场」才 fetch + 创建
  */
-import { ref } from 'vue';
+import { ref, shallowRef } from 'vue';
 import Wind2D from './Wind2D';
 import { acquireContinuous, releaseContinuous } from '@cesium-domain/composables/interaction/useCesiumRenderMode';
 
@@ -15,7 +15,8 @@ import { acquireContinuous, releaseContinuous } from '@cesium-domain/composables
 const RENDER_MODE_TAG = 'wind-field';
 
 export function useCesiumWind({ getViewer, getCesium: _getCesium, message }) {
-    const wind2D = ref(null);
+    // shallowRef：WindLayer 为原生 WebGL 句柄，仅需引用追踪（整值赋换），无需深代理
+    const wind2D = shallowRef(null);
     const windParams = ref({
         windEnabled: false,
         // 性能:粒子数 = size²。600²=36 万粒子(库默认 100²=1 万)是帧率杀手;

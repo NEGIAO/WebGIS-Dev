@@ -393,66 +393,78 @@ function getMapUserLocation(enableHighAccuracy = true) {
 
 // ═══ 引擎感知迁移 P2：公交/驾车规划桥接（RoutePlannerPanel 回调按引擎注入）═══
 
+/**
+ * 3D 桥接统一兜底：容器或目标方法未就绪时显式拒绝，
+ * 不允许 resolve(undefined) 被调用方误判为"绘制成功"
+ */
+function callCesiumBridge(methodName, ...args) {
+    const host = cesiumContainerRef.value;
+    const fn = host?.[methodName];
+    if (typeof fn !== 'function') {
+        return Promise.reject(new Error('三维容器未就绪'));
+    }
+    return Promise.resolve(fn.apply(host, args));
+}
+
 function startBusPointPick(type) {
     if (is3DMode.value) {
-        return cesiumContainerRef.value?.startRoutePointPick?.(type)
-            ?? Promise.reject(new Error('三维容器未就绪'));
+        return callCesiumBridge('startRoutePointPick', type);
     }
     return mapContainerRef.value?.startBusPointPick?.(type);
 }
 
 function drawRouteOnMap(route) {
     if (is3DMode.value) {
-        return Promise.resolve(cesiumContainerRef.value?.drawCesiumBusRoute?.(route));
+        return callCesiumBridge('drawCesiumBusRoute', route);
     }
     return mapContainerRef.value?.drawRouteOnMap?.(route);
 }
 
 function zoomToBusRouteStep(stepIndex) {
     if (is3DMode.value) {
-        return Promise.resolve(cesiumContainerRef.value?.zoomToCesiumRouteStep?.('bus', stepIndex));
+        return callCesiumBridge('zoomToCesiumRouteStep', 'bus', stepIndex);
     }
     return mapContainerRef.value?.zoomToBusRouteStep?.(stepIndex);
 }
 
 function previewBusRouteStep(stepIndex) {
     if (is3DMode.value) {
-        return Promise.resolve(cesiumContainerRef.value?.previewCesiumRouteStep?.('bus', stepIndex));
+        return callCesiumBridge('previewCesiumRouteStep', 'bus', stepIndex);
     }
     return mapContainerRef.value?.previewBusRouteStep?.(stepIndex);
 }
 
 function clearBusRouteStepPreview() {
     if (is3DMode.value) {
-        return Promise.resolve(cesiumContainerRef.value?.clearCesiumStepPreview?.('bus'));
+        return callCesiumBridge('clearCesiumStepPreview', 'bus');
     }
     return mapContainerRef.value?.clearBusRouteStepPreview?.();
 }
 
 function drawDriveRouteOnMap(routeLatLonStr) {
     if (is3DMode.value) {
-        return Promise.resolve(cesiumContainerRef.value?.drawCesiumDriveRoute?.(routeLatLonStr));
+        return callCesiumBridge('drawCesiumDriveRoute', routeLatLonStr);
     }
     return mapContainerRef.value?.drawDriveRouteOnMap?.(routeLatLonStr);
 }
 
 function zoomToDriveRouteStep(stepIndex) {
     if (is3DMode.value) {
-        return Promise.resolve(cesiumContainerRef.value?.zoomToCesiumRouteStep?.('drive', stepIndex));
+        return callCesiumBridge('zoomToCesiumRouteStep', 'drive', stepIndex);
     }
     return mapContainerRef.value?.zoomToDriveRouteStep?.(stepIndex);
 }
 
 function previewDriveRouteStep(stepIndex) {
     if (is3DMode.value) {
-        return Promise.resolve(cesiumContainerRef.value?.previewCesiumRouteStep?.('drive', stepIndex));
+        return callCesiumBridge('previewCesiumRouteStep', 'drive', stepIndex);
     }
     return mapContainerRef.value?.previewDriveRouteStep?.(stepIndex);
 }
 
 function clearDriveRouteStepPreview() {
     if (is3DMode.value) {
-        return Promise.resolve(cesiumContainerRef.value?.clearCesiumStepPreview?.('drive'));
+        return callCesiumBridge('clearCesiumStepPreview', 'drive');
     }
     return mapContainerRef.value?.clearDriveRouteStepPreview?.();
 }
@@ -1298,9 +1310,11 @@ async function handleUploadData(data) {
     }
 }
 
-/** 处理地图交互工具 */
+/** 处理地图交互工具（TOC 绘制页/坐标拾取等入口） */
 function handleInteraction(type) {
-    mapContainerRef.value?.activateInteraction(type);
+    // 与工具箱入口共享引擎感知路由：3D 下绘制/测量走 Cesium，
+    // 未支持类型（如 ZoomToGraphics）明示降级而非静默驱动隐藏的 OL 地图
+    handleControlsMapInteraction(type);
 }
 
 function handleToggleLayerVisibility({ layerId, visible }) {

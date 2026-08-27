@@ -34,6 +34,7 @@ import {
 import { buildRasterBasemapSource } from '@ol/basemap/composables/basemapLayerFactory';
 import { Z_BAND } from '@ol/layer/zIndexBands';
 import { normalizeBinaryFlag, normalizeLocationFlag, normalizeText } from '@common/utils/normalize';
+import { DEFAULT_SEARCH_ZOOM } from '@common/utils/mapDefaults';
 import { getCurrentQuerySnapshot as getSnapshot, readQueryValue as readQueryFromSnapshot } from '@common/url-state/urlQueryReader';
 // 新增：中心点标记所需导入
 import Feature from 'ol/Feature';
@@ -629,7 +630,7 @@ export function useMapState(mapInstance, options = {}) {
      * @param {number} [options.duration=flyDuration] - 动画时长（毫秒）
      * @returns {Promise<null|{lng:number,lat:number,adcode:string,level:string,formattedAddress:string}>}
      */
-    async function locateAddress(address, { city = '', zoom = 16, duration = flyDuration } = {}) {
+    async function locateAddress(address, { city = '', zoom = DEFAULT_SEARCH_ZOOM, duration = flyDuration } = {}) {
         const normalizedAddress = String(address || '').trim();
         if (!normalizedAddress) return null;
 
@@ -641,7 +642,7 @@ export function useMapState(mapInstance, options = {}) {
         const result = geocodeResponse?.data || null;
         if (!result) return null;
 
-        const targetZoom = Number.isFinite(Number(zoom)) ? Number(zoom) : 16;
+        const targetZoom = Number.isFinite(Number(zoom)) ? Number(zoom) : DEFAULT_SEARCH_ZOOM;
         const targetDuration = Number(duration) > 0 ? Number(duration) : flyDuration;
         view.animate({
             center: fromLonLat([result.lng, result.lat]),

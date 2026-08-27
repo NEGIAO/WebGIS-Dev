@@ -6,6 +6,16 @@
 
 ## 版本记录
 
+### V3.5.33 (2026-08-27) — 全项目审查离散缺陷集中修复
+
+> 本版本为 2026-08-27 四维全项目 Code Review（后端安全 / 前端质量 / 性能泄漏 / V3.5.30~32 回归风险）的离散缺陷集中修复，多会话产出归并为单一版本。完整分析：`Docs/LLM_record/26-08/2026-08-27/2026-08-27-full-project-code-review-and-fixes.md`。结构性重构（大文件拆分、API /api/v1 前缀迁移、TS strict、连接池）单独评估不在此列。
+
+> 1、回归修复（V3.5.30~32 引入）：① TOCPanel 绘制页入口 `handleInteraction` 固定驱动 OL 地图 → 委托引擎感知的 `handleControlsMapInteraction`，HomeView 九个公交/驾车桥接统一 `callCesiumBridge()`（容器未就绪显式 reject，消除"静默成功"误判）；② viewer 重试重建后 TOC 僵尸档案——useCesiumDrawMeasure/useCesiumRouteRendering 的 reset() 补 purgeRecord 清档；③ unifiedActionRouter 检测 thenable 并 `.catch` 包装，异步 rejection 不再逃逸也不再被误记"已处理"；④ useChatSession 移除 sessions 深度 watch（流式期间逐字深遍历 + 全量 JSON.stringify 卡顿），改 11 个离散变更点显式 schedulePersist，ChatPanelContent 在流结束边界（完成/出错/停止）通知；onScopeDispose 时 pending 防抖先同步 flush 再清理（防关闭面板丢最近改动）；⑤ AttributeTable / MapDownloader 改 defineAsyncComponent 异步加载，移出首屏 chunk。
+> 2、安全加固：① location.py 私有符号导入消除——新增公开鉴权依赖 `resolve_optional_session()`（auth/dependencies.py），删除本地重复实现；② DEV_DEFAULT_ADMIN_PASSWORD 单源 config/catalog.py。（管理端数据浏览器维持现状：admin 即最高权限，允许对任意表增删改，未引入表级写白名单）
+> 3、性能与正确性：① loadedDataSources/wind2D 改 shallowRef（消除 Cesium 原生句柄双身份，写入点均为整组替换已核实安全）；② CesiumAdvancedEffects preRender uniform 变更检测门控（fog/HBAO/tiltShift/atmosphere 各自缓存上次值，requestRenderMode 下相机静止不再反复写入打断脏检查）；③ finishInteraction 成品落盘 try/catch 回滚半成品实体；detachEntityFromScene 地形分支补 Cesium 构造器守卫；clearAllDataSources 回退分支补可观测 warn；文件夹清空 toast 文案改为进行时语义（i18n 双语同步）。
+> 4、单源收敛：① 新增 common/utils/datetime.js（parseDateValue/formatDateTime/formatTimeShort/formatDateEpoch），六处重复日期格式化全部接入薄包装并保留各自回退语义；② 新增 common/utils/mapDefaults.js（DEFAULT_SEARCH_ZOOM/MAX_SEARCH_ZOOM），GISCommander/useMapState.locateAddress/chatIntentFallback/agentToolsSchema 四处 zoom=16 魔法数字统一；③ compat.js nadir 公式委托 cesiumScale.js 单源。
+> 5、死代码清理（均经零引用验证）：GeoWTFS.js(1053 行)、universalAmapParser(298)、MapEasterEgg.vue(285)、vectorWorkerUtils(128)、interactionHandlers(31)、useDataManager(341)、routeService(3)、loadTiandituSdk(95) 及 frontend/.tmp-test/*.mjs 调试脚本 ×4。
+
 ### V3.5.31 (2026-08-26) — 统一图层管理 P0~P2 全链落地 + OL↔Cesium 视图尺度系统
 
 > 本版本整合原多批次中间提交（曾临时编号 V3.5.31~V3.5.34）为单一版本。计划文档：Docs/TODO/unified-layer-management-refactor-plan.md（L3，用户批准执行）、Docs/TODO/ol2cesium.md。
