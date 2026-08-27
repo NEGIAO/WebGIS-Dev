@@ -86,7 +86,7 @@ frontend/src/
 │   │   │   │   ├── dataSourceDisplay.js  # 显隐/透明度类型适配器（统一图层管理·句柄侧）
 │   │   │   │   ├── geoTiffUtils.js  # GeoTIFF 工具函数
 │   │   │   │   ├── importUtils.js  # 导入工具函数
-│   │   │   │   ├── useCesiumDataImport.js  # 数据导入主逻辑
+│   │   │   │   ├── useCesiumDataImport.js  # 数据导入主逻辑（移除/清空走对象级宿主探测卸载 detachEntityFromScene，防 type 错配静默残留）
 │   │   │   │   ├── useCesiumDataOpsHandlers.js  # 数据操作事件转发层（面板/拖拽/GLTF 弹窗 → dataImport，自容器抽离）
 │   │   │   │   └── loaders/
 │   │   │   │       ├── czmlLoader.js  # CZML 时序数据加载器
@@ -96,7 +96,7 @@ frontend/src/
 │   │   │   │       ├── kmlLoader.js  # KML/KMZ 格式加载器
 │   │   │   │       ├── shpLoader.js  # Shapefile 格式加载器
 │   │   │   │       ├── tilesetLoader.js  # 3D Tiles 数据集加载器
-│   │   │   │       └── utils.js  # 加载器共享工具函数
+│   │   │   │       └── utils.js  # 加载器共享工具函数（flyTo/clamp/blobUrl + 数据源句柄对象级宿主探测卸载 detachEntityFromScene）
 │   │   │   ├── interaction/
 │   │   │   │   ├── useCesiumFrameRate.js  # FPS 采样
 │   │   │   │   ├── useCesiumInteractions.js  # 交互管理
@@ -126,7 +126,11 @@ frontend/src/
 │   │   │       ├── routeFlyModule.js  # 路线漫游模块（手绘贴地线路+第一/第三人称相机漫游卡片）
 │   │   │       ├── sceneModule.js  # 场景导航模块（相机飞行+演示数据）
 │   │   │       ├── shallowWaterModule.js  # 热带浅水模块（三渲二水体+闪电）
-│   │   │       └── useCesiumToolModules.js  # 工具面板模块编排（核心）
+│   │   │       └── useCesiumToolModules.js  # 工具面板模块编排（核心：模块注册表 + 按 i18n 语言重建）
+│   │   │   ├── draw/
+│   │   │       ├── scenePicker.js  # 场景取点工具（pickEarthPoint 两级取点链 pickPosition→pickEllipsoid 兜底 + Cartesian3↔经纬度换算；绘制/测量与路线选点共用）
+│   │   │       ├── useCesiumDrawMeasure.js  # P0 绘制/测量管理器（ScreenSpaceEventHandler 交互，EllipsoidGeodesic 表面距离+ENU shoelace 面积，贴地实体 + 测量结果标签；cancelActive 同步摘除预览 Label 防泄漏，removeHandle 带 contains 回执强校验）
+│   │   │       └── useCesiumRouteRendering.js  # P2 公交/驾车路线渲染器（贴地折线/站点/label，步骤定位/预览/清理，纯函数无 @ol 依赖；removeHandle 带 contains 回执强校验）
 │   │   ├── constants/
 │   │   │   └── basemapProviderFactory.ts  # Cesium ImageryProvider 工厂
 │   │   ├── layers/
@@ -257,8 +261,8 @@ frontend/src/
 │   │   │       ├── lercDecode.worker.js  # LERC 瓦片解码 Worker（主线程卡顿修复）
 │   │   │       └── util.js  # 工具函数
 │   │   ├── stores/
-│   │   │   ├── cesiumLayerNodeBuilder.ts  # Cesium 元数据 → TOC 树节点映射
-│   │   │   └── cesiumLayers.ts  # Cesium 三维数据元数据店
+│   │   │   ├── cesiumLayerNodeBuilder.ts  # Cesium 元数据 → TOC 树节点映射（TYPE_LABELS 新增 draw/route；sourceType = cesium-draw / cesium-route / cesium-data 按 category 分组）
+│   │   │   └── cesiumLayers.ts  # Cesium 三维数据元数据店（OPACITY_SUPPORTED_TYPES 新增 draw；MANAGED_CATEGORIES = {'draw','route'} 记录免于 loadedDataSources 清除；registerDrawing/remove/purgeRecord 带 category 跟踪）
 │   │   ├── utils/
 │   │   │   └── echartsFxRuntime.js  # Cesium 图表运行时
 │   │   └── vendors/

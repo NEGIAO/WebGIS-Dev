@@ -951,6 +951,8 @@ export default {
             tileset: '3D Tiles (tileset.json)',
         },
         reset: 'Reset',
+        interaction3dUnsupported: 'Interaction not supported in 3D mode: {type}',
+        draw3dNoSelectionDelete: 'Marquee delete is unavailable for 3D drawings: use Undo Last or remove the layer from the TOC',
         status: {
             enabled: 'Enabled',
             disabled: 'Disabled',

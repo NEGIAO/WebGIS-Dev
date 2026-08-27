@@ -96,7 +96,8 @@ export function setRecordOpacity(Cesium, record, opacity, onApplied) {
 
     switch (record.type) {
         case 'tif':
-            // ImageryLayer 原生 alpha
+        case 'imagery':
+            // ImageryLayer 原生 alpha（tif 栅格与 Ion/在线影像同型句柄）
             entity.alpha = alpha;
             break;
         case 'gltf':

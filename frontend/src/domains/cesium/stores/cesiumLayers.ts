@@ -17,14 +17,32 @@ import { defineStore } from 'pinia';
 /**
  * 支持透明度调节的类型（二期已放开矢量类：per-entity 原色快照缩放，
  * 实现见 dataSourceDisplay.js applyVectorDataSourceOpacity）
+ * 注：draw（绘制）支持 per-handle 回放；route（路线）材质透明度基线在创建时固化，暂不开放
  */
-const OPACITY_SUPPORTED_TYPES = new Set(['tif', 'gltf', '3dtiles', 'geojson', 'kml', 'czml', 'shp', 'wayline']);
+const OPACITY_SUPPORTED_TYPES = new Set([
+    'tif',
+    'gltf',
+    '3dtiles',
+    'geojson',
+    'kml',
+    'czml',
+    'shp',
+    'wayline',
+    'draw',
+    // Ion 等外部影像图层：ImageryLayer.alpha 原生支持透明度调节
+    'imagery',
+]);
+
+/** 引擎内生成类目（非导入数据）：生命周期由管理器句柄表驱动 */
+const MANAGED_CATEGORIES = new Set(['draw', 'route']);
 
 /** Cesium 图层元数据记录（禁止出现任何 Cesium 对象字段） */
 export interface CesiumLayerRecord {
     id: string;
     name: string;
-    type: string;              // geojson|kml|czml|shp|tif|gltf|3dtiles
+    type: string;              // geojson|kml|czml|shp|tif|gltf|3dtiles|draw|route
+    /** 记录来源：data=导入数据（默认）；draw=绘制/测量；route=公交/驾车路线 */
+    category?: 'data' | 'draw' | 'route';
     engine: 'cesium';
     visible: boolean;
     opacity: number;           // 0~1
@@ -83,7 +101,11 @@ export const useCesiumLayersStore = defineStore('cesiumLayers', () => {
     ): void {
         const now = Date.now();
         const nextIds = new Set(sources.map((item) => String(item.id)));
-        const kept = records.value.filter((item) => nextIds.has(item.id));
+        // 差量修剪豁免：draw / route 类记录由管理器句柄表驱动生命周期，
+        // 不随 loadedDataSources 变化被清除
+        const kept = records.value.filter(
+            (item) => nextIds.has(item.id) || MANAGED_CATEGORIES.has(item.category || 'data'),
+        );
         const keptIds = new Set(kept.map((item) => item.id));
 
         const added: CesiumLayerRecord[] = sources
@@ -157,6 +179,42 @@ export const useCesiumLayersStore = defineStore('cesiumLayers', () => {
     /** 移除（adapter 清场景 → loadedDataSources 变化 → watch 回调 syncFromImport 删档） */
     function remove(id: string): void {
         adapter?.remove(id);
+        // draw / route 类无 loadedDataSources 回声链路，由 store 即时删档
+        const record = getRecord(id);
+        if (record && MANAGED_CATEGORIES.has(record.category || 'data')) {
+            records.value = records.value.filter((item) => item.id !== id);
+        }
+    }
+
+    /**
+     * 绘制 / 路线建档（引擎感知迁移 P0/P2）：
+     * 由 CesiumContainer 内的绘制管理器与路线渲染器在成品时调用。
+     * @param input { id, name, category: 'draw' | 'route' }
+     */
+    function registerDrawing(input: { id: string; name: string; category: 'draw' | 'route' }): void {
+        const id = String(input?.id || '').trim();
+        if (!id) return;
+        if (getRecord(id)) return;
+        const category = input.category === 'route' ? 'route' : 'draw';
+        records.value = [
+            ...records.value,
+            {
+                id,
+                name: String(input.name || '未命名').slice(0, 60),
+                type: category,
+                category,
+                engine: 'cesium' as const,
+                visible: true,
+                opacity: 1,
+                supportsOpacity: category === 'draw',
+                createdAt: Date.now(),
+            },
+        ];
+    }
+
+    /** 纯元数据删档（不触发 adapter；绘制管理器清空链路使用，避免回调环路） */
+    function purgeRecord(id: string): void {
+        records.value = records.value.filter((item) => item.id !== String(id));
     }
 
     /** 3D Tiles 高程调节（回写 record 供 TOC 滑杆取值） */
@@ -203,6 +261,8 @@ export const useCesiumLayersStore = defineStore('cesiumLayers', () => {
         rename,
         flyTo,
         remove,
+        registerDrawing,
+        purgeRecord,
         setBaseHeight,
         setMaterialMode,
         requestReposition,

@@ -71,3 +71,16 @@
 - contextMenu.js 及 node builders 的中文硬编码 label（三维菜单项/『二维数据』组名等）为存量惯例，i18n 化需另立任务（规范上属硬伤但涉及面广，未在本批扩权处理）。
 - remoteServices 重注册保护仅在「已触碰+空选」分支生效；若上游未来传入非空但不完整的 selectedIds 仍会覆盖——当前调用方均为全量勾选集，无此场景。
 - 本批 6 个代码文件修改均未暂存，等待用户审阅。
+
+---
+
+## 零散修补（同日追加）
+
+### SSE 实时统计流 CORS 凭据冲突（2026-08-26 20:05）
+
+- **症状**：生产环境 `webgis.negiao.cn` 建立 `/api/statistics/stream` SSE 连接被浏览器 CORS 拦截——`The value of the 'Access-Control-Allow-Credentials' header in the response is '' which must be 'true' when the request's credentials mode is 'include'`。
+- **根因**：前端 [useRealtimeStats.js:171] 以 `new EventSource(url, { withCredentials: true })` 建连（凭据模式），浏览器强制要求响应带 `Access-Control-Allow-Credentials: true`；而后端 app.py CORSMiddleware 为 `allow_credentials=False` → 响应缺失该头 → 连接 401 化失败（net::ERR_FAILED 200）。
+- **修复**（用户明确指示「后端默认 allow all」）：app.py 改为 `allow_credentials=True`；白名单缺省仍为 `["*"]`（allow all）——Starlette 在 credentials 模式下自动把通配来源回显为具体请求 Origin，浏览器判定通过。移除「白名单已启用」条件日志（allow all 为默认态不再特殊提示）。nginx 各段无 CORS 头注入，响应头全部来自 FastAPI 层，改动即全链生效。
+- **说明**：后端鉴权实际走 Authorization header + query ticket，不依赖 cookie；前端 `withCredentials: true` 属防御性声明（未来若引入 cookie 会话可直接工作），保留不动。
+- **验证**：ast 语法检查 ✅ / CheckConfigRegistry ✅ / 待部署 HF Space 后实机确认 SSE onopen。
+- **变更文件**：`backend/app.py`（CORS 中间件段）。

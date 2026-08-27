@@ -269,16 +269,16 @@ app = FastAPI(
 # ==================== CORS 中间件配置 ====================
 
 # CORS 来源白名单经统一 loader 读取（L1 key: CORS_ALLOWED_ORIGINS，逗号分隔）；
-# 留空 = ["*"] 兼容旧行为；生产 HF Variables 建议配置 Pages 域名 + localhost（P1-1）。
+# 留空 = 允许所有来源（allow all）。SSE（EventSource withCredentials）要求
+# 响应必须带 Access-Control-Allow-Credentials: true，故 credentials 恒开；
+# Starlette 在 credentials 模式下会把通配来源回显为请求 Origin（等价 allow all）。
 _cors_raw = get_str("CORS_ALLOWED_ORIGINS", "")
 _cors_origins = [item.strip().rstrip("/") for item in _cors_raw.split(",") if item.strip()] or ["*"]
-if _cors_origins != ["*"]:
-    logger.info("CORS 白名单已启用（%d 个来源）：%s", len(_cors_origins), ", ".join(_cors_origins))
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_cors_origins,
-    allow_credentials=False,
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )

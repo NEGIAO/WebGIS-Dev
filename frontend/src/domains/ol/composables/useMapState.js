@@ -93,12 +93,12 @@ function formatNumber(value, fractionDigits) {
 /**
  * 将 URL 传输链路中的 z 参数格式化为统一两位小数字符串。
  * @param {*} value - OL zoom 或 Cesium height 数值
- * @returns {string|null} 六位小数字符串（保证双向互逆的序列化精度），或无效时返回 null
+ * @returns {string|null} 两位小数字符串，或无效时返回 null
  */
 function formatZParam(value) {
     const numberValue = Number(value);
     if (!Number.isFinite(numberValue)) return null;
-    return numberValue.toFixed(6);
+    return numberValue.toFixed(2);
 }
 
 /**

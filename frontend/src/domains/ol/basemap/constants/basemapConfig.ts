@@ -293,6 +293,26 @@ export const LAYER_SOURCE_DEFINITIONS: LayerSourceDefinition[] = [
             ),
     },
     {
+        id: 'tianditu_ibo_w',
+        name: '天地图国界',
+        category: 'label',
+        group: '注记',
+        // DataServer 形式（与 3D 侧 useCesiumLayers 同源）：T=ibo_w 直接以 x/y/l 取瓦片
+        url: 'https://t{s}.tianditu.gov.cn/DataServer?T=ibo_w&x={x}&y={y}&l={z}&tk={tiandituTk}',
+        serviceType: 'xyz',
+        createSource: ({ tiandituTk }) =>
+            withSkipHighResTile(
+                prioritizeTileSourceRequest(
+                    new XYZ({
+                        url: buildTiandituUrl(
+                            '/DataServer?T=ibo_w&x={x}&y={y}&l={z}',
+                            tiandituTk,
+                        ),
+                    }),
+                ),
+            ),
+    },
+    {
         id: 'custom',
         name: '自定义URL',
         category: 'custom',

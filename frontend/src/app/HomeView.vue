@@ -18,6 +18,7 @@ import {
     convertCesiumViewToOl,
     canonicalScaleToOlView,
     nearlyEqual,
+    olZoomToCesiumHeight,
 } from '@common/utils/viewScale';
 import { encodeCesiumPoseState } from '@common/url-state/crypto';
 import { readQueryValue as readQueryFromSnapshot } from '@common/url-state/urlQueryReader';
@@ -390,39 +391,69 @@ function getMapUserLocation(enableHighAccuracy = true) {
     return mapContainerRef.value?.getCurrentLocation?.(enableHighAccuracy);
 }
 
+// ═══ 引擎感知迁移 P2：公交/驾车规划桥接（RoutePlannerPanel 回调按引擎注入）═══
+
 function startBusPointPick(type) {
+    if (is3DMode.value) {
+        return cesiumContainerRef.value?.startRoutePointPick?.(type)
+            ?? Promise.reject(new Error('三维容器未就绪'));
+    }
     return mapContainerRef.value?.startBusPointPick?.(type);
 }
 
 function drawRouteOnMap(route) {
+    if (is3DMode.value) {
+        return Promise.resolve(cesiumContainerRef.value?.drawCesiumBusRoute?.(route));
+    }
     return mapContainerRef.value?.drawRouteOnMap?.(route);
 }
 
 function zoomToBusRouteStep(stepIndex) {
+    if (is3DMode.value) {
+        return Promise.resolve(cesiumContainerRef.value?.zoomToCesiumRouteStep?.('bus', stepIndex));
+    }
     return mapContainerRef.value?.zoomToBusRouteStep?.(stepIndex);
 }
 
 function previewBusRouteStep(stepIndex) {
+    if (is3DMode.value) {
+        return Promise.resolve(cesiumContainerRef.value?.previewCesiumRouteStep?.('bus', stepIndex));
+    }
     return mapContainerRef.value?.previewBusRouteStep?.(stepIndex);
 }
 
 function clearBusRouteStepPreview() {
+    if (is3DMode.value) {
+        return Promise.resolve(cesiumContainerRef.value?.clearCesiumStepPreview?.('bus'));
+    }
     return mapContainerRef.value?.clearBusRouteStepPreview?.();
 }
 
 function drawDriveRouteOnMap(routeLatLonStr) {
+    if (is3DMode.value) {
+        return Promise.resolve(cesiumContainerRef.value?.drawCesiumDriveRoute?.(routeLatLonStr));
+    }
     return mapContainerRef.value?.drawDriveRouteOnMap?.(routeLatLonStr);
 }
 
 function zoomToDriveRouteStep(stepIndex) {
+    if (is3DMode.value) {
+        return Promise.resolve(cesiumContainerRef.value?.zoomToCesiumRouteStep?.('drive', stepIndex));
+    }
     return mapContainerRef.value?.zoomToDriveRouteStep?.(stepIndex);
 }
 
 function previewDriveRouteStep(stepIndex) {
+    if (is3DMode.value) {
+        return Promise.resolve(cesiumContainerRef.value?.previewCesiumRouteStep?.('drive', stepIndex));
+    }
     return mapContainerRef.value?.previewDriveRouteStep?.(stepIndex);
 }
 
 function clearDriveRouteStepPreview() {
+    if (is3DMode.value) {
+        return Promise.resolve(cesiumContainerRef.value?.clearCesiumStepPreview?.('drive'));
+    }
     return mapContainerRef.value?.clearDriveRouteStepPreview?.();
 }
 
@@ -515,7 +546,16 @@ function handleControlsMapInteraction(type) {
         return;
     }
 
-    // 其余交互仍走 OL
+    // 引擎感知迁移 P0：3D 下绘制/测量路由 Cesium；未支持类型（高级图形/要素编辑）明示降级
+    if (is3DMode.value) {
+        const handled = cesiumContainerRef.value?.activateCesiumInteraction?.(nextType);
+        if (!handled) {
+            message.warning(t('cesium.interaction3dUnsupported', { type: nextType }));
+        }
+        return;
+    }
+
+    // 其余交互走 OL
     mapContainerRef.value?.activateInteraction?.(nextType);
 }
 
@@ -524,6 +564,10 @@ function handleControlsMapInteraction(type) {
  * @param {Object} stylePayload
  */
 function handleControlsDrawStyleChange(stylePayload) {
+    if (is3DMode.value) {
+        cesiumContainerRef.value?.updateCesiumDrawingStyle?.(stylePayload);
+        return;
+    }
     mapContainerRef.value?.updateDrawingStyleParams?.(stylePayload);
 }
 
@@ -532,6 +576,16 @@ function handleControlsDrawStyleChange(stylePayload) {
  * @param {string} action
  */
 function handleControlsDrawEditAction(action) {
+    if (is3DMode.value) {
+        if (action === 'delete-selected') {
+            message.info(t('cesium.draw3dNoSelectionDelete'));
+            return;
+        }
+        if (action === 'undo-last') {
+            cesiumContainerRef.value?.activateCesiumInteraction?.('UndoLastDrawing');
+        }
+        return;
+    }
     if (action === 'delete-selected') {
         mapContainerRef.value?.deleteSelectedDrawingFeature?.();
         return;
@@ -871,12 +925,12 @@ function handleCesiumLoadFailed() {
 /**
  * 将 URL 传输链路中的 z 参数格式化为统一两位小数字符串。
  * @param {*} value - OL zoom 或 Cesium height 数值
- * @returns {string|null} 六位小数字符串（保证双向互逆的序列化精度），或无效时返回 null
+ * @returns {string|null} 两位小数字符串，或无效时返回 null
  */
 function formatZParam(value) {
     const numberValue = Number(value);
     if (!Number.isFinite(numberValue)) return null;
-    return numberValue.toFixed(6);
+    return numberValue.toFixed(2);
 }
 
 /**
@@ -1426,6 +1480,26 @@ function handleBaseLayersChange(layers) {
 }
 
 function handleTopBarJumpView(lng, lat, z, layer) {
+    // 引擎感知迁移 P1：3D 下 z 为 OL 缩放级别语义，经 canonical 尺度系统换算相机高度
+    if (is3DMode.value) {
+        const targetLat = Number(lat) || 0;
+        const canvasHeight = cesiumContainerRef.value
+            ?.getViewer?.()
+            ?.scene?.canvas?.clientHeight;
+        const height = olZoomToCesiumHeight({
+            zoom: Number(z) || 0,
+            centerLat: targetLat,
+            viewportHeight: Number.isFinite(canvasHeight) && canvasHeight > 0 ? canvasHeight : undefined,
+        });
+        const jumped = cesiumContainerRef.value?.jumpTo?.(lng, targetLat, height);
+        if (jumped && Number.isInteger(Number(layer))) {
+            const targetLayerId = getLayerIdByIndex(Number(layer));
+            if (targetLayerId && targetLayerId !== 'custom') {
+                cesiumContainerRef.value?.setBasemapById?.(targetLayerId);
+            }
+        }
+        return;
+    }
     mapContainerRef.value?.updateViewByParams?.(lng, lat, z, layer);
 }
 

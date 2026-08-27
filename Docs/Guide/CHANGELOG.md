@@ -10,6 +10,37 @@
 
 > 本版本整合原多批次中间提交（曾临时编号 V3.5.31~V3.5.34）为单一版本。计划文档：Docs/TODO/unified-layer-management-refactor-plan.md（L3，用户批准执行）、Docs/TODO/ol2cesium.md。
 
+### V3.5.32 (2026-08-27) — 统一图层管理 P0~P2 全链落地与 OL↔Cesium 视图尺度系统（引擎感知迁移）
+
+> 本版本落实 P0~P2 同时执行：绘制/测量引擎化、常用地点引擎化、公交/驾车规划引擎化；死代码清理；版本文档 SSOT 收敛至 V3.5.32。
+
+> 1、绘制/测量：新增 useCesiumDrawMeasure.js 管理器，ScreenSpaceEventHandler 交互（点/线/面/测距/测面/清空/撤销），EllipsoidGeodesic 表面距离+ENU shoelace 面积，成品实体贴地（点 heightReference/polyline clampToGround/地面多边形）+测量结果标签，TOC 建档 category='draw' 进「三维数据」分组；HomeView 3处 handler 引擎分支；i18n 双语提示
+> 2、常用地点：handleTopBarJumpView 引擎分支，3D 下用 olZoomToCesiumHeight 把 OL z 换算为 Cesium 相机高度，l 参数同步 activeBasemap.value；纯视口跳转，无 TOC 注册需求
+> 3、公交/驾车规划：新增 useCesiumRouteRendering.js，解析天地图 route/payload 结果（纯函数，不导入 @ol），贴地折线（步行段细线+低透明度、驾车段实线brand色），站点点+label，步骤定位/预览/清理，注册 category='route' 进「三维数据」分组；SidePanel/RoutesPlannerPanel 9个桥接函数按引擎注入对应实现；startPointPick Promise 语义对齐
+
+> 4、修复（渲染崩溃级）：`useCesiumDrawMeasure.js#updatePreviewText` 曾把 `Cartesian3` 点集误当 OpenLayers 的 `[lng,lat,h]` 数组下标访问（`positions[0][0]` 等全为 `undefined`），`Cartesian3.fromDegrees(NaN,…)` 生成 NaN position 预览 Label，导致 Cesium 渲染视锥裁剪 `createPotentiallyVisibleSet` 抛 `RangeError: Invalid array length` 停止渲染；已改为按 Cartesian3 `x/y/z` 语义计算点/线/面预览锚点并做有限性校验。
+
+> 5、修复（数据同步级）：TOC 移除数据源后 Cesium 场景不同步移除——`registerExternalDataSource` type 缺省 `'3dtiles'`，Ion 影像（ImageryLayer）/Ion 地形（TerrainProvider）注册时未传 type 被错记，删除时按字符串分派走 `primitives.remove(...)` 静默 no-op，而 loadedDataSources 已无条件删档 → watch → syncFromImport 删 TOC 记录，形成「TOC 已删档、场景仍渲染」不同步；新增 `loaders/utils.js#detachEntityFromScene` 对象级宿主探测卸载（entities/dataSources/imageryLayers/primitives 的 contains 引用比较分派 + TerrainProvider 特判复位椭球地形），`removeDataSource` / `clearAllDataSources` 探测优先、未命中回退 type 分支；注册处补准确 type（'imagery'/'terrain'）；配套 TYPE_LABELS（影像/地形）、OPACITY_SUPPORTED_TYPES+'imagery'、setRecordOpacity case 'imagery'。
+
+> 6、修复（绘制/测量标注残留，用户复测定位）：① `useCesiumDrawMeasure.js#cancelActive` 只清理 `active.sketch` 与事件句柄，独立创建的 `active.previewLabel`（预览 Label 实体）从未摘除——每次绘制/测量交互都向 viewer.entities 泄漏一个不入任何句柄表的孤儿实体，且 updatePreviewText 每帧把其 position 静态化，所有 TOC 移除/清空链路均无法触达 → 已在 cancelActive 显式移除并置 null；② 绘制管理器 removeHandle 增加删除回执强校验（remove 返回值 + contains 兜底判定，幸存实体二次强制移除并 console.warn），useCesiumRouteRendering.removeHandle 同款对齐——把「链路已走完但场景仍显示」从静默降级为显式可观测告警。
+
+> 7、整合会话 Code Review（暂存区多批次归并为 V3.5.32 单一版本）：① 根 README「项目简介·当前版本」仍停留 V3.5.31（vite 构建自此行正则提取 `__APP_VERSION__`）→ 同步 V3.5.32；② frontend-structure.md 结构树 scenePicker.js 画在 composables 层级且注释张冠李戴（其真实职责是 pickEarthPoint 场景取点，非坐标串解析）→ 归位 draw/ 目录并修正注释，toolModules 注释恢复通顺表述；③ `activateInteraction('Clear')` 只清成品句柄表不终止进行中交互（sketch/handler 存活，清空后继续点击会向场景追加脏数据）→ Clear 分支先 cancelActive 再 clearAllDrawings；④ 双击结束绘制前 Cesium 先派发两次 LEFT_CLICK 致末端重复点（测距虚高、线面赘点，右击结束无此现象）→ 新增 clickPixels 屏幕像素记录，finishInteraction 对末两点 ≤3px 像素间距去重；⑤ TODO 方案文档状态行「待用户批准」与现实矛盾 → 更新为已实施并附裁决结论。
+
+> <!--
+> 待后续补充：
+> - capabilitiesProxy 兜底逻辑
+> - WMS 默认全选语义
+> - 文件夹级清空图层
+> - viewer 销毁链 creditDisplay 补丁
+> -->
+
+#### 二、视图尺度系统补缺（P0/P1/P2）
+
+- **viewScale/ 八模块**：解析模型+射线实测 Precision 校正；修复射线实测双重解包、compat 层旧签名丢失(mapSize/cesiumFovy/clamp)、校正环绝对容差失真三处缺陷
+- **OPACITY_SUPPORTED_TYPES**：新增 draw；route 材质透明度基线在创建时固化，暂不开放
+- **MANAGED_CATEGORIES**：draw / route 类记录由管理器句柄表驱动生命周期，不随 loadedDataSources 变化被清除
+- **registerDrawing / remove / purgeRecord**：新增/修正引擎感知路由记录生命周期管理
+
 #### 一、统一图层管理架构（P0/P1）
 - **P0-1 引擎状态贯通**：HomeView → SidePanel → TOCPanel 新增 active-engine prop 链（'ol' | 'cesium'），TOC 首次感知当前引擎。
 - **P0-2 zoom 按引擎分发**：zoomViaEngine 支持优先引擎参数——3D 模式下在线服务定位走 cesiumRemoteAdapter.flyTo，不再误飞 v-show 隐藏的 OL 地图；失败自动回退另一引擎。
@@ -31,10 +62,10 @@
 - **模块化架构**：common/utils/viewScale/ 八模块——constants（常量 SSOT）/ precision / webMercator / openlayersScale / cesiumScale / conversion / compat / browserAdapter + index 桶式入口；旧 viewScaleConverter.js 降级为兼容再导出 shim。
 - **解析模型**：nadir 精确式 G=2h·tan(fovY/2)/vh；任意 pitch 斜距近似及逆变换；正俯视球面弦长闭式解 measureNadirSphereChord + 一次比例迭代将平面/球面系统差压至 ULP 级。
 - **射线测量（Precision）**：pickRay→globe.pick 相邻像素距离采样（中心+四邻候选回退），Terrain 自动生效；solveCameraHeightBinary 二分求解供 Terrain 场景数值收敛；模式切换结束做一次比例校正消除曲率系统差。
-- **HomeView 接入**：buildCesiumQueryPatchFromOl → convertOlViewToCesium（earthModel:'sphere'）；syncOlFromCesiumPayload → convertCesiumViewToOl（注入射线实测优先）；URL z 序列化三处统一 toFixed(6) 字符串级往返恒等；负零归一化杜绝 '-0.00'。
+- **HomeView 接入**：buildCesiumQueryPatchFromOl → convertOlViewToCesium（earthModel:'sphere'）；syncOlFromCesiumPayload → convertCesiumViewToOl（注入射线实测优先）；URL z 序列化三处统一保留两位小数（米级高度精度充裕，URL 简洁；中间换算全程全精度，仅序列化端量化）；负零归一化杜绝 '-0.00'。
 - **启动白屏修复**：constants.js 补齐 MIN_CESIUM_HEIGHT/MAX_CESIUM_HEIGHT/MIN_OL_ZOOM/MAX_OL_ZOOM 兼容导出，修复 ESM 具名导出缺失导致的 main.js SyntaxError。
 - **OL→Cesium 极近视角修复**：切引擎时换算失败不再残留 OL 缩放级别 z——useMapViewUrlState 无条件写入默认相机高度 + buildCesiumQueryPatchFromOl 失败兜底米制补丁。
-- **验收**：z=4 往返 400 轮字符串级恒等（max|Δzoom|=0）；小数 zoom（5.32/8.716/12.00453）×20 轮稳定；详见[维护日志](../LLM_record/26-08/26-08-26/2026-08-26-ol-cesium-z4-roundtrip-acceptance.md)。
+- **验收**：z=4 往返 400 轮 max|Δzoom|=0（6dp 序列化下字符串级恒等；后按用户裁决收敛为 2dp 序列化，量化误差 ≤ 半米级高度 / 0.005 级 zoom，视觉无感）；小数 zoom（5.32/8.716/12.00453）×20 轮稳定；详见[维护日志](../LLM_record/26-08/26-08-26/2026-08-26-ol-cesium-z4-roundtrip-acceptance.md)。
 
 #### 四、整合会话 Code Review 修复（本批次）
 - **P1 射线实测双重解包**：HomeView.syncOlFromCesiumPayload 对 cesiumContainerRef.measureGroundResolution()（已返回 number）再取 `.groundResolution` 恒为 undefined → 3D→OL Precision 链路完全失效，静默退化为解析模型。已去除多余解包。

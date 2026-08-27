@@ -1396,10 +1396,13 @@ export function useCesiumLayers({
             }
             message.success(`已加载自定义 Ion 影像 (Asset ${assetId})`);
             // 注册到统一数据源列表（获得显隐控制等 UI）
+            // type 必须显式声明 'imagery'：句柄是 ImageryLayer，缺省会按 '3dtiles'
+            // 建档，导致 TOC 移除时走 primitives.remove 静默 no-op（V3.5.32 不同步根因）
             if (dataImport?.registerExternalDataSource) {
                 dataImport.registerExternalDataSource({
                     name: `Ion 影像 Asset ${assetId}`,
                     entity: customIonImageryLayer,
+                    type: 'imagery',
                 });
             }
             return result;
@@ -1451,10 +1454,14 @@ export function useCesiumLayers({
             }
             message.success(`已加载自定义 Ion 地形 (Asset ${assetId})`);
             // 注册到统一数据源列表（获得显隐控制等 UI）
+            // type 必须显式声明 'terrain'：句柄是 TerrainProvider（非容器型对象），
+            // 缺省建档会被按 '3dtiles' 走 primitives.remove 静默 no-op；删除时由
+            // detachEntityFromScene 复位为椭球地形
             if (dataImport?.registerExternalDataSource) {
                 dataImport.registerExternalDataSource({
                     name: `Ion 地形 Asset ${assetId}`,
                     entity: customIonTerrainProvider,
+                    type: 'terrain',
                 });
             }
             return result;

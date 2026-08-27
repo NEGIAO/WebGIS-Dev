@@ -81,6 +81,10 @@
 | `Docs/Guide/frontend-structure.md` | 移除 canonicalScale.js 树节点 |
 | `Docs/LLM_record/26-08/2026-08-26/2026-08-26-v3531-staged-consolidation-review.md` | 本日志 |
 
+## 零散修补（同日追加）
+
+- **URL z 参数序列化恢复两位小数**（用户会话内指令）：HomeView / useMapState / useCesiumUrlTracking 三处 formatZParam 由 toFixed(6) 收敛回 toFixed(2)（useCesiumUrlTracking 函数体本为 2dp，仅注释失真已修正）。中间换算链保持全精度，仅序列化端量化；量化误差 ≤ 0.005 米高度 / 0.005 级 zoom，视觉无感。CHANGELOG 与 README 演进表中「6dp 字符串级往返恒等」表述同步修正。Node 实测 zoom 4/5.32/12 → z="5635542.35"/"2257233.38"/"22013.86"。
+
 ## 遗留与风险
 
 - `frontend/.tmp-test/*.mjs` 四个测试脚手架已随暂存进入索引，未被 .gitignore 覆盖；是否随本提交入库请用户裁决（不入库则 `git restore --staged frontend/.tmp-test` 后提交）。

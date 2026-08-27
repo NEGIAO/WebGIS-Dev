@@ -7,7 +7,7 @@
  */
 
 import { ref, toRaw } from 'vue';
-import { getExtension, flyToEntity, revokeBlobUrl } from './loaders/utils.js';
+import { getExtension, flyToEntity, revokeBlobUrl, detachEntityFromScene } from './loaders/utils.js';
 import { loadGeoJSON } from './loaders/geojsonLoader.js';
 import { loadKML, loadKMZ } from './loaders/kmlLoader.js';
 import { loadSHP } from './loaders/shpLoader.js';
@@ -459,23 +459,32 @@ export function useCesiumDataImport({ getViewer, getCesium, message, heightSampl
             const entity = toRaw(record.entity);
             const type = record.type;
 
-            if (type === '3dtiles') {
-                viewer.scene.primitives.remove(entity);
-            } else if (type === 'gltf') {
-                // Entity 模型：从 viewer.entities 移除（兼容历史 primitive 记录）
-                if (entity?.model) {
-                    viewer.entities.remove(entity);
-                } else {
+            // ── 对象级宿主探测优先（V3.5.32 不同步修复）──
+            // 以句柄的真实容器挂载关系分派卸载，消除注册方 type 错配
+            // （如影像/地形被记成 '3dtiles'）造成的 primitives.remove 静默 no-op。
+            // 未命中任何容器时才回退到按 type 的兼容分支（100% 向后兼容）。
+            const detached = detachEntityFromScene({ viewer, Cesium, entity, type });
+
+            if (!detached) {
+                if (type === '3dtiles') {
                     viewer.scene.primitives.remove(entity);
-                }
-            } else if (type === 'tif') {
-                if (entity instanceof Cesium.ImageryLayer) {
-                    viewer.imageryLayers.remove(entity);
+                } else if (type === 'gltf') {
+                    // Entity 模型：从 viewer.entities 移除（兼容历史 primitive 记录）
+                    if (entity?.model) {
+                        viewer.entities.remove(entity);
+                    } else {
+                        viewer.scene.primitives.remove(entity);
+                    }
+                } else if (type === 'tif') {
+                    if (entity instanceof Cesium.ImageryLayer) {
+                        viewer.imageryLayers.remove(entity);
+                    } else {
+                        viewer.scene.primitives.remove(entity);
+                    }
                 } else {
-                    viewer.scene.primitives.remove(entity);
+                    viewer.dataSources.remove(entity, true);
                 }
-            } else {
-                viewer.dataSources.remove(entity, true);
+                console.warn('[CesiumDataImport] 数据源句柄未命中场景宿主容器，已回退 type 分支处理', { id, type });
             }
         } catch (e) {
             console.warn('[CesiumDataImport] 移除数据源失败:', e);
@@ -510,24 +519,31 @@ export function useCesiumDataImport({ getViewer, getCesium, message, heightSampl
                 const entity = toRaw(record.entity);
                 const type = record.type;
 
-                if (type === '3dtiles') {
-                    viewer.scene.primitives.remove(entity);
-                } else if (type === 'gltf') {
-                    // Entity 模型：从 viewer.entities 移除（兼容历史 primitive 记录），
-                    // 与 removeDataSource 同构——primitives.remove 对 Entity 是静默 no-op
-                    if (entity?.model) {
-                        viewer.entities.remove(entity);
-                    } else {
+                // ── 对象级宿主探测优先（与 removeDataSource 同构）：──
+                // 防注册方 type 错配时的 primitives.remove(ImageryLayer/TerrainProvider)
+                // 静默 no-op 造成清空后场景残留
+                const detached = detachEntityFromScene({ viewer, Cesium, entity, type });
+
+                if (!detached) {
+                    if (type === '3dtiles') {
                         viewer.scene.primitives.remove(entity);
-                    }
-                } else if (type === 'tif') {
-                    if (Cesium && entity instanceof Cesium.ImageryLayer) {
-                        viewer.imageryLayers.remove(entity);
+                    } else if (type === 'gltf') {
+                        // Entity 模型：从 viewer.entities 移除（兼容历史 primitive 记录），
+                        // 与 removeDataSource 同构——primitives.remove 对 Entity 是静默 no-op
+                        if (entity?.model) {
+                            viewer.entities.remove(entity);
+                        } else {
+                            viewer.scene.primitives.remove(entity);
+                        }
+                    } else if (type === 'tif') {
+                        if (Cesium && entity instanceof Cesium.ImageryLayer) {
+                            viewer.imageryLayers.remove(entity);
+                        } else {
+                            viewer.scene.primitives.remove(entity);
+                        }
                     } else {
-                        viewer.scene.primitives.remove(entity);
+                        viewer.dataSources.remove(entity, true);
                     }
-                } else {
-                    viewer.dataSources.remove(entity, true);
                 }
             } catch (e) {
                 console.warn('[CesiumDataImport] 清除数据源失败:', e);

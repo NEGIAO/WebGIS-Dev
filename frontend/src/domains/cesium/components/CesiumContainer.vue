@@ -170,6 +170,8 @@ import { useCesiumToolModules } from '../composables/toolModules/useCesiumToolMo
 import { useCesiumLayersStore } from '@cesium-domain/stores/cesiumLayers';
 import { registerEngineHandlers, unregisterEngineHandlers } from '@common/layer-tree/actions/unifiedActionRouter';
 import { getCesiumGroundResolution } from '@common/utils/viewScale/browserAdapter';
+import { createCesiumDrawMeasureFeature } from '../composables/draw/useCesiumDrawMeasure';
+import { createCesiumRouteFeature } from '../composables/draw/useCesiumRouteRendering';
 import { readCachedPreferredBasemap } from '@common/user/stores/useUserPreferencesStore';
 import { setRecordVisible, setRecordOpacity } from '../composables/dataImport/dataSourceDisplay';
 import { setupCloudIntegration } from '@cesium-domain/modules/cloud';
@@ -406,6 +408,21 @@ watch(
     { immediate: true, deep: false },
 );
 
+// ════════════════════════════════════════════
+// 绘制/测量管理器 + 公交/驾车路线渲染器（引擎感知迁移 P0/P2）
+// 方案：Docs/TODO/engine-aware-map-operations-migration-plan.md
+// ════════════════════════════════════════════
+const drawMeasureFeature = createCesiumDrawMeasureFeature({
+    getCesium,
+    getViewer,
+    cesiumLayersStore,
+});
+const routeFeature = createCesiumRouteFeature({
+    getCesium,
+    getViewer,
+    cesiumLayersStore,
+});
+
 // 注册场景操作 adapter（store action → 句柄）
     // 惰性引用：ops 处理器在后方解构，adapter 方法调用时已就绪
     let _rsvcSetHeight = null;
@@ -415,6 +432,15 @@ watch(
 
     cesiumLayersStore.registerAdapter({
     setVisible(id, visible) {
+        // 绘制 / 路线句柄优先分流（引擎感知迁移：TOC 显隐直达管理器）
+        if (drawMeasureFeature.isManaged(id)) {
+            drawMeasureFeature.setVisible(id, visible);
+            return;
+        }
+        if (routeFeature.isManaged(id)) {
+            routeFeature.setVisible(id, visible);
+            return;
+        }
         const record = findImportRecord(id);
         if (!record) {
             console.warn('[CesiumContainer] setVisible 找不到句柄记录', { id, visible });
@@ -424,6 +450,10 @@ watch(
         getViewer()?.scene?.requestRender?.();
     },
     setOpacity(id, opacity) {
+        if (drawMeasureFeature.isManaged(id)) {
+            drawMeasureFeature.setOpacity(id, opacity);
+            return;
+        }
         const record = findImportRecord(id);
         if (!record) {
             console.warn('[CesiumContainer] setOpacity 找不到句柄记录', { id, opacity });
@@ -441,9 +471,26 @@ watch(
         getViewer()?.scene?.requestRender?.();
     },
     flyTo(id) {
+        if (drawMeasureFeature.isManaged(id)) {
+            drawMeasureFeature.flyTo(id);
+            return;
+        }
+        if (routeFeature.isManaged(id)) {
+            routeFeature.flyTo(id);
+            return;
+        }
         dataImport.flyToDataSource(id);
     },
     remove(id) {
+        // 绘制 / 路线句柄优先分流（store 已同步删档，无需 loadedDataSources 回声）
+        if (drawMeasureFeature.isManaged(id)) {
+            drawMeasureFeature.removeHandle(id);
+            return;
+        }
+        if (routeFeature.isManaged(id)) {
+            routeFeature.removeHandle(id);
+            return;
+        }
         // 模块托管数据源（面状航线 / 路线漫游）：先让对应控制器复位内部状态，
         // 避免控制器持有已销毁 DataSource 引用导致后续写入失效容器
         if (id === PLANAR_SOURCE_ID) {
@@ -946,6 +993,34 @@ defineExpose({
     toggleReverseGeocodePick,
     zoomToRemoteService,
     importUserData,
+    /** ── 引擎感知迁移 P0/P2：绘制/测量 + 路线能力接口（HomeView 按引擎路由） ── */
+    /** 交互激活：Point/LineString/Polygon/MeasureDistance/MeasureArea/Clear/UndoLastDrawing；不支持类型返回 false */
+    activateCesiumInteraction: (type) => drawMeasureFeature.activateInteraction(type),
+    /** 更新后续绘制默认样式（对齐 OL「影响后续绘制」语义） */
+    updateCesiumDrawingStyle: (patch) => drawMeasureFeature.updateStyle(patch),
+    /** 公交起终点选点（Promise<{lng,lat}|null>，右击取消） */
+    startRoutePointPick: (type) => routeFeature.startPointPick(type),
+    /** 渲染公交方案（载荷为 RoutePlannerPanel 解析后的 route 对象） */
+    drawCesiumBusRoute: (route) => routeFeature.drawBusRoute(route),
+    /** 渲染驾车方案（载荷 { routeLatLonStr, stepLinePoints[] }） */
+    drawCesiumDriveRoute: (payload) => routeFeature.drawDriveRoute(payload),
+    zoomToCesiumRouteStep: (mode, stepIndex) => routeFeature.zoomToRouteStep(mode, stepIndex),
+    previewCesiumRouteStep: (mode, stepIndex) => routeFeature.previewRouteStep(mode, stepIndex),
+    clearCesiumStepPreview: (mode) => {
+        if (mode === 'bus' || mode === 'drive') routeFeature.clearPreview();
+        return true;
+    },
+    /** 视口跳转（常用地点 P1）：lng/lat 度 + 相机海拔米 */
+    jumpTo(lng, lat, heightMeters) {
+        const v = typeof viewer === 'object' ? viewer : null;
+        const C = getCesium?.();
+        if (!v?.camera || !C || !Number.isFinite(Number(lng)) || !Number.isFinite(Number(lat))) return false;
+        v.camera.flyTo({
+            destination: C.Cartesian3.fromDegrees(Number(lng), Number(lat), Math.max(1, Number(heightMeters) || 1)),
+            duration: 1.2,
+        });
+        return true;
+    },
     /** 射线实测当前视角地面分辨率（米/像素）；Precision 校正与 §44 误差报告数据源 */
     measureGroundResolution: () =>
         getCesiumGroundResolution(viewer)?.groundResolution ?? null,
@@ -1443,6 +1518,10 @@ let cloudCleanup = null;
  * 设置模块级 viewer 变量，供所有 composable 通过 getViewer() 访问
  */
 function initViewer() {
+    // viewer 重建（重试链路）：复位绘制/路线句柄表，防止残留旧 viewer 的死实体引用
+    try { drawMeasureFeature.reset(); } catch { /* ignore */ }
+    try { routeFeature.reset(); } catch { /* ignore */ }
+
     const mapCtor = typeof Cesium.Map === 'function' ? Cesium.Map : Cesium.Viewer;
     const imageryProviderViewModels = createImageryProviderViewModels();
     const terrainProviderViewModels = createTerrainProviderViewModels();
@@ -1569,6 +1648,10 @@ onUnmounted(() => {
     _cancelInitialSceneWait = null;
     cesiumReady.value = false;
     unregisterEngineHandlers('cesium');
+
+    // 绘制/路线管理器复位（取消进行中交互、清空句柄表；实体随下方 viewer.destroy 释放）
+    try { drawMeasureFeature.reset(); } catch { /* ignore */ }
+    try { routeFeature.reset(); } catch { /* ignore */ }
 
     // 统一图层管理：注销 adapter 并清档（TOC「三维数据」分组随之消失）
     try { cesiumLayersStore.unregisterAdapter(); } catch { /* ignore */ }

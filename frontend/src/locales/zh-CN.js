@@ -1156,6 +1156,8 @@ export default {
             tileset: '3D Tiles (tileset.json)',
         },
         reset: '重置',
+        interaction3dUnsupported: '三维模式暂不支持该交互：{type}',
+        draw3dNoSelectionDelete: '三维绘制暂不支持框选删除：请使用「撤销上个」或在图层目录中右键移除',
         status: {
             enabled: '已启用',
             disabled: '未启用',

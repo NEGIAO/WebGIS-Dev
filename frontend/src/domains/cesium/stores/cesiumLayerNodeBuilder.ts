@@ -26,6 +26,10 @@ const TYPE_LABELS: Record<string, string> = {
     tif: 'GeoTIFF',
     gltf: '模型',
     '3dtiles': '3D Tiles',
+    imagery: '影像',
+    terrain: '地形',
+    draw: '绘制',
+    route: '路线',
 };
 
 /** 单条记录 → TOC layer 节点（形状对齐 toLayerNode 输出） */
@@ -48,7 +52,12 @@ function toCesiumLayerNode(record: CesiumLayerRecord): any {
         labelVisible: false,
         showCheckbox: true,
         engine: 'cesium',
-        sourceType: 'cesium-data',
+        sourceType:
+            record.category === 'draw'
+                ? 'cesium-draw'
+                : record.category === 'route'
+                  ? 'cesium-route'
+                  : 'cesium-data',
         layerType: record.type,
         format: TYPE_LABELS[record.type] || record.type,
         opacity: Number.isFinite(record.opacity) ? record.opacity : 1,
