@@ -6,6 +6,22 @@
 
 ## 版本记录
 
+### V3.5.34 (2026-08-28) — 大气渲染修复与增强 + HENU 矢量瓦片全链修复 + Chat 配置面板改版
+
+> 本版本为暂存区多批次不规范提交（原临时编号 V3.5.34~35）经整合 Code Review 后归并的**单一版本**。审查日志：`Docs/LLM_record/26-08/2026-08-28/2026-08-28-code-review-staged-v3534.md`；分项分析：`2026-08-28-fix-skyatmosphere-lightintensity.md`、`2026-08-28-fix-henu-vectortile-layer-type-mismatch.md`、`2026-08-28-feat-vectortile-server-style.md`。
+
+> **1、修复天空大气光强参数失效**：Cesium 1.121（2024-09 大气系统统一重构）将 `SkyAtmosphere.lightIntensity` 更名为 `atmosphereLightIntensity`（引擎默认值 50）。项目使用 Cesium 1.132，`CesiumContainer.vue` 的 `applyBaseAtmosphereParams` 仍写旧属性名，且赋值前有 `if ('lightIntensity' in sky)` 防御检查——旧属性在实例上不存在，赋值被**静默跳过**（无报错），实际光强一直停留在引擎默认 50。修复：优先写入 `atmosphereLightIntensity` 并保留旧属性名 `else if` 兼容回退（支持 Cesium < 1.121）；`atmosphereModule.js` 滑杆上限 30 → 100（引擎默认 50 高于原上限）。修复后参数真实生效，配置默认值 16 低于引擎默认 50，光晕比失效期间略暗属预期；调到 >50 可获得更亮光晕。
+
+> **2、修复 HENU 边界矢量瓦片在 OL 中渲染空白**：图层类型与 source 类型错配——启动引导期不可见图层以 `createRasterBasemapLayer(null)` 创建为 **TileLayer** 占位；切换挂载时 `useMapState.js` 的 `ensureLayerSourceById` 用 `cfg.createSource()` 产出 **VectorTileSource** 后直接 `layer.setSource()`——OL 的 TileLayer 渲染器只能消费 image 瓦片，VectorTileSource 的要素瓦片无 image 可画，导致**有网络请求、无画面**（网络/数据层因素已实测排除：瓦片 200、合法 MVT、无 gzip、CORS 正常、512px 网格吻合）。同型隐患存在于 `refreshAllBasemapSourcesForHD()`，且其"本系统暂无矢量瓦片、一律跳过 VectorTile"分支属错误假设。修复：① `basemapLayerFactory.js` 新增共享助手 `applyBasemapSourceToLayer()`——类型一致轻量 `setSource`，不一致按旧图层 visible/zIndex/opacity 经 `createBasemapLayerFromSource` 重建图层实例，调用方负责 `map.removeLayer/addLayer` 替换并同步 instanceMap；② `ensureLayerSourceById` 接入助手；③ `refreshAllBasemapSourcesForHD` 移除矢量跳过分支、接入助手并新增 `mapInstanceRef` 注入（MapContainer 同步传参）。
+
+> **3、新增矢量瓦片服务端样式适配器（零依赖）**：矢量瓦片可加载后仍用通用兜底样式，未应用 ArcGIS 下发的 Mapbox 样式。新增 `vectorTileStyleAdapter.js`（项目无 ol-mapbox-style，不新增依赖）：从瓦片 URL 模板推导 `resources/styles/root.json`，编译为 OL StyleFunction（line/fill/circle 基础 paint + 最小 filter 表达式；symbol/text 与 paint 表达式明确降级），`createVectorTileBasemapLayer` 创建后异步拉取应用——成功前/失败时保持兜底样式渐进增强，未命中要素回退兜底保证不丢。HENU 边界渲染为"黑主线+紫晕线+浅色宽晕"，未定国界为虚线。**整合 Review 补强**：filter `==/!=` 改宽松相等（MVT 属性常以 string 编码，如 `_symbol: "0"` vs 数值 0，对齐 Mapbox legacy 语义）；`line-dasharray` 仅接受全有限数值数组常量，表达式形态安全忽略防 NaN 污染 Stroke。
+
+> **4、新增地面大气相机高度渐隐 + 大气光强链路收敛**：地面大气按相机高度 smoothstep 渐隐（低于下限全关：市/城乡/建筑尺度；高于上限全开：省/国家级），`applyAtmosphereParams` 与渐隐共用 `computeGroundAtmosphereBaseIntensity()` 同一基准（基础滑块值 + Tellux 月光增益）。**整合 Review 修复两处**：① preRender 帧回调节流条件 `fadeStep < 0.002 && factor !== 0` 在低空视角（factor 恒 0）永不成立，导致每帧写属性 + `requestRender()`，把 requestRenderMode 按需渲染打回连续渲染——改为"系数未显著变化纯读返回，仅从正系数首次落到 0 强制落盘"，恢复空闲零开销；② 光强硬钳位 `Math.min(base + moonBoost, 12.0)` 在滑杆默认值提到 16（max 25）后把 12 以上行程静默吞掉——钳位下限改为随基准值抬升 `Math.max(base, 12.0)`，月光增益仍受软顶控制。另：`initViewer` 设 `useBrowserRecommendedResolution: false` 按物理像素渲染（Windows 125%/150% 缩放下瓦片不再被拉伸发虚；HiDPI 交互期填充成本上升，已有 requestRenderMode 按需渲染兜底）；`cesiumAtmosphere.js` 写实天空大气光强 12→20；大气面板补 hue/saturation/brightness shift 与天空大气光强/亮度/饱和度/瑞利标高滑杆（i18n 双语）。
+
+> **5、Chat 配置面板改版**：四卡片（接入凭据/模型/生成参数/系统提示词）支持折叠（默认仅展开"模型"），`ChatPanelContent` 顶部滚动区封顶 max-height 55% 防止展开后挤占消息区；模型下拉改为独立过滤词 `modelQuery`（不再拿常驻的 draft.model 当过滤词），模型选择改为"仅改草稿、点保存设置后生效"语义（`defaultAIModel` 为默认 AI 模式实际请求模型源；v2 存储 key 使历史脏数据一次性失效）；`resetProviderOverrides` 修复默认 AI 模式误清 `directConfig`（存管理员 base_url/model）与后端代理模式重置形同未做（三处"上次选择"来源全清）。
+
+> **涉及文件**：`frontend/src/domains/cesium/components/CesiumContainer.vue`、`frontend/src/domains/cesium/composables/scene/cesiumAtmosphere.js`、`frontend/src/domains/cesium/composables/toolModules/atmosphereModule.js`、`frontend/src/domains/cesium/composables/toolModules/useCesiumToolModules.js`、`frontend/src/domains/ol/basemap/composables/basemapLayerFactory.js`、`frontend/src/domains/ol/basemap/composables/vectorTileStyleAdapter.js`（新增）、`frontend/src/domains/ol/basemap/composables/useBasemapStateManagement.js`、`frontend/src/domains/ol/composables/useMapState.js`、`frontend/src/domains/ol/components/MapContainer.vue`、`frontend/src/domains/common/chat/components/ChatConfigPanel.vue`、`frontend/src/domains/common/chat/components/ChatPanelContent.vue`、`frontend/src/domains/common/chat/composables/useChatAgentConfig.js`、`frontend/src/locales/zh-CN.js`、`frontend/src/locales/en-US.js`。
+
 ### V3.5.33 (2026-08-27) — 全项目审查离散缺陷集中修复
 
 > 本版本为 2026-08-27 四维全项目 Code Review（后端安全 / 前端质量 / 性能泄漏 / V3.5.30~32 回归风险）的离散缺陷集中修复，多会话产出归并为单一版本。完整分析：`Docs/LLM_record/26-08/2026-08-27/2026-08-27-full-project-code-review-and-fixes.md`。结构性重构（大文件拆分、API /api/v1 前缀迁移、TS strict、连接池）单独评估不在此列。

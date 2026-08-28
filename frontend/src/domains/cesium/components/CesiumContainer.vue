@@ -548,6 +548,12 @@ const cameraAttitude = ref({ heading: 0, pitch: 0, roll: 0, height: 0 });
 let cleanupAttitudeListener = null;
 
 /**
+ * 地面大气相机高度渐隐（scene.preRender 每帧驱动）：
+ * 低于渐隐下限全关（市/城乡/建筑尺度），高于上限全开（省/国家级视角），中间按 smoothstep 过渡
+ */
+let cleanupGroundAtmosphereFade = null;
+
+/**
  * 坐标显示：漫游模式下显示人物三维坐标+实时速度，否则显示鼠标位置
  * 移动端固定拆为「位置 / 姿态 / 相机海拔」三行，避免窄屏自动折叠成两行。
  */
@@ -1540,6 +1546,11 @@ function initViewer() {
         terrainProviderViewModels,
         selectedTerrainProviderViewModel: getSelectedTerrainProviderViewModel(terrainProviderViewModels),
         shouldAnimate: true,
+        // 按 devicePixelRatio（物理像素）渲染。Cesium ≥1.62 默认 true：画布只按 CSS 像素渲染，
+        // Windows 125%/150% 显示缩放下瓦片被浏览器整体拉伸 → 影像发虚（同屏 OL 按物理像素渲染，
+        // 对比明显更清晰）。代价是 HiDPI 下填充像素增多，已有 requestRenderMode 按需渲染兜底。
+        //改善cesium瓦片渲染质量
+        useBrowserRecommendedResolution: false,
     });
     // FPS 面板保留常开：按需渲染（requestRenderMode）下低 FPS = 空闲降载省电（预期行为，非卡顿），
     // 交互瞬间回升——恰是验证按需渲染生效的直接仪表；如嫌干扰可改 false，不影响功能
@@ -1594,6 +1605,10 @@ function initViewer() {
             height: carto.height,
         };
     });
+
+    // 地面大气相机高度渐隐：每帧按相机高度插值（市/建筑尺度自动关闭，省/国家级自动开启）
+    cleanupGroundAtmosphereFade = viewer.scene.preRender.addEventListener(updateGroundAtmosphereFade);
+    if (import.meta.env.DEV) console.warn('[大气渐隐] preRender 监听已注册');
 
     // 导航控件（罗盘 / 缩放 / 比例尺）— 动态加载，不阻塞主流程
     initNavigation();
@@ -1689,6 +1704,12 @@ onUnmounted(() => {
         cleanupAttitudeListener = null;
     }
 
+    // 清理地面大气高度渐隐
+    if (cleanupGroundAtmosphereFade) {
+        cleanupGroundAtmosphereFade();
+        cleanupGroundAtmosphereFade = null;
+    }
+
     cleanupCreditHider();
     cleanupNavigation();
     dataImport.clearAllDataSources();
@@ -1713,6 +1734,66 @@ watch(cesiumReady, (ready) => {
         applyAtmosphereParams(atmosphereParams.value);
     }
 });
+
+/**
+ * 地面大气有效光强：基础滑块值 + Tellux 月光增益，钳位防过曝。
+ * applyAtmosphereParams（直控）与高度渐隐（逐帧）共用，保证两处写入同一基准。
+ */
+function computeGroundAtmosphereBaseIntensity() {
+    const p = baseAtmosphereParams.value;
+    const tp = atmosphereParams.value;
+    const base = p.atmosphereLightIntensity ?? 5.5;
+    const MOON_BOOST_MAX = 4.0;
+    const moonBoost = tp.moonLightEnabled !== false ? (tp.moonLightIntensity ?? 0.18) * MOON_BOOST_MAX : 0;
+    // 钳位下限不得低于用户基准值：滑杆量程 0~25（默认 16），若硬钳 12 会把滑杆上半段静默吞掉；
+    // 月光增益叠加时仍受软顶控制防过曝
+    return Math.min(base + moonBoost, Math.max(base, 12.0));
+}
+
+// 渐隐系数缓存：系数未显著变化时不重复写属性/触发渲染
+let lastGroundAtmosphereFadeFactor = -1;
+
+/**
+ * 相机高度驱动的地面大气渐隐（scene.preRender 每帧回调）。
+ * showGroundAtmosphere 与 AutoFade 均开启时接管 globe.atmosphereLightIntensity / showGroundAtmosphere；
+ * 散射颜色随光强线性缩放（见 computeAtmosphereColor.glsl），渐隐到 0 即无痕消失，不会出现暗带。
+ */
+function updateGroundAtmosphereFade() {
+    const globe = viewer?.scene?.globe;
+    if (!globe) return;
+    const p = baseAtmosphereParams.value;
+    const fadeActive = p.groundAtmosphereAutoFade === true && p.showGroundAtmosphere === true;
+    if (!fadeActive) {
+        // 从「渐隐接管」切回直控后恢复一次即可，避免每帧重复写
+        if (lastGroundAtmosphereFadeFactor >= 0) {
+            lastGroundAtmosphereFadeFactor = -1;
+            if ('atmosphereLightIntensity' in globe) globe.atmosphereLightIntensity = computeGroundAtmosphereBaseIntensity();
+            globe.showGroundAtmosphere = p.showGroundAtmosphere === true;
+            viewer.scene.requestRender?.();
+        }
+        return;
+    }
+    const low = p.groundAtmosphereFadeLowHeight ?? 100000;
+    const high = p.groundAtmosphereFadeHighHeight ?? 500000;
+    const height = viewer.camera.positionCartographic.height;
+    const t = Cesium.Math.clamp((height - low) / Math.max(high - low, 1), 0, 1);
+    // smoothstep 缓动：两端平滑、中段近似线性，视觉过渡更自然
+    const factor = t * t * (3 - 2 * t);
+    const fadeStep = Math.abs(factor - lastGroundAtmosphereFadeFactor);
+    // 系数未显著变化时不写属性、不触发渲染（requestRenderMode 下避免每帧空转连续重绘）；
+    // 仅「从正系数首次落到 0」这一次强制落盘，确保最后一帧残留清零，其余 factor=0 帧直接返回
+    if (fadeStep < 0.002 && !(factor === 0 && lastGroundAtmosphereFadeFactor > 0)) return;
+    if (import.meta.env.DEV && fadeStep >= 0.1) {
+        console.warn(`[大气渐隐] 高度=${(height / 1000).toFixed(0)}km 系数=${factor.toFixed(2)} 地面大气=${factor > 0 ? '开' : '关'}`);
+    }
+    lastGroundAtmosphereFadeFactor = factor;
+    if ('atmosphereLightIntensity' in globe) {
+        globe.atmosphereLightIntensity = computeGroundAtmosphereBaseIntensity() * factor;
+    }
+    // 完全渐隐时直接关闭渲染：近地面无残留，也省掉地面大气的着色开销
+    globe.showGroundAtmosphere = factor > 0;
+    viewer.scene.requestRender?.();
+}
 
 /**
  * 应用基础大气参数到 Cesium 场景
@@ -1744,9 +1825,25 @@ function applyBaseAtmosphereParams(params) {
         if ('minimumBrightness' in scene.fog) scene.fog.minimumBrightness = params.fogMinimumBrightness;
     }
 
+    // 天空大气（地球外环光晕）：光强按比例放大延伸渐隐尾部（厚度且保渐变）；
+    // 亮度偏移过大会压平渐变并在壳边界形成硬边；Rayleigh 标高控制渐变衰减距离
+    const sky = scene.skyAtmosphere;
+    if (sky) {
+        // Cesium 1.121+ 属性更名：SkyAtmosphere.lightIntensity → atmosphereLightIntensity（引擎默认 50）
+        // 旧属性名在 1.132 中不存在，会被下方 `'lightIntensity' in sky` 防御检查静默跳过，导致参数"不生效"
+        if ('atmosphereLightIntensity' in sky) sky.atmosphereLightIntensity = params.skyAtmosphereLightIntensity;
+        else if ('lightIntensity' in sky) sky.lightIntensity = params.skyAtmosphereLightIntensity; // 兼容 Cesium < 1.121 旧属性名
+        if ('brightnessShift' in sky) sky.brightnessShift = params.skyAtmosphereBrightnessShift;
+        if ('saturationShift' in sky) sky.saturationShift = params.skyAtmosphereSaturationShift;
+        if ('atmosphereRayleighScaleHeight' in sky) sky.atmosphereRayleighScaleHeight = params.skyAtmosphereRayleighScaleHeight;
+    }
+
     if (scene.sun) scene.sun.show = params.sunShow;
     if (scene.moon) scene.moon.show = params.moonShow;
     if (scene.skyBox) scene.skyBox.show = params.skyBoxShow;
+
+    // 渐隐激活时本函数会覆盖渐隐的写入，强制下一帧无条件重写恢复
+    lastGroundAtmosphereFadeFactor = -1;
 
     scene.requestRender?.();
 }
@@ -1765,21 +1862,14 @@ watch(
  * 控制月光强度贡献（日夜/月光/星空的 enableLighting、moon.show、skyBox.show
  * 由 applyBaseAtmosphereParams 统一管理，此处不再重复写入，避免双写冲突）
  */
-function applyAtmosphereParams(params) {
+function applyAtmosphereParams(_params) {
     if (!viewer || !Cesium) return;
     const scene = viewer.scene;
     const globe = scene.globe;
 
-    // 月光强度贡献：叠加到 atmosphereLightIntensity 基础值之上
+    // 月光强度贡献：叠加到 atmosphereLightIntensity 基础值之上（与高度渐隐共用同一基准计算）
     if (globe && 'atmosphereLightIntensity' in globe) {
-        const baseIntensity = baseAtmosphereParams.value.atmosphereLightIntensity ?? 5.5;
-        // 月光增益系数：slider 0~1 → 实际贡献 0~MOON_BOOST_MAX
-        const MOON_BOOST_MAX = 4.0;
-        const moonBoost = (params.moonLightEnabled !== false)
-            ? (params.moonLightIntensity ?? 0.18) * MOON_BOOST_MAX
-            : 0;
-        // 钳位防止过曝：总强度上限 12.0
-        globe.atmosphereLightIntensity = Math.min(baseIntensity + moonBoost, 12.0);
+        globe.atmosphereLightIntensity = computeGroundAtmosphereBaseIntensity();
     }
 
     scene.requestRender?.();

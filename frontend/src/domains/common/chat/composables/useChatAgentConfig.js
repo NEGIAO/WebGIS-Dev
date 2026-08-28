@@ -23,11 +23,18 @@ import {
     apiAgentSaveModelPreference,
     apiGetDefaultAIConfig,
 } from '@/api/backend';
-import { readCachedPreferredAgentModel } from '@common/user/stores/useUserPreferencesStore';
+import {
+    USER_PREFERENCE_AGENT_MODEL_KEY,
+    readCachedPreferredAgentModel,
+    useUserPreferencesStore,
+} from '@common/user/stores/useUserPreferencesStore';
 
-/** localStorage 键名模板：按路由模式隔离（避免跨模式模型误用） */
-const MODEL_STORAGE_KEY_DEFAULT_AI = 'chat:selectedModel:defaultAI';
-const MODEL_STORAGE_KEY_PERSONAL = 'chat:selectedModel:personal';
+/** localStorage 键名模板：按路由模式隔离（避免跨模式模型误用）。
+ * direct 模式（默认 AI/个人 Key）使用 :v2 后缀——旧 key 曾被"选中即生效"与
+ * "首个模型"兜底在未点击保存的情况下写入，换 key 使这批脏数据一次性失效，
+ * 让所有用户回到管理员配置的模型，直至用户主动保存新的选择。 */
+const MODEL_STORAGE_KEY_DEFAULT_AI = 'chat:selectedModel:defaultAI:v2';
+const MODEL_STORAGE_KEY_PERSONAL = 'chat:selectedModel:personal:v2';
 const MODEL_STORAGE_KEY_PROXY = 'chat:selectedModel:proxy';
 
 /** 根据当前路由模式返回对应的 localStorage key */
@@ -115,6 +122,8 @@ export function createChatAgentConfig({ message, onModeChanged = () => {} }) {
         userConfigDraft: defaultDraft(),
         directConfig: emptyDirectConfig(),
         isDefaultAIMode: false,
+        /** 默认 AI 模式的实际请求模型（用户保存过的选择），空值表示跟随管理员配置 */
+        defaultAIModel: '',
         serviceReady: false,
         modelName: '',
         statusHint: '正在初始化...',
@@ -165,10 +174,6 @@ export function createChatAgentConfig({ message, onModeChanged = () => {} }) {
         // ── 方法 ──
         applyQuota(raw) {
             config.quota = normalizeQuota(raw || {});
-        },
-
-        saveModelPreference(model) {
-            saveModel(model, config.isDefaultAIMode, config.isPersonalMode);
         },
 
         /** 从直连配置同步草稿（个人 Key/默认 AI 模式下打开配置面板时） */
@@ -378,12 +383,16 @@ export function createChatAgentConfig({ message, onModeChanged = () => {} }) {
                         ? `✅ 已加载 ${models.length} 个模型（默认 AI 模式）`
                         : '未从默认 AI 上游返回可用模型，请检查管理员配置的 Base URL / API Key。';
 
-                    // 恢复该模式下用户上次选择的模型（仅当它在上游列表内，避免跨模式误用）
+                    // 恢复该模式下用户已保存的模型选择（仅当它在上游列表内，避免跨模式误用），
+                    // 并同步到草稿回显——defaultAIModel 是该模式的实际请求模型源，面板必须如实显示
                     if (!config.defaultAIModel) {
                         const saved = readSavedModel(true, false);
                         if (saved && models.some((m) => m.id === saved)) {
                             config.defaultAIModel = saved;
                         }
+                    }
+                    if (config.defaultAIModel) {
+                        config.userConfigDraft.model = config.defaultAIModel;
                     }
                 } else if (config.isPersonalMode) {
                     const dc = config.directConfig;
@@ -426,42 +435,42 @@ export function createChatAgentConfig({ message, onModeChanged = () => {} }) {
                 config.configuredModels = models.filter((m) => m?.source !== 'upstream');
                 config.upstreamModels = models.filter((m) => m?.source === 'upstream');
 
-                // 草稿无模型时按 后端配置 → localStorage 上次选择 → 首个可聊模型 的顺序补齐。
-                // 账号偏好模型（preferred_agent_model）仅在后端代理模式使用：
-                // 默认 AI / 个人 Key 模式使用各自按模式隔离的 localStorage，避免跨模式污染。
-                if (!String(config.userConfigDraft.model || '').trim()) {
-                    // 账号偏好模型（用户中心-偏好设置）：仅后端代理模式（非 direct）下锁定优先
-                    const prefModel = config.isDirectMode ? '' : readCachedPreferredAgentModel();
+                // 草稿无模型时按 账号偏好 → 后端配置 → localStorage 上次选择 → 首个可聊模型 补齐。
+                // 仅后端代理模式执行：direct 模式（默认 AI/个人 Key）的请求模型源各有所属
+                // （defaultAIModel / directConfig.model），草稿仅用于回显；若在此用"首个模型"
+                // 兜底并写入 localStorage，下次打开面板会被当作"已保存选择"恢复为实际请求模型——
+                // 即"仅点开设置、未点保存，模型就被悄悄改成列表第一项"的根因。
+                if (!config.isDirectMode && !String(config.userConfigDraft.model || '').trim()) {
+                    // 账号偏好模型（用户中心-偏好设置）
+                    const prefModel = readCachedPreferredAgentModel();
                     if (prefModel && models.some((m) => m.id === prefModel)) {
                         config.userConfigDraft.model = prefModel;
-                        saveModel(prefModel, config.isDefaultAIMode, config.isPersonalMode);
+                        saveModel(prefModel, false, false);
                         config.isLoadingModels = false;
                         return;
                     }
 
-                    const currentModel = config.isDirectMode
-                        ? ''
-                        : String(
-                              (await apiAgentGetChatConfig().catch(() => ({})))?.data?.model || '',
-                          ).trim();
+                    const currentModel = String(
+                        (await apiAgentGetChatConfig().catch(() => ({})))?.data?.model || '',
+                    ).trim();
 
                     if (currentModel) {
                         config.userConfigDraft.model = currentModel;
                     } else {
-                        const saved = readSavedModel(config.isDefaultAIMode, config.isPersonalMode);
+                        const saved = readSavedModel(false, false);
                         if (saved && models.some((m) => m.id === saved)) {
                             config.userConfigDraft.model = saved;
                         } else if (models.length > 0) {
                             const chatModels = models.filter((m) => m?.chat_compatible !== false);
                             if (chatModels.length > 0) {
                                 config.userConfigDraft.model = String(chatModels[0]?.id || '');
-                                if (config.userConfigDraft.model && !config.isDirectMode) {
+                                if (config.userConfigDraft.model) {
                                     apiAgentSaveModelPreference(config.userConfigDraft.model).catch(() => {});
                                 }
                             }
                         }
                         if (config.userConfigDraft.model) {
-                            saveModel(config.userConfigDraft.model, config.isDefaultAIMode, config.isPersonalMode);
+                            saveModel(config.userConfigDraft.model, false, false);
                         }
                     }
                 }
@@ -590,8 +599,37 @@ export function createChatAgentConfig({ message, onModeChanged = () => {} }) {
         async resetProviderOverrides() {
             config.userConfigSaving = true;
             try {
+                // 默认 AI 模式：仅清除用户在该模式保存的模型选择，回到管理员配置的模型。
+                // 必须提前返回：下方 fall-through 会清空 directConfig——而它在默认 AI 模式下
+                // 存的是管理员的 base_url/model，清掉会破坏该通道；后端个人配置亦不可写。
+                if (config.isDefaultAIMode) {
+                    config.defaultAIModel = '';
+                    saveModel('', true, false);
+                    config.syncDraftFromDirectConfig();
+                    await config.reloadAgentConfig(false);
+                    await config.loadAvailableModels();
+                    message.success('已恢复管理员配置的默认模型');
+                    return;
+                }
+
                 config.isPersonalMode = false;
                 config.directConfig = emptyDirectConfig();
+
+                // 后端代理模式：模型有三处「用户上次选择」的来源，全部清空后重载，
+                // 否则 loadAvailableModels/reloadAgentConfig 会把它们兜底回来，重置形同未做：
+                //   1) localStorage 上次选择（proxy key）
+                //   2) 账号偏好模型 preferred_agent_model（后端 + 本机运行时缓存）
+                saveModel('', false, false);
+                try {
+                    await useUserPreferencesStore().savePreferences({ preferred_agent_model: '' });
+                } catch {
+                    // 接口失败也必须清本机缓存，避免 readCachedPreferredAgentModel 复活旧模型
+                    try {
+                        localStorage.removeItem(USER_PREFERENCE_AGENT_MODEL_KEY);
+                    } catch {
+                        /* noop */
+                    }
+                }
 
                 try {
                     await apiAgentUpdateUserConfig({ reset_provider_overrides: true });

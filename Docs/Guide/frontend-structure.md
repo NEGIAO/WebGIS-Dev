@@ -540,7 +540,8 @@ frontend/src/
 │       ├── basemap/
 │       │   ├── basemapSystem.js  # 底图系统入口（barrel export）
 │       │   ├── composables/
-│       │   │   ├── basemapLayerFactory.js  # 底图图层工厂（栅格/矢量瓦片自动识别）
+│       │   │   ├── basemapLayerFactory.js  # 底图图层工厂（栅格/矢量瓦片自动识别 + source 类型安全挂载 applyBasemapSourceToLayer）
+│       │   │   ├── vectorTileStyleAdapter.js  # 矢量瓦片服务端样式适配器（ArcGIS root.json → OL StyleFunction，零依赖轻量实现）
 │       │   │   ├── useBasemapLayerBootstrap.js  # 底图图层初始化引导
 │       │   │   ├── useBasemapSelectionWatcher.js  # 底图选择监听
 │       │   │   ├── useBasemapStateManagement.js  # 底图状态管理

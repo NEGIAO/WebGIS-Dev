@@ -9,7 +9,7 @@
  */
 
 import { abortTileSourceRequests } from '@ol/tile-source';
-import { buildRasterBasemapSource, isVectorTileSource } from './basemapLayerFactory';
+import { buildRasterBasemapSource, applyBasemapSourceToLayer } from './basemapLayerFactory';
 
 /**
  * 创建底图状态管理特性工厂函数
@@ -22,6 +22,7 @@ import { buildRasterBasemapSource, isVectorTileSource } from './basemapLayerFact
  * @param {Function} options.emit - Vue emit 函数
  * @param {Array} options.LAYER_CONFIGS - 图层配置列表
  * @param {Object} options.layerInstances - 图层实例映射表
+ * @param {Ref} [options.mapInstanceRef] - 地图实例 ref（图层类型替换时需要）
  *
  * @returns {Object} 返回底图状态管理功能对象
  */
@@ -33,6 +34,7 @@ export function createBasemapStateManagementFeature({
     emit,
     LAYER_CONFIGS,
     layerInstances,
+    mapInstanceRef = null,
 }) {
     /**
      * [改进] 批量 emit 包装器，减少频繁的事件广播
@@ -116,12 +118,16 @@ export function createBasemapStateManagementFeature({
     }
 
     /**
-     * 高清渲染开关翻转后，重建所有 raster 底图 source。
+     * 高清渲染开关翻转后，重建所有底图 source。
      *
      * 机制：buildRasterBasemapSource 在构造期读取 tileHDRendering 决定是否设置 zDirection（自定义函数，非整数 zoom 一律取上层）；
      * 已建图层的 source 不会自动跟随开关变化，故翻转后需遍历 layerInstances 重建 source。
-     * 旧 source 先 abort 释放 fetch 连接，再 setSource 新 source，避免泄漏/挂起请求。
-     * VectorTile 图层不受高清开关影响（矢量瓦片本身可缩放，无模糊问题），跳过。
+     * 旧 source 先 abort 释放 fetch 连接，再挂新 source，避免泄漏/挂起请求。
+     * 挂载统一走 applyBasemapSourceToLayer 类型安全路径：
+     *   - raster 底图（wms/wmts/xyz，系统绝大多数）挂 TileLayer，轻量 setSource；
+     *   - 真矢量瓦片（系统唯一：HENU 边界 pbf）挂 VectorTileLayer，重建后照常生效
+     *     （OL VectorTileLayer 渲染器读取 source.zDirection，对真矢量同样按 finer-zoom 取瓦）；
+     *   - 若图层类型与 source 类型错配（启动引导期 source=null 占位所致），自动重建图层实例并替换。
      */
     function refreshAllBasemapSourcesForHD() {
         Object.keys(layerInstances).forEach((id) => {
@@ -130,16 +136,18 @@ export function createBasemapStateManagementFeature({
             const cfg = LAYER_CONFIGS.find((item) => item.id === id);
             if (!cfg || typeof cfg.createSource !== 'function') return;
 
-            // 仅 raster 底图需要重建（VectorTile 跳过）
-            const prevSource = layer.getSource();
-            if (prevSource && isVectorTileSource(prevSource)) return;
-
             // 先 abort 旧 source 的所有 fetch，释放 TCP 连接，再挂新 source
+            const prevSource = layer.getSource();
             if (prevSource) abortTileSourceRequests(prevSource);
-            // 走与构造期同一套 zDirection 设置逻辑
+            // 走与构造期同一套 zDirection 设置逻辑 + 类型安全挂载
             const newSource = buildRasterBasemapSource(cfg.createSource());
-            if (newSource) {
-                layer.setSource(newSource);
+            const replacedLayer = applyBasemapSourceToLayer({
+                layer,
+                source: newSource,
+                map: mapInstanceRef?.value ?? null,
+            });
+            if (replacedLayer) {
+                layerInstances[id] = replacedLayer;
             }
         });
     }

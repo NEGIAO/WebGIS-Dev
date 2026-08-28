@@ -4,6 +4,7 @@ import VectorTileSource from 'ol/source/VectorTile';
 import { Circle as CircleStyle, Fill, Stroke, Style } from 'ol/style';
 import { tileHDRendering } from '@ol/layer/composables/useTileHDRendering';
 import { Z_BAND } from '@ol/layer/zIndexBands';
+import { applyVectorTileServerStyleAsync } from './vectorTileStyleAdapter';
 
 // Basemap layer factory helpers for raster vs vector tile sources.
 const VECTOR_TILE_LAYER_KIND = 'vector-tile';
@@ -77,6 +78,11 @@ export function createVectorTileBasemapLayer(source, options = {}) {
     });
 
     layer.set('basemapLayerKind', VECTOR_TILE_LAYER_KIND);
+
+    // 渐进增强：异步拉取 ArcGIS VectorTileServer 服务端样式（resources/styles/root.json）
+    // 并编译为 StyleFunction 应用；成功前/失败时保持上方通用兜底样式渲染，不阻塞不报错
+    applyVectorTileServerStyleAsync(layer, source, resolveVectorTileStyle);
+
     return layer;
 }
 
@@ -151,4 +157,58 @@ export function createBasemapLayerFromSource(source, options = {}) {
     }
 
     return createRasterBasemapLayer(source, options);
+}
+
+/**
+ * 将底图 source 类型安全地挂载到图层实例。
+ *
+ * 核心逻辑：OL 的 TileLayer 只能渲染 image 瓦片，VectorTileLayer 只能渲染
+ * VectorTileSource 的要素瓦片，二者不可通过 setSource 互换（互换后渲染空白）。
+ *
+ * 处理策略：
+ *   - source 类型与图层类型一致 → 轻量路径，直接 setSource（零开销）；
+ *   - 不一致（如启动引导期 source=null 时以 TileLayer 占位，挂载期才产出
+ *     VectorTileSource）→ 按旧图层 visible/zIndex/opacity 用工厂重建图层实例，
+ *     由调用方负责在地图内替换并同步 instanceMap。
+ *
+ * @param {Object} options - 参数对象
+ * @param {import('ol/layer/Base').default|null} options.layer - 当前图层实例
+ * @param {import('ol/source/Tile').default|import('ol/source/VectorTile').default|null} options.source - 新 source（可先经 buildRasterBasemapSource 处理）
+ * @param {import('ol/Map').default|null} [options.map] - 地图实例，用于类型不一致时替换图层；缺省时仅做轻量 setSource
+ * @returns {import('ol/layer/Base').default|null} 重建后的新图层实例；未发生替换时返回 null
+ */
+export function applyBasemapSourceToLayer({ layer, source, map = null }) {
+    if (!layer) return null;
+
+    if (!source) {
+        if (typeof layer.setSource === 'function') {
+            layer.setSource(null);
+        }
+        return null;
+    }
+
+    const needVectorLayer = isVectorTileSource(source);
+    const layerIsVector = isVectorTileLayer(layer);
+
+    if (needVectorLayer === layerIsVector) {
+        // 类型一致：轻量路径，直接换 source 即可
+        layer.setSource(source);
+        return null;
+    }
+
+    // 类型不一致：setSource 无法跨图层类型（TileLayer 挂 VectorTileSource 会渲染空白），
+    // 必须整体重建图层实例，并继承旧图层的显示状态
+    const nextLayer = createBasemapLayerFromSource(source, {
+        visible: typeof layer.getVisible === 'function' ? layer.getVisible() : true,
+        zIndex: typeof layer.getZIndex === 'function' ? layer.getZIndex() : Z_BAND.BASEMAP,
+        opacity: typeof layer.getOpacity === 'function' ? (layer.getOpacity() ?? 1) : 1,
+    });
+
+    // 地图内替换：移除旧图层、加入新图层（无 map 时由调用方自行挂载）
+    if (map) {
+        map.removeLayer(layer);
+        map.addLayer(nextLayer);
+    }
+
+    return nextLayer;
 }

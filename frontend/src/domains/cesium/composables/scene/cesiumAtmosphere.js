@@ -58,7 +58,7 @@ export function configureRealisticAtmosphere(viewer, Cesium) {
         setIfExists(sky, 'hueShift', -0.025);
         setIfExists(sky, 'saturationShift', 0.08);
         setIfExists(sky, 'brightnessShift', 0.03);
-        setIfExists(sky, 'atmosphereLightIntensity', 12.0);
+        setIfExists(sky, 'atmosphereLightIntensity', 20.0);
         setCartesian3IfExists(Cesium, sky, 'atmosphereRayleighCoefficient', 5.5e-6, 13.0e-6, 28.4e-6);
         setCartesian3IfExists(Cesium, sky, 'atmosphereMieCoefficient', 21e-6, 21e-6, 21e-6);
         setIfExists(sky, 'atmosphereRayleighScaleHeight', 10000.0);

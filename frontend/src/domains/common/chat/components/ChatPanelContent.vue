@@ -744,10 +744,12 @@ watch(
     color: var(--brand-primary-dark);
 }
 
-/* 配置面板 + 服务状态的可滚动包裹层 */
+/* 配置面板 + 服务状态的可滚动包裹层：封顶防止展开后挤占消息区，
+   超出部分在内部滚动 */
 .scroll-top-section {
     flex: 0 1 auto;
     min-height: 0;
+    max-height: 55%;
     overflow-y: auto;
     overscroll-behavior: contain;
 }

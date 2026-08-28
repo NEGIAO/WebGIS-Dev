@@ -845,6 +845,8 @@ const { emitBaseLayersChangeBatched, refreshAllBasemapSourcesForHD } =
         emit,
         LAYER_CONFIGS,
         layerInstances,
+        // 图层类型替换（TileLayer ↔ VectorTileLayer）时需在地图内换图层实例
+        mapInstanceRef: mapInstance,
     });
 
 // 图层控制面板事件（切换/排序/自定义 URL）

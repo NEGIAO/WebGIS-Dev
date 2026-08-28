@@ -51,13 +51,24 @@ export function useCesiumToolModules({
     // 基础大气参数（只开启晨昏半球，其余全部关闭）
     const baseAtmosphereParams = ref({
         enableLighting: true,       // 晨昏线 - 开启
-        showGroundAtmosphere: false, // 地面大气 - 关闭（与 initViewer 默认值一致，可在面板动态开启）
+        showGroundAtmosphere: true, // 地面大气 - 开启（默认随高度渐隐联动，可在面板关闭）
+        // 地面大气按相机高度自动渐隐：低于下限全关（市/城乡/建筑尺度），高于上限全开（省/国家级视角），中间平滑过渡
+        groundAtmosphereAutoFade: true,
+        groundAtmosphereFadeLowHeight: 100000,
+        groundAtmosphereFadeHighHeight: 500000,
         dynamicAtmosphereLighting: true,
         dynamicAtmosphereLightingFromSun: true,
-        atmosphereLightIntensity: 5.5,
-        atmosphereHueShift: -0.015,
-        atmosphereSaturationShift: 0.08,
-        atmosphereBrightnessShift: 0.02,
+        atmosphereLightIntensity: 16,
+        atmosphereHueShift: 1,
+        atmosphereSaturationShift: 1,
+        atmosphereBrightnessShift: -0.12,
+        // 天空大气（地球外环光晕）：光强按比例放大让渐隐尾部自然延伸（更厚且保持渐变）；
+        // 亮度偏移是恒定加亮，过大会把渐隐区抬成均匀色带并在大气壳边界形成硬边；
+        // Rayleigh 标高控制蓝色向外衰减的距离，是渐变厚度的物理参数
+        skyAtmosphereLightIntensity: 6.5,
+        skyAtmosphereBrightnessShift: 0.36,
+        skyAtmosphereSaturationShift: 0.1,
+        skyAtmosphereRayleighScaleHeight: 20000,
         lightingFadeInDistance: 0,
         lightingFadeOutDistance: Number.MAX_SAFE_INTEGER,
         nightFadeInDistance: 0,

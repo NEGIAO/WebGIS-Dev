@@ -31,7 +31,7 @@ import {
     getBasemapIdByUrlLayerNumber,
     getUrlLayerNumberByBasemapId,
 } from '@common/basemap/basemapOptions';
-import { buildRasterBasemapSource } from '@ol/basemap/composables/basemapLayerFactory';
+import { buildRasterBasemapSource, applyBasemapSourceToLayer } from '@ol/basemap/composables/basemapLayerFactory';
 import { Z_BAND } from '@ol/layer/zIndexBands';
 import { normalizeBinaryFlag, normalizeLocationFlag, normalizeText } from '@common/utils/normalize';
 import { DEFAULT_SEARCH_ZOOM } from '@common/utils/mapDefaults';
@@ -744,8 +744,18 @@ export function useMapState(mapInstance, options = {}) {
         if (!cfg || typeof cfg.createSource !== 'function') return;
         // cfg.createSource() 已内含 prioritizeTileSourceRequest，再走 buildRasterBasemapSource 套 zDirection
         const newSource = buildRasterBasemapSource(cfg.createSource());
-        if (newSource) {
-            layer.setSource(newSource);
+        if (!newSource) return;
+
+        // 类型安全挂载：启动引导期不可见图层以 TileLayer(null) 占位，若配置产出
+        // VectorTileSource（如 HENU 边界矢量），直接 setSource 会因图层类型错配渲染空白，
+        // 需整体重建图层实例并同步 instanceMap
+        const replacedLayer = applyBasemapSourceToLayer({
+            layer,
+            source: newSource,
+            map: mapInstance?.value ?? null,
+        });
+        if (replacedLayer) {
+            instanceMap[layerId] = replacedLayer;
         }
     }
 
