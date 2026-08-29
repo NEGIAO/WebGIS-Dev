@@ -1759,6 +1759,7 @@ function handleFileSelect(event) {
     color: inherit;
     font-size: 11px;
     outline: none;
+    color-scheme: dark;
 }
 
 .wms-layer-select:focus {
@@ -1802,6 +1803,47 @@ function handleFileSelect(event) {
     font-size: 11px;
     cursor: pointer;
     flex: 1;
+    color-scheme: dark;
+}
+
+/* ===== 下拉 option 弹出层（wms-layer-select / remote-service-type-select 共用） =====
+   面板为暗色身份，浏览器原生下拉默认白底，而 option 文字继承 select 浅色字，
+   会形成「白底白字」不可读；显式接管 option 配色 + color-scheme 暗色化弹层框架。
+   hover/checked 复用面板「深绿选中族」设计语言，底色令牌 --ctp-option-bg 为主题预留位。 */
+.wms-layer-select option,
+.remote-service-type-select option {
+    background: var(--ctp-option-bg);
+    color: var(--ctp-text);
+}
+
+.wms-layer-select option:hover,
+.remote-service-type-select option:hover {
+    background: rgba(var(--ctp-active-rgb), 0.92);
+    color: var(--ctp-title);
+}
+
+.wms-layer-select option:checked,
+.remote-service-type-select option:checked {
+    background: rgba(var(--ctp-active-deep-rgb), 0.92);
+    color: var(--ctp-mint-mark);
+    font-weight: 600;
+}
+
+/* 嵌入浅色态（.is-embedded）回退：option 恢复白底深灰字，与亮色面板观感一致；
+   置于暗色规则之后声明，同特异性下靠后者胜出，保证回退生效。 */
+.is-embedded .wms-layer-select,
+.is-embedded .remote-service-type-select {
+    color-scheme: light;
+}
+
+.is-embedded .wms-layer-select option,
+.is-embedded .remote-service-type-select option,
+.is-embedded .wms-layer-select option:hover,
+.is-embedded .remote-service-type-select option:hover,
+.is-embedded .wms-layer-select option:checked,
+.is-embedded .remote-service-type-select option:checked {
+    background: var(--ctp-white-solid);
+    color: var(--ctp-ink-neutral);
 }
 
 .remote-service-form {

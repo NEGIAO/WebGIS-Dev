@@ -1,3 +1,5 @@
+import { isCloudPipelineActive } from '@cesium-domain/modules/cloud';
+
 export function configureSolarLighting(viewer) {
     const scene = viewer?.scene;
     const globe = scene?.globe;
@@ -11,7 +13,8 @@ export function configureSolarLighting(viewer) {
     if (scene.moon) {
         scene.moon.show = true;
     }
-    if (scene.skyBox) {
+    // 体积云 Bruneton 管线存活期间原生天空由管线接管，重开会双大气/白闪
+    if (scene.skyBox && !isCloudPipelineActive(viewer)) {
         scene.skyBox.show = true;
     }
 
@@ -27,7 +30,10 @@ export function configureRealisticAtmosphere(viewer, Cesium) {
     configureSceneFog(scene);
 
     globe.enableLighting = true;
-    globe.showGroundAtmosphere = true;
+    // 体积云 Bruneton 管线存活期间原生地面大气由互斥逻辑关闭，此处不得重开（白闪/双大气）
+    if (!isCloudPipelineActive(viewer)) {
+        globe.showGroundAtmosphere = true;
+    }
 
     setIfExists(globe, 'dynamicAtmosphereLighting', true);
     setIfExists(globe, 'dynamicAtmosphereLightingFromSun', true);
@@ -51,7 +57,7 @@ export function configureRealisticAtmosphere(viewer, Cesium) {
 
     const sky = scene.skyAtmosphere;
     if (sky) {
-        sky.show = true;
+        if (!isCloudPipelineActive(viewer)) sky.show = true;
         setIfExists(sky, 'perFragmentAtmosphere', true);
         setIfExists(sky, 'dynamicAtmosphereLighting', true);
         setIfExists(sky, 'dynamicAtmosphereLightingFromSun', true);
@@ -72,7 +78,8 @@ export function configureRealisticAtmosphere(viewer, Cesium) {
     if (scene.moon) {
         scene.moon.show = true;
     }
-    if (scene.skyBox) {
+    // 体积云 Bruneton 管线存活期间原生天空由管线接管，重开会双大气/白闪
+    if (scene.skyBox && !isCloudPipelineActive(viewer)) {
         scene.skyBox.show = true;
     }
     if ('sunBloom' in scene) {
@@ -153,16 +160,23 @@ export function restoreRealisticAtmosphere(viewer, Cesium, snapshot) {
     const globe = scene?.globe;
     if (!scene || !globe) return;
 
+    // 体积云 Bruneton 管线存活期间原生天空由管线接管，写 show 前需门控
+    const cloudOwnsSky = isCloudPipelineActive(viewer);
     writeProps(scene, snapshot.scene, Cesium);
     writeProps(scene.fog, snapshot.fog, Cesium);
     writeProps(globe, snapshot.globe, Cesium);
     writeProps(scene.sun, snapshot.sun, Cesium);
     writeProps(scene.moon, snapshot.moon, Cesium);
-    writeProps(scene.skyBox, snapshot.skyBox, Cesium);
+    if (scene.skyBox && !cloudOwnsSky) {
+        writeProps(scene.skyBox, snapshot.skyBox, Cesium);
+    }
 
     if (scene.skyAtmosphere) {
-        writeProps(scene.skyAtmosphere, snapshot.sky, Cesium);
-        if (!snapshot.skyAtmosphereExisted) {
+        // 快照 sky 含 show 字段，管线存活期间不得随 writeProps 重开（白闪/双大气）；
+        // 色调/光强等纯渲染参数不受管线影响，照常恢复
+        const { show: _skyShow, ...skyRenderProps } = snapshot.sky || {};
+        writeProps(scene.skyAtmosphere, cloudOwnsSky ? skyRenderProps : snapshot.sky, Cesium);
+        if (!cloudOwnsSky && !snapshot.skyAtmosphereExisted) {
             scene.skyAtmosphere.show = false;
         }
     }

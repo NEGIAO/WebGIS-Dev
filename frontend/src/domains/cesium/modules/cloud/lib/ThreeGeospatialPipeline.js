@@ -339,6 +339,13 @@ float marchOpticalDepthToSun(vec3 rayOrigin, vec3 rayDirection, float mipLevel, 
   return od;
 }
 
+// ══════════════════════════════════════════════════════════════════════════════
+// 【天空/地面分割核心逻辑】以下函数负责判断射线是否击中地面，并据此分割
+//  近地面采样区间与天空采样区间，是体积云"地面不穿模、天际线正确"的关键。
+//  修改时请确保理解三个相机高度区间（u_minHeight / u_maxHeight / 云顶以上）。
+// ══════════════════════════════════════════════════════════════════════════════
+
+// ── 【1. 地面相交判断】射线是否指向地面 ──
 bool rayIntersectsGround(vec3 camPos, vec3 rd) {
   float r = length(camPos);
   float mu = dot(camPos, rd) / r;
@@ -355,12 +362,22 @@ void raySphereIntersections(vec3 origin, vec3 direction, vec4 radius, out vec4 i
   i2 = mix((-b + Q) * 0.5, vec4(-1.0), mask);
 }
 
+// ── 【2. 求交汇总】地面标志 + 四层球面交点（地面/云底/云顶/阴影顶） ──
 void getIntersections(vec3 camPos, vec3 rd, out bool ground, out vec4 first, out vec4 second) {
   ground = rayIntersectsGround(camPos, rd);
   vec4 radii = u_bottomRadius + vec4(0.0, u_minHeight, u_maxHeight, u_shadowTopHeight);
   raySphereIntersections(camPos, rd, radii, first, second);
 }
 
+// ── 【3. 主射线区间分割】根据相机高度 + 地面标志，输出近地面/天空采样区间 ──
+//   相机高度 < u_minHeight（云层下方）：
+//     - 指向地面 → 无效区间（不采样云）
+//     - 指向天空 → 从云底到云顶采样
+//   相机高度在云层内（u_minHeight ~ u_maxHeight）：
+//     - 指向地面 → 从近裁面到云底（只采样相机前薄层）
+//     - 指向天空 → 从近裁面到最大射线距离
+//   相机高度 > u_maxHeight（云顶上方）：
+//     - 从进入云顶球面到离开云顶球面（避免耗尽步数穿越空旷空间）
 vec2 getRayNearFar(bool ground, vec4 first, vec4 second) {
   vec2 nearFar = vec2(-1.0);
   if (u_cameraHeight < u_minHeight) {
@@ -398,6 +415,7 @@ vec2 getRayNearFar(bool ground, vec4 first, vec4 second) {
   return nearFar;
 }
 
+// ── 【4. 阴影射线区间分割】同理基于地面标志分割阴影采样区间 ──
 vec2 getShadowRayNearFar(bool ground, vec4 first, vec4 second) {
   vec2 nf;
   if (u_cameraHeight < u_shadowTopHeight) {
@@ -410,6 +428,7 @@ vec2 getShadowRayNearFar(bool ground, vec4 first, vec4 second) {
   return nf;
 }
 
+// ── 【5. 霾射线区间分割】同理基于地面标志分割霾/雾采样区间 ──
 vec2 getHazeRayNearFar(bool ground, vec4 first, vec4 second) {
   vec2 nf;
   if (u_cameraHeight < u_maxHeight) {
@@ -680,8 +699,10 @@ void main() {
     }
   }
   float tMax = rayNearFar.y;
+  // ── 【6. 深度钳位（天空/地面分割最终守卫）】 ──
   // 原逻辑：低于云层且 !ground 时跳过深度钳位 —— 平视/看山体时 ground 常为 false，会整屏不钳位 → 云盖住地形。
-  // 仅当该像素无场景深度（天空）时才允许跳过；有地形/几何时必须用 rayDistToScene 截断射线。
+  // 修复：仅当该像素无场景深度（天空）时才允许跳过；有地形/几何时必须用 rayDistToScene 截断射线。
+  // 即：地面标志 + 无地形深度 → 看天空，跳过钳位；否则用地形距离截断，防止云穿模覆盖地表。
   const float DEPTH_SKY = 1.0 - 1e-7;
   bool skipDepthClamp =
     (depth >= DEPTH_SKY) && (u_cameraHeight < u_minHeight) && (!ground);

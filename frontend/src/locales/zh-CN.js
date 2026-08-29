@@ -364,7 +364,7 @@ export default {
         shareNativeTitle: 'NEGIAO WebGIS 视角',
         shareNativeText: '分享当前地图视角链接',
         sharePanelOpened: '已唤起系统分享面板',
-        shareCopied: '✅ 视角链接已复制，快去分享吧！',
+        shareCopied: '视角链接已复制，快去分享吧！',
         shareCopyFailed: '分享链接复制失败',
         shareManualCopy: '复制失败，请手动从地址栏复制链接',
         locations: {

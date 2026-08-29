@@ -297,7 +297,7 @@ export default {
         shareNativeTitle: 'NEGIAO WebGIS view',
         shareNativeText: 'Share current map view link',
         sharePanelOpened: 'System share sheet opened',
-        shareCopied: '✅ View link copied — go share it!',
+        shareCopied: 'View link copied — go share it!',
         shareCopyFailed: 'Failed to copy share link',
         shareManualCopy: 'Copy failed — please copy the URL from the address bar',
         locations: {

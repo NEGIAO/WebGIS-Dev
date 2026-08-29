@@ -104,6 +104,47 @@ export function useCesiumToolModules({
         ),
     );
 
+    // ========== 体积云 ↔ 原生地面大气互斥 ==========
+    // 两套地面大气模型叠加会在天际线掠射带白屏闪烁：Bruneton Aerial（体积云管线自带）
+    // 与 Cesium 原生 globe.showGroundAtmosphere 同时处理同一批地面像素，
+    // 后处理天空/地面分类启发式（依赖像素亮度/深度）在双层大气下帧间翻转。
+    // 规则：开体积云 → 记录并关闭地面大气；关体积云 → 恢复；开地面大气 → 关闭体积云。
+    /** 体积云启用时被关闭前的地面大气状态，供关闭体积云时恢复 */
+    let groundAtmosphereStateBeforeCloud = null;
+
+    function setGroundAtmosphereEnabled(value) {
+        baseAtmosphereParams.value = {
+            ...baseAtmosphereParams.value,
+            showGroundAtmosphere: Boolean(value),
+        };
+    }
+
+    function handleCloudsEnabledToggle(enabled) {
+        if (enabled) {
+            // 开体积云：记录当前地面大气状态并关闭（互斥）
+            groundAtmosphereStateBeforeCloud = baseAtmosphereParams.value.showGroundAtmosphere === true;
+            setGroundAtmosphereEnabled(false);
+        } else {
+            // 关体积云：恢复开启体积云前的地面大气状态
+            if (groundAtmosphereStateBeforeCloud !== null) {
+                setGroundAtmosphereEnabled(groundAtmosphereStateBeforeCloud);
+                groundAtmosphereStateBeforeCloud = null;
+            }
+        }
+    }
+
+    function handleGroundAtmosphereToggle(enabled) {
+        if (!enabled) return;
+        // 开地面大气：关闭体积云（互斥）；无需恢复标记——本次是用户主动切走
+        if (cloudParams.value.cloudsEnabled === true) {
+            groundAtmosphereStateBeforeCloud = null;
+            cloudParams.value = {
+                ...cloudParams.value,
+                cloudsEnabled: false,
+            };
+        }
+    }
+
     const fluidParams = ref({
         threshold: 10,
         blend: 20,
@@ -618,6 +659,11 @@ export function useCesiumToolModules({
         if (moduleId === 'atmosphere') {
             // 高级特效开关（fog/hbao/tiltShift/atmosphere）
             if (controlId in advancedEffectControls.value) {
+                // Tellux 大气增强（Atmosphere + Bloom）会在高空直写 globe.showGroundAtmosphere = true，
+                // 等效开启原生地面大气 → 纳入同一互斥：开它则先关体积云
+                if (controlId === 'atmosphere' && Boolean(value)) {
+                    handleGroundAtmosphereToggle(true);
+                }
                 advancedEffectControls.value = {
                     ...advancedEffectControls.value,
                     [controlId]: Boolean(value),
@@ -627,6 +673,10 @@ export function useCesiumToolModules({
 
             // 基础大气参数（Cesium 原生）
             if (controlId in baseAtmosphereParams.value) {
+                // 互斥：手动开地面大气时先关掉体积云，再写入开关值
+                if (controlId === 'showGroundAtmosphere') {
+                    handleGroundAtmosphereToggle(Boolean(value));
+                }
                 baseAtmosphereParams.value = {
                     ...baseAtmosphereParams.value,
                     [controlId]: value,
@@ -634,8 +684,11 @@ export function useCesiumToolModules({
                 return;
             }
 
-            // Tellux 大气渲染参数
+            // Tellux 大气渲染参数（开启后等效硬写 globe.showGroundAtmosphere = true，纳入互斥）
             if (controlId === 'atmosphereEnabled') {
+                if (Boolean(value)) {
+                    handleGroundAtmosphereToggle(true);
+                }
                 advancedEffectControls.value = {
                     ...advancedEffectControls.value,
                     atmosphere: Boolean(value),
@@ -656,6 +709,10 @@ export function useCesiumToolModules({
             if (controlId === 'quality') {
                 cloudParams.value = applyCloudQualityPreset(cloudParams.value, value);
                 return;
+            }
+            // 总开关互斥：开体积云 → 记录并关地面大气；关体积云 → 恢复地面大气
+            if (controlId === 'cloudsEnabled') {
+                handleCloudsEnabledToggle(Boolean(value));
             }
             if (controlId in cloudParams.value) {
                 const booleanKeys = new Set([

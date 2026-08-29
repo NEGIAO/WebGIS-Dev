@@ -40,6 +40,7 @@ import {
     restoreRealisticAtmosphere,
 } from '../composables/scene/cesiumAtmosphere';
 import LilGuiControls from './LilGuiControls.vue';
+import { isCloudPipelineActive } from '@cesium-domain/modules/cloud';
 
 const props = defineProps({
     headless: {
@@ -653,8 +654,10 @@ function restoreAtmosphereState(viewer) {
         }
     }
 
+    // 体积云管线存活期间原生 skyAtmosphere/skyBox 由 Bruneton 接管，恢复不得重开（白闪/双大气）
+    const cloudOwnsSky = isCloudPipelineActive(viewer);
     if (scene.skyAtmosphere && originalSceneState.sky) {
-        if (originalSceneState.sky.show !== undefined) {
+        if (!cloudOwnsSky && originalSceneState.sky.show !== undefined) {
             scene.skyAtmosphere.show = originalSceneState.sky.show;
         }
         scene.skyAtmosphere.hueShift = originalSceneState.sky.hueShift;
@@ -667,7 +670,7 @@ function restoreAtmosphereState(viewer) {
         const c = originalSceneState.celestial;
         if (scene.sun && c.sunShow !== undefined) scene.sun.show = c.sunShow;
         if (scene.moon && c.moonShow !== undefined) scene.moon.show = c.moonShow;
-        if (scene.skyBox && c.skyBoxShow !== undefined) scene.skyBox.show = c.skyBoxShow;
+        if (scene.skyBox && !cloudOwnsSky && c.skyBoxShow !== undefined) scene.skyBox.show = c.skyBoxShow;
     }
 
     scene.requestRender?.();

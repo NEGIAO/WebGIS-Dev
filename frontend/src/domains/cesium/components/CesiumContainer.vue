@@ -174,7 +174,7 @@ import { createCesiumDrawMeasureFeature } from '../composables/draw/useCesiumDra
 import { createCesiumRouteFeature } from '../composables/draw/useCesiumRouteRendering';
 import { readCachedPreferredBasemap } from '@common/user/stores/useUserPreferencesStore';
 import { setRecordVisible, setRecordOpacity } from '../composables/dataImport/dataSourceDisplay';
-import { setupCloudIntegration } from '@cesium-domain/modules/cloud';
+import { setupCloudIntegration, isCloudPipelineActive } from '@cesium-domain/modules/cloud';
 import { useCesiumUrlTracking } from '../composables/layers/useCesiumUrlTracking';
 import { useCesiumWind } from '@cesium-domain/modules/wind/useCesiumWind';
 import { useCesiumModelManager } from '../composables/models/useCesiumModelManager';
@@ -1762,6 +1762,12 @@ function updateGroundAtmosphereFade() {
     const globe = viewer?.scene?.globe;
     if (!globe) return;
     const p = baseAtmosphereParams.value;
+    // 体积云互斥兜底：Bruneton Aerial 与原生地面大气叠加会白屏闪烁。
+    // 多条路径（Tellux 大气启用/洪水面板/Tellux 快照恢复）绕过参数直写 globe，
+    // 体积云存活期间逐帧压制，确保原生地面大气始终关闭（UI 参数不动，关闭体积云后自动恢复）
+    if (cloudParams.value.cloudsEnabled === true && globe.showGroundAtmosphere) {
+        globe.showGroundAtmosphere = false;
+    }
     const fadeActive = p.groundAtmosphereAutoFade === true && p.showGroundAtmosphere === true;
     if (!fadeActive) {
         // 从「渐隐接管」切回直控后恢复一次即可，避免每帧重复写
@@ -1840,7 +1846,11 @@ function applyBaseAtmosphereParams(params) {
 
     if (scene.sun) scene.sun.show = params.sunShow;
     if (scene.moon) scene.moon.show = params.moonShow;
-    if (scene.skyBox) scene.skyBox.show = params.skyBoxShow;
+    // 体积云管线存活期间原生 skyBox/skyAtmosphere 由 Bruneton 接管，
+    // 面板任何参数变动都不得重开（否则复现白屏闪烁/双大气）
+    if (!isCloudPipelineActive(viewer) && scene.skyBox) {
+        scene.skyBox.show = params.skyBoxShow;
+    }
 
     // 渐隐激活时本函数会覆盖渐隐的写入，强制下一帧无条件重写恢复
     lastGroundAtmosphereFadeFactor = -1;

@@ -6,6 +6,26 @@
 
 ## 版本记录
 
+### V3.5.35 (2026-08-29) — 暂存区多批次归并：体积云天际线白闪修复 + 云↔大气互斥 + 天空旁路封堵 + 工具面板下拉白底白字修复 + 全项目同类排查 + 散项修复
+
+> 本版本为暂存区多批次不规范提交（原临时编号 V3.5.35~36，含未记录散项）经整合 Code Review 后归并的**单一版本**。审查日志：`Docs/LLM_record/26-08/2026-08-29/2026-08-29-code-review-staged-v3535.md`；分项分析：`2026-08-29-fix-cloud-sky-flicker-mutex.md`、`2026-08-29-fix-ctp-select-dropdown-ui.md`、`2026-08-28-fix-atmosphere-autofade-dependency.md`。
+
+> **1、根因修复——体积云天际线白屏闪烁**：开启体积云后近地面/天际线掠射带白屏闪烁。根因为启动时 `scene.backgroundColor = WHITE` + `skyBox.show=false` 与 Bruneton 管线（three-geospatial 移植）的黑太空设计假设冲突——掠射带 `eyePos.z` 深度抖动使 `hasScene`/`isSky` 帧间翻转，天空辉光与白底透传交替即白闪；其"天际线黑带救援"（`lum<0.04`）在白背景下永不命中。修复：管线启用时快照并压黑 `backgroundColor`，关闭/卸载时恢复（`setupCloudIntegration.js`）。排查要点："操控大气面板就不闪"是红鲱鱼——真实机制为 `applyBaseAtmosphereParams` 副作用重开 skyBox 把白背景换暗；首版"双地面大气叠加"假设被实测证伪（互斥逻辑保留，属独立行为规范）。
+
+> **2、体积云↔地面大气双向互斥**：两套大气模型同时渲染同一批地面像素属架构性双重渲染。规则：开体积云 → 记录并关闭原生地面大气（面板同步熄灭）；关体积云 → 恢复开启前状态；手动开地面大气 → 自动关闭体积云。Tellux 主开关（启用路径硬写 `showGroundAtmosphere=true`）纳入同一互斥；`updateGroundAtmosphereFade` preRender 回调对旁路直写逐帧兜底压制。
+
+> **3、天空状态旁路封堵**：新增 `isCloudPipelineActive(viewer)` 查询接口（WeakSet，管线就绪/销毁/失败同步注册注销），穷举门控原生天空 show 写入点——大气面板 `applyBaseAtmosphereParams`（skyBox）、`cesiumAtmosphere.js` 三函数（configureSolarLighting/configureRealisticAtmosphere/restoreRealisticAtmosphere）、Tellux 恢复路径（CesiumAdvancedEffects）、洪水模拟 prepareScene/restoreScene（FluidSimulationPanel）。未来新增写原生天空状态的代码前必须先查该接口。**整合 Review 补强两处**：① `FluidSimulationPanel.restoreScene` 的 `showGroundAtmosphere` 快照恢复原无门控（与同函数 skyAtmosphere 守卫不对称）——洪水模拟运行期间开启体积云后结束模拟，会把快照旧值写回重开地面大气（依赖逐帧兜底存在单帧双大气窗口），已补 `!isCloudPipelineActive(viewer)` 门控；② WeakSet 注册时序提前——原在 `createCloudAtmosphere` 纹理加载（4×8MB 可达数秒）完成后才注册，加载窗口期门控失效（白闪可复现），提前至 `applySkyOwnedByPipeline` 之前使所有权即刻生效；并修复 disposed 路径（加载中关闭/卸载）WeakSet 残留 + 天空状态停留接管态 + 连续渲染计数泄漏。
+
+> **4、修复大气高度渐隐前提依赖缺失**：`groundAtmosphereAutoFade` 依赖 `showGroundAtmosphere` 开启，但控件未设依赖——地面大气关闭后渐隐开关与两档高度滑杆仍可操作。修复：渐隐开关补 `disabled: showGroundAtmosphere === false`，两滑杆 disabled 改为双重条件。
+
+> **5、修复 Cesium 工具面板下拉列表白底白字（option 弹出层 UI 接线）**：暗色浮层中下拉展开后 `<option>` 弹出层为浏览器默认白底，文字继承面板浅色字（`--ctp-text`）→ 白底白字不可读。涉及两类来源：① 模板级原生 `<select>`（WMS 图层选择器、远程 3D 服务类型）；② modules 模块卡片内嵌下拉——`LilGuiControls.vue` 内 lil-gui 运行时注入的 `<select class="lil-selector">`（全部 `type:'select'` 控件，Cinematic FX/流体面板复用）。修复：select 声明 `color-scheme: dark`；新增 option 配色块——暗底 `--ctp-option-bg`（激活主题预留悬空令牌）+ 浅色字 `--ctp-text`，hover/checked 复用「深绿选中族」令牌；模板级 select 另有 `.is-embedded` 嵌入亮色态回退白底深字。**全项目同类排查**：13 文件 22 处原生 select 逐一核验，其余均处亮色宿主（深色字）无同类缺陷，无新增修复项。
+
+> **6、Chat 个人 Key 模式模型选择修复**：① reload 优先级修正——旧逻辑把 `pool[0]` 排在 `dc.model` 之前，localStorage 为空时 reload 用列表第一项覆盖用户已保存/刚选的模型，改为「已保存选择 → dc.model → 首个可聊模型」三级优先；② 个人 Key 模式补 `saveModel` 持久化（按模式隔离存储，与默认 AI 模式同口径），此前漏写导致 reload 永远走兜底链。
+
+> **7、TOC 关闭按钮图标化 + 分享文案 emoji 清理**：TOCPanel 关闭按钮由文字按钮改为 Lucide `X` 图标（新增 `.toc-icon-btn` 样式，符合 UI 图标规范）；`shareCopied` 中英文文案移除 emoji 前缀（toast 文案规范化）。
+
+> **涉及文件**：`frontend/src/domains/cesium/modules/cloud/{setupCloudIntegration,index,cloudQualityPresets}.js`、`modules/cloud/lib/ThreeGeospatialPipeline.js`（排查注释）、`modules/fluid-simulation/FluidSimulationPanel.vue`、`composables/toolModules/{useCesiumToolModules,atmosphereModule}.js`、`components/{CesiumContainer,CesiumAdvancedEffects,CesiumToolPanel,LilGuiControls}.vue`、`composables/scene/cesiumAtmosphere.js`、`domains/common/chat/composables/useChatAgentConfig.js`、`domains/common/layer-tree/components/TOCPanel.vue`、`locales/{zh-CN,en-US}.js`。
+
 ### V3.5.34 (2026-08-28) — 大气渲染修复与增强 + HENU 矢量瓦片全链修复 + Chat 配置面板改版
 
 > 本版本为暂存区多批次不规范提交（原临时编号 V3.5.34~35）经整合 Code Review 后归并的**单一版本**。审查日志：`Docs/LLM_record/26-08/2026-08-28/2026-08-28-code-review-staged-v3534.md`；分项分析：`2026-08-28-fix-skyatmosphere-lightintensity.md`、`2026-08-28-fix-henu-vectortile-layer-type-mismatch.md`、`2026-08-28-feat-vectortile-server-style.md`。

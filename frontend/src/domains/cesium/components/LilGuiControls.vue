@@ -293,6 +293,30 @@ function destroyGui() {
     color: #eefbf3;
 }
 
+/* ===== 模块内嵌下拉 option 弹出层（lil-gui 动态注入的 .lil-selector） =====
+   lil-gui select 框底为 --widget-color 半透明冰蓝、显示正常，但其展开的 <option>
+   弹出层为浏览器原生白底，与继承的浅色字叠加成「白底白字」不可读；
+   显式接管 option 配色 + color-scheme 暗色化弹层框架，与工具面板暗色观感对齐。
+   :deep() 编译后 data-v 属性锚定在 .lil-gui-host 宿主上，对运行时注入 DOM 依然命中。 */
+.lil-gui-host :deep(.cesium-lil-gui select) {
+    color-scheme: dark;
+}
+
+.lil-gui-host :deep(.cesium-lil-gui select option) {
+    background: var(--ctp-option-bg);
+    color: var(--ctp-text);
+}
+
+.lil-gui-host :deep(.cesium-lil-gui select option:hover) {
+    background: rgba(var(--ctp-active-rgb), 0.92);
+    color: var(--ctp-title);
+}
+
+.lil-gui-host :deep(.cesium-lil-gui select option:checked) {
+    background: rgba(var(--ctp-active-deep-rgb), 0.92);
+    color: var(--ctp-mint-mark);
+}
+
 .lil-gui-host :deep(.cesium-lil-gui .lil-controller.lil-disabled) {
     opacity: 0.46;
 }

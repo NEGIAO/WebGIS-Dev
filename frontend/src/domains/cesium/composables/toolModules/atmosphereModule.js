@@ -146,6 +146,8 @@ function createBaseAtmosphereControls(params = {}) {
             label: t('cesium.module.atmosphere.groundAtmosphereAutoFade'),
             type: 'toggle',
             value: params.groundAtmosphereAutoFade !== false,
+            // 前提依赖：地面大气关闭时，高度渐隐开关不可操作
+            disabled: params.showGroundAtmosphere === false,
             tooltip: t('cesium.module.atmosphere.groundAtmosphereAutoFadeTip'),
         },
         {
@@ -157,7 +159,8 @@ function createBaseAtmosphereControls(params = {}) {
             step: 10000,
             value: params.groundAtmosphereFadeLowHeight ?? 100000,
             displayValue: `${(Number(params.groundAtmosphereFadeLowHeight ?? 100000) / 1000).toFixed(0)} km`,
-            disabled: params.groundAtmosphereAutoFade === false,
+            // 双重依赖：地面大气关闭 或 高度渐隐关闭时，该参数不可操作
+            disabled: params.showGroundAtmosphere === false || params.groundAtmosphereAutoFade === false,
             tooltip: t('cesium.module.atmosphere.groundAtmosphereFadeLowHeightTip'),
         },
         {
@@ -169,7 +172,8 @@ function createBaseAtmosphereControls(params = {}) {
             step: 10000,
             value: params.groundAtmosphereFadeHighHeight ?? 500000,
             displayValue: `${(Number(params.groundAtmosphereFadeHighHeight ?? 500000) / 1000).toFixed(0)} km`,
-            disabled: params.groundAtmosphereAutoFade === false,
+            // 双重依赖：地面大气关闭 或 高度渐隐关闭时，该参数不可操作
+            disabled: params.showGroundAtmosphere === false || params.groundAtmosphereAutoFade === false,
             tooltip: t('cesium.module.atmosphere.groundAtmosphereFadeHighHeightTip'),
         },
         {

@@ -18,6 +18,20 @@ import { acquireContinuous, releaseContinuous } from '@cesium-domain/composables
 /** 按需渲染计数器 tag：体积云管线存活期间需要连续渲染（preRender BSM / 时域降噪） */
 const RENDER_MODE_TAG = 'volumetric-cloud';
 
+/** viewer → 管线存活映射：供外部旁路（大气面板/洪水/Tellux 恢复）在写原生天空状态前查询 */
+const activePipelineViewers = new WeakSet();
+
+/**
+ * 体积云 Bruneton 管线是否在该 viewer 上存活。
+ * 管线存活期间原生 skyBox/skyAtmosphere/backgroundColor 由管线接管，
+ * 其他功能写这些状态前必须先查询，否则会复现白屏闪烁/双大气。
+ * @param {import('cesium').Viewer} viewer
+ * @returns {boolean}
+ */
+export function isCloudPipelineActive(viewer) {
+  return viewer ? activePipelineViewers.has(viewer) : false;
+}
+
 /**
  * @param {object} opts
  * @param {import('cesium').Viewer} opts.viewer
@@ -82,6 +96,9 @@ export function setupCloudIntegration({
         const { createCloudAtmosphere } = await import('./lib/createCloudAtmosphere.js');
 
         if (disposed) return;
+        // 天空所有权即刻生效：查询标记必须先于 applySkyOwnedByPipeline 注册，
+        // 否则纹理加载窗口期（可达数秒）内面板/旁路写原生天空时 isCloudPipelineActive 仍为 false，门控失效
+        activePipelineViewers.add(viewer);
 
         // 交由 Bruneton 天空接管
         applySkyOwnedByPipeline(viewer);
@@ -103,15 +120,21 @@ export function setupCloudIntegration({
         });
 
         if (disposed) {
+          // teardown 已在 await 期间发生：标记已注册（提前注册修复），须与失败路径同口径回收，
+          // 否则 WeakSet 残留 + 天空状态停留在管线接管态 + 连续渲染计数泄漏
           try {
             instance.destroy();
           } catch {
             /* ignore */
           }
+          activePipelineViewers.delete(viewer);
+          restoreSkyState(viewer, skySnapshot);
+          releaseContinuous(viewer, RENDER_MODE_TAG);
           return;
         }
 
         pipeline = instance;
+        // activePipelineViewers 注册已提前至 applySkyOwnedByPipeline 前（见 ensurePipeline 开头），此处不再重复
         // 管线就绪 → 声明连续渲染（与 teardownPipeline 的 release 成对）
         acquireContinuous(viewer, RENDER_MODE_TAG);
         applyCloudPanelParams(pipeline, cloudParams?.value ?? {});
@@ -124,6 +147,7 @@ export function setupCloudIntegration({
         restoreSkyState(viewer, skySnapshot);
         pipeline = null;
         lensFlare = null;
+        activePipelineViewers.delete(viewer); // 注册提前后，失败路径同样要注销（对未注册 viewer 为安全 no-op）
         // 若 acquire 已发生（参数应用/光晕加载阶段失败），归还计数；未发生时为安全 no-op
         releaseContinuous(viewer, RENDER_MODE_TAG);
         throw err;
@@ -218,6 +242,7 @@ export function setupCloudIntegration({
       console.warn('[Cloud] pipeline destroy:', e);
     }
     pipeline = null;
+    activePipelineViewers.delete(viewer);
 
     // 归还连续渲染计数；重复 teardown（watch 关闭 + cleanup）时第二次为安全 no-op
     releaseContinuous(viewer, RENDER_MODE_TAG);
@@ -301,11 +326,15 @@ function captureSkyState(viewer) {
   return {
     skyAtmosphereShow: scene?.skyAtmosphere ? scene.skyAtmosphere.show : undefined,
     skyBoxShow: scene?.skyBox ? scene.skyBox.show : undefined,
+    backgroundColor: scene ? scene.backgroundColor : undefined,
   };
 }
 
 /**
  * 启用管线时关闭 Cesium 自带天空，避免双重大气。
+ * 同时把画布背景压黑：Bruneton 管线的透传/救援启发式均假设深色太空，
+ * 本应用启动时把背景设为白色，地平线掠射带被误分类为地面的背景像素
+ * 会原样透传白底，随深度抖动帧间翻转成白屏闪烁。
  * @param {import('cesium').Viewer} viewer
  */
 function applySkyOwnedByPipeline(viewer) {
@@ -313,12 +342,18 @@ function applySkyOwnedByPipeline(viewer) {
   if (!scene) return;
   if (scene.skyAtmosphere) scene.skyAtmosphere.show = false;
   if (scene.skyBox) scene.skyBox.show = false;
+  const Cesium = window.Cesium ?? globalThis.Cesium;
+  if (Cesium?.Color) {
+    // 画布背景压黑：Bruneton 透传/救援启发式假设深色太空，白背景下地平线掠射带
+    // 被误分类为地面背景像素，随深度抖动帧间翻转成白屏闪烁（低视角尤其明显）
+    scene.backgroundColor = new Cesium.Color(0.0, 0.0, 0.0, 1.0);
+  }
 }
 
 /**
  * 恢复进入体积云前的天空状态。
  * @param {import('cesium').Viewer} viewer
- * @param {{ skyAtmosphereShow?: boolean, skyBoxShow?: boolean }} snapshot
+ * @param {{ skyAtmosphereShow?: boolean, skyBoxShow?: boolean, backgroundColor?: import('cesium').Color }} snapshot
  */
 function restoreSkyState(viewer, snapshot) {
   const scene = viewer?.scene;
@@ -328,5 +363,8 @@ function restoreSkyState(viewer, snapshot) {
   }
   if (scene.skyBox && snapshot.skyBoxShow !== undefined) {
     scene.skyBox.show = snapshot.skyBoxShow;
+  }
+  if (snapshot.backgroundColor) {
+    scene.backgroundColor = snapshot.backgroundColor;
   }
 }

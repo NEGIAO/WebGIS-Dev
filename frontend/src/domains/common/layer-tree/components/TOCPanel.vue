@@ -24,10 +24,11 @@
                 <div class="title">{{ t('layer.toolbox') }}</div>
             </div>
             <button
-                class="ghost-btn"
+                class="toc-icon-btn"
+                :title="t('layer.close')"
                 @click="emit('close')"
             >
-                {{ t('layer.close') }}
+                <X :size="16" />
             </button>
         </div>
 
@@ -586,6 +587,7 @@ import {
     SlidersHorizontal,
     SquareDashed,
     Table,
+    X,
 } from '@lucide/vue';
 import { useMessage } from '@common/shell/useMessage';
 import { useLocale } from '@common/app/useLocale';
@@ -1841,6 +1843,29 @@ function applyStyle() {
 .upload-btns {
     display: inline-flex;
     gap: 6px;
+}
+
+.toc-icon-btn {
+    width: 28px;
+    height: 28px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: none;
+    border-radius: 7px;
+    background: transparent;
+    color: var(--toc-text-secondary);
+    cursor: pointer;
+    transition: all 0.15s;
+}
+
+.toc-icon-btn:hover {
+    background: rgba(var(--brand-primary-rgb), 0.1);
+    color: var(--brand-primary-dark);
+}
+
+.toc-icon-btn:active {
+    transform: scale(0.92);
 }
 
 .ghost-btn,

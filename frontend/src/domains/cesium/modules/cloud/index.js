@@ -6,7 +6,7 @@
  * @module Cloud
  */
 
-export { setupCloudIntegration } from './setupCloudIntegration.js';
+export { setupCloudIntegration, isCloudPipelineActive } from './setupCloudIntegration.js';
 export { resolveWebgisCloudAssetPaths, createDefaultCloudPanelParams } from './assetConfig.js';
 export { applyCloudPanelParams, applyLensFlareParams } from './cloudParamsApply.js';
 export {

@@ -276,7 +276,11 @@ export function createChatAgentConfig({ message, onModeChanged = () => {} }) {
                             const preferredModel =
                                 (savedModel && pool.some((m) => m.id === savedModel) && savedModel) ||
                                 '';
-                            const selectedModel = preferredModel || String(pool[0]?.id || dc.model || '');
+                            // 优先级：已保存选择 → dc.model（用户保存过的配置）→ 首个可聊模型兜底。
+                            // 旧逻辑把 pool[0] 排在 dc.model 之前，只要 localStorage 为空，
+                            // reload 就会用列表第一项覆盖用户已保存/刚选择的模型。
+                            const selectedModel =
+                                preferredModel || String(dc.model || '') || String(pool[0]?.id || '');
                             if (selectedModel) {
                                 config.directConfig.model = selectedModel;
                                 config.modelName = selectedModel;
@@ -532,6 +536,12 @@ export function createChatAgentConfig({ message, onModeChanged = () => {} }) {
                     config.isDefaultAIMode = false;
                     config.isPersonalMode = true;
                     config.directConfig = { api_key: personalApiKey, ...backendPayload };
+                    // 与默认 AI 模式同口径：个人 Key 模式的模型选择持久化到按模式隔离的
+                    // localStorage。此前漏写导致 reloadAgentConfig 永远走"无已保存选择"
+                    // 兜底链，配合旧优先级把保存后的模型覆盖成列表第一项。
+                    if (backendPayload.model) {
+                        saveModel(backendPayload.model, false, true);
+                    }
                 } else {
                     // 未填 Key：仅修改模型/参数，仍保持当前路由模式（后端代理），不算个人 Key
                     config.isPersonalMode = false;

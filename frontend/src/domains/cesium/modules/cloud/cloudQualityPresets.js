@@ -80,6 +80,7 @@ export const CLOUD_QUALITY_PRESETS = {
       haloIntensity: 0.0,
       // stage 级：保留 Aerial 链末端合成，让流畅档也能看到基础大气透视。
       atmosphereStageEnabled: true,
+      // 曾误判 Aerial stage 引发天空白闪，实为 backgroundColor=WHITE 与 Bruneton 黑太空假设冲突（2026-08-29 排查）。
       aerialStageEnabled: true,
       // 地面发白独立控制：空中透视 stage 对地面的大气散射强度（0=原色 1=全散射）
       groundAerialScale: 0.35,

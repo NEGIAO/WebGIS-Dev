@@ -57,6 +57,7 @@ import { translate as t } from '@common/app/useLocale';
 import { createFluidRuntime } from './fluidRuntime';
 import LilGuiControls from '@cesium-domain/components/LilGuiControls.vue';
 import { acquireContinuous, releaseContinuous } from '@cesium-domain/composables/interaction/useCesiumRenderMode';
+import { isCloudPipelineActive } from '@cesium-domain/modules/cloud';
 
 /** 按需渲染计数器 tag：流体模拟 postRender 时间步逐帧执行，水体存活期间需要连续渲染 */
 const RENDER_MODE_TAG = 'fluid-sim';
@@ -729,8 +730,9 @@ function prepareScene(viewer, Cesium) {
     viewer.scene.logarithmicDepthBuffer = true;
     viewer.scene.highDynamicRange = true;
     if (viewer.scene.fog) viewer.scene.fog.enabled = true;
-    viewer.scene.globe.showGroundAtmosphere = true;
-    if (viewer.scene.skyAtmosphere) viewer.scene.skyAtmosphere.show = true;
+    // viewer.scene.globe.showGroundAtmosphere = false;
+    // 体积云管线存活期间原生天空由 Bruneton 接管，重开会双大气/白闪
+    if (viewer.scene.skyAtmosphere && !isCloudPipelineActive(viewer)) viewer.scene.skyAtmosphere.show = true;
     viewer.scene.globe.enableLighting = true;
 
     if (!skyStage && createSkyEffect) {
@@ -750,8 +752,13 @@ function restoreScene(viewer) {
     scene.logarithmicDepthBuffer = sceneSnapshot.logarithmicDepthBuffer;
     scene.highDynamicRange = sceneSnapshot.highDynamicRange;
     if (scene.fog && sceneSnapshot.fogEnabled !== undefined) scene.fog.enabled = sceneSnapshot.fogEnabled;
-    scene.globe.showGroundAtmosphere = sceneSnapshot.showGroundAtmosphere;
-    if (scene.skyAtmosphere && sceneSnapshot.skyAtmosphereShow !== undefined) {
+    // 体积云管线存活期间原生地面大气由互斥逻辑接管，恢复不得直写（否则复现双大气白闪；
+    // 与下方 skyAtmosphere 守卫对称，互斥状态机在关闭体积云时统一恢复）
+    if (!isCloudPipelineActive(viewer)) {
+        scene.globe.showGroundAtmosphere = sceneSnapshot.showGroundAtmosphere;
+    }
+    // 体积云管线存活期间原生天空由 Bruneton 接管，恢复也不得重开
+    if (scene.skyAtmosphere && !isCloudPipelineActive(viewer) && sceneSnapshot.skyAtmosphereShow !== undefined) {
         scene.skyAtmosphere.show = sceneSnapshot.skyAtmosphereShow;
     }
     scene.globe.enableLighting = sceneSnapshot.enableLighting;
