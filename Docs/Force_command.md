@@ -7,6 +7,8 @@
 > **适用范围**：`frontend/`、`backend/`、`Docs/`、根级配置文件的一切增删改。
 >
 > **Cesium API**：相关代码参考 skill `cesium-skills`；不确定的 API 禁止臆造，以 [Cesium 官方文档](https://cesium.com/learn/cesiumjs/ref-doc/) 为准。
+> **cesium skill**："C:\Users\NEGIAO\AppData\Roaming\Code\agentPlugins\vscode-synced-customization-agent-host-copilotcli\215423188\skills\cesium-skills"
+涉及到cesium的功能，可以查看这个技能包，里面有很多cesium的使用示例和封装好的函数，可以直接调用。
 
 ---
 
