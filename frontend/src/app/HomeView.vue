@@ -813,8 +813,9 @@ function handleMapCoreReady() {
     }
 
     // ========== Cesium 主脚本空闲预热 ==========
-    // 就绪 10s 后 + 浏览器空闲时后台下载 public/cesium/Cesium.js（约 6MB），
-    // 用户切换 3D 时命中缓存秒开；saveData/慢速网络自动跳过。
+    // 就绪 10s 后 + 浏览器空闲时显式调用 ensureCesiumLoaded() 后台下载
+    // public/cesium/Cesium.js（约 6MB），用户切换 3D 时命中缓存秒开；
+    // saveData/慢速网络自动跳过。
     scheduleCesiumWarmup();
 }
 

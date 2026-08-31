@@ -78,7 +78,7 @@ frontend/src/
 │   │   │   │   ├── useCesiumCameraEnhanced.js  # 相机增强
 │   │   │   │   └── useCesiumSceneActions.js  # 场景动作
 │   │   │   ├── core/
-│   │   │   │   ├── cesiumRuntime.js  # Cesium 运行时加载（await cesiumReady）
+│   │   │   │   ├── cesiumRuntime.js  # Cesium 运行时加载（await ensureCesiumLoaded()）
 │   │   │   │   ├── cesiumStorage.js  # Cesium 状态持久化
 │   │   │   │   ├── cesiumTimeSystem.js  # 时间系统
 │   │   │   │   └── useCesiumNavigation.js  # 导航控件集成（罗盘/缩放）
@@ -386,7 +386,7 @@ frontend/src/
 │   │   ├── data-import/
 │   │   │   ├── archiveProcessor.js  # 归档解包
 │   │   │   ├── batchProcessor.js  # 批量数据分类
-│   │   │   ├── cesiumWarmup.js  # Cesium 主脚本空闲预热（首屏就绪 10s 后后台预载，saveData 跳过）
+│   │   │   ├── cesiumWarmup.js  # Cesium 主脚本空闲预热（首屏就绪 6s + idle 后显式调用 ensureCesiumLoaded() 后台预载，saveData 跳过）
 │   │   │   ├── crsAware.js  # ⚠️ 转发壳（canonical 在 crs/crsAware.js）
 │   │   │   ├── crs-engine.ts  # ⚠️ 转发壳（canonical 在 crs/crs-engine.ts）
 │   │   │   ├── dataDispatcher.js  # 数据格式分发

@@ -6,6 +6,11 @@
 
 ## 版本记录
 
+### V3.5.36 (2026-08-29) — 首页/登录页 Cesium.js 抢跑加载修复
+
+> **症状**：访问落地页 `/#/` 时 Network 立即出现约 6MB 的 `cesium/Cesium.js` 请求，`map-core-ready` 后的延迟预热策略完全失效。**根因**：`cesium-shim.js` 模块顶层以 IIFE 立即注入 Cesium CDN `<script>`（`import 即下载`），而 Rollup 把 shim 与入口启动链所需的 `publicRuntime` 配置（后端地址/超时/OAuth client id）以及 `@cesium-extends` 一并归入 `vendor-planar-route` chunk——入口为拿配置静态加载该 chunk 时，chunk 求值即执行注入副作用。**修复**：注入重构为显式幂等 `ensureCesiumLoaded()`（`window.Cesium` 已在直接 resolve；重复调用返回同一 `cesiumReady`），模块求值零副作用、对 chunk 归属免疫；`loadCesiumRuntime()`（切 3D 时显式触发+等待）与 `scheduleCesiumWarmup()`（预热）改为显式调用；预热延迟 10s → **6s**。涉及 `cesium-shim.js`、`domains/cesium/composables/core/cesiumRuntime.js`、`domains/common/data-import/cesiumWarmup.js`、`cesium.d.ts`、`app/HomeView.vue`（注释）。验证：构建后新产物中顶层注入调用已消失（`appendChild(r)}e(0)})();` → 函数内封装），入口 chunk 零 Cesium 请求路径；日志 `Docs/LLM_record/26-08/2026-08-29/2026-08-29-fix-landing-cesium-eager-load.md`。
+
+
 ### V3.5.35 (2026-08-29) — 暂存区多批次归并：体积云天际线白闪修复 + 云↔大气互斥 + 天空旁路封堵 + 工具面板下拉白底白字修复 + 全项目同类排查 + 散项修复
 
 > 本版本为暂存区多批次不规范提交（原临时编号 V3.5.35~36，含未记录散项）经整合 Code Review 后归并的**单一版本**。审查日志：`Docs/LLM_record/26-08/2026-08-29/2026-08-29-code-review-staged-v3535.md`；分项分析：`2026-08-29-fix-cloud-sky-flicker-mutex.md`、`2026-08-29-fix-ctp-select-dropdown-ui.md`、`2026-08-28-fix-atmosphere-autofade-dependency.md`。

@@ -80,7 +80,7 @@
 
 ## 🎯 项目简介
 
-**NEGIAO's WebGIS** 是一个功能完整、架构清晰的前后端分离 WebGIS 平台（当前版本 V3.5.35），前端托管于 GitHub Pages（正式域名 webgis.negiao.cn），后端以 Docker 部署在 Hugging Face Spaces，通过 RESTful API 通信，支持独立扩展。
+**NEGIAO's WebGIS** 是一个功能完整、架构清晰的前后端分离 WebGIS 平台（当前版本 V3.5.36），前端托管于 GitHub Pages（正式域名 webgis.negiao.cn），后端以 Docker 部署在 Hugging Face Spaces，通过 RESTful API 通信，支持独立扩展。
 
 > 📚 本 README 仅保留核心概览与导航。完整文档已模块化至 [`Docs/Guide/`](Docs/Guide/)，详见下方「文档导航」。
 >
@@ -404,10 +404,9 @@ HF Spaces 在 24 小时无访问后自动休眠。本平台通过**双向互保�
 
 | 版本 | 日期 | 概要 |
 |------|------|------|
+| **V3.5.36** | 2026-08-29 | **首页/登录页 Cesium.js 抢跑加载修复**：①根因——`cesium-shim.js` 模块顶层 IIFE 立即注入 Cesium CDN `<script>`，而 Rollup 将 shim 与入口所需的 `publicRuntime` 配置归入同一 chunk（vendor-planar-route），导致首页打开瞬间即拉取约 6MB Cesium.js，延迟预热完全失效；②修复——注入改为显式幂等 `ensureCesiumLoaded()`（零顶层副作用，对 chunk 归属免疫），`loadCesiumRuntime()` 与 `scheduleCesiumWarmup()` 均显式调用；③预热延迟统一为 6s（原 10s）。详见[完整更新日志](Docs/Guide/CHANGELOG.md) |
 | **V3.5.35** | 2026-08-29 | **体积云天际线白闪修复 + 云↔大气互斥 + 天空旁路封堵 + 工具面板下拉白底白字修复（暂存区多批次归并 + 整合 Code Review）**：①根因——启动时 `backgroundColor=WHITE` 与 Bruneton 管线黑太空假设冲突，掠射带 `isSky` 分类随深度抖动帧间翻转成"天空辉光↔白底透传"白闪；管线启用时快照并压黑背景、关闭时恢复（`setupCloudIntegration.js`）；②体积云与原生地面大气双向互斥（开云记状态并关大气/关云恢复/手动开大气关云），Tellux 主开关等效路径纳入互斥，preRender 逐帧兜底压制旁路直写；③新增 `isCloudPipelineActive(viewer)` 查询接口封堵大气面板/Tellux/洪水模拟旁路共 8 处原生天空写入点（整合 Review 补强洪水 `restoreScene` 的 `showGroundAtmosphere` 恢复门控）；④修复大气渐隐前提依赖（渐隐开关/滑杆随地面大气开关联动禁用）；⑤修复工具面板下拉白底白字——模板级 `<select>` 与 lil-gui 内嵌下拉接 `color-scheme: dark` + option 暗底浅字配色（激活 `--ctp-option-bg` 预留令牌），并全量排查 13 文件 22 处原生 select 无其他同类缺陷；⑥Chat 个人 Key 模式模型持久化与 reload 优先级修正；⑦TOC 关闭按钮图标化 + 分享文案 emoji 清理。详见[完整更新日志](Docs/Guide/CHANGELOG.md) |
 | **V3.5.34** | 2026-08-28 | **大气渲染修复与增强 + HENU 矢量瓦片全链修复 + Chat 配置面板改版（暂存区多批次归并 + 整合 Code Review）**：①修复 `skyAtmosphereLightIntensity` 失效——Cesium 1.121+ 属性更名 `lightIntensity → atmosphereLightIntensity`，旧防御检查静默跳过赋值，改为优先写新属性并保留旧名回退，滑杆上限 30→100；②修复 HENU 边界矢量瓦片 OL 渲染空白——图层类型与 source 类型错配（TileLayer 挂 VectorTileSource），新增 `applyBasemapSourceToLayer` 类型安全挂载助手接入切换与 HD 刷新链路；③新增零依赖服务端样式适配器 `vectorTileStyleAdapter.js`（ArcGIS root.json → OL StyleFunction，渐进增强、失败静默降级），filter 宽松相等 + line-dasharray 表达式防护；④新增地面大气相机高度渐隐（preRender smoothstep，系数节流幂等化避免 requestRenderMode 空转重绘），光强钳位下限随基准值抬升恢复滑杆 12~25 行程；`useBrowserRecommendedResolution: false` 按物理像素渲染提升瓦片清晰度；⑤Chat 配置面板四卡片可折叠 + 模型选择改为"仅改草稿、保存后生效"语义（v2 存储 key 隔离脏数据）。详见[完整更新日志](Docs/Guide/CHANGELOG.md) |
-| **V3.5.33** | 2026-08-27 | **全项目审查离散缺陷集中修复**：回归修复（TOC 绘制页 3D 引擎路由、viewer 重试重建后 TOC 僵尸档案、Action Router 异步 rejection 兜底、useChatSession 移除 deep watch 改显式持久化 + 卸载 flush）；安全加固（location 鉴权公开化 resolve_optional_session、DEV_DEFAULT_ADMIN_PASSWORD 单源化）；性能（loadedDataSources/wind2D shallowRef 消除 Cesium 句柄双身份、CesiumAdvancedEffects preRender uniform 变更检测门控、AttributeTable/MapDownloader defineAsyncComponent 出首屏 chunk）；单源收敛（datetime.js 六处日期格式化、mapDefaults.js zoom=16 四处魔法数字、compat.js nadir 公式委托 cesiumScale）；清理 ~2700 行零引用死代码与 .tmp-test 调试脚本。详见[完整更新日志](Docs/Guide/CHANGELOG.md) |
-
 > 注：V3.5.34 之前的多批次内容已整合进对应版本条目并归档于 CHANGELOG，演进表仅保留最近三个版本实义摘要。
 
 更早版本（V3.5.32 及以前）请查阅 [完整更新日志 →](Docs/Guide/CHANGELOG.md)
@@ -432,6 +431,6 @@ HF Spaces 在 24 小时无访问后自动休眠。本平台通过**双向互保�
 |:------:|:--------:|:--------:|
 | [GitHub](https://github.com/NEGIAO/WebGIS-Dev) | [webgis.negiao.cn](https://webgis.negiao.cn)（正式域名，GitHub Pages 托管） | [Hugging Face](https://NEGIAO-WebGIS.hf.space) |
 
-<sub>V3.5.35 · 完成 · 最后更新 2026-08-29</sub>
+<sub>V3.5.36 · 完成 · 最后更新 2026-08-29</sub>
 
 </div>

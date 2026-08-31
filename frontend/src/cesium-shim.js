@@ -5,16 +5,21 @@
  * Vite alias 将 "cesium" 解析至此文件，所有导出均为惰性 Proxy。
  *
  * ## 加载时序
- * 模块顶层立即注入 <script>（Cesium CDN），暴露 cesiumReady Promise。
- * cesiumRuntime.js 的 loadCesiumRuntime() 内部 `await cesiumReady` 保证
- * Cesium 就位后才继续。cesium-navigation / cesium-wind-layer 源码仍在
+ * 模块求值【不再】触发 CDN 注入。旧版在顶层以 IIFE 立即注入 <script>，
+ * 但一旦 Rollup 把本模块与入口所需的公共配置(publicRuntime)分进同一
+ * chunk，首页就会在页面打开瞬间下载约 6MB 的 Cesium.js，拖慢首屏。
+ * 现改为显式加载（幂等）：
+ * - 调用 ensureCesiumLoaded() 才注入 <script>，返回 cesiumReady Promise
+ * - cesiumRuntime.loadCesiumRuntime() 内部 await ensureCesiumLoaded()
+ * - HomeView.scheduleCesiumWarmup() 在 2D 就绪后延迟 6s 调用，后台预热
+ * - 零顶层副作用：即使入口 chunk 意外包含本模块代码也不会发起任何请求
+ * cesium-navigation / cesium-wind-layer 源码仍在
  * components/Cesium/ 迁移期 legacy 模块中，模块级构造器已改为惰性 getter。
  *
  * ## 设计要点
- * - CDN 注入在模块求值时同步触发（createElement + appendChild），
- *   但下载是异步的；cesiumReady 作为栅栏保证业务代码不抢先。
- * - 不阻塞非 Cesium 页面：只有 CesiumContainer 懒加载链路上的模块
- *   才会触发本文件的 import，首页完全不加载 Cesium。
+ * - CDN 注入仅在显式调用 ensureCesiumLoaded() 时同步触发
+ *   （createElement + appendChild），下载本身是异步的；
+ *   cesiumReady 作为栅栏保证业务代码不抢先。
  * - knockout 补丁（track / cesiumSvgPath）在此文件中完成，
  *   cesium-navigation 控件依赖这些扩展。
  */
@@ -61,62 +66,77 @@ const cesiumReady = new Promise((resolve, reject) => {
     _cesiumReadyReject = reject;
 });
 
-(function injectCesiumCDN() {
-    if (document.getElementById('cesium-shim-autoload')) return;
-
-    /**
-     * 依次尝试候选源:成功 → resolve cesiumReady;失败/超时 → 清理后试下一个;
-     * 全部失败 → reject(与旧单源失败行为一致,由调用方兜底)。
-     * @param {number} index - 当前候选下标
-     */
-    function attemptLoad(index) {
-        if (index >= CESIUM_CDN_CANDIDATES.length) {
-            const err = new Error('[cesium-shim] 所有 Cesium CDN 候选源均加载失败');
-            // 错误由 cesiumReady reject 链路上抛,由 cesiumRuntime/CesiumContainer boot 以 message toast 兜底,此处不再重复 console.error
-            // console.error(err);
-            _cesiumReadyReject(err);
-            return;
-        }
-
-        const candidate = CESIUM_CDN_CANDIDATES[index];
-        // Cesium 依赖此全局解析 Worker / 静态资源路径,必须在脚本加载前指向当前候选
-        activeCesiumBaseUrl = candidate.base;
-        window.CESIUM_BASE_URL = candidate.base;
-
-        const script = document.createElement('script');
-        script.id = 'cesium-shim-autoload';
-        script.src = `${candidate.base}Cesium.js`;
-
-        let settled = false;
-        const timer = window.setTimeout(() => {
-            if (settled) return;
-            settled = true;
-            console.warn(`[cesium-shim] ${candidate.name} 加载超时(${CDN_ATTEMPT_TIMEOUT_MS}ms),切换下一候选源`);
-            script.remove();
-            attemptLoad(index + 1);
-        }, CDN_ATTEMPT_TIMEOUT_MS);
-
-        script.onload = () => {
-            if (settled) return;
-            settled = true;
-            window.clearTimeout(timer);
-            // eslint-disable-next-line no-console
-            console.info(`[cesium-shim] Cesium CDN 加载完成(来源:${candidate.name})`);
-            _cesiumReadyResolve();
-        };
-        script.onerror = () => {
-            if (settled) return;
-            settled = true;
-            window.clearTimeout(timer);
-            console.warn(`[cesium-shim] ${candidate.name} 加载失败,切换下一候选源`);
-            script.remove();
-            attemptLoad(index + 1);
-        };
-        document.head.appendChild(script);
+/**
+ * 依次尝试候选源:成功 → resolve cesiumReady;失败/超时 → 清理后试下一个;
+ * 全部失败 → reject(与旧单源失败行为一致,由调用方兜底)。
+ * @param {number} index - 当前候选下标
+ */
+function attemptLoad(index) {
+    if (index >= CESIUM_CDN_CANDIDATES.length) {
+        const err = new Error('[cesium-shim] 所有 Cesium CDN 候选源均加载失败');
+        // 错误由 cesiumReady reject 链路上抛,由 cesiumRuntime/CesiumContainer boot 以 message toast 兜底,此处不再重复 console.error
+        // console.error(err);
+        _cesiumReadyReject(err);
+        return;
     }
 
-    attemptLoad(0);
-})();
+    const candidate = CESIUM_CDN_CANDIDATES[index];
+    // Cesium 依赖此全局解析 Worker / 静态资源路径,必须在脚本加载前指向当前候选
+    activeCesiumBaseUrl = candidate.base;
+    window.CESIUM_BASE_URL = candidate.base;
+
+    const script = document.createElement('script');
+    script.id = 'cesium-shim-autoload';
+    script.src = `${candidate.base}Cesium.js`;
+
+    let settled = false;
+    const timer = window.setTimeout(() => {
+        if (settled) return;
+        settled = true;
+        console.warn(`[cesium-shim] ${candidate.name} 加载超时(${CDN_ATTEMPT_TIMEOUT_MS}ms),切换下一候选源`);
+        script.remove();
+        attemptLoad(index + 1);
+    }, CDN_ATTEMPT_TIMEOUT_MS);
+
+    script.onload = () => {
+        if (settled) return;
+        settled = true;
+        window.clearTimeout(timer);
+        // eslint-disable-next-line no-console
+        console.info(`[cesium-shim] Cesium CDN 加载完成(来源:${candidate.name})`);
+        _cesiumReadyResolve();
+    };
+    script.onerror = () => {
+        if (settled) return;
+        settled = true;
+        window.clearTimeout(timer);
+        console.warn(`[cesium-shim] ${candidate.name} 加载失败,切换下一候选源`);
+        script.remove();
+        attemptLoad(index + 1);
+    };
+    document.head.appendChild(script);
+}
+
+/** 标记 CDN 注入是否已启动,保证 ensureCesiumLoaded 幂等 */
+let _injectionStarted = false;
+
+/**
+ * 显式触发 Cesium CDN 注入（幂等）。
+ * 功能：注入 <script src=".../Cesium.js"> 并返回就绪 Promise；
+ * 参数：无；返回：Promise<void>，CDN 就位后 resolve，全部候选源失败后 reject。
+ * 核心逻辑：window.Cesium 已存在则直接 resolve；未启动过注入则启动一次；
+ * 重复调用返回同一个 cesiumReady Promise。取代旧版「模块求值即注入」的
+ * 顶层副作用，保证首页/登录页零 Cesium 请求。
+ * @returns {Promise<void>}
+ */
+export function ensureCesiumLoaded() {
+    if (window.Cesium) return Promise.resolve();
+    if (!_injectionStarted) {
+        _injectionStarted = true;
+        attemptLoad(0);
+    }
+    return cesiumReady;
+}
 
 export { cesiumReady };
 

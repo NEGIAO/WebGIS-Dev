@@ -115,6 +115,7 @@ declare module 'cesium' {
 
     // Shim 特有导出
     export const cesiumReady: Promise<void>;
+    export function ensureCesiumLoaded(): Promise<void>;
     export const CESIUM_BASE_URL: string;
     export function getActiveCesiumBaseUrl(): string;
 
