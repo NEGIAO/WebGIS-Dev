@@ -7,8 +7,8 @@ KeepAlive 互活跃模块（WebGIS 端 - 项目 A）
   - GET  /api/keepalive/ping —— 兼容探活
 
 发送端：
-  - asyncio 后台任务，每 3~6 分钟（含随机浮动 180~360s）主动 GET 对端 /api/status
-  - 对端 New API 是编译型 Go 二进制，公开端口 3000 上只有 /api/status 可用
+  - asyncio 后台任务，每 3~6 分钟（含随机浮动 180~360s）主动 GET 对端 /health
+  - 对端为 Xianyu Super Butler（HF Space: negiao/apps），公开端口 8080 上 /health 免鉴权
   - 请求头随机轮换 Chrome/Edge/Firefox UA + Accept + Accept-Language
   - 日志格式：[保活] 数据发送成功 / 数据接收成功 / 保活失败
 """
@@ -23,10 +23,10 @@ from fastapi import APIRouter, Request
 
 logger = logging.getLogger(__name__)
 
-# 对端公开地址（New API HF Space，端口 3000 已暴露到公网）
-PEER_URL = "https://negiao-newapi.hf.space"
-# 对端 Go 程序已公开的探活端点（GET，无需鉴权）
-PEER_PROBE_PATH = "/api/status"
+# 对端公开地址（Xianyu Super Butler HF Space，端口 8080 已暴露到公网）
+PEER_URL = "https://negiao-apps.hf.space"
+# 对端已公开的探活端点（GET /health，无需鉴权，HEALTHCHECK 同路径）
+PEER_PROBE_PATH = "/health"
 
 router = APIRouter(tags=["keepalive"])
 
@@ -139,7 +139,7 @@ async def keepalive_ping():
 # 发送端：asyncio 后台任务，3~6 分钟随机间隔 GET 对端 /api/status
 # ---------------------------------------------------------------------------
 async def _send_keepalive_once(client):
-    """执行一次 GET 探活（对端是 Go 二进制，公开端点只有 /api/status）。
+    """执行一次 GET 探活（对端为 Xianyu Super Butler，公开端点 /health）。
 
     返回：
       - 2xx 状态码      —— 保活成功
