@@ -15,6 +15,7 @@ import {
     getAuthToken,
     getAuthUser,
 } from '@common/user/services/auth';
+import { EMERGENCY_GUEST_MODE } from '@/config/publicRuntime';
 
 const HomeView = () => import('./lazyHomeViewLoader').then((mod) => mod.loadHomeView());
 
@@ -180,13 +181,18 @@ router.beforeEach(async (to, from) => {
             authStore.requiresEmailBinding === true ||
             getAuthUser()?.requires_email_binding === true;
 
-        // [Share Mode] 即使未登录，分享模式也允许访问（已通过访客令牌）
+        // 未登录时：应急游客强制模式下直接注入游客令牌放行浏览；否则走原登录流程重定向 register。
         if (requiresAuth && !isLoggedIn && !shareModeEnabled) {
             cacheRoutePositionCode(to);
-            return {
-                name: 'register',
-                query: { redirect: to.fullPath },
-            };
+            if (EMERGENCY_GUEST_MODE) {
+                injectGuestTokenForShareMode();
+                // 不返回重定向；游客令牌已注入，继续走下方 home 逻辑放行
+            } else {
+                return {
+                    name: 'register',
+                    query: { redirect: to.fullPath },
+                };
+            }
         }
 
         if (requiresAuth && isLoggedIn && bindingRequired && !shareModeEnabled) {

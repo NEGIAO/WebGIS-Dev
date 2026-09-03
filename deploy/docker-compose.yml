@@ -9,7 +9,7 @@
 #
 # 生产仿真（可选，与 HF 行为一致）：
 #   docker compose -f deploy/docker-compose.yml --profile prod up -d
-#     http://localhost:8080  nginx 托管镜像内打包的 dist + 反代（含 cron 保活）
+#     http://localhost:8080  nginx 托管镜像内打包的 dist + 反代
 #
 # 与 HF 的关系：同一 Dockerfile；CI 组装 {Dockerfile, deploy/, backend/,
 # frontend/} 推送 Space，构建路径两侧完全一致。
@@ -89,7 +89,7 @@ services:
              exec npx vite"
 
   # -----------------------------------------------------------------
-  # 生产仿真（可选）：零覆写即 HF Space 同款行为（nginx + 打包 dist + cron 保活）
+  # 生产仿真（可选）：零覆写即 nginx + 打包 dist + 反代（原 HF Space 同款行为已移除保活）
   # -----------------------------------------------------------------
   app:
     image: negiao/webgis:latest

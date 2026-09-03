@@ -20,7 +20,7 @@
 </p>
 
 <p align="center">
-  🚀 <strong>在线演示</strong>：<a href="https://webgis.negiao.cn">NEGIAO's WebGIS-Dev — 欢迎点击体验</a>
+  🚀 <strong>在线演示</strong>：<a href="https://webgis.negiao.cn/#/home?ut=guest&lng=114.302000&lat=34.814600&z=4.00&l=5&s=1&loc=0&p=0&view=ol">NEGIAO's WebGIS-Dev — 欢迎点击体验（后端挂了，暂时应急通道）</a>
 </p>
 
 <p align="center">
@@ -65,7 +65,6 @@
 - [🏗️ 系统架构](#️-系统架构)
   - [分层架构总览](#分层架构总览)
   - [域名映射](#域名映射)
-- [🔁 双向保活机制](#-双向保活机制)
 - [🧭 文档导航](#-文档导航)
   - [开发文档](#开发文档)
   - [架构文档](#架构文档)
@@ -224,7 +223,7 @@ docker pull negiao/webgis_dev:V3.5
 ## 🏗️ 系统架构
 
 > 完整架构文档已模块化至 [`Docs/Architecture/`](Docs/Architecture/)：
-> [系统架构总览](Docs/Architecture/system-architecture.md) · [CI/CD 流水线](Docs/Architecture/cicd-pipeline.md) · [部署关系与域名映射](Docs/Architecture/deployment-relationship.md) · [HF Space 双向保活机制](Docs/Architecture/keepalive-hf-space.md)
+> [系统架构总览](Docs/Architecture/system-architecture.md) · [CI/CD 流水线](Docs/Architecture/cicd-pipeline.md) · [部署关系与域名映射](Docs/Architecture/deployment-relationship.md)
 
 ### 分层架构总览
 
@@ -329,17 +328,6 @@ tiles.negiao.cc.cd"]
 | 瓦片存储 | `tiles.negiao.cc.cd` | Cloudflare R2 |
 
 > 完整域名清单、部署来源矩阵、平台能力对比见 [deployment-relationship.md](Docs/Architecture/deployment-relationship.md)
-
----
-
-## 🔁 双向保活机制
-
-HF Spaces 在 24 小时无访问后自动休眠。本平台通过**双向互保活**机制，让 WebGIS 后端（:7860）与 New API 服务（:3000）每 3~6 分钟互相发送模拟真实用户的 HTTP 请求，保持双方始终活跃。
-
-- 公开探活接口：`GET /api/keepalive/ping`（WebGIS）/ `GET /keepalive/ping`（New API）
-- 详细架构文档 → [Docs/Architecture/keepalive-hf-space.md](Docs/Architecture/keepalive-hf-space.md)
-
----
 
 ## 🧭 文档导航
 
