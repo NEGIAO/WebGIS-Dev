@@ -6,7 +6,7 @@ import asyncio
 import logging
 
 from .db import _db_connection, _iso, _safe_execute, _utc_now, AUTH_DB_PATH, backup_auth_db_for_migration
-from utils.sqlite_maintenance import ensure_maintenance_event_table, sync_recovery_manifests
+from core.sqlite_maintenance import ensure_maintenance_event_table, sync_recovery_manifests
 
 logger = logging.getLogger(__name__)
 

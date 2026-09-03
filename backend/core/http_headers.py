@@ -1,6 +1,6 @@
 """瓦片出站面共享的浏览器特征请求头。
 
-三处瓦片出站面（download_xyz / gcj_rectify / api.proxy）共用本模块，
+三处瓦片出站面（domains/tiles/download、rectify、直通代理）共用本模块，
 规避天地图等瓦片源对「非浏览器特征请求」的 418 反爬拦截（见
 Docs/LLM_record/26-08/2026-08-17/2026-08-17-tianditu-418-download-fix.md）。
 新增瓦片源反爬适配只需改本文件白名单，无需改动消费方。
@@ -51,11 +51,14 @@ REFERER_BY_DOMAIN = {
     "tianditu.gov.cn": "https://www.tianditu.gov.cn/",
     # 天地图企业/移动域名（omap.map-world.com.cn 等），同一官网 Referer
     "map-world.com.cn": "https://www.tianditu.gov.cn/",
+    # 百度系瓦片（maponline*.bdimg.com）防盗链：缺 Referer 返回错误图，
+    # 需伪装 map.baidu.com 官网来源（bdimg.com 为 bdstatic 瓦片主域）
+    "bdimg.com": "https://map.baidu.com/",
 }
 
-# 出站请求的浏览器特征默认头（api.proxy 通用代理与 gcj_rectify 纠偏代理共用），
+# 出站请求的浏览器特征默认头（直通代理与纠偏代理共用，见 domains/tiles/），
 # 与真实浏览器请求对齐（Accept: */*、Accept-Encoding 含 br/zstd 等）。
-# ⚠️ br/zstd 版本仅可用于「流式原样转发、不解压」的面（api.proxy 通用代理）；
+# ⚠️ br/zstd 版本仅可用于「流式原样转发、不解压」的面（直通代理 routes_passthrough）；
 # 需要 httpx 解压响应体的面（纠偏 / 下载）必须用 build_browser_headers_no_br()——
 # backend 未安装 brotli/zstandard 解码库，上游真以 br/zstd 编码响应时
 # httpx 会抛 DecodingError，瓦片拉取直接失败。

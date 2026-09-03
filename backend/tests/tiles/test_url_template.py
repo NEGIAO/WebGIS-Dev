@@ -1,4 +1,4 @@
-"""瓦片 URL 模板解析/重建单测（gcj_rectify/url_template.py）
+"""瓦片 URL 模板解析/重建单测（domains/tiles/rectify/common/url_template.py）
 
 覆盖三种常规模式（format / query / path）与通用「单路径段内嵌多数字」解析
 （如 Google maps/vt 的 pb=!1m4!1m3!1i10!2i500!3i800!2m1!1e6）。
@@ -8,9 +8,9 @@ import sys
 import unittest
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from gcj_rectify.url_template import build_tile_url, parse_tile_url
+from domains.tiles.rectify.common.url_template import build_tile_url, parse_tile_url
 
 
 class TestParseTileUrl(unittest.TestCase):

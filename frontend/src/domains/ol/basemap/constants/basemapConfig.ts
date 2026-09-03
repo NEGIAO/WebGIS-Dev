@@ -36,7 +36,7 @@ import {
     prioritizeTileSourceRequest,
 } from '@ol/tile-source';
 // 后端/瓦片代理基址统一由 publicRuntime 派生，禁止硬编码域名与直接读取 import.meta.env
-import { backendTilesUrl, gcj2wgsProxyUrl, tileProxyUrl } from '@/config/publicRuntime';
+import { backendTilesUrl, bd2wgsProxyUrl, gcj2wgsProxyUrl, tileProxyUrl } from '@/config/publicRuntime';
 
 // ========== 预设目录(已抽离至 basemapPresets.ts,原位 re-export 保持兼容) ==========
 // 抽离原因见 basemapPresets.ts 头注释(切断登录页入口 → ol 的打包链)。
@@ -1393,6 +1393,29 @@ export const LAYER_SOURCE_DEFINITIONS: LayerSourceDefinition[] = [
                     url: gcj2wgsProxyUrl(
                         'http://webrd01.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}',
                     ),
+                }),
+            ),
+    },
+    {
+        id: 'vector_baidu_wgs',
+        name: '百度地图(WGS)',
+        category: 'vector',
+        group: '矢量',
+        // 百度 BD09MC 为独立网格（Y 轴向上、res=2^(18-z)），前端以标准 XYZ 索引请求，
+        // 后端 /proxy/bd2wgs 拉对应百度网格跨网格重采样对齐 WGS84（实现见 backend/domains/tiles/rectify/bd/）。
+        // 子域固定 maponline0 避免 OL/Cesium 对 {s}/{0-9} 语义差异；负载均衡无碍正确性。
+        url: bd2wgsProxyUrl(
+            'https://maponline0.bdimg.com/tile/?qt=vtile&x={x}&y={y}&z={z}&styles=pl&scaler=1&from=jsapi2_0',
+        ),
+        serviceType: 'xyz',
+        maxZoom: 18,
+        createSource: () =>
+            prioritizeTileSourceRequest(
+                new XYZ({
+                    url: bd2wgsProxyUrl(
+                        'https://maponline0.bdimg.com/tile/?qt=vtile&x={x}&y={y}&z={z}&styles=pl&scaler=1&from=jsapi2_0',
+                    ),
+                    maxZoom: 18,
                 }),
             ),
     },

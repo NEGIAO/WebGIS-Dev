@@ -1,3 +1,12 @@
+# -*- coding: utf-8 -*-
+"""源瓦片网格拉取 / 拼接 / 缓存（gcj/bd 双向共用）。
+
+内容整体搬自旧 `gcj_rectify/rectify.py`（并发、重试、字节/网格护栏、
+文件缓存、合成逻辑均原样保留），仅 import 前缀改为本包。
+"""
+
+from __future__ import annotations
+
 import asyncio
 import logging
 from io import BytesIO
@@ -9,17 +18,9 @@ from PIL import Image
 
 from config import get_int
 
-from .fetch import fetch_tile
-from .url_template import TileUrlTemplate, build_tile_url
-from .utils import (
-    TILE_SIZE,
-    bytes_to_image,
-    gcjbbox_to_wgsbbox,
-    image_to_bytes,
-    lonlat_to_xyz,
-    wgsbbox_to_gcjbbox,
-    xyz_to_bbox,
-)
+from domains.tiles.rectify.common.fetch import fetch_tile
+from domains.tiles.rectify.common.geo import TILE_SIZE, bytes_to_image, image_to_bytes
+from domains.tiles.rectify.common.url_template import TileUrlTemplate, build_tile_url
 
 logger = logging.getLogger(__name__)
 
@@ -69,47 +70,9 @@ def _save_tile_bytes(tile_path: Path, tile_bytes: bytes) -> None:
     tile_path.write_bytes(tile_bytes)
 
 
-def _normalize_range(min_val: int, max_val: int) -> tuple[int, int]:
-    """确保 min <= max"""
-    if min_val > max_val:
-        return max_val, min_val
-    return min_val, max_val
-
-
 def _build_blank_tile() -> Image.Image:
     """创建空白瓦片（RGBA）"""
     return Image.new("RGBA", (TILE_SIZE, TILE_SIZE))
-
-
-def _crop_composite(
-    composite: Image.Image,
-    merged_bbox,
-    target_bbox,
-) -> Image.Image:
-    x_range = merged_bbox[1][0] - merged_bbox[0][0]
-    y_range = merged_bbox[0][1] - merged_bbox[1][1]
-    if x_range == 0 or y_range == 0:
-        return composite.resize((TILE_SIZE, TILE_SIZE))
-
-    left_percent = (target_bbox[0][0] - merged_bbox[0][0]) / x_range
-    top_percent = (merged_bbox[0][1] - target_bbox[0][1]) / y_range
-
-    left = int(left_percent * composite.width)
-    top = int(top_percent * composite.height)
-    right = left + TILE_SIZE
-    bottom = top + TILE_SIZE
-
-    left = max(0, min(left, composite.width))
-    top = max(0, min(top, composite.height))
-    right = max(left, min(right, composite.width))
-    bottom = max(top, min(bottom, composite.height))
-
-    crop = composite.crop((left, top, right, bottom))
-    if crop.size != (TILE_SIZE, TILE_SIZE):
-        canvas = _build_blank_tile()
-        canvas.paste(crop, (0, 0))
-        return canvas
-    return crop
 
 
 async def _get_tile_cached(
@@ -242,6 +205,7 @@ def _merge_tiles(
     y_min: int,
     y_max: int,
 ) -> Image.Image:
+    """拼接标准 XYZ 网格瓦片（Y 轴向下，行序与索引升序一致）。"""
     composite = Image.new(
         "RGBA",
         ((x_max - x_min + 1) * TILE_SIZE, (y_max - y_min + 1) * TILE_SIZE),
@@ -253,118 +217,3 @@ def _merge_tiles(
                 composite.paste(tile.convert("RGBA"), (i * TILE_SIZE, j * TILE_SIZE))
             tile_index += 1
     return composite
-
-
-async def _build_rectified_tile(
-    source_bbox,
-    z: int,
-    template: TileUrlTemplate,
-    cache_dir: Path,
-    source_category: str,
-    client: Optional[httpx.AsyncClient],
-) -> bytes:
-    left_upper, right_lower = source_bbox
-    x_min, y_min = lonlat_to_xyz(left_upper[0], left_upper[1], z)
-    x_max, y_max = lonlat_to_xyz(right_lower[0], right_lower[1], z)
-    x_min, x_max = _normalize_range(x_min, x_max)
-    y_min, y_max = _normalize_range(y_min, y_max)
-
-    tiles = await _fetch_tile_grid(
-        x_min,
-        x_max,
-        y_min,
-        y_max,
-        z,
-        template,
-        cache_dir,
-        source_category,
-        client,
-    )
-    composite = _merge_tiles(tiles, x_min, x_max, y_min, y_max)
-
-    merged_bbox = (
-        xyz_to_bbox(x_min, y_min, z)[0],
-        xyz_to_bbox(x_max, y_max, z)[1],
-    )
-    cropped = _crop_composite(composite, merged_bbox, source_bbox)
-    return image_to_bytes(cropped)
-
-
-async def get_gcj2wgs_tile(
-    x: int,
-    y: int,
-    z: int,
-    template: TileUrlTemplate,
-    cache_dir: Path,
-    *,
-    client: Optional[httpx.AsyncClient] = None,
-) -> bytes:
-    """Return a WGS tile built from GCJ tiles.
-
-    GCJ-02 -> WGS84 纠偏流程：
-    1. 检查输出缓存，命中则直接返回
-    2. z <= 9 时直接返回源瓦片（低缩放级别偏差可忽略）
-    3. z > 9 时执行像素级纠偏
-    """
-    output_path = _tile_cache_path(cache_dir, template, "gcj2wgs", z, x, y)
-
-    # 缓存命中：直接返回字节
-    if output_path.exists():
-        return output_path.read_bytes()
-
-    # 低缩放级别：偏差可忽略，直接返回源瓦片
-    if z <= 9:
-        tile_bytes = await _get_tile_cached(
-            x, y, z, template, cache_dir, "source-gcj", client=client
-        )
-        _save_tile_bytes(output_path, tile_bytes)
-        return tile_bytes
-
-    # 高缩放级别：执行像素级纠偏
-    wgs_bbox = xyz_to_bbox(x, y, z)
-    gcj_bbox = wgsbbox_to_gcjbbox(wgs_bbox)
-    tile_bytes = await _build_rectified_tile(
-        gcj_bbox, z, template, cache_dir, "source-gcj", client
-    )
-    _save_tile_bytes(output_path, tile_bytes)
-    return tile_bytes
-
-
-async def get_wgs2gcj_tile(
-    x: int,
-    y: int,
-    z: int,
-    template: TileUrlTemplate,
-    cache_dir: Path,
-    *,
-    client: Optional[httpx.AsyncClient] = None,
-) -> bytes:
-    """Return a GCJ tile built from WGS tiles.
-
-    WGS84 -> GCJ-02 纠偏流程：
-    1. 检查输出缓存，命中则直接返回
-    2. z <= 9 时直接返回源瓦片（低缩放级别偏差可忽略）
-    3. z > 9 时执行像素级纠偏
-    """
-    output_path = _tile_cache_path(cache_dir, template, "wgs2gcj", z, x, y)
-
-    # 缓存命中：直接返回字节
-    if output_path.exists():
-        return output_path.read_bytes()
-
-    # 低缩放级别：偏差可忽略，直接返回源瓦片
-    if z <= 9:
-        tile_bytes = await _get_tile_cached(
-            x, y, z, template, cache_dir, "source-wgs", client=client
-        )
-        _save_tile_bytes(output_path, tile_bytes)
-        return tile_bytes
-
-    # 高缩放级别：执行像素级纠偏
-    gcj_bbox = xyz_to_bbox(x, y, z)
-    wgs_bbox = gcjbbox_to_wgsbbox(gcj_bbox)
-    tile_bytes = await _build_rectified_tile(
-        wgs_bbox, z, template, cache_dir, "source-wgs", client
-    )
-    _save_tile_bytes(output_path, tile_bytes)
-    return tile_bytes

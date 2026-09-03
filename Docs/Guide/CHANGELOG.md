@@ -6,6 +6,39 @@
 
 ## 版本记录
 
+### V3.5.37 (2026-09-03) — 百度纠偏代理上线 + 接缝修复 + 瓦片域重组（多批次归并单一版本）
+
+> 本版本为 2026-09-02→09-03 期间多批次暂存工作经整合 Code Review 后归并的**单一版本**
+> （用户明确指令压合，豁免版本号规范"不合并"条款，仅本次生效）。
+> 最终落点：`backend/domains/tiles/` 瓦片域（纠偏/直通代理路由 + 底图下载 + 纠偏底座库）与
+> `backend/core/` 横切基础能力；URL 与行为零变化。
+>
+> **1、百度 BD-09 纠偏代理上线**：百度 BD09MC 并非精确球面墨卡托，而是 JS API v2.0 的
+> LL2MC/MC2LL 分段多项式拟合（北京地区球面公式系统性偏差 x≈+15km/y≈−23km，z16 天安门实测偏西北约 12km）。
+> 新增 BD 瓦片网格数学（居中原点、Y 轴向上、`res=2^(18-z)`，`z_bd≈z_out+1` 跨网格对齐）与
+> `/proxy/bd2wgs`、`/proxy/wgs2bd` 路由（内存 TTL 缓存 + 异常分级，注册于通用代理之前）；
+> Referer 白名单新增 `bdimg.com`；前端新增 `bd2wgsProxyUrl`（索引契约注释）、百度底图预设与图层。
+> 验证：z16 双模板地标对齐 + 双向 E2E 目视确认。
+> 日志：`Docs/LLM_record/26-09/2026-09-02/2026-09-02-bd09-tile-proxy.md`。
+>
+> **2、bd/gcj 相邻瓦片拼接缝修复**：根因为轴对齐 box 近似（bd：四角取极值压扁倾斜平行四边形，
+> 角点偏差达 0.88 源像素，相邻瓦片共享边误差反相关）与 `int()` 截断 256 窗口拷贝
+> （gcj：达 1px 量化误差 + 约 −0.5px 系统偏移）。双向改用精确四角 QUAD 透视重采样
+> （共用 `_quad_warp`；bd 用 BICUBIC，gcj 用 BILINEAR，一行可切 NEAREST），共享边端点 bit 级一致；
+> 旧函数标记 deprecated 保留；磁盘输出分类升版（`bd2wgs2`/`wgs2bd2`/`gcj2wgs2`/`wgs2gcj2`），源缓存复用。
+> 验证：合成网格线 0 错位，z16 天安门 2×2 白路贯通，gcj 真实瓦片锐度保留约九成。
+>
+> **3、后端瓦片域重组**：`bd|gcj_rectify` → `tile_rectify/{common,gcj,bd}`（依赖铁律 `bd → common ← gcj`），
+> 再归入 `backend/domains/tiles/{rectify,download,routes_rectify,routes_passthrough,proxy_shared}`；
+> `api/proxy.py`（738 行）按节拆分（AST 校验逐字一致）；`download_xyz/`、`utils/`（→`core/`）原样下沉；
+> `tests/tiles/` 分组 + 路由顺序回归测试；`config/` 搬迁取消（保持顶层干净小包）。
+> 附带修复：`api/location.py` 漏改旧 import（Docker 启动崩溃根因）、`get_cache_dir` 硬编码父级误指
+> （改按 `pyproject.toml` 向上查找）、2 处 stale 注释与 docstring 路径 + 门禁脚本 typo。
+> 验证：新包重算逐字节一致，`pytest` 42 passed，双门禁通过，`import app` 全量门禁脚本固化。
+> 日志：`2026-09-03-backend-tile-rectify-reorg.md`、`2026-09-03-backend-tiles-domain-phase1.md`、
+> `2026-09-03-backend-startup-fix-phase2.md`、`2026-09-03-backend-import-gate-closeout.md`（均在
+> `Docs/LLM_record/26-09/2026-09-03/` 下），方案：`Docs/TODO/backend-reorg-plan.md`。
+
 ### V3.5.36 (2026-08-29) — 首页/登录页 Cesium.js 抢跑加载修复
 
 > **症状**：访问落地页 `/#/` 时 Network 立即出现约 6MB 的 `cesium/Cesium.js` 请求，`map-core-ready` 后的延迟预热策略完全失效。**根因**：`cesium-shim.js` 模块顶层以 IIFE 立即注入 Cesium CDN `<script>`（`import 即下载`），而 Rollup 把 shim 与入口启动链所需的 `publicRuntime` 配置（后端地址/超时/OAuth client id）以及 `@cesium-extends` 一并归入 `vendor-planar-route` chunk——入口为拿配置静态加载该 chunk 时，chunk 求值即执行注入副作用。**修复**：注入重构为显式幂等 `ensureCesiumLoaded()`（`window.Cesium` 已在直接 resolve；重复调用返回同一 `cesiumReady`），模块求值零副作用、对 chunk 归属免疫；`loadCesiumRuntime()`（切 3D 时显式触发+等待）与 `scheduleCesiumWarmup()`（预热）改为显式调用；预热延迟 10s → **6s**。涉及 `cesium-shim.js`、`domains/cesium/composables/core/cesiumRuntime.js`、`domains/common/data-import/cesiumWarmup.js`、`cesium.d.ts`、`app/HomeView.vue`（注释）。验证：构建后新产物中顶层注入调用已消失（`appendChild(r)}e(0)})();` → 函数内封装），入口 chunk 零 Cesium 请求路径；日志 `Docs/LLM_record/26-08/2026-08-29/2026-08-29-fix-landing-cesium-eager-load.md`。

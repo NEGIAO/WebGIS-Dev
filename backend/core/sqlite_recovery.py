@@ -31,7 +31,7 @@ from typing import Callable, Dict, Iterable, List, Optional, Sequence, Set, Tupl
 # 北京时间（UTC+8）
 _BEIJING_TZ = timezone(timedelta(hours=8))
 
-from utils.sqlite_maintenance import record_maintenance_manifest
+from core.sqlite_maintenance import record_maintenance_manifest
 
 logger = logging.getLogger(__name__)
 

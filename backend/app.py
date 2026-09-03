@@ -2,7 +2,7 @@
 WebGIS Backend - FastAPI 主应用入口
 
 功能模块：
-- 瓦片代理：Google 卫星图瓦片代理 (api/proxy.py)
+- 瓦片域：纠偏/直通代理 + 底图下载 (domains/tiles/)
 - 访客统计：地理位置统计功能 (api/statistics.py)
 - 通用接口：新闻、数据处理、健康检查等
 """
@@ -19,14 +19,15 @@ from typing import Any, Dict
 
 from config import build_public_config, get_settings, get_str, masked_summary
 
-from utils.time_utils import hourly_chime_task
+from core.time_utils import hourly_chime_task
 
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
 from starlette.background import BackgroundTasks
-from api.proxy import router as proxy_router, build_http_client
+from domains.tiles import tiles_router as proxy_router, build_http_client
+from domains.tiles.download.download import router as download_router
 from api.external_proxy import router as external_proxy_router
 from api.statistics import router as statistics_router
 from api.location import router as location_router
@@ -35,9 +36,8 @@ from api.admin import router as admin_router
 from api.api_management import router as api_management_router
 from api.api_keys_management import router as api_keys_router, runtime_config_router
 from api.agent_chat import router as agent_chat_router, admin_router as agent_chat_admin_router
-from download_xyz.download import router as download_router
-from download_xyz.task_scheduler import start_task_cleanup_scheduler, shutdown_task_cleanup_scheduler
-from download_xyz.download_task import init_download_task_db
+from domains.tiles.download.task_scheduler import start_task_cleanup_scheduler, shutdown_task_cleanup_scheduler
+from domains.tiles.download.download_task import init_download_task_db
 from api.monitor import init_monitor_log_streaming, router as monitor_router
 from api.spatial import router as spatial_router
 from api.keepalive import router as keepalive_router, start_keepalive_sender

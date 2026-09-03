@@ -60,6 +60,7 @@ export const BASEMAP_PRESETS: BasemapPresetDefinition[] = [
     },
     { id: 'imagery_amap_wgs_preset', label: '高德影像(WGS)', stack: ['imagery_amap_wgs'] },
     { id: 'vector_amap_wgs_preset', label: '高德地图(WGS)', stack: ['vector_amap_wgs'] },
+    { id: 'vector_baidu_wgs_preset', label: '百度地图(WGS)', stack: ['vector_baidu_wgs'] },
     { id: 'imagery_mapbox_preset', label: 'Mapbox影像', stack: ['imagery_mapbox', 'label_tuxin'] },
     {
         id: 'arcgis_imagery_preset',

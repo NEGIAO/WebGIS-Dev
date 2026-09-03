@@ -10,13 +10,13 @@ from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-import utils.sqlite_recovery as recovery_module
-from utils.sqlite_maintenance import (
+import core.sqlite_recovery as recovery_module
+from core.sqlite_maintenance import (
     MAINTENANCE_TABLE,
     record_maintenance_manifest,
     sync_recovery_manifests,
 )
-from utils.sqlite_recovery import (
+from core.sqlite_recovery import (
     SQLiteRecoveryError,
     normalize_dump_transaction,
     recover_sqlite_database,

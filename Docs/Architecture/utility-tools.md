@@ -2,7 +2,7 @@
 
 日期：2026-07-21
 
-适用范围：前端 `frontend/src/domains/ol/drawing/composables/useDrawMeasure.js`、`frontend/src/domains/ol/components/MapControlsBar.vue`、`frontend/src/domains/common/map-view/coordinateFormatter.js`、`frontend/src/domains/ol/utils/coordTransform.js`、`frontend/src/domains/common/compass/services/CompassManager.ts`、`frontend/src/domains/common/compass/stores/useCompassStore.ts`、`frontend/src/domains/common/shell/TopBar.vue`；后端 `backend/download_xyz/`、`backend/gcj_rectify/` 模块。
+适用范围：前端 `frontend/src/domains/ol/drawing/composables/useDrawMeasure.js`、`frontend/src/domains/ol/components/MapControlsBar.vue`、`frontend/src/domains/common/map-view/coordinateFormatter.js`、`frontend/src/domains/ol/utils/coordTransform.js`、`frontend/src/domains/common/compass/services/CompassManager.ts`、`frontend/src/domains/common/compass/stores/useCompassStore.ts`、`frontend/src/domains/common/shell/TopBar.vue`；后端 `backend/domains/tiles/download/`、`backend/domains/tiles/rectify/` 模块。
 
 本文是长期参考文档，说明 WebGIS 3.0 中"实用工具"功能集合的算法原理、数据结构、前后端交互机制与实现细节，供后续维护、扩展与问题排查时对照。
 
@@ -32,11 +32,11 @@
 | `domains/common/compass/services/urlState.ts` | 罗盘 URL 状态读写：cs 参数编解码桥接 |
 | `domains/common/url-state/crypto.js` | BigInt 位打包编解码：经纬度/半径/相机状态 → Base62 短码 |
 | `domains/common/shell/TopBar.vue` | 分享链接：私有参数排除、s=1 标记、Native Share / 剪贴板 |
-| `backend/download_xyz/download.py` | 下载 API 路由：POST /api/download/tasks 异步任务 + token + TTL |
-| `backend/download_xyz/tile_engine.py` | 瓦片引擎：分辨率→层级换算、并发抓取、rasterio GeoTIFF 拼接与裁剪 |
-| `backend/download_xyz/download_task.py` | 任务持久化：SQLModel + SQLite 任务表 CRUD |
-| `backend/gcj_rectify/rectify.py` | GCJ-02 瓦片纠偏：像素级坐标偏移 + 瓦片网格重采样 |
-| `backend/gcj_rectify/transform.py` | 坐标转换核心：WGS84/GCJ-02/BD-09 正逆向变换（牛顿迭代） |
+| `backend/domains/tiles/download/download.py` | 下载 API 路由：POST /api/download/tasks 异步任务 + token + TTL |
+| `backend/domains/tiles/download/tile_engine.py` | 瓦片引擎：分辨率→层级换算、并发抓取、rasterio GeoTIFF 拼接与裁剪 |
+| `backend/domains/tiles/download/download_task.py` | 任务持久化：SQLModel + SQLite 任务表 CRUD |
+| `backend/domains/tiles/rectify/gcj/rectify.py` | GCJ-02 瓦片纠偏：精确四角 QUAD 重采样 |
+| `backend/domains/tiles/rectify/common/transform.py` | 坐标转换核心：WGS84/GCJ-02/BD-09 正逆向变换（牛顿迭代） |
 
 ## 3. 距离/面积测量
 
@@ -104,7 +104,7 @@
 
 算法使用 WGS84 椭球参数（长半轴 `A = 6378245.0`，偏心率平方 `EE = 0.00669342162296594323`），通过 `outOfChina()` 判断是否在中国境内（经度 72.004~137.8347，纬度 0.8293~55.8271），境外坐标直接返回原值。
 
-后端 `gcj_rectify/transform.py` 提供更完整的实现：
+后端 `domains/tiles/rectify/common/transform.py` 提供更完整的实现：
 - 正向 `wgs2gcj`：标准加偏
 - 逆向 `gcj2wgs`：**牛顿迭代法**（最多 20 次，精度 1e-6 度 ≈ 0.1m），比前端线性近似更精确
 - 额外支持 BD-09 百度坐标系互转（`gcj2bd` / `bd2gcj` / `wgs2bd` / `bd2wgs`）
@@ -220,7 +220,7 @@ flowchart TD
 
 ### 7.1 API 设计
 
-后端 `download_xyz/download.py` 提供三个端点（路由前缀 `/api/download`）：
+后端 `domains/tiles/download/download.py` 提供三个端点（路由前缀 `/api/download`）：
 
 | 端点 | 方法 | 功能 |
 |------|------|------|
@@ -298,7 +298,7 @@ stateDiagram-v2
 
 ## 8. GCJ-02 瓦片纠偏（后端）
 
-`backend/gcj_rectify/` 模块为 GCJ-02 加密瓦片提供像素级纠偏，使 WGS84 底图与 GCJ-02 瓦片对齐：
+`backend/domains/tiles/rectify/` 模块为 GCJ-02 加密瓦片提供像素级纠偏，使 WGS84 底图与 GCJ-02 瓦片对齐：
 
 ### 8.1 纠偏流程（get_gcj2wgs_tile）
 

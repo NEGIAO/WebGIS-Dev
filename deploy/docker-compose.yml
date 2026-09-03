@@ -32,6 +32,9 @@ services:
       - "7860:7860"
     environment:
       - PYTHONUNBUFFERED=1
+      # 源码经 bind mount 挂进容器，容器内 Python 写的 .pyc 会穿透回宿主；
+      # dev 走 --reload，本来也享受不到字节码加速，直接禁写保本地干净
+      - PYTHONDONTWRITEBYTECODE=1
       - APP_ENV=development
       # Windows 宿主目录 bind mount 的文件事件跨层不可靠 → 轮询兜底保证触发重载
       - WATCHFILES_FORCE_POLLING=1

@@ -96,6 +96,9 @@ env/
 backend/data/*.db
 backend/data/
 **/*.db
+# 纠偏瓦片运行时缓存：任何层级的 gcj_rectify_cache/ 一律忽略
+# （曾因默认路径随包搬迁漂移到 domains/tiles/rectify/data/ 下未被忽略而入库，已修复）
+gcj_rectify_cache/
 
 
 # ========== IDE ==========

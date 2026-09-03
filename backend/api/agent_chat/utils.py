@@ -13,7 +13,7 @@ _BEIJING_TZ = timezone(timedelta(hours=8))
 from fastapi import HTTPException, status
 from pydantic import BaseModel
 
-from utils.net_guard import (
+from core.net_guard import (
     LOCAL_HOST_SUFFIXES,
     LOCAL_HOSTNAMES,
     coerce_ip_literal,
@@ -54,8 +54,8 @@ def _normalize_model(value: str) -> str:
 
 
 # --- override_base_url 安全护栏（方案文档：Docs/TODO/agent-override-key-leak-plan.md） ---
-# V3.4.64（P1-4 SSRF S1）：IP 字面量归一与内网判定迁入 utils/net_guard.py 单点共用，
-# proxy/download_xyz 三处出站面共享同一判定；下列别名保留原函数名不改调用点与语义。
+# V3.4.64（P1-4 SSRF S1）：IP 字面量归一与内网判定迁入 core/net_guard.py 单点共用，
+# 瓦片域（直通/纠偏/下载）三处出站面共享同一判定；下列别名保留原函数名不改调用点与语义。
 
 _LOCAL_HOSTNAMES = LOCAL_HOSTNAMES
 _LOCAL_HOST_SUFFIXES = LOCAL_HOST_SUFFIXES

@@ -25,7 +25,7 @@ from api.auth import (
     resolve_optional_session,
 )
 from services import ip_geo_service
-from gcj_rectify.transform import wgs2gcj
+from domains.tiles.rectify import wgs2gcj
 
 logger = logging.getLogger(__name__)
 

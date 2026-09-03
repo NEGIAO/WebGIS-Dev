@@ -4,7 +4,7 @@ from typing import Optional
 import httpx
 from httpx import AsyncClient
 
-from utils.http_headers import BROWSER_USER_AGENT, build_browser_headers_no_br, referer_headers_for
+from core.http_headers import BROWSER_USER_AGENT, build_browser_headers_no_br, referer_headers_for
 
 logger = logging.getLogger(__name__)
 
@@ -90,7 +90,7 @@ async def fetch_tile(url: str, client: Optional[AsyncClient] = None) -> bytes:
         active_client = client or get_async_client()
         try:
             # 完整浏览器特征头（本面需 httpx 解压响应体 → 不广告 br/zstd，
-            # 见 utils/http_headers.build_browser_headers_no_br 注释）
+            # 见 core/http_headers.build_browser_headers_no_br 注释）
             # + 白名单防盗链 Referer（非白名单源不附加）
             headers = build_browser_headers_no_br()
             referer_headers = referer_headers_for(url)

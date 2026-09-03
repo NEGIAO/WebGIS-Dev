@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import Optional
 
 from config import get_settings, get_str
-from utils.sqlite_recovery import (
+from core.sqlite_recovery import (
     SQLiteRecoveryError,
     is_sqlite_database_corrupted,
     recover_sqlite_database,

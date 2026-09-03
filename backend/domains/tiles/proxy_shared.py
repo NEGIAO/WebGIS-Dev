@@ -1,3 +1,10 @@
+# -*- coding: utf-8 -*-
+"""瓦片代理通用基础设施（纠偏路由与直通路由共用）。
+
+内容整体搬自旧 `api/proxy.py`（内存瓦片缓存、 sliding-window 限流、
+出站 HTTP 客户端、SSRF 校验、浏览器特征头组装、PROXY_* 配置），逻辑逐字保留。
+"""
+
 import logging
 import time
 from collections import defaultdict
@@ -6,29 +13,18 @@ from typing import AsyncIterator, Dict, List, Optional, Tuple
 from urllib.parse import urlparse
 
 import httpx
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
-from fastapi.responses import JSONResponse, Response, StreamingResponse
-from PIL import Image
-
-from gcj_rectify.rectify import get_gcj2wgs_tile, get_wgs2gcj_tile
-from gcj_rectify.url_template import parse_tile_url
-from gcj_rectify.utils import get_cache_dir
+from fastapi import HTTPException, Request
 
 from config import get_bool, get_int, get_str
-from utils.http_headers import build_browser_headers, build_sec_ch_ua, referer_headers_for
-from utils.net_guard import (
+from core.http_headers import build_browser_headers, build_sec_ch_ua, referer_headers_for
+from core.net_guard import (
     host_matches_allowlist,
     is_disallowed_host,
     parse_host_allowlist,
     resolve_host_has_private_ip,
 )
 
-# 初始化路由对象
-router = APIRouter()
-
-# 定义日志记录器
 logger = logging.getLogger(__name__)
-
 
 PROXY_ALLOW_PRIVATE_HOSTS = get_bool("PROXY_ALLOW_PRIVATE_HOSTS", False)
 PROXY_VERIFY_SSL = get_bool("PROXY_VERIFY_SSL", True)
@@ -247,7 +243,7 @@ if PROXY_USER_AGENT:
 
 
 def _is_private_host(hostname: str) -> bool:
-    """host 字面量是否指向内网/本机（判定实现见 utils/net_guard，三处出站面共用）。
+    """host 字面量是否指向内网/本机（判定实现见 core/net_guard，三处出站面共用）。
 
     修复背景（P1-4 SSRF S1）：旧实现只用 `ipaddress.ip_address` 认点分十进制，
     解析失败即放行 → `2130706433` / `0x7f000001` / `127.1` / `0177.0.0.1` 等
@@ -395,245 +391,3 @@ def _build_proxy_request_headers(request: Request, upstream_url: str) -> Dict[st
     return headers
 
 
-def _resolve_gcj_cache_dir(request: Request):
-    cache_dir = getattr(request.app.state, "gcj_rectify_cache_dir", None)
-    if cache_dir is None:
-        cache_dir = get_cache_dir()
-        request.app.state.gcj_rectify_cache_dir = cache_dir
-    return cache_dir
-
-
-def _resolve_gcj_http_client(request: Request) -> Tuple[httpx.AsyncClient, bool]:
-    shared_client = getattr(request.app.state, "http_client", None)
-    if shared_client is not None:
-        return shared_client, False
-    fallback_client = build_http_client()
-    return fallback_client, True
-
-
-# ==================== 专用海图代理 ====================
-@router.get("/tiles/ships66/{z}/{x}/{y}.png")
-async def ships66_tile(z: int, x: int, y: int, request: Request, _: None = Depends(_rate_limit_check)):
-    upstream_url = get_str("SHIPS66_TILE_URL_TEMPLATE").format(z=z, x=x, y=y)
-    headers = {
-        "User-Agent": PROXY_DEFAULT_REQUEST_HEADERS["User-Agent"],
-        "Accept": "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
-        "Accept-Language": "zh-CN,zh;q=0.9",
-        "Cache-Control": "no-cache",
-        "Pragma": "no-cache",
-    }
-
-    client = getattr(request.app.state, "http_client", None)
-    fallback_client = None
-    if client is None:
-        fallback_client = httpx.AsyncClient(follow_redirects=False)
-        client = fallback_client
-
-    try:
-        upstream_request = client.build_request("GET", upstream_url, headers=headers)
-        upstream_response = await client.send(upstream_request, stream=True)
-
-        if upstream_response.status_code in (301, 302, 307, 308):
-            location = upstream_response.headers.get("location")
-
-            background = BackgroundTasks()
-            background.add_task(upstream_response.aclose)
-            if fallback_client:
-                background.add_task(fallback_client.aclose)
-
-            return Response(
-                status_code=upstream_response.status_code,
-                headers={"Location": location},
-                background=background,
-            )
-    except httpx.TimeoutException:
-        if fallback_client:
-            await fallback_client.aclose()
-        raise HTTPException(status_code=504, detail="瓦片请求超时")
-    except Exception as exc:
-        if fallback_client:
-            await fallback_client.aclose()
-        logger.error(f"海图瓦片请求失败: {exc!r}")
-        raise HTTPException(status_code=502, detail=str(exc))
-
-    response_headers = {
-        key: value
-        for key, value in upstream_response.headers.items()
-        if key.lower() not in PROXY_HOP_BY_HOP_HEADERS and key.lower() in PROXY_PASSTHROUGH_HEADERS
-    }
-
-    # ships66 纯中转不缓存，保持流式响应以降低峰值内存
-    background = BackgroundTasks()
-    background.add_task(upstream_response.aclose)
-    if fallback_client:
-        background.add_task(fallback_client.aclose)
-
-    return StreamingResponse(
-        upstream_response.aiter_raw(),
-        media_type=upstream_response.headers.get("content-type", "image/png"),
-        status_code=upstream_response.status_code,
-        headers=response_headers,
-        background=background,
-    )
-
-
-# ==================== GCJ 瓦片纠偏代理 ====================
-@router.get("/proxy/gcj2wgs/{target_url:path}")
-async def gcj2wgs_proxy(target_url: str, request: Request, _: None = Depends(_rate_limit_check)):
-    """GCJ02 -> WGS84 瓦片纠偏代理"""
-    upstream_url = _build_proxy_target_url(target_url, request.url.query)
-    try:
-        template, xyz = parse_tile_url(upstream_url)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-
-    cache_key = f"gcj2wgs:{template.cache_key}:{xyz.z}/{xyz.x}/{xyz.y}"
-    cached = _tile_cache.get(cache_key)
-    if cached:
-        logger.debug("瓦片缓存命中 [gcj2wgs z=%d/x=%d/y=%d]", xyz.z, xyz.x, xyz.y)
-        return Response(content=cached.content, media_type=cached.media_type)
-
-    cache_dir = _resolve_gcj_cache_dir(request)
-    client, should_close = _resolve_gcj_http_client(request)
-    try:
-        tile_bytes = await get_gcj2wgs_tile(
-            xyz.x, xyz.y, xyz.z, template, cache_dir, client=client
-        )
-    except httpx.TimeoutException as exc:
-        raise HTTPException(status_code=504, detail="纠偏请求超时") from exc
-    except ValueError as exc:
-        # 资源护栏拒绝（瓦片字节/网格数超上限，P1-4 S2）属请求问题 → 400 而非 502
-        raise HTTPException(status_code=400, detail=f"纠偏请求被拒绝: {exc}") from exc
-    except Image.DecompressionBombError as exc:
-        raise HTTPException(status_code=400, detail="上游瓦片像素超上限，已拒绝解码") from exc
-    except Exception as exc:
-        raise HTTPException(status_code=502, detail=f"纠偏失败: {exc}") from exc
-    finally:
-        if should_close:
-            await client.aclose()
-
-    _tile_cache.set(cache_key, tile_bytes, "image/png")
-    logger.debug("瓦片缓存写入 [gcj2wgs z=%d/x=%d/y=%d] 当前缓存: %d 条目", xyz.z, xyz.x, xyz.y, _tile_cache.size)
-    return Response(content=tile_bytes, media_type="image/png")
-
-
-@router.get("/proxy/wgs2gcj/{target_url:path}")
-async def wgs2gcj_proxy(target_url: str, request: Request, _: None = Depends(_rate_limit_check)):
-    """WGS84 -> GCJ02 瓦片纠偏代理"""
-    upstream_url = _build_proxy_target_url(target_url, request.url.query)
-    try:
-        template, xyz = parse_tile_url(upstream_url)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-
-    cache_key = f"wgs2gcj:{template.cache_key}:{xyz.z}/{xyz.x}/{xyz.y}"
-    cached = _tile_cache.get(cache_key)
-    if cached:
-        logger.debug("瓦片缓存命中 [wgs2gcj z=%d/x=%d/y=%d]", xyz.z, xyz.x, xyz.y)
-        return Response(content=cached.content, media_type=cached.media_type)
-
-    cache_dir = _resolve_gcj_cache_dir(request)
-    client, should_close = _resolve_gcj_http_client(request)
-    try:
-        tile_bytes = await get_wgs2gcj_tile(
-            xyz.x, xyz.y, xyz.z, template, cache_dir, client=client
-        )
-    except httpx.TimeoutException as exc:
-        raise HTTPException(status_code=504, detail="纠偏请求超时") from exc
-    except ValueError as exc:
-        # 同 gcj2wgs：资源护栏拒绝归 400（P1-4 S2）
-        raise HTTPException(status_code=400, detail=f"纠偏请求被拒绝: {exc}") from exc
-    except Image.DecompressionBombError as exc:
-        raise HTTPException(status_code=400, detail="上游瓦片像素超上限，已拒绝解码") from exc
-    except Exception as exc:
-        raise HTTPException(status_code=502, detail=f"纠偏失败: {exc}") from exc
-    finally:
-        if should_close:
-            await client.aclose()
-
-    _tile_cache.set(cache_key, tile_bytes, "image/png")
-    logger.debug("瓦片缓存写入 [wgs2gcj z=%d/x=%d/y=%d] 当前缓存: %d 条目", xyz.z, xyz.x, xyz.y, _tile_cache.size)
-    return Response(content=tile_bytes, media_type="image/png")
-
-
-# ==================== 通用流式代理 ====================
-@router.get("/proxy/{target_url:path}")
-async def universal_stream_proxy(target_url: str, request: Request, _: None = Depends(_rate_limit_check)):
-    """通用流式代理接口"""
-    upstream_url = _build_proxy_target_url(target_url, request.url.query)
-
-    proxy_request_headers = _build_proxy_request_headers(request, upstream_url)
-
-    shared_client = getattr(request.app.state, "http_client", None)
-    fallback_client = None
-    client = shared_client
-
-    if client is None:
-        fallback_client = httpx.AsyncClient(follow_redirects=False)
-        client = fallback_client
-
-    try:
-        upstream_request = client.build_request("GET", upstream_url, headers=proxy_request_headers)
-        upstream_response = await client.send(upstream_request, stream=True)
-
-        if upstream_response.status_code in (301, 302, 307, 308):
-            location = upstream_response.headers.get("location")
-
-            background = BackgroundTasks()
-            background.add_task(upstream_response.aclose)
-            if fallback_client:
-                background.add_task(fallback_client.aclose)
-
-            return Response(
-                status_code=upstream_response.status_code,
-                headers={"Location": location},
-                background=background,
-            )
-    except httpx.TimeoutException:
-        if fallback_client is not None:
-            await fallback_client.aclose()
-        return JSONResponse(
-            status_code=504,
-            content={"detail": "代理请求超时", "upstream": upstream_url},
-            headers={"X-Proxy-Status": "TIMEOUT"},
-        )
-    except httpx.HTTPError as exc:
-        if fallback_client is not None:
-            await fallback_client.aclose()
-        return JSONResponse(
-            status_code=502,
-            content={"detail": "代理请求失败", "upstream": upstream_url, "error": str(exc)},
-            headers={"X-Proxy-Status": "UPSTREAM_ERROR"},
-        )
-
-    response_headers: Dict[str, str] = {}
-    for key, value in upstream_response.headers.items():
-        lower_key = key.lower()
-        if lower_key in PROXY_HOP_BY_HOP_HEADERS:
-            continue
-        if lower_key in PROXY_PASSTHROUGH_HEADERS:
-            response_headers[key] = value
-
-    proxy_status = "SUCCESS" if upstream_response.status_code < 400 else "UPSTREAM_ERROR"
-    response_headers["X-Proxy-Status"] = proxy_status
-
-    background_tasks = BackgroundTasks()
-    background_tasks.add_task(upstream_response.aclose)
-    if fallback_client is not None:
-        background_tasks.add_task(fallback_client.aclose)
-
-    # 响应体上限（P1-4 S2）：先按 Content-Length 预检，再由 _limited_stream 兜住无长度声明的流
-    try:
-        _reject_if_content_length_exceeds(upstream_response)
-    except HTTPException:
-        await upstream_response.aclose()
-        if fallback_client is not None:
-            await fallback_client.aclose()
-        raise
-
-    return StreamingResponse(
-        _limited_stream(upstream_response, upstream_url),
-        status_code=upstream_response.status_code,
-        headers=response_headers,
-        background=background_tasks,
-    )

@@ -2,7 +2,7 @@
 
 日期：2026-07-21
 
-适用范围：`frontend/src/domains/ol/basemap/`、`frontend/src/domains/ol/tile-source/`、`frontend/src/domains/ol/layer/` 及 `backend/api/proxy.py`、`backend/gcj_rectify/` 模块。
+适用范围：`frontend/src/domains/ol/basemap/`、`frontend/src/domains/ol/tile-source/`、`frontend/src/domains/ol/layer/` 及 `backend/domains/tiles/` 模块。
 
 本文是长期参考文档，说明 WebGIS 3.0 中"丰富底图源体系"功能的双引擎配置模型、预设栈机制、瓦片请求生命周期、熔断回退策略、GCJ-02 火星坐标纠偏算法、高清瓦片优化及后端代理架构，供后续维护、扩展图源与调参时对照。
 
@@ -25,9 +25,11 @@
 | `frontend/src/domains/ol/basemap/composables/basemapLayerFactory.js` | OL 图层工厂：栅格/矢量瓦片图层创建、高清瓦片 `zDirection` 注入 |
 | `frontend/src/domains/ol/layer/composables/useTileHDRendering.js` | 高清瓦片渲染全局开关（`tileHDRendering` ref，持久化到 localStorage） |
 | `frontend/src/domains/ol/basemap/resilience/useBasemapResilience.js` | 底图容灾：切换验证、加载监测、熔断降级（`createBasemapResilience`） |
-| `backend/api/proxy.py` | 后端通用流式代理 + GCJ-02 纠偏瓦片路由 |
-| `backend/gcj_rectify/transform.py` | GCJ-02 坐标转换算法（WGS84/GCJ-02/BD-09 互转，牛顿迭代） |
-| `backend/gcj_rectify/rectify.py` | 瓦片级纠偏：像素级重采样合成 WGS84 对齐瓦片 |
+| `backend/domains/tiles/` | 瓦片域：纠偏路由（`routes_rectify.py`）+ 直通代理（`routes_passthrough.py`）+ 通用infra（`proxy_shared.py`） |
+| `backend/domains/tiles/rectify/common/transform.py` | GCJ-02 坐标转换算法（WGS84/GCJ-02/BD-09 互转，牛顿迭代） |
+| `backend/domains/tiles/rectify/gcj/rectify.py` | 瓦片级纠偏：精确四角 QUAD 重采样合成 WGS84 对齐瓦片 |
+| `backend/domains/tiles/rectify/bd/mercator.py` | 百度官方 LL2MC/MC2LL 分段多项式投影 + BD 瓦片网格数学 |
+| `backend/domains/tiles/rectify/bd/rectify.py` | BD 网格 ↔ 标准 XYZ 跨网格重采样纠偏 |
 
 ## 3. 双引擎配置体系（SSOT 模式）
 
@@ -214,7 +216,7 @@ flowchart TD
 
 ### 7.1 算法原理
 
-`backend/gcj_rectify/transform.py` 实现国测局偏移算法：
+`backend/domains/tiles/rectify/common/transform.py` 实现国测局偏移算法：
 
 - **正向加偏**（`wgs2gcj`）：对 WGS84 坐标施加非线性偏移
 - **逆向求解**（`gcj2wgs`）：**牛顿迭代法**，最多 20 次迭代，精度 `1e-6` 度（约 0.1 米）
@@ -342,13 +344,15 @@ URL 模板转换（`toCesiumUrlTemplate`）处理：
 
 ## 11. 后端代理架构
 
-`backend/api/proxy.py` 提供三类路由：
+`backend/domains/tiles/` 提供三类路由（`tiles_router` 先纠偏后通配聚合挂载）：
 
 | 路由 | 功能 |
 |------|------|
 | `/proxy/{target_url:path}` | 通用流式代理，转发任意 HTTP(S) 资源 |
 | `/proxy/gcj2wgs/{target_url:path}` | GCJ-02 → WGS84 瓦片纠偏 |
 | `/proxy/wgs2gcj/{target_url:path}` | WGS84 → GCJ-02 瓦片纠偏 |
+| `/proxy/bd2wgs/{target_url:path}` | 百度 BD-09 → WGS84 瓦片纠偏（跨网格重采样，`domains/tiles/rectify/bd/`） |
+| `/proxy/wgs2bd/{target_url:path}` | WGS84 → 百度 BD-09 瓦片纠偏（跨网格重采样，`domains/tiles/rectify/bd/`） |
 | `/tiles/ships66/{z}/{x}/{y}.png` | 船舶网专用代理（特殊请求头） |
 
 通用代理特性：
@@ -387,10 +391,10 @@ URL 模板转换（`toCesiumUrlTemplate`）处理：
 | `ACTIVITY_TIMEOUT` | 10000 | `useBasemapResilience.js` | 无活动超时（ms） |
 | `WARNING_THRESHOLD` | 5 | `useBasemapResilience.js` | 累计错误警告阈值 |
 | `PROXY_NOTIFY_DEBOUNCE_MS` | 5000 | `tileLifecycle.ts` | 代理通知防抖（ms） |
-| `GCJ2WGS_MAX_ITERATIONS` | 20 | `gcj_rectify/transform.py` | 牛顿迭代最大次数 |
-| `GCJ2WGS_TOLERANCE` | 1e-6 | `gcj_rectify/transform.py` | 迭代收敛精度（度） |
-| `MAX_CONCURRENCY` | 100 | `gcj_rectify/rectify.py` | 纠偏并发获取上限 |
-| `TILE_SIZE` | 256 | `gcj_rectify/utils.py` | 标准瓦片像素尺寸 |
+| `GCJ2WGS_MAX_ITERATIONS` | 20 | `domains/tiles/rectify/common/transform.py` | 牛顿迭代最大次数 |
+| `GCJ2WGS_TOLERANCE` | 1e-6 | `domains/tiles/rectify/common/transform.py` | 迭代收敛精度（度） |
+| `MAX_CONCURRENCY` | 100 | `domains/tiles/rectify/gcj/rectify.py` | 纠偏并发获取上限 |
+| `TILE_SIZE` | 256 | `domains/tiles/rectify/common/geo.py` | 标准瓦片像素尺寸 |
 | `DEFAULT_BASEMAP_PRESET_ID` | `'custom_China_Blender_preset_2'` | `basemapConfig.ts` | 默认底图预设 |
 | `checkTimeoutMs`（默认参数） | 3000 | `useBasemapResilience.js` | 切换验证超时（ms） |
 | `tileHDRendering`（默认值） | `true` | `useTileHDRendering.js` | 高清渲染默认开启 |

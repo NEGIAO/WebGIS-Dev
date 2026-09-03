@@ -28,7 +28,7 @@ from api.auth.quota import (
 )
 from api.auth.system_config import _get_system_config_value_sync
 from config import get_bool, get_int, get_str
-from utils.net_guard import is_disallowed_host
+from core.net_guard import is_disallowed_host
 from .download_task import DownloadTask, create_task, get_task, update_task, list_active_tasks_by_user
 from .tile_engine import MAX_CONCURRENCY, MAX_LATITUDE, WEB_MERCATOR_EXTENT, bbox4326_to_tile_range, build_geotiff_from_tiles, clip_geotiff_to_bbox, resolution_to_zoom
 
@@ -604,12 +604,12 @@ def _validate_tile_template(template: str) -> None:
 
     # P1-4 SSRF S1：补协议与内网目标校验——此前只校验占位符，已登录用户可让服务器
     # 抓取任意内网 URL 并把响应写进 GeoTIFF 回传（信息回传型 SSRF）。
-    # host 判定走 utils/net_guard 单点（与 /proxy/** 及 agent override 同一实现）；
+    # host 判定走 core/net_guard 单点（与 /proxy/** 及 agent override 同一实现）；
     # V3.5.24：DOWNLOAD_ALLOW_PRIVATE_HOSTS=true 时放行内网/本机目标（自建内网瓦片源场景）。
     probe_url = template.replace("{z}", "0").replace("{x}", "0").replace("{y}", "0")
     probe_url = probe_url.replace("{s}", "a").replace("{-y}", "0")
     # 无协议前缀（`tile.example.com/...`）与协议相对（`//host/...`）按 https 兜底解析，
-    # 与 api/proxy._build_proxy_target_url 同语义——保持既有宽松输入不被本次校验打断
+    # 与 domains.tiles.proxy_shared._build_proxy_target_url 同语义——保持既有宽松输入不被本次校验打断
     if "//" not in probe_url.split("?", 1)[0]:
         probe_url = f"https://{probe_url.lstrip('/')}"
     elif probe_url.startswith("//"):

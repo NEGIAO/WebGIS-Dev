@@ -128,9 +128,25 @@ export function tileProxyUrl(hostAndPath: string): string {
 /**
  * 拼接 GCJ-02 纠偏代理 URL（/proxy/gcj2wgs/{完整上游URL} 形式）
  * @param upstreamUrl 完整上游 URL（含协议），如 http://webst01.is.autonavi.com/appmaptile?...
+ *
+ * ⚠️ 索引契约：gcj2wgs/wgs2gcj 的 {x}/{y}/{z} 均为「标准 XYZ 网格」索引（客户端地图工作网格）。
  */
 export function gcj2wgsProxyUrl(upstreamUrl: string): string {
     return `${TILE_PROXY_BASE_URL}/proxy/gcj2wgs/${upstreamUrl}`;
+}
+
+/**
+ * 拼接百度 BD-09 → WGS84 纠偏代理 URL（/proxy/bd2wgs/{完整上游URL} 形式）
+ * @param upstreamUrl 完整上游百度瓦片 URL（含协议），如 https://maponline{s}.bdimg.com/tile/?qt=vtile&x={x}&y={y}&z={z}&styles=pl&scaler=1&from=jsapi2_0
+ *
+ * ⚠️ 索引契约：
+ *   - bd2wgs：{x}/{y}/{z} 为「标准 XYZ 网格」索引——前端按普通 XYZ 底图使用（推荐路径）；
+ *   - wgs2bd：{x}/{y}/{z} 为「百度网格」索引（居中原点、Y 轴向上、res=2^(18-z)），仅当客户端
+ *     工作在百度坐标/网格空间（如原生加载百度底图叠加 WGS 图源）时才使用。
+ *   {s} 子域占位符仅用于原始上游 URL；走到 bd2wgs 时由 OL/Cesium 在请求前替换为具体子域数字。
+ */
+export function bd2wgsProxyUrl(upstreamUrl: string): string {
+    return `${TILE_PROXY_BASE_URL}/proxy/bd2wgs/${upstreamUrl}`;
 }
 
 /**

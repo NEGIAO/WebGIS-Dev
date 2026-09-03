@@ -1,7 +1,7 @@
 """网络出站护栏共用工具（SSRF 判定单点）。
 
 背景：后端有三处「按调用方给的 URL 代为访问」的出站面——agent `override_base_url`（V3.4.63 已加固）、
-`/proxy/**` 瓦片与通用代理、`download_xyz` 瓦片模板。此前 agent 侧自带一套 IP 字面量归一判定，
+`/proxy/**` 瓦片与通用代理、`domains/tiles/download` 瓦片模板。此前 agent 侧自带一套 IP 字面量归一判定，
 proxy 侧另有一套只认点分十进制的弱判定（`2130706433` 等写法可绕过）。本模块把判定收敛为单点，
 供三处共用，避免"两处各写一套"（P1-4 SSRF 方案 S1；方案文档 Docs/TODO/proxy-ssrf-hardening-plan.md）。
 
