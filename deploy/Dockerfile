@@ -54,8 +54,6 @@ RUN sed -i 's/deb.debian.org/mirrors.tuna.tsinghua.edu.cn/g' /etc/apt/sources.li
     tzdata \
     nginx \
     curl \
-    cron \
-    sudo \
     coreutils \
     && rm -rf /var/lib/apt/lists/*
 
@@ -84,71 +82,15 @@ COPY deploy/nginx.conf /etc/nginx/nginx.conf
 RUN chown -R user:user /usr/share/nginx/html /etc/nginx \
  && mkdir -p /tmp/nginx_cache && chown -R user:user /tmp/nginx_cache
 
-# =================================================================-
-# KeepAlive 互活跃机制（HF Space 防 24h 休眠；本地 compose 会覆盖 CMD，不启用）
-# 发送端（主）：asyncio 任务随机间隔 GET 对端 /api/status
-# 发送端（兜底）：cron 每 3min + sleep(0~180)
-# 接收端：FastAPI /api/heartbeat + /api/keepalive/ping（公开无鉴权）
-# =================================================================-
-RUN echo '*/3 * * * * sleep $(shuf -i 0-180 -n 1) && /app/keepalive_send.sh >> /var/log/keepalive.log 2>&1' | crontab -
-
-# 启动脚本：cron 保活 + nginx(前台守护进程化后台运行) + uvicorn(主进程)
+# 启动脚本：nginx(前台守护进程化后台运行) + uvicorn(主进程)
 RUN cat > /opt/start.sh << 'SCRIPT'
 #!/bin/sh
 set -e
-sudo /usr/sbin/cron 2>/dev/null || cron 2>/dev/null || true
 
 nginx
 exec uv run uvicorn app:app --host 127.0.0.1 --port 8000 --no-access-log
 SCRIPT
 RUN chmod +x /opt/start.sh && chown user:user /opt/start.sh
-
-# cron 兜底探活脚本：GET 对端 New API 公开状态端点（随机 UA/Accept-Language 拟真）
-RUN cat > /app/keepalive_send.sh << 'SCRIPT'
-#!/bin/sh
-PEER="https://negiao-newapi.hf.space/api/status"
-
-_UA_1="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"
-_UA_2="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36 Edg/125.0.0.0"
-_UA_3="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
-_UA_4="Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:128.0) Gecko/20100101 Firefox/128.0"
-_UA_5="Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
-
-UA_NUM=$(shuf -i 1-5 -n 1)
-eval "UA=\$_UA_${UA_NUM}"
-
-AL_NUM=$(shuf -i 1-3 -n 1)
-if [ "$AL_NUM" = "1" ]; then
-  AL="zh-CN,zh;q=0.9,en;q=0.8"
-elif [ "$AL_NUM" = "2" ]; then
-  AL="en-US,en;q=0.9,zh-CN;q=0.8"
-else
-  AL="zh-CN,zh;q=0.9,en-US;q=0.8,en;q=0.7"
-fi
-
-TS=$(date '+%Y-%m-%d %H:%M:%S')
-printf '[保活] [%s] 数据发送中 → %s\n' "$TS" "$PEER"
-TS=$(date '+%Y-%m-%d %H:%M:%S')
-HTTP_CODE=$(curl -s -o /dev/null -w '%{http_code}' \
-  -X GET "$PEER" \
-  -H "User-Agent: $UA" \
-  -H "Accept: application/json, text/html, */*" \
-  -H "Accept-Language: $AL" \
-  -H "Referer: https://negiao-webgis.hf.space/" \
-  --max-time 15 2>/dev/null)
-
-if [ -n "$HTTP_CODE" ] && [ "$HTTP_CODE" -ge 200 ] && [ "$HTTP_CODE" -lt 300 ]; then
-  printf '[保活] [%s] 保活成功 ✓ 对方响应: HTTP %s\n' "$TS" "$HTTP_CODE"
-else
-  printf '[保活] [%s] 保活失败 ✗ 错误码: %s\n' "$TS" "${HTTP_CODE:-unreachable}"
-fi
-SCRIPT
-RUN chmod +x /app/keepalive_send.sh && chown user:user /app/keepalive_send.sh
-
-# 非 root user 启动 cron 所需 sudo 白名单
-USER root
-RUN echo 'user ALL=(ALL) NOPASSWD: /usr/sbin/cron' >> /etc/sudoers.d/keepalive && chmod 440 /etc/sudoers.d/keepalive
-USER user
 
 EXPOSE 7860
 

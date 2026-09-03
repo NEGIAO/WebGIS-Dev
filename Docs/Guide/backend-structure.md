@@ -19,7 +19,6 @@ backend/
 │   ├── api_keys_management.py                     # API 主/备密钥管理 + L2 Agent/高德 Key 池 + 运行时地图 token 池下发
 │   ├── api_management.py                          # API 使用管理接口
 │   ├── external_proxy.py                          # 外部代理接口
-│   ├── keepalive.py                               # KeepAlive 互活跃模块（公开 POST/GET 心跳接收 + asyncio 后台随机间隔主动探活对端）
 │   ├── location.py                                # 定位相关接口
 │   ├── monitor.py                                 # 日志监控接口
 │   ├── statistics.py                              # 访问统计接口

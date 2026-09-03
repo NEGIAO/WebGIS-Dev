@@ -1,7 +1,8 @@
 import { computed, ref } from 'vue';
 import { defineStore } from 'pinia';
 import { apiAuthMe } from '@/api/backend';
-import { clearAuthSession, getAuthToken } from '@common/user/services/auth';
+import { clearAuthSession, getAuthToken, isGuestSession } from '@common/user/services/auth';
+import { EMERGENCY_GUEST_MODE } from '@/config/publicRuntime';
 
 type AuthUser = {
     username?: string;
@@ -58,6 +59,12 @@ export const useAuthStore = defineStore('authStore', () => {
         if (!token) {
             resetValidation();
             return false;
+        }
+
+        // 应急游客强制模式下：游客会话直接信任，不再向后端 apiAuthMe 请求验证。
+        // 否则后端离线时请求抛异常 → clearAuthSession → 拒绝放行，访客将无法浏览。
+        if (EMERGENCY_GUEST_MODE && isGuestSession()) {
+            return true;
         }
 
         if (validatedToken.value === token) {

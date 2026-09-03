@@ -162,6 +162,12 @@ CONFIG_CATALOG: Dict[str, ConfigMeta] = {
         "secret": False,
         "description": "纠偏瓦片抓取并发上限（原硬编码 100，收紧防打爆上游与本机 fd）",
     },
+    "VITE_EMERGENCY_GUEST_MODE": {
+        "layer": "L1",
+        "default": "1",
+        "secret": False,
+        "description": "前端应急游客强制模式（构建期 VITE_，仅应急使用）：1=后端下线时未登录直接以游客身份浏览；0=恢复原登录流程",
+    },
     "GCJRE_MAX_TILES_PER_REQUEST": {
         "layer": "L1",
         "default": 64,

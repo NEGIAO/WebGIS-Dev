@@ -68,6 +68,13 @@ async function getPublicIp() {
 // 启动时预热（不阻塞）
 void getPublicIp();
 
+// ─── 后端不可达负缓存 ───
+// 后端彻底下线（连接层失败）时，短期内后续请求直接快速失败，
+// 避免每个功能都等待 BACKEND_REQUEST_TIMEOUT_MS 超时造成界面卡顿/白屏。
+let _backendUnavailable = false;
+let _backendUnavailableUntil = 0;
+const BACKEND_UNAVAILABLE_COOLDOWN_MS = 30000;
+
 export { getPublicIp };
 
 /**
@@ -88,6 +95,13 @@ const backendAPI = axios.create({
  */
 backendAPI.interceptors.request.use(
     async (config) => {
+        // 后端不可达负缓存：直接快速失败，不发请求（避免每次等待超时）
+        if (_backendUnavailable && Date.now() < _backendUnavailableUntil) {
+            return Promise.reject(Object.assign(new Error('后端服务暂不可用，请稍后刷新'), {
+                isBackendUnavailable: true,
+            }));
+        }
+
         const token = getAuthToken();
         if (token) {
             config.headers.Authorization = `Bearer ${token}`;
@@ -160,6 +174,12 @@ backendAPI.interceptors.response.use(
         return data;
     },
     (error) => {
+        // 连接层失败（无 response）→ 标记后端不可达，进入负缓存窗口
+        if (!error.response) {
+            _backendUnavailable = true;
+            _backendUnavailableUntil = Date.now() + BACKEND_UNAVAILABLE_COOLDOWN_MS;
+        }
+
         // 处理网络错误、超时等
         let message = '请求失败，请稍后重试';
         let status = 0;

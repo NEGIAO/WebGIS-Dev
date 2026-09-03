@@ -47,6 +47,12 @@ export const BACKEND_BASE_URL: string = stripTrailingSlash(
     String(import.meta.env.VITE_BACKEND_URL || 'http://localhost:7860'),
 );
 
+/** 应急游客强制模式（VITE_EMERGENCY_GUEST_MODE，默认开启）。
+ * 后端下线时置 1，前端未登录直接以游客身份进地图浏览；后端恢复后置 0 重建即可一键回原登录流程。
+ * 仅应急/临时使用，不属正式功能。 */
+export const EMERGENCY_GUEST_MODE: boolean =
+    String(import.meta.env.VITE_EMERGENCY_GUEST_MODE || '1').trim() === '1';
+
 /** 瓦片代理基址（/proxy/*、/proxy/gcj2wgs/*、/tiles/* 等瓦片类服务） */
 export const TILE_PROXY_BASE_URL: string = stripTrailingSlash(
     String(import.meta.env.VITE_TILE_PROXY_BASE_URL || import.meta.env.VITE_BACKEND_URL || 'http://localhost:7860'),

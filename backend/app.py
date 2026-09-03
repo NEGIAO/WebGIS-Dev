@@ -40,7 +40,6 @@ from domains.tiles.download.task_scheduler import start_task_cleanup_scheduler, 
 from domains.tiles.download.download_task import init_download_task_db
 from api.monitor import init_monitor_log_streaming, router as monitor_router
 from api.spatial import router as spatial_router
-from api.keepalive import router as keepalive_router, start_keepalive_sender
 from api.realtime_stats import init_broadcaster, router as realtime_stats_router, start_periodic_broadcast, stop_periodic_broadcast
 from api.historical_imagery import router as historical_imagery_router
 from services.historical_imagery import (
@@ -179,9 +178,6 @@ async def lifespan(app: FastAPI):
     app.state.hourly_chime = asyncio.create_task(hourly_chime_task(startup_time=_startup_time))
     logger.info("整点报时后台任务已创建")
 
-    # 启动 KeepAlive 发送端（每 5 min 主动 ping 对端 New API，保持双方 HF Space 活跃）
-    app.state.keepalive_task = start_keepalive_sender(app)
-
     # 初始化实时统计 SSE 广播管理器
     app.state.stats_broadcaster = init_broadcaster()
     logger.info("实时统计 SSE 广播管理器已初始化")
@@ -293,7 +289,7 @@ async def check_startup_state(request: Request, call_next):
     - 正常路径：init_auth_storage() 仅做一次布尔检查即返回。
     - 降级路径：尝试重新初始化认证存储，恢复成功则继续处理。
     """
-    allowlist = {"/", "/health", "/docs", "/redoc", "/openapi.json", "/api/info", "/api/heartbeat", "/api/keepalive/ping"}
+    allowlist = {"/", "/health", "/docs", "/redoc", "/openapi.json", "/api/info"}
     if request.url.path in allowlist:
         return await call_next(request)
 
@@ -382,9 +378,6 @@ async def http_exception_handler(request: Request, exc: HTTPException):
 
 # ==================== 路由挂载 ====================
 
-# 挂载 KeepAlive 路由（必须在 proxy 之前，避免被 /api/* 通配拦截）
-app.include_router(keepalive_router)
-logger.info("已注册 KeepAlive 探活路由")
 
 # 挂载瓦片代理路由
 app.include_router(proxy_router)
