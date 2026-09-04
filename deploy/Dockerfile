@@ -83,6 +83,7 @@ RUN chown -R user:user /usr/share/nginx/html /etc/nginx \
  && mkdir -p /tmp/nginx_cache && chown -R user:user /tmp/nginx_cache
 
 # 启动脚本：nginx(前台守护进程化后台运行) + uvicorn(主进程)
+# 启动脚本：nginx(前台守护进程化后台运行) + uvicorn(主进程)
 RUN cat > /opt/start.sh << 'SCRIPT'
 #!/bin/sh
 set -e
