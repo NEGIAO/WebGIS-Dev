@@ -77,6 +77,17 @@ flowchart LR
 - `MAX_CONCURRENCY` 文档值旧账（仍未改，待立 L1）。
 - index 暂存条目 + 根目录乱码 `stubs.txt` 误建文件（此前交接块已报，提交前处理）。
 
+## 零散修补（二)：Docker 镜像重建发布（L1 ops）
+
+- `negiao/webgis:V3.5.43` + `latest` 构建推送完毕（同 digest `914b705…`）。
+- 构建中发现真 bug：Windows 检出给 `deploy/Dockerfile` 带上 CRLF，heredoc 写出的
+  `/opt/start.sh` shebang 变成 `#!/bin/sh\r`，容器起即崩（`exec /opt/start.sh: no such file`）。
+  此前无人发现是因为本地 compose 用 command 覆盖了 CMD，且 HF 在 Linux 侧构建不受影响。
+  修：Dockerfile 内 `sed -i 's/\r$//'` 脱 CR + 新增 `.gitattributes` 锁 LF。
+- 冒烟（7861 端口）：`/health` 200、前端 200、`/proxy/gcj2wgs/高德` 回 46KB PNG，`domains/tiles` 新路径实证。
+- 清理：`docker builder prune -af` 回收 26.17GB；悬空镜像零剩余（无可删）。
+- 注意：运行中的 `webgis-api` 容器仍钉在旧镜像 ID（-compose 下次 up 自动切新版；其代码走 bind mount 本就不受影响）；本次新增的两个 worktree 改动（`deploy/Dockerfile`、`.gitattributes`）随下次提交带走。
+
 ## 零散修补（同日追加，L1）
 
 - **杂散缓存目录未被 ignore**：`backend/domains/tiles/rectify/data/gcj_rectify_cache/`

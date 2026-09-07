@@ -83,6 +83,7 @@ RUN chown -R user:user /usr/share/nginx/html /etc/nginx \
  && mkdir -p /tmp/nginx_cache && chown -R user:user /tmp/nginx_cache
 
 # 启动脚本：nginx(前台守护进程化后台运行) + uvicorn(主进程)
+# 启动脚本：nginx(前台守护进程化后台运行) + uvicorn(主进程)
 RUN cat > /opt/start.sh << 'SCRIPT'
 #!/bin/sh
 set -e
@@ -90,7 +91,9 @@ set -e
 nginx
 exec uv run uvicorn app:app --host 127.0.0.1 --port 8000 --no-access-log
 SCRIPT
-RUN chmod +x /opt/start.sh && chown user:user /opt/start.sh
+# Windows 检出会给 Dockerfile 带上 CRLF，heredoc 会把 \r 写进 start.sh
+# 导致 shebang 变成 #!/bin/sh\r 而启动失败；此处强制脱 CR（幂等，LF 检出无影响）
+RUN sed -i 's/\r$//' /opt/start.sh && chmod +x /opt/start.sh && chown user:user /opt/start.sh
 
 EXPOSE 7860
 

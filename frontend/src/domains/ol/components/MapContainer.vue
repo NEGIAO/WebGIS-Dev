@@ -1316,7 +1316,7 @@ async function runDeferredStartupTasks() {
         });
         message.soup(); //鸡汤问候
     } else {
-        message.success(`欢迎使用NEGIAO的WebGIS!(${APP_DISPLAY_VERSION})`, { duration: 3000 });
+        message.success(`系统运维中，后端功能暂不可用,前端功能正常(2026.09.01)!   敬请期待后端服务器恢复。(${APP_DISPLAY_VERSION})`, { duration: 3000 });
     }
 
     // ========== 用户定位 ==========

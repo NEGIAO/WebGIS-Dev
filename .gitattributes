@@ -1,0 +1,5 @@
+# 容器内 heredoc/配置对 CRLF 敏感的文件强制 LF，
+# 避免 Windows 检出（core.autocrlf=true）导致镜像启动失败
+deploy/Dockerfile text eol=lf
+deploy/nginx.conf text eol=lf
+*.sh text eol=lf
