@@ -168,6 +168,12 @@ CONFIG_CATALOG: Dict[str, ConfigMeta] = {
         "secret": False,
         "description": "前端应急游客强制模式（构建期 VITE_，仅应急使用）：1=后端下线时未登录直接以游客身份浏览；0=恢复原登录流程",
     },
+    "VITE_GITHUB_STATS_WORKER_URL": {
+        "layer": "L1",
+        "default": "",
+        "secret": False,
+        "description": "前端 GitHub 开源数据边缘代理基址（构建期 VITE_，见 workers/github-stats/）：落地页 Stars/Forks/版本号/趋势图统一走它；为空则回退直连 GitHub",
+    },
     "GCJRE_MAX_TILES_PER_REQUEST": {
         "layer": "L1",
         "default": 64,

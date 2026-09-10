@@ -78,13 +78,47 @@
                             {{ t('landing.tryNow') }}
                         </router-link>
                         <a
-                            href="https://github.com/NEGIAO/WebGIS-Dev"
+                            :href="GITHUB_PAGE_URL"
                             target="_blank"
                             rel="noopener"
                             class="btn-outline"
                         >
                             <i class="fab fa-github"></i>
                             {{ t('landing.githubSource') }}
+                        </a>
+                    </div>
+
+                    <!-- GitHub 实时认可：Stars / Forks 直读 GitHub API，失败时显示缓存/占位 -->
+                    <div
+                        class="github-live"
+                        aria-live="polite"
+                    >
+                        <a
+                            :href="GITHUB_PAGE_URL"
+                            target="_blank"
+                            rel="noopener"
+                            class="github-pill"
+                        >
+                            <Star :size="15" />
+                            <span class="github-pill-label">{{ t('landing.ossStars') }}</span>
+                            <span class="github-pill-value">{{ formattedStars }}</span>
+                            <span
+                                class="live-dot"
+                                :class="{ on: githubIsLive }"
+                            ></span>
+                            <span class="live-text">{{
+                                githubIsLive ? t('landing.ossLive') : t('landing.ossCached')
+                            }}</span>
+                        </a>
+                        <a
+                            :href="`${GITHUB_PAGE_URL}/fork`"
+                            target="_blank"
+                            rel="noopener"
+                            class="github-pill"
+                        >
+                            <GitFork :size="15" />
+                            <span class="github-pill-label">{{ t('landing.ossForks') }}</span>
+                            <span class="github-pill-value">{{ formattedForks }}</span>
                         </a>
                     </div>
 
@@ -167,6 +201,114 @@
                 </div>
             </section>
 
+            <!-- ============ 开源认可：实时 Stars/Forks + 每日更新的 Star History ============ -->
+            <section class="oss-section">
+                <div class="section-head">
+                    <p class="section-eyebrow">{{ t('landing.ossEyebrow') }}</p>
+                    <h3 class="section-title">{{ t('landing.ossTitle') }}</h3>
+                    <p class="oss-origin">{{ ossOriginText }}</p>
+                </div>
+
+                <!-- 求 Star/Fork 引导：标题下独立条，不嵌卡片 -->
+                <div class="oss-support">
+                    <p class="oss-support-text">
+                        <span>{{ t('landing.ossSupportText1') }}</span>
+                        <span>{{ t('landing.ossSupportText2') }}</span>
+                    </p>
+                    <div class="oss-support-actions">
+                        <a
+                            :href="GITHUB_PAGE_URL"
+                            target="_blank"
+                            rel="noopener"
+                            class="oss-support-btn oss-support-btn--star"
+                        >
+                            <Star :size="16" />
+                            {{ t('landing.ossStarBtn') }}
+                        </a>
+                        <a
+                            :href="`${GITHUB_PAGE_URL}/fork`"
+                            target="_blank"
+                            rel="noopener"
+                            class="oss-support-btn oss-support-btn--fork"
+                        >
+                            <GitFork :size="16" />
+                            {{ t('landing.ossForkBtn') }}
+                        </a>
+                    </div>
+                </div>
+
+                <div class="oss-stats">
+                    <a
+                        :href="GITHUB_PAGE_URL"
+                        target="_blank"
+                        rel="noopener"
+                        class="oss-stat"
+                    >
+                        <span class="oss-stat-icon"><Star :size="18" /></span>
+                        <span class="oss-stat-body">
+                            <span class="oss-stat-value">{{ formattedStars }}</span>
+                            <span class="oss-stat-label">{{ t('landing.ossStars') }}</span>
+                        </span>
+                    </a>
+                    <div class="oss-stat-divider"></div>
+                    <a
+                        :href="`${GITHUB_PAGE_URL}/forks`"
+                        target="_blank"
+                        rel="noopener"
+                        class="oss-stat"
+                    >
+                        <span class="oss-stat-icon"><GitFork :size="18" /></span>
+                        <span class="oss-stat-body">
+                            <span class="oss-stat-value">{{ formattedForks }}</span>
+                            <span class="oss-stat-label">{{ t('landing.ossForks') }}</span>
+                        </span>
+                    </a>
+                    <div class="oss-stat-divider"></div>
+                    <a
+                        :href="GITHUB_PAGE_URL"
+                        target="_blank"
+                        rel="noopener"
+                        class="oss-repo-link"
+                    >
+                        <span
+                            class="live-dot"
+                            :class="{ on: githubIsLive }"
+                        ></span>
+                        {{ githubIsLive ? t('landing.ossLive') : t('landing.ossCached') }}
+                        <span
+                            v-if="githubUpdatedText"
+                            class="oss-updated"
+                            >· {{ githubUpdatedText }}</span
+                        >
+                        <ExternalLink :size="14" />
+                        {{ t('landing.ossViewRepo') }}
+                    </a>
+                </div>
+
+                <a
+                    v-if="!chartDead"
+                    :href="STAR_HISTORY_PAGE_URL"
+                    target="_blank"
+                    rel="noopener"
+                    class="oss-chart-link"
+                >
+                    <img
+                        :src="starChartSrc"
+                        :alt="t('landing.ossChartAlt')"
+                        loading="lazy"
+                        referrerpolicy="no-referrer"
+                        @error="onChartError"
+                    />
+                    <span class="oss-chart-caption">{{ t('landing.ossChartCaption') }}</span>
+                </a>
+                <p
+                    v-else
+                    class="oss-chart-unavailable"
+                >
+                    {{ t('landing.ossChartUnavailable') }}
+                </p>
+            </section>
+
             <!-- ============ CTA 区域 ============ -->
             <section class="cta-section">
                 <div class="cta-card">
@@ -247,16 +389,18 @@
 </template>
 
 <script setup>
-import { computed } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 import { useLocale } from '@common/app/useLocale';
 import { useUserPreferencesStore } from '../stores';
-import { ASSET_BASE_URL } from '../config/publicRuntime';
+import { ASSET_BASE_URL, GITHUB_STATS_WORKER_URL } from '../config/publicRuntime';
 import {
     Bot,
     ChartArea,
     Cloud,
     CloudSun,
+    ExternalLink,
     FileUp,
+    GitFork,
     Globe,
     IdCard,
     Layers,
@@ -268,6 +412,7 @@ import {
     Route,
     Send,
     ShieldCheck,
+    Star,
     UserRound,
     Wrench,
     Zap,
@@ -329,6 +474,275 @@ const heroStats = computed(() =>
         label: t(stat.labelKey),
     })),
 );
+
+// ============ GitHub 实时认可数据（Stars / Forks） ============
+// 直调 GitHub 公开仓库 API（CORS 允许，无需后端代理）：
+// https://api.github.com/repos/NEGIAO/WebGIS-Dev
+// 未登录限流 60 次/小时/IP，落地页每次访问约 1 次，足够面试展示用。
+// 策略：localStorage 缓存先行展示 → 后台 revalidate → 失败则保留缓存/占位，不阻塞首屏。
+const GITHUB_REPO = 'NEGIAO/WebGIS-Dev';
+const GITHUB_API_URL = `https://api.github.com/repos/${GITHUB_REPO}`;
+const GITHUB_CACHE_KEY = 'webgis-github-stats-v1';
+const GITHUB_CACHE_TTL_MS = 10 * 60 * 1000;
+const GITHUB_PAGE_URL = `https://github.com/${GITHUB_REPO}`;
+const STAR_HISTORY_PAGE_URL =
+    'https://www.star-history.com/?repos=NEGIAO%2FWebGIS-Dev&type=timeline&legend=top-left';
+// star-history 官方 sealed_token 图表：服务端每次访问时用仓库主人授权的
+// fine-grained PAT 重新渲染，天然“每日更新”。URL 必须保持原样，勿拼接多余参数。
+// 固定使用浅色（白色底）版本：深色系统下也不切换，保证面试展示时永远是白底。
+const STAR_CHART_URL =
+    'https://api.star-history.com/chart?repos=NEGIAO/WebGIS-Dev&type=timeline&legend=top-left&sealed_token=B5ReoH7FL9EMbjs7rJJ3APlIoYZwGKo3g2gC_4_0LxIrQ--e5uhUrYXR7UEBcnb3CU48BAX9--IyzI-TxTszy8HrMJ3oVSVvfowMjrMOxY8n477EUd4_Ip6F8EMaHsKX6H5b1JjudmBoRUn3HxJ1R6zxt3lO1CKGidFnlqFb2W_TXYy_sTk3AS3rn8v8';
+
+// ============ Cloudflare Worker 边缘代理（国内直连 GitHub 不稳定时的首选链路） ============
+// Worker（workers/github-stats/）在边缘抓 GitHub 并缓存 10 分钟，前端一次请求拿全量数据。
+// 未配置（VITE_GITHUB_STATS_WORKER_URL 为空）则自动降级为直连 GitHub，有本地缓存兜底。
+const WORKER_STATS_URL = GITHUB_STATS_WORKER_URL ? `${GITHUB_STATS_WORKER_URL}/api/stats` : '';
+const WORKER_CHART_URL = GITHUB_STATS_WORKER_URL ? `${GITHUB_STATS_WORKER_URL}/api/chart` : '';
+const WORKER_TIMEOUT_MS = 8000;
+
+const githubStars = ref(null);
+const githubForks = ref(null);
+const githubUpdatedAt = ref('');
+const githubIsLive = ref(false);
+
+function formatCount(value) {
+    if (value == null) return '—';
+    try {
+        return Number(value).toLocaleString(language.value === 'zh-CN' ? 'zh-CN' : 'en-US');
+    } catch {
+        return String(value);
+    }
+}
+
+const formattedStars = computed(() => formatCount(githubStars.value));
+const formattedForks = computed(() => formatCount(githubForks.value));
+// 趋势图：配了 Worker 就走边缘代理（国内稳 + 边缘缓存），否则直连 star-history
+const chartUseFallback = ref(false);
+const chartDead = ref(false);
+const starChartSrc = computed(() => {
+    if (chartUseFallback.value) return STAR_CHART_URL;
+    return WORKER_CHART_URL || STAR_CHART_URL;
+});
+// 图片加载失败兜底：Worker 图床不通 → 降级直连再试一次 → 仍失败则隐藏图片保版面
+function onChartError() {
+    if (!chartUseFallback.value && WORKER_CHART_URL) {
+        chartUseFallback.value = true;
+    } else {
+        chartDead.value = true;
+    }
+}
+const githubUpdatedText = computed(() => {
+    if (!githubUpdatedAt.value) return '';
+    let text = githubUpdatedAt.value;
+    try {
+        const date = new Date(githubUpdatedAt.value);
+        if (!Number.isNaN(date.getTime())) {
+            text = date.toLocaleDateString(language.value === 'zh-CN' ? 'zh-CN' : 'en-US', {
+                year: 'numeric',
+                month: 'short',
+                day: 'numeric',
+            });
+        }
+    } catch {
+        /* 保持原始字符串 */
+    }
+    return t('landing.ossUpdatedAt', { time: text });
+});
+
+function readGithubCache() {
+    try {
+        const raw = localStorage.getItem(GITHUB_CACHE_KEY);
+        if (!raw) return null;
+        const parsed = JSON.parse(raw);
+        if (
+            !parsed ||
+            typeof parsed !== 'object' ||
+            typeof parsed.stars !== 'number' ||
+            typeof parsed.forks !== 'number'
+        ) {
+            return null;
+        }
+        if (Date.now() - Number(parsed.fetchedAt || 0) > GITHUB_CACHE_TTL_MS * 6) return null;
+        return parsed;
+    } catch {
+        return null;
+    }
+}
+
+async function fetchGithubStats() {
+    const cached = readGithubCache();
+    if (cached) {
+        githubStars.value = cached.stars;
+        githubForks.value = cached.forks;
+        githubUpdatedAt.value = cached.updatedAt || '';
+    }
+    try {
+        const response = await fetch(GITHUB_API_URL, {
+            headers: { Accept: 'application/vnd.github+json' },
+        });
+        if (!response.ok) throw new Error(`GitHub API ${response.status}`);
+        const data = await response.json();
+        if (typeof data.stargazers_count === 'number') githubStars.value = data.stargazers_count;
+        if (typeof data.forks_count === 'number') githubForks.value = data.forks_count;
+        githubUpdatedAt.value = data.pushed_at || data.updated_at || '';
+        githubIsLive.value = true;
+        try {
+            localStorage.setItem(
+                GITHUB_CACHE_KEY,
+                JSON.stringify({
+                    stars: githubStars.value,
+                    forks: githubForks.value,
+                    updatedAt: githubUpdatedAt.value,
+                    fetchedAt: Date.now(),
+                }),
+            );
+        } catch {
+            /* 隐私模式无存储也照常展示实时值 */
+        }
+    } catch (error) {
+        console.warn('[Landing] GitHub stats fetch failed, keep cache/fallback:', error);
+    }
+}
+
+// ============ 项目版本号：README 为唯一正式来源 ============
+// 运行时抓取 main 分支 README 全文并解析版本号，README 一改、落地页自动跟进。
+// 解析优先级：①“当前版本 V3.5.x”正式声明 → ②版本演进表首个 Vx.y.z → ③页脚 <sub>Vx.y.z</sub>。
+// 缓存先行展示 → 后台 revalidate → 失败则保留缓存/无版本号兜底文案。
+const README_URL = 'https://raw.githubusercontent.com/NEGIAO/WebGIS-Dev/main/README.md';
+const VERSION_CACHE_KEY = 'webgis-app-version-v1';
+
+const appVersion = ref('');
+
+const ossOriginText = computed(() =>
+    appVersion.value
+        ? t('landing.ossOrigin', { version: appVersion.value })
+        : t('landing.ossOriginFallback'),
+);
+
+function parseVersionFromReadme(markdown) {
+    if (!markdown || typeof markdown !== 'string') return '';
+    const declared = markdown.match(/当前版本\s*[Vv]?(\d+\.\d+(?:\.\d+)?)/);
+    if (declared) return `V${declared[1]}`;
+    // 版本演进表按最新在前排序，取首行（避免误命中正文里的历史版本号，如 Docker 镜像旧版本）
+    const tableRow = markdown.match(/\|\s*\*\*V(\d+\.\d+\.\d+)\*\*\s*\|/);
+    if (tableRow) return `V${tableRow[1]}`;
+    const footer = markdown.match(/<sub>V(\d+\.\d+\.\d+)/);
+    if (footer) return `V${footer[1]}`;
+    return '';
+}
+
+async function fetchAppVersion() {
+    try {
+        const cached = localStorage.getItem(VERSION_CACHE_KEY);
+        if (cached) appVersion.value = String(cached);
+    } catch {
+        /* 隐私模式无存储则直接走网络 */
+    }
+    try {
+        const response = await fetch(README_URL, { cache: 'no-store' });
+        if (!response.ok) throw new Error(`README ${response.status}`);
+        const version = parseVersionFromReadme(await response.text());
+        if (version) {
+            appVersion.value = version;
+            try {
+                localStorage.setItem(VERSION_CACHE_KEY, version);
+            } catch {
+                /* 隐私模式无存储也照常展示本次解析值 */
+            }
+        }
+    } catch (error) {
+        console.warn('[Landing] README version fetch failed, keep cache/fallback:', error);
+    }
+}
+
+// ---- Worker 链路（含本地缓存秒开） ----
+async function fetchJsonWithTimeout(url, timeoutMs = WORKER_TIMEOUT_MS) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+        const response = await fetch(url, { signal: controller.signal, cache: 'no-store' });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        return await response.json();
+    } finally {
+        clearTimeout(timer);
+    }
+}
+
+/** 首屏同步展示本地缓存，不等待任何网络；真正的刷新由 Worker/直连在后台完成 */
+function applyLocalCaches() {
+    const cached = readGithubCache();
+    if (cached) {
+        githubStars.value = cached.stars;
+        githubForks.value = cached.forks;
+        githubUpdatedAt.value = cached.updatedAt || '';
+    }
+    try {
+        const version = localStorage.getItem(VERSION_CACHE_KEY);
+        if (version) appVersion.value = String(version);
+    } catch {
+        /* 隐私模式无存储则等待网络 */
+    }
+}
+
+function persistLocalCaches() {
+    try {
+        localStorage.setItem(
+            GITHUB_CACHE_KEY,
+            JSON.stringify({
+                stars: githubStars.value,
+                forks: githubForks.value,
+                updatedAt: githubUpdatedAt.value,
+                fetchedAt: Date.now(),
+            }),
+        );
+    } catch {
+        /* 隐私模式无存储也照常展示本次值 */
+    }
+    try {
+        if (appVersion.value) localStorage.setItem(VERSION_CACHE_KEY, appVersion.value);
+    } catch {
+        /* 同上 */
+    }
+}
+
+/** Worker 优先：一次请求拿全 Stars / Forks / 版本号（边缘缓存 10 分钟） */
+async function fetchViaWorker() {
+    if (!WORKER_STATS_URL) return false;
+    try {
+        const data = await fetchJsonWithTimeout(WORKER_STATS_URL);
+        if (!data || typeof data !== 'object') return false;
+        let useful = false;
+        if (typeof data.stars === 'number') {
+            githubStars.value = data.stars;
+            githubIsLive.value = true;
+            useful = true;
+        }
+        if (typeof data.forks === 'number') {
+            githubForks.value = data.forks;
+            useful = true;
+        }
+        if (data.updatedAt) githubUpdatedAt.value = data.updatedAt;
+        if (data.version) {
+            appVersion.value = data.version;
+            useful = true;
+        }
+        if (!useful) return false;
+        persistLocalCaches();
+        return true;
+    } catch (error) {
+        console.warn('[Landing] Worker stats failed, fallback to direct GitHub:', error);
+        return false;
+    }
+}
+
+onMounted(() => {
+    applyLocalCaches(); // 本地缓存秒开，首屏不等待任何网络
+    void (async () => {
+        if (await fetchViaWorker()) return; // Worker 命中则不再打扰 GitHub
+        void fetchGithubStats(); // 直连兜底（同样缓存先行）
+        void fetchAppVersion();
+    })();
+});
 </script>
 
 <style scoped>
@@ -613,7 +1027,76 @@ const heroStats = computed(() =>
     align-items: center;
     gap: 1rem;
     flex-wrap: wrap;
-    margin-bottom: 3.5rem;
+    margin-bottom: 1.25rem;
+}
+
+/* GitHub 实时认可 pills：首屏即见，面试官一眼看到社区认可 */
+.github-live {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+    margin-bottom: 2.5rem;
+}
+
+.github-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 0.45rem 1rem;
+    border-radius: 999px;
+    background: var(--bg-primary);
+    border: 1px solid var(--border-light);
+    color: var(--text-primary);
+    font-size: 0.85rem;
+    font-weight: 600;
+    text-decoration: none;
+    transition: all 0.2s ease;
+}
+
+.github-pill svg {
+    color: var(--brand-primary-dark);
+}
+
+.github-pill:hover {
+    border-color: rgba(var(--brand-primary-rgb), 0.45);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.07);
+}
+
+.github-pill-value {
+    font-variant-numeric: tabular-nums;
+}
+
+.live-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: #c9cdd3;
+    flex-shrink: 0;
+}
+
+.live-dot.on {
+    background: #22c55e;
+    box-shadow: 0 0 0 4px rgba(34, 197, 94, 0.18);
+    animation: live-pulse 2s ease-in-out infinite;
+}
+
+@keyframes live-pulse {
+    0%,
+    100% {
+        box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.18);
+    }
+    50% {
+        box-shadow: 0 0 0 6px rgba(34, 197, 94, 0.08);
+    }
+}
+
+.live-text {
+    font-size: 0.72rem;
+    font-weight: 700;
+    color: var(--text-muted);
 }
 
 .btn-large,
@@ -848,6 +1331,242 @@ const heroStats = computed(() =>
     color: var(--brand-primary-dark);
     transform: translateY(-2px);
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
+}
+
+/* ============ 开源认可（Star History） ============ */
+.oss-section {
+    width: 100%;
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 2rem 2rem 4rem;
+}
+
+/* 本区头后直接跟引导条，全局 3rem 间距过大，单独收窄 */
+.oss-section .section-head {
+    margin-bottom: 1.5rem;
+}
+
+.oss-stats {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 1.5rem;
+    flex-wrap: wrap;
+    margin-bottom: 1.5rem;
+}
+
+.oss-stat {
+    display: inline-flex;
+    align-items: center;
+    gap: 12px;
+    text-decoration: none;
+    color: inherit;
+    padding: 0.4rem 0.6rem;
+    border-radius: 12px;
+    transition: background 0.2s ease;
+}
+
+.oss-stat:hover {
+    background: rgba(var(--brand-primary-rgb), 0.07);
+}
+
+.oss-stat-icon {
+    width: 44px;
+    height: 44px;
+    border-radius: 12px;
+    background: rgba(var(--brand-primary-rgb), 0.1);
+    border: 1px solid rgba(var(--brand-primary-rgb), 0.2);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--brand-primary-dark);
+    flex-shrink: 0;
+}
+
+.oss-stat-body {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    line-height: 1.3;
+}
+
+.oss-stat-value {
+    font-size: 1.4rem;
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+    background: linear-gradient(135deg, var(--brand-primary), var(--brand-primary-dark));
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    color: transparent;
+}
+
+.oss-stat-label {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+}
+
+.oss-stat-divider {
+    width: 1px;
+    height: 40px;
+    background: var(--border-light);
+}
+
+.oss-repo-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    text-decoration: none;
+    padding: 0.5rem 1rem;
+    border-radius: 999px;
+    border: 1px solid var(--border-light);
+    background: rgba(var(--brand-primary-rgb), 0.05);
+    transition: all 0.2s ease;
+}
+
+.oss-repo-link:hover {
+    color: var(--brand-primary-dark);
+    border-color: rgba(var(--brand-primary-rgb), 0.45);
+}
+
+.oss-updated {
+    font-weight: 400;
+    color: var(--text-muted);
+}
+
+.oss-chart-link {
+    display: block;
+    width: 100%;
+    max-width: 760px;
+    margin: 0 auto;
+    text-decoration: none;
+    border-radius: 14px;
+    overflow: hidden;
+    border: 1px solid var(--border-light);
+    background: #fff;
+    transition: box-shadow 0.25s ease, transform 0.25s ease;
+}
+
+.oss-chart-link:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 10px 28px rgba(0, 0, 0, 0.1);
+}
+
+.oss-chart-link picture,
+.oss-chart-link img {
+    display: block;
+    width: 100%;
+    height: auto;
+    background: #fff;
+}
+
+.oss-chart-caption {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 0.8rem 1rem;
+    font-size: 0.82rem;
+    color: var(--text-muted);
+    background: var(--bg-primary);
+    border-top: 1px solid var(--border-light);
+}
+
+.oss-chart-link:hover .oss-chart-caption {
+    color: var(--brand-primary-dark);
+}
+
+/* 趋势图双链路全断时的占位文案：保版面，不出现裂图图标 */
+.oss-chart-unavailable {
+    width: 100%;
+    max-width: 760px;
+    margin: 0 auto;
+    padding: 2rem 1rem;
+    text-align: center;
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    border: 1px dashed var(--border-light);
+    border-radius: 14px;
+    background: rgba(var(--brand-primary-rgb), 0.04);
+}
+
+/* 求 Star/Fork 引导：标题下独立无框条，与区块融为一体 */
+.oss-support {
+    width: 100%;
+    max-width: 760px;
+    margin: 0 auto 1.4rem;
+    text-align: center;
+}
+
+.oss-support-text {
+    margin: 0 auto 1.1rem;
+    max-width: 600px;
+    font-size: 0.92rem;
+    line-height: 1.8;
+    color: var(--text-primary);
+    font-weight: 600;
+    text-wrap: balance;
+}
+
+.oss-support-text span {
+    display: block;
+}
+
+.oss-support-actions {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 0.8rem;
+    flex-wrap: wrap;
+}
+
+.oss-support-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 0.65rem 1.6rem;
+    border-radius: 10px;
+    font-weight: 600;
+    font-size: 0.9rem;
+    text-decoration: none;
+    transition: all 0.2s ease;
+}
+
+.oss-support-btn--star {
+    background: linear-gradient(135deg, var(--brand-primary), var(--brand-primary-dark));
+    color: #fff;
+    box-shadow: 0 4px 12px rgba(var(--brand-primary-rgb), 0.3);
+}
+
+.oss-support-btn--star:hover {
+    filter: brightness(1.06);
+    transform: translateY(-2px);
+    box-shadow: 0 6px 16px rgba(var(--brand-primary-rgb), 0.4);
+}
+
+.oss-support-btn--fork {
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    border: 1px solid var(--border-light);
+}
+
+.oss-support-btn--fork:hover {
+    border-color: var(--brand-primary);
+    color: var(--brand-primary-dark);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+}
+
+/* 项目渊源说明：弱化处理，不抢图表风头 */
+.oss-origin {
+    margin: 0.6rem auto 0;
+    max-width: 640px;
+    font-size: 0.85rem;
+    line-height: 1.7;
+    color: var(--text-muted);
 }
 
 /* ============ CTA 区域 ============ */
@@ -1124,6 +1843,14 @@ const heroStats = computed(() =>
 
     .tech-section {
         padding: 2rem 1rem 4rem;
+    }
+
+    .oss-section {
+        padding: 1rem 1rem 3rem;
+    }
+
+    .oss-stat-divider {
+        display: none;
     }
 
     .cta-section {

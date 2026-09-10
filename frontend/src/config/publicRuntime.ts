@@ -105,6 +105,13 @@ export const TIANDITU_API_BASE_URL: string = stripTrailingSlash(String(import.me
 export const TIANDITU_SEARCH_DEFAULT_BOUND: string = String(import.meta.env.VITE_TIANDITU_SEARCH_DEFAULT_BOUND || '73.5,18.2,135.0,53.5');
 export const DISTRICT_BOUNDARY_BASE_URL: string = stripTrailingSlash(String(import.meta.env.VITE_DISTRICT_BOUNDARY_BASE_URL || 'https://geo.datav.aliyun.com/areas_v3/bound'));
 
+/** GitHub 开源数据边缘代理（Cloudflare Worker，见仓库 workers/github-stats/）基址。
+ * 落地页的 Stars / Forks / 版本号 / Star History 趋势图统一走它：
+ * Worker 在边缘抓 GitHub 并缓存，前端只跟自己的 Worker 通信（国内直连 GitHub 不稳定）。
+ * 为空则回退为前端直连 GitHub（有本地缓存兜底）。部署 Worker 后通过
+ * VITE_GITHUB_STATS_WORKER_URL 传入，如 https://webgis-github-stats.xxx.workers.dev。 */
+export const GITHUB_STATS_WORKER_URL: string = stripTrailingSlash(String(import.meta.env.VITE_GITHUB_STATS_WORKER_URL || '').trim());
+
 
 
 /** Google OAuth Client ID（公开，供 One Tap / GIS 初始化；空则跳过） */

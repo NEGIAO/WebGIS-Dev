@@ -6,6 +6,34 @@
 
 ## 版本记录
 
+### V3.5.38 (2026-09-10) — 落地页开源认可区 + Cloudflare Worker 边缘数据接口
+
+> **动机**：个人预推免面试（9.16）在即，项目将放入简历，落地页需要实时展示社区认可
+> （Stars/Forks/Star History）且在国内网络下稳定可达；版本号以根 README 为唯一来源，落地页动态跟随。
+>
+> **1、落地页「开源认可」区**（`frontend/src/app/LandingView.vue`）：Hero 首屏新增 Stars/Forks
+> 实时 pills（含实时/缓存状态呼吸灯）；技术栈下方新增独立区块——大数字 Stars/Forks +
+> 数据更新日期 + 白底 Star History 趋势图（限宽 760px 居中，`loading="lazy"`，点击跳交互版）+
+> 项目渊源说明（本科课程实践 → 持续迭代）与 README 动态版本号（`{version}` 插值，抓不到时
+> fallback 无版本号文案）。中英文案补进 `src/locales/core.js` 首屏同步包。
+> 数据链路三级兜底：**本地缓存秒开 → Worker（8s 超时）→ 直连 GitHub → 占位**，失败永不白屏。
+>
+> **2、Cloudflare Worker 边缘接口**（新增 `workers/github-stats/`）：`GET /api/stats`
+> 返回 `{ stars, forks, updatedAt, version, repo, fetchedAt }`（一次请求拿全量，边缘缓存 10 分钟）；
+> `GET /api/chart` 代理 star-history 趋势图 SVG（边缘缓存 6 小时）；cron 每 15 分钟暖缓存；
+> `GITHUB_TOKEN` 走 wrangler secret（限额 60/h → 5000/h）；自定义域名 `api.negiao.cn`。
+> 版本号解析与前端同构三档：①"当前版本 Vx.y.z"声明 → ②版本演进表首行 → ③页脚 `<sub>`。
+>
+> **3、配置接线**（L1 非密）：`deploy/.env` + `.env.local` + `.env.example` 新增
+> `VITE_GITHUB_STATS_WORKER_URL`（`frontend/src/config/publicRuntime.ts` 统一导出
+> `GITHUB_STATS_WORKER_URL`，为空自动降级直连）；`backend/config/catalog.py` 同步登记。
+> 验证：线上实测 29 stars / 10 forks，`/api/stats` 与 `/api/chart` 均为 200 且命中边缘缓存；
+> `npm run build` 通过，产物含新域名；双门禁通过。
+> 日志：`Docs/LLM_record/26-09/2026-09-10/2026-09-10-landing-github-stats-worker.md`。
+>
+> 另含开源认可区标题下求 Star/Fork 引导条（无框独立条，不嵌卡片；
+> Star 主按钮直达仓库，Fork 次按钮直达 fork 页；初版实心绿渐变过重已推翻重做）。
+
 ### V3.5.37 (2026-09-03) — 百度纠偏代理上线 + 接缝修复 + 瓦片域重组（多批次归并单一版本）
 
 > 本版本为 2026-09-02→09-03 期间多批次暂存工作经整合 Code Review 后归并的**单一版本**

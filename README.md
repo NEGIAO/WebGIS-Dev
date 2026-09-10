@@ -28,6 +28,8 @@
   <img src="https://img.shields.io/badge/dynamic/json?label=Total%20Clones&query=$.totalClones&url=https://raw.githubusercontent.com/NEGIAO/WebGIS-Dev/main/.github/traffic.json&color=green" alt="Total Clones" />
   <img src="https://img.shields.io/badge/dynamic/json?label=Unique%20Cloners&query=$.totalUniqueClones&url=https://raw.githubusercontent.com/NEGIAO/WebGIS-Dev/main/.github/traffic.json?cache=1&color=blue" alt="Unique Cloners" />
   <img src="https://img.shields.io/github/last-commit/negiao/webgis-dev" alt="Last Commit" />
+  <a href="https://github.com/NEGIAO/WebGIS-Dev/stargazers"><img src="https://img.shields.io/github/stars/NEGIAO/WebGIS-Dev?logo=github" alt="GitHub Stars" /></a>
+  <a href="https://github.com/NEGIAO/WebGIS-Dev/forks"><img src="https://img.shields.io/github/forks/NEGIAO/WebGIS-Dev?logo=github" alt="GitHub Forks" /></a>
 </p>
 
 ---
@@ -79,7 +81,7 @@
 
 ## 🎯 项目简介
 
-**NEGIAO's WebGIS** 是一个功能完整、架构清晰的前后端分离 WebGIS 平台（当前版本 V3.5.37），前端托管于 GitHub Pages（正式域名 webgis.negiao.cn），后端以 Docker 部署在 Hugging Face Spaces，通过 RESTful API 通信，支持独立扩展。
+**NEGIAO's WebGIS** 是一个功能完整、架构清晰的前后端分离 WebGIS 平台（当前版本 V3.5.38），前端托管于 GitHub Pages（正式域名 webgis.negiao.cn），后端以 Docker 部署在 Hugging Face Spaces，通过 RESTful API 通信，支持独立扩展。
 
 > 📚 本 README 仅保留核心概览与导航。完整文档已模块化至 [`Docs/Guide/`](Docs/Guide/)，详见下方「文档导航」。
 >
@@ -390,8 +392,19 @@ tiles.negiao.cc.cd"]
 
 > 完整历史见 [`CHANGELOG.md`](Docs/Guide/CHANGELOG.md)，以下仅列最近版本摘要。
 
+### Star History
+
+<a href="https://www.star-history.com/?repos=NEGIAO%2FWebGIS-Dev&type=timeline&legend=top-left">
+ <picture>
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=NEGIAO/WebGIS-Dev&type=timeline&theme=dark&legend=top-left&sealed_token=B5ReoH7FL9EMbjs7rJJ3APlIoYZwGKo3g2gC_4_0LxIrQ--e5uhUrYXR7UEBcnb3CU48BAX9--IyzI-TxTszy8HrMJ3oVSVvfowMjrMOxY8n477EUd4_Ip6F8EMaHsKX6H5b1JjudmBoRUn3HxJ1R6zxt3lO1CKGidFnlqFb2W_TXYy_sTk3AS3rn8v8" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=NEGIAO/WebGIS-Dev&type=timeline&legend=top-left&sealed_token=B5ReoH7FL9EMbjs7rJJ3APlIoYZwGKo3g2gC_4_0LxIrQ--e5uhUrYXR7UEBcnb3CU48BAX9--IyzI-TxTszy8HrMJ3oVSVvfowMjrMOxY8n477EUd4_Ip6F8EMaHsKX6H5b1JjudmBoRUn3HxJ1R6zxt3lO1CKGidFnlqFb2W_TXYy_sTk3AS3rn8v8" />
+   <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=NEGIAO/WebGIS-Dev&type=timeline&legend=top-left&sealed_token=B5ReoH7FL9EMbjs7rJJ3APlIoYZwGKo3g2gC_4_0LxIrQ--e5uhUrYXR7UEBcnb3CU48BAX9--IyzI-TxTszy8HrMJ3oVSVvfowMjrMOxY8n477EUd4_Ip6F8EMaHsKX6H5b1JjudmBoRUn3HxJ1R6zxt3lO1CKGidFnlqFb2W_TXYy_sTk3AS3rn8v8" />
+ </picture>
+</a>
+
 | 版本 | 日期 | 概要 |
 |------|------|------|
+| **V3.5.38** | 2026-09-10 | **落地页开源认可区 + Cloudflare Worker 边缘数据接口**：落地页新增 Stars/Forks 实时展示与 Star History 趋势图（白底、限宽 760px，附项目渊源与 README 动态版本号）；新增 `workers/github-stats`（`/api/stats` + `/api/chart`，边缘缓存 + 15 分钟暖缓存，自定义域名 `api.negiao.cn`）；前端 Worker 优先、直连兜底三级链路；标题下设求 Star/Fork 引导。详见[完整更新日志](Docs/Guide/CHANGELOG.md) |
 | **V3.5.37** | 2026-09-03 | **百度纠偏代理上线 + 接缝修复 + 瓦片域重组**（多批次归并单一版本）：①百度 BD-09 纠偏代理（BD09MC 多项式网格数学，`/proxy/bd2wgs`、`/proxy/wgs2bd`，前端预设与索引契约注释）；②bd/gcj 相邻瓦片拼接缝修复（精确四角 QUAD，共享边 bit 一致）；③后端收拢为 `domains/tiles/` 瓦片域 + `core/`，附启动崩溃修复与 `import app` 门禁固化。pytest 42 通过。详见[完整更新日志](Docs/Guide/CHANGELOG.md) |
 > 注：本版本为多批次暂存工作归并的单一版本（豁免"不合并"条款，仅本次），分项日志见 CHANGELOG 条目内链接。
 
@@ -417,6 +430,6 @@ tiles.negiao.cc.cd"]
 |:------:|:--------:|:--------:|
 | [GitHub](https://github.com/NEGIAO/WebGIS-Dev) | [webgis.negiao.cn](https://webgis.negiao.cn)（正式域名，GitHub Pages 托管） | [Hugging Face](https://NEGIAO-WebGIS.hf.space) |
 
-<sub>V3.5.37 · 完成 · 最后更新 2026-09-03</sub>
+<sub>V3.5.38 · 完成 · 最后更新 2026-09-10</sub>
 
 </div>
