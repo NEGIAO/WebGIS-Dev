@@ -359,7 +359,7 @@ URL 模板转换（`toCesiumUrlTemplate`）处理：
 - 协议补全：缺省协议统一补全为 `https://`
 - SSRF 防护：阻止私网/本地地址访问（`_is_private_host`）
 - 流式转发：`StreamingResponse` + `aiter_raw()`，不缓冲整个响应
-- 请求头伪装：模拟 Chrome UA，优先接受图片格式
+- 请求头兼容：使用 Chrome UA，优先接受图片格式
 - 超时配置：连接 5s，总计 20s（`httpx.Timeout(20.0, connect=5.0)`）
 - 连接池：`max_connections=100, max_keepalive_connections=20`
 

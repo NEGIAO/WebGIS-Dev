@@ -405,9 +405,9 @@ async def _fetch_tile_bytes(
             if response.status_code in {204, 404}:
                 return None
             if response.status_code == 418:
-                # 418 为瓦片源服务端反爬策略拦截（如天地图对非浏览器出站），重试无意义，直接放弃
+                # 418 为瓦片服务端拒绝非标准出站请求（如缺浏览器兼容头），重试无意义，直接放弃
                 logger.warning(
-                    "Tile download rejected (418, anti-crawler block) attempt %s/%s: %s",
+                    "Tile download rejected (418) attempt %s/%s: %s",
                     attempt + 1,
                     retries,
                     url,

@@ -139,7 +139,7 @@ class AgentChatRequest(BaseModel):
 
 
 class AgentChatProxyRequest(BaseModel):
-    """用户个人 API Key 代理聊天请求（绕过平台配额限制）。"""
+    """用户个人 API Key 聊天请求（使用自备 Key，不消耗平台配额）。"""
     message: str = Field(..., min_length=1, max_length=2000)
     history: List[AgentChatHistoryItem] = Field(default_factory=list, max_items=20)
     location_context: Optional[str] = Field(default=None, max_length=1000)

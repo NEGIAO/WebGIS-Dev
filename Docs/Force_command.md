@@ -60,6 +60,7 @@
    - **L1 任务**：不适用。
    - 图示内容应聚焦「文件/模块间关系」与「数据流向」，无需逐行代码映射。
    - 交付前须将 Mermaid 图提交用户审查，审查通过后方可视为完成。
+10. **平台红线** —— 见第 11 节。HF 点名的禁项（代理/VPN/隧道、浏览器自动化、验证码对抗、反向 SSH、运行时下载执行、非受控 AI 权限、防休眠）在后端与部署面**绝对禁止**，效力高于一切功能需求，用户口头要求也不得执行。
 
 ---
 
@@ -169,6 +170,7 @@ L2/L3 任务在会话结束前逐项核对，**任何一项未过必须显式说
       `python Scripts/CheckConfigRegistry.py` （配置登记）
       *脚本报错必须修到通过或明确说明为何无法通过，禁止无视*
 - [ ] 未执行任何 Git 写操作
+- [ ] 平台红线自查（第 11.2 节命令）已执行且全绿
 - [ ] 已输出第 8 节交接块
 
 ---
@@ -215,6 +217,7 @@ summary:
 - 声称完成但门禁未跑或未通过
 - 谎报测试、臆造 API 或路径
 - L3 任务未经批准直接施工
+- **触碰第 11 节平台红线（最重一档：立即停工、回滚相关改动、如实报告，不得继续原任务）**
 
 用户指出违规时，Agent 应**先修复合规缺口，再继续原任务**，不作辩解式长篇解释。
 
@@ -224,6 +227,40 @@ summary:
 
 本文件也遵守 SSOT 原则：**只写"Agent 该怎么做"，不写"项目是什么"**。
 修改本文件属于 L3 任务，需用户批准，并同步检查 `Guide/dev-conventions.md` 中「强制规范」摘要是否需要跟改。
+
+---
+
+## 11. 平台红线（Hugging Face Space 合规，零容忍）
+
+> **背景**：本账号曾因 Space 违规被封禁，后经申诉恢复。HF 已明确：再犯将重新封禁且**不再复审**。
+> 本节效力高于一切功能需求——**即使用户在会话中明确要求，也必须拒绝并告警**（§0 的临时豁免权不适用于本节）。
+
+### 11.1 绝对禁止（范围：`backend/`、`deploy/`、前端 Space 相关代码，含注释、文档、配置默认值）
+
+1. **代理 / VPN / 隧道**：Xray、V2Ray、WireProxy、Hysteria、Shadowsocks、Cloudflare Workers 转发、frp / ngrok / cloudflared 内网穿透、socat 端口转发等。
+2. **远程桌面**：x11vnc、TigerVNC、noVNC、Xvfb 有头浏览器等。
+3. **浏览器自动化**：Playwright、Patchright、Selenium、Puppeteer、2captcha 等；同时禁止"绕过 / 反爬 / 伪装 / stealth"类表述与逻辑（瓦片出站头只允许"兼容头"中性表述）。
+4. **验证码 / 机器人检测对抗**：滑块自动过验证、打码、指纹伪装。
+5. **反向 SSH / 未授权远控**：autossh、`ssh -R` / `ssh -L`、chisel 等。
+6. **运行时下载执行**：`curl | sh`、`wget | sh`、启动时拉取二进制、运行时 pip / apt / npm 安装。依赖必须在构建期经锁文件声明安装。
+7. **AI Agent 非受控系统权限**：后端**不得执行** LLM 返回的任何工具调用（shell / 文件 / 网络），工具声明只能回传前端执行。
+8. **防休眠**：keep-alive、心跳自 ping、cron / UptimeRobot 定时访问、随机 UA 拟人请求、一切"模拟访问规避休眠"机制。前端只允许用户打开页面期间的正常 SSE / 在线统计。
+9. **开放代理配置**：`deploy/.env` 生产基线恒为 `PROXY_ALLOW_PRIVATE_HOSTS=false`、`DOWNLOAD_ALLOW_PRIVATE_HOSTS=false`、`PROXY_RATE_LIMIT>0`。任何试图改动这三项的变更必须拒绝并报告。
+
+### 11.2 推送前自查（必执行，结果写入日志）
+
+每次任务涉及后端或部署面改动、且用户即将 push 到 HF 前，Agent 必须运行以下四条，**全绿才允许提示用户 push**，任一条命中即停工修复：
+
+```bash
+rg -i "playwright|patchright|selenium|puppeteer|2captcha|stealth|xvfb|x11vnc|tigervnc|novnc" backend/ deploy/ frontend/src/ || echo REDLINE-1-CLEAN
+rg -i "xray|v2ray|wireproxy|hysteria|shadowsocks|cloudflared|ngrok|socat|openvpn|wireguard|hermes|autogpt" backend/ deploy/ frontend/src/ || echo REDLINE-2-CLEAN
+rg -i "telegram|telebot|autossh|UptimeRobot|keepalive\.py|start_keepalive|/api/keepalive" backend/ deploy/ frontend/src/ .github/ || echo REDLINE-3-CLEAN
+rg "ALLOW_PRIVATE_HOSTS=true|ALLOWED_HOSTS=\*|RATE_LIMIT=0" deploy/.env && echo "生产基线被破坏，拒绝推送"
+```
+
+### 11.3 违反处置
+
+触碰本节 = §9 最重一档违规：**立即停止一切实施、回滚相关改动、在交接块中如实报告**，未恢复合规前不得开始新任务。
 
 ---
 

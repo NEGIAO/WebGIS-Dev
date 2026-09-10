@@ -1,33 +1,33 @@
-"""瓦片出站面共享的浏览器特征请求头。
+"""瓦片出站面共享的请求头。
 
-三处瓦片出站面（domains/tiles/download、rectify、直通代理）共用本模块，
-规避天地图等瓦片源对「非浏览器特征请求」的 418 反爬拦截（见
+三处瓦片出站面（domains/tiles/download、rectify、直通代理）共用本模块：
+部分瓦片源要求请求携带浏览器兼容头才会正常返回瓦片（缺失时返回 418，见
 Docs/LLM_record/26-08/2026-08-17/2026-08-17-tianditu-418-download-fix.md）。
-新增瓦片源反爬适配只需改本文件白名单，无需改动消费方。
+新增瓦片源适配只需改本文件白名单，无需改动消费方。
 """
 
 from __future__ import annotations
 
 import re
 
-# 浏览器 UA：部分瓦片源（如天地图）对非浏览器出站请求返回 418 拦截，
-# 注入浏览器特征以正常拉取（与 PROXY_USER_AGENT 配置同级别语义）
+# 浏览器 UA：部分瓦片源（如天地图）要求请求携带浏览器 UA 才会返回瓦片，
+# 默认头据此设置（与 PROXY_USER_AGENT 配置同级别语义）
 BROWSER_USER_AGENT = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
     "(KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
 )
 
-# 与 BROWSER_USER_AGENT 的 Chrome 版本号必须一致：反爬服务会交叉校验
-# UA 与 sec-ch-ua 中的版本号，不一致反而暴露非浏览器特征
+# 与 BROWSER_USER_AGENT 的 Chrome 版本号必须一致：部分服务端会校验
+# UA 与 sec-ch-ua 中的版本号，不一致时请求可能被拒绝
 SEC_CH_UA = '"Not/A)Brand";v="8", "Chromium";v="126", "Google Chrome";v="126"'
 
 
 def build_sec_ch_ua(user_agent: str) -> str:
     """从 UA 字符串解析 Chrome 版本号，生成版本号一致的 sec-ch-ua。
 
-    反爬服务会交叉校验 UA 与 sec-ch-ua 中的 Chrome 版本号；
+    部分服务端会校验 UA 与 sec-ch-ua 中的 Chrome 版本号是否一致；
     当出站 UA 被配置覆盖（如 PROXY_USER_AGENT）时，必须同步推导 sec-ch-ua，
-    否则版本不一致反而暴露非浏览器特征。
+    否则版本不一致可能导致请求被拒绝。
 
     Args:
         user_agent: 实际出站 User-Agent。
@@ -52,7 +52,7 @@ REFERER_BY_DOMAIN = {
     # 天地图企业/移动域名（omap.map-world.com.cn 等），同一官网 Referer
     "map-world.com.cn": "https://www.tianditu.gov.cn/",
     # 百度系瓦片（maponline*.bdimg.com）防盗链：缺 Referer 返回错误图，
-    # 需伪装 map.baidu.com 官网来源（bdimg.com 为 bdstatic 瓦片主域）
+    # 需设置 map.baidu.com 官网来源（bdimg.com 为 bdstatic 瓦片主域）
     "bdimg.com": "https://map.baidu.com/",
 }
 

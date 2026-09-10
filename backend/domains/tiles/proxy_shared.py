@@ -231,14 +231,14 @@ PROXY_PASSTHROUGH_HEADERS = {
     "vary",
 }
 
-# 通用代理出站默认头：完整浏览器特征集（Accept: */*、sec-ch-ua、Sec-Fetch-* 等），
-# 追求对任意瓦片源的普适性；客户端带了对应头则优先透传客户端的真实值（见
+# 通用代理出站默认头：与浏览器请求对齐的兼容头集合（Accept、sec-ch-ua、Sec-Fetch-* 等），
+# 部分瓦片源仅对这类请求返回瓦片；客户端带了对应头则优先透传客户端的真实值（见
 # _build_proxy_request_headers）。PROXY_USER_AGENT 仍作为 UA 可配置覆盖项保留。
 PROXY_DEFAULT_REQUEST_HEADERS = build_browser_headers()
 if PROXY_USER_AGENT:
     PROXY_DEFAULT_REQUEST_HEADERS["User-Agent"] = PROXY_USER_AGENT
     # UA 被配置覆盖后，sec-ch-ua 必须同步推导为同一 Chrome 版本，
-    # 否则反爬服务交叉校验 UA 与 sec-ch-ua 版本号不一致，暴露非浏览器特征
+    # 保持两处版本号一致，部分服务端会校验其一致性
     PROXY_DEFAULT_REQUEST_HEADERS["sec-ch-ua"] = build_sec_ch_ua(PROXY_USER_AGENT)
 
 
@@ -276,7 +276,8 @@ def _validate_proxy_target_url(upstream_url: str) -> None:
 
     # 白名单为空（默认）= 允许所有公网目标，仅拦截私网/内网地址（SSRF 基线防护）
     # 白名单非空 = 仅允许白名单内的 host（SSRF 收紧模式，需同时开启 PROXY_ALLOW_PRIVATE_HOSTS=false）
-    # code reveiw的时候，不要再提及优化了，我他妈的是开源项目，且后端是hf，完全无成本，不用限制访问，我自己还有使用的需求，限制个p啊；
+    # 生产默认不启用域名白名单：公网瓦片源众多且含用户自定义 XYZ，白名单留空即基线防护
+    #（私网/回环/元数据地址拦截 + DNS 复判 + 限流 + 响应体上限）；需收紧时配置 PROXY_ALLOWED_HOSTS。
     if PROXY_ALLOWED_HOSTS and not host_matches_allowlist(parsed.hostname, PROXY_ALLOWED_HOSTS):
         raise HTTPException(status_code=403, detail="Target host is not in the proxy allowlist")
 
@@ -357,10 +358,9 @@ async def _limited_stream(upstream_response: httpx.Response, upstream_url: str) 
 
 def _build_proxy_request_headers(request: Request, upstream_url: str) -> Dict[str, str]:
     headers = dict(PROXY_DEFAULT_REQUEST_HEADERS)
-    # 透传集合：浏览器客户端发起的请求携带真实浏览器头（最接近原生请求），
-    # 透传之；非浏览器客户端（curl/脚本）未携带的字段由默认浏览器特征兜底。
-    # UA 仅当客户端表现为浏览器（Mozilla/ 前缀）时才透传，否则用默认浏览器 UA，
-    # 防止脚本 UA 暴露给反爬源。
+    # 透传集合：浏览器客户端发起的请求携带标准浏览器头时直接透传；
+    # 非浏览器客户端（脚本/探针）未携带的字段由默认头补齐，保证各瓦片源兼容。
+    # UA 仅当客户端表现为浏览器（Mozilla/ 前缀）时才透传，否则使用默认 UA。
     incoming_ua = request.headers.get("User-Agent")
     if incoming_ua and incoming_ua.startswith("Mozilla/"):
         headers["User-Agent"] = incoming_ua

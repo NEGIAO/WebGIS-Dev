@@ -874,7 +874,7 @@ async def agent_chat_proxy(
     request: Request,
     session: Dict[str, Any] = Depends(require_api_access_or_guest_noconsume),
 ) -> Dict[str, Any]:
-    """用户个人 API Key 代理聊天端点（绕过浏览器 CORS 限制，不消耗平台配额）。"""
+    """用户个人 API Key 聊天端点（后端转发以支持浏览器跨域调用，使用自备 Key，不消耗平台配额）。"""
     username = str(session.get("username") or "anonymous")
     role = normalize_role(session.get("role"), username)
 

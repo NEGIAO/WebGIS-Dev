@@ -224,7 +224,7 @@ export async function apiAgentSaveModelPreference(preferredModel) {
 }
 
 /**
- * 用户个人 API Key 代理聊天（后端转发，绕过浏览器 CORS 限制）
+ * 用户个人 API Key 聊天（后端转发，解决浏览器跨域调用限制）
  *
  * 当用户配置了个人 API Key 时，通过后端代理转发 LLM 请求，
  * 避免浏览器直接调用外部 LLM API 遇到 CORS 拦截。
