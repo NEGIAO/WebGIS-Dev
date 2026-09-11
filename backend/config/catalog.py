@@ -164,7 +164,7 @@ CONFIG_CATALOG: Dict[str, ConfigMeta] = {
     },
     "VITE_EMERGENCY_GUEST_MODE": {
         "layer": "L1",
-        "default": "1",
+        "default": "0",
         "secret": False,
         "description": "前端应急游客强制模式（构建期 VITE_，仅应急使用）：1=后端下线时未登录直接以游客身份浏览；0=恢复原登录流程",
     },

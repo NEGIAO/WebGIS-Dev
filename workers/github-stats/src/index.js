@@ -9,6 +9,8 @@
  * 路由（均为 GET，公开只读）：
  *   /api/stats  → { stars, forks, updatedAt, version, repo, fetchedAt }（JSON，边缘缓存 10 分钟）
  *   /api/chart  → star-history 趋势图 SVG 代理（边缘缓存 6 小时，每日更新足够）
+ *   /api/snake /api/snake-dark → GitHub 贡献贪吃蛇动画 SVG 代理（供 NEGIAO.github.io 首页，
+ *     上游由 Platane/snk 每日重新生成，边缘缓存 6 小时）
  *
  * 部署（本目录执行，需要一个 Cloudflare 账号，免费计划即可）：
  *   npx wrangler login
@@ -27,6 +29,9 @@ const README_RAW_URL = `https://raw.githubusercontent.com/${REPO}/main/README.md
 // README 唯一版本源：三档解析与前端 LandingView.parseVersionFromReadme 保持一致。
 const STATS_CACHE_TTL = 600; // 秒：Stars / Forks / 版本号边缘缓存
 const CHART_CACHE_TTL = 6 * 3600; // 秒：趋势图边缘缓存（每日更新足够）
+const SNAKE_CACHE_TTL = 6 * 3600; // 秒：贪吃蛇动画边缘缓存（上游每日重新生成）
+// 贪吃蛇贡献动画固定上游（NEGIAO 主页画像仓 output 分支）：固定地址，非开放代理
+const SNAKE_BASE_URL = 'https://raw.githubusercontent.com/NEGIAO/NEGIAO/output';
 // 已在 README 公开的 sealed_token：内置仅为开箱即用，安全等级与公开无异；
 // 如需轮换，用 wrangler secret put STAR_HISTORY_SEALED_TOKEN 覆盖，无需改代码。
 const DEFAULT_SEALED_TOKEN =
@@ -35,6 +40,7 @@ const DEFAULT_SEALED_TOKEN =
 // 边缘缓存统一 key（fetch / scheduled 共用，保证定时暖缓存能被用户请求命中）
 const statsCacheKey = () => new Request('https://webgis-stats.internal/api/stats');
 const chartCacheKey = () => new Request('https://webgis-stats.internal/api/chart');
+const snakeCacheKey = (variant) => new Request(`https://webgis-stats.internal/api/${variant}`);
 
 function parseVersionFromReadme(markdown) {
     if (!markdown || typeof markdown !== 'string') return '';
@@ -137,32 +143,42 @@ async function handleStats(_request, env, ctx) {
 }
 
 async function handleChart(_request, env, ctx) {
-    const key = chartCacheKey();
-    const hit = await cachedResponse(key, 'HIT');
+    const sealedToken = env.STAR_HISTORY_SEALED_TOKEN || DEFAULT_SEALED_TOKEN;
+    const chartUrl =
+        `https://api.star-history.com/chart?repos=${REPO}` +
+        `&type=timeline&legend=top-left&sealed_token=${sealedToken}`;
+    return fetchImageCached(chartCacheKey(), chartUrl, CHART_CACHE_TTL, 'chart', ctx);
+}
+
+async function handleSnake(variant, _request, _env, ctx) {
+    const upstreamUrl =
+        variant === 'snake-dark' ? `${SNAKE_BASE_URL}/snake-dark.svg` : `${SNAKE_BASE_URL}/snake.svg`;
+    return fetchImageCached(snakeCacheKey(variant), upstreamUrl, SNAKE_CACHE_TTL, 'snake', ctx);
+}
+
+// 通用图片代理（固定上游 + 边缘缓存）：chart / snake 共用
+async function fetchImageCached(cacheKey, upstreamUrl, ttlSeconds, label, ctx) {
+    const hit = await cachedResponse(cacheKey, 'HIT');
     if (hit) return hit;
     try {
-        const sealedToken = env.STAR_HISTORY_SEALED_TOKEN || DEFAULT_SEALED_TOKEN;
-        const chartUrl =
-            `https://api.star-history.com/chart?repos=${REPO}` +
-            `&type=timeline&legend=top-left&sealed_token=${sealedToken}`;
-        const upstream = await fetch(chartUrl, {
+        const upstream = await fetch(upstreamUrl, {
             headers: { 'User-Agent': 'WebGIS-Dev-stats-worker/1.0' },
         });
-        if (!upstream.ok) throw new Error(`chart upstream -> HTTP ${upstream.status}`);
+        if (!upstream.ok) throw new Error(`${label} upstream -> HTTP ${upstream.status}`);
         const res = new Response(upstream.body, {
             status: 200,
             headers: {
                 'Content-Type': upstream.headers.get('Content-Type') || 'image/svg+xml',
-                'Cache-Control': `public, max-age=${CHART_CACHE_TTL}`,
+                'Cache-Control': `public, max-age=${ttlSeconds}`,
                 ...corsHeaders(),
                 'X-Cache-Status': 'MISS',
             },
         });
-        putCache(key, res, ctx);
+        putCache(cacheKey, res, ctx);
         return res;
     } catch (error) {
         return jsonResponse(
-            { error: 'chart upstream unavailable', detail: String((error && error.message) || error) },
+            { error: `${label} upstream unavailable`, detail: String((error && error.message) || error) },
             502,
             { 'Cache-Control': 'no-store', 'X-Cache-Status': 'ERROR' },
         );
@@ -181,8 +197,11 @@ export default {
         if (request.method === 'GET' && (url.pathname === '/api/chart' || url.pathname === '/chart')) {
             return handleChart(request, env, ctx);
         }
+        if (request.method === 'GET' && (url.pathname === '/api/snake' || url.pathname === '/api/snake-dark')) {
+            return handleSnake(url.pathname.slice(5), request, env, ctx); // 'snake' / 'snake-dark'
+        }
         return jsonResponse(
-            { error: 'Not found', usage: ['GET /api/stats', 'GET /api/chart'] },
+            { error: 'Not found', usage: ['GET /api/stats', 'GET /api/chart', 'GET /api/snake', 'GET /api/snake-dark'] },
             404,
             { 'Cache-Control': 'no-store' },
         );

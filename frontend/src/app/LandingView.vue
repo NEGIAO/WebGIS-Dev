@@ -35,7 +35,7 @@
                         </button>
                     </div>
                     <router-link
-                        to="/home"
+                        to="/register"
                         class="btn-primary"
                     >
                             <LogIn :size="16" />
@@ -71,7 +71,7 @@
                     </p>
                     <div class="hero-actions">
                         <router-link
-                            to="/home"
+                            to="/register"
                             class="btn-large"
                         >
                             <Rocket :size="18" />
@@ -323,7 +323,7 @@
                     <h3>{{ t('landing.ctaTitle') }}</h3>
                     <p>{{ t('landing.ctaDesc') }}</p>
                     <router-link
-                        to="/home"
+                        to="/register"
                         class="btn-cta"
                     >
                         <Send :size="16" />

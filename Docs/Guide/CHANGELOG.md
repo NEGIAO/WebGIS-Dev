@@ -6,6 +6,26 @@
 
 ## 版本记录
 
+### V3.6.0 (2026-09-11) — HF 后端恢复全量还原 + Worker 贪吃蛇代理
+
+> **1、HF 封号应急全量还原**（对照 `492ca839` 逐项）：`deploy/.env` + `.env.local`
+> `VITE_EMERGENCY_GUEST_MODE` 置 0；`LandingView.vue` 3 处入口回 `/register`；
+> `client.js` 删除后端不可达负缓存（正常时期单次抖动不应熔断 30s）；
+> `publicRuntime.ts` flag 缺省归零 + `catalog.py` 同步；flag 读取代码与 key 登记保留
+> （批准的未来应急手段）。**保活全套明确不恢复**（§11 红线：封号原因，再犯不再复审）。
+>
+> **2、Worker 新增贪吃蛇动画代理**：`/api/snake` + `/api/snake-dark`（固定上游
+> `raw.githubusercontent.com/NEGIAO/NEGIAO/output`，边缘缓存 6 小时，与 chart 共用
+> 图片代理 helper）；NEGIAO.github.io 首页三处 URL 切 `api.negiao.cn`（站外仓库，
+> 另行提交）；贪吃蛇改 JS 跟随站内 `data-theme`（`<picture>` 只认系统主题，
+> MutationObserver 监听切换）。线上实测双路由 200 + 117KB 真图。
+>
+> **3、README 整理**：演示入口恢复原文（去应急括号，链接回到根域名）；
+> 版本演进区 Star History 图表块经 review 确认删除（用户明确）。
+> 日志：`Docs/LLM_record/26-09/2026-09-11/2026-09-11-code-review-v360.md`。
+> 注：`84b95f52`（已 push，标题亦为 V3.5.38，HF 合规整改）与本仓 V3.5.38 行同号
+> 共存系历史遗留（用户接受），自本版起以 V3.6.0 消解歧义。
+
 ### V3.5.38 (2026-09-10) — 落地页开源认可区 + Cloudflare Worker 边缘数据接口
 
 > **动机**：个人预推免面试（9.16）在即，项目将放入简历，落地页需要实时展示社区认可

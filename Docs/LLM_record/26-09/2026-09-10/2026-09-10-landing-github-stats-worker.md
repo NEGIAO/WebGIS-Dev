@@ -134,6 +134,22 @@ flowchart LR
   （Worker 图床 `@error` → 降级直连 star-history 再试 → 全断则隐藏裂图、
   显示虚线占位文案 `ossChartUnavailable`）。改动文件：`LandingView.vue`、
   `src/locales/core.js`（中英各 +1 key）。构建通过，ESLint 零报错。
+- 2026-09-10 12:40（北京时间）：Worker 新增 `/api/snake` + `/api/snake-dark`
+  （贪吃蛇贡献动画固定上游代理，供 NEGIAO.github.io 首页，边缘缓存 6 小时；
+  与 chart 共用图片代理 helper；首页三处 URL 切到 `api.negiao.cn`，
+  原本地 `onerror` 兜底保留）。改动文件：`workers/github-stats/src/index.js`、
+  `NEGIAO.github.io/index.html`（站外仓库）。
+  [12:50 更新] Agent 已代为 deploy（复用本机登录态，7.48 KiB）并实测：
+  `/api/snake` 与 `/api/snake-dark` 均为 200 + `image/svg+xml` + 117KB
+ （含 `Generated with Platane/snk` 真图）；`/api/stats` 同步验证 200，
+  且 `version` 已自动变为 V3.5.38（README bump 后首次刷新，动态管线贯通）。
+  刚发版时有约 1 分钟边缘 TLS 抖动，重试即恢复，属正常 rollout 现象。
+- 2026-09-10 13:00（北京时间）：修复贪吃蛇不跟随站内主题——根因为 `<picture>`
+  只认操作系统深浅色，而本站主题是 `body[data-theme]`（localStorage，默认暗色，
+  不跟随系统）。改为纯 `<img id="contrib-snake">` + JS 同步 src
+  （初值/存储/默认三档判定，MutationObserver 监听 `data-theme`，
+  因 theme-toggle.js 直接写 dataset 无事件）。三组逻辑桩实测通过。
+  改动文件：`NEGIAO.github.io/index.html`（站外仓库）。
 
 ## 遗留与风险
 
