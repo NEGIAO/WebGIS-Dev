@@ -21,6 +21,7 @@ import {
     apiAdminGetAgentTokensPerUnit,
     apiAdminGetDefaultBasemapIndex,
     apiAdminGetDownloadTTL,
+    apiAdminGetProxyRateLimit,
     apiAdminGetTableRows,
     apiAdminInsertRow,
     apiAdminListTables,
@@ -30,6 +31,7 @@ import {
     apiAdminUpdateContact,
     apiAdminUpdateDefaultBasemapIndex,
     apiAdminUpdateDownloadTTL,
+    apiAdminUpdateProxyRateLimit,
     apiAdminUpdateRows,
 } from '@/api/backend';
 import { BASEMAP_OPTIONS, DEFAULT_BASEMAP_LAYER_INDEX } from '@common/basemap/basemapOptions';
@@ -332,6 +334,38 @@ async function handleSaveDownloadTtl() {
 
 const agentTokensPerUnit = ref(1000);
 const loadingAgentTokensPerUnit = ref(false);
+
+const proxyRateLimit = ref(600);
+const loadingProxyRateLimit = ref(false);
+
+async function loadProxyRateLimit() {
+    loadingProxyRateLimit.value = true;
+    try {
+        const result = await apiAdminGetProxyRateLimit();
+        const val = result?.data?.rate_limit;
+        proxyRateLimit.value = val != null ? val : 300;
+    } catch {
+        proxyRateLimit.value = 300;
+    } finally {
+        loadingProxyRateLimit.value = false;
+    }
+}
+
+async function handleSaveProxyRateLimit() {
+    submittingConfig.value = true;
+    try {
+        const val = Math.max(0, Math.min(100000, Number(proxyRateLimit.value)));
+        const normalized = Number.isFinite(val) ? val : 300;
+        await apiAdminUpdateProxyRateLimit(normalized);
+        proxyRateLimit.value = normalized;
+        message.success(t('admin.proxyRateLimitSaveSuccess'));
+    } catch (err) {
+        const detail = err?.response?.data?.detail || err?.message || t('admin.unknownError');
+        message.error(t('admin.proxyRateLimitSaveFailed', { error: detail }));
+    } finally {
+        submittingConfig.value = false;
+    }
+}
 
 async function loadAgentTokensPerUnit() {
     loadingAgentTokensPerUnit.value = true;
@@ -830,6 +864,7 @@ onMounted(async () => {
     await loadDefaultBasemapIndex();
     await loadDownloadTtl();
     await loadAgentTokensPerUnit();
+    await loadProxyRateLimit();
 });
 </script>
 
@@ -1077,6 +1112,31 @@ onMounted(async () => {
                                         @click="handleSaveAgentTokensPerUnit"
                                     >
                                         {{ t('admin.saveAgentTokensPerUnit') }}
+                                    </button>
+                                </div>
+                            </div>
+
+                            <hr class="divider" />
+
+                            <div class="form-group">
+                                <label class="field-label">{{ t('admin.proxyRateLimitLabel') }}</label>
+                                <input
+                                    v-model.number="proxyRateLimit"
+                                    class="form-input"
+                                    type="number"
+                                    min="0"
+                                    max="100000"
+                                    :placeholder="t('admin.proxyRateLimitPlaceholder')"
+                                />
+                                <p class="field-hint">{{ t('admin.proxyRateLimitHint') }}</p>
+                                <div class="form-actions-right">
+                                    <button
+                                        class="btn btn-secondary"
+                                        type="button"
+                                        :disabled="submittingConfig"
+                                        @click="handleSaveProxyRateLimit"
+                                    >
+                                        {{ t('admin.saveProxyRateLimit') }}
                                     </button>
                                 </div>
                             </div>

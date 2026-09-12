@@ -780,6 +780,13 @@ export default {
         saveAgentTokensPerUnit: 'Save Conversion Setting',
         agentTokensPerUnitSaveSuccess: 'Agent quota conversion saved',
         agentTokensPerUnitSaveFailed: 'Save failed: {error}',
+        // Tile proxy rate limit (L2)
+        proxyRateLimitLabel: 'Tile proxy rate limit (req / min / IP)',
+        proxyRateLimitPlaceholder: 'Range 0-100000; 0=unlimited (default 600)',
+        proxyRateLimitHint: 'Per-IP per-minute cap for rectify/universal tile proxy. Effective immediately. Prefer >0 in production to reduce abuse risk.',
+        saveProxyRateLimit: 'Save rate limit',
+        proxyRateLimitSaveSuccess: 'Proxy rate limit saved',
+        proxyRateLimitSaveFailed: 'Save failed: {error}',
     },
     apiManagement: {
         title: 'API Management',

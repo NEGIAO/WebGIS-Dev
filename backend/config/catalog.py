@@ -181,10 +181,10 @@ CONFIG_CATALOG: Dict[str, ConfigMeta] = {
         "description": "纠偏单请求合成瓦片数上限（默认 64=8×8），超限 400",
     },
     "PROXY_RATE_LIMIT": {
-        "layer": "L1",
-        "default": 0,
+        "layer": "L2",
+        "default": 600,
         "secret": False,
-        "description": "代理限流",
+        "description": "瓦片/纠偏代理每 IP 每分钟请求上限；0=不限流。管理员面板可调（system_config: proxy_rate_limit）",
     },
     "PROXY_ALLOW_PRIVATE_HOSTS": {
         "layer": "L1",

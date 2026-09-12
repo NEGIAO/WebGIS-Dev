@@ -24,7 +24,7 @@
                             @click.stop="copyCurrentCoordinate"
                         >
                             <Copy
-                                :size="13"
+                                :size="15"
                                 :stroke-width="2"
                             />
                             <span class="copy-tooltip">{{ copyTooltipText }}</span>
@@ -37,7 +37,7 @@
                             @click.stop="toggleFormatMenu"
                         >
                             <ChevronRight
-                                :size="14"
+                                :size="16"
                                 :stroke-width="2.2"
                             />
                         </button>

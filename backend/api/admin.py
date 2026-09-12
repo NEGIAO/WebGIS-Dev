@@ -567,6 +567,11 @@ class UpdateAgentTokensPerUnitRequest(BaseModel):
     tokens_per_unit: int = Field(..., ge=100, le=100000)
 
 
+class UpdateProxyRateLimitRequest(BaseModel):
+    """管理员设置瓦片/纠偏代理限流（每 IP 每分钟）；0=不限流"""
+    rate_limit: int = Field(..., ge=0, le=100000)
+
+
 @router.get("/config/agent-tokens-per-unit")
 async def get_agent_tokens_per_unit(
     _session: Dict[str, Any] = Depends(require_admin),
@@ -593,3 +598,42 @@ async def update_agent_tokens_per_unit(
         _set_system_config_value_sync, "agent_tokens_per_unit", str(value)
     )
     return {"status": "success", "message": f"Agent tokens_per_unit 已设为 {value}"}
+
+
+# ========== 瓦片代理限流（L2）==========
+
+@router.get("/config/proxy-rate-limit")
+async def get_proxy_rate_limit(
+    _session: Dict[str, Any] = Depends(require_admin),
+) -> Dict[str, Any]:
+    """获取瓦片/纠偏代理限流配置（每 IP 每分钟；0=不限流）"""
+    raw = await asyncio.to_thread(
+        _get_system_config_value_sync, "proxy_rate_limit", ""
+    )
+    if str(raw).strip() == "":
+        # 未写入 DB 时展示 env/catalog 有效默认（600）
+        from config import get_effective_int
+
+        value = get_effective_int(
+            "PROXY_RATE_LIMIT", 600, db_key="proxy_rate_limit", minimum=0, maximum=100000
+        )
+    else:
+        try:
+            value = int(raw)
+        except (TypeError, ValueError):
+            value = 300
+    return {"status": "success", "data": {"rate_limit": value}}
+
+
+@router.post("/config/proxy-rate-limit")
+async def update_proxy_rate_limit(
+    payload: UpdateProxyRateLimitRequest,
+    _session: Dict[str, Any] = Depends(require_admin),
+) -> Dict[str, Any]:
+    """更新瓦片/纠偏代理限流，写入 system_config 后立即生效"""
+    value = int(payload.rate_limit)
+    await asyncio.to_thread(
+        _set_system_config_value_sync, "proxy_rate_limit", str(value)
+    )
+    hint = "不限流" if value == 0 else f"{value} 次/分钟/IP"
+    return {"status": "success", "message": f"代理限流已设为 {hint}"}

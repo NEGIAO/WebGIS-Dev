@@ -16,35 +16,35 @@
                     :title="t('chat.myAgentConfig')"
                     @click="toggleUserConfig"
                 >
-                    <Settings :size="16" />
+                    <Settings :size="20" />
                 </button>
                 <button
                     class="icon-btn"
                     :title="t('chat.refreshStatus')"
                     @click="config.reloadAgentConfig(true)"
                 >
-                    <RefreshCw :size="16" />
+                    <RefreshCw :size="20" />
                 </button>
                 <button
                     class="icon-btn"
                     :title="t('chat.exportMarkdown')"
                     @click="exportConversation"
                 >
-                    <Download :size="16" />
+                    <Download :size="20" />
                 </button>
                 <button
                     class="icon-btn"
                     :title="t('chat.clearHistory')"
                     @click="clearHistory"
                 >
-                    <Trash2 :size="16" />
+                    <Trash2 :size="20" />
                 </button>
                 <button
                     class="icon-btn"
                     :title="t('chat.exitAI')"
                     @click="emit('close-chat')"
                 >
-                    <X :size="16" />
+                    <X :size="20" />
                 </button>
             </div>
         </div>
@@ -742,6 +742,25 @@ watch(
 .header-controls .icon-btn.active {
     background: rgba(var(--brand-primary-rgb), 0.12);
     color: var(--brand-primary-dark);
+}
+
+/* 移动端：按钮略收至 30、图标 18（单边留白 6px，与桌面一致） */
+@media (max-width: 700px) {
+    .header-controls {
+        gap: 2px;
+    }
+
+    .header-controls .icon-btn {
+        width: 30px;
+        height: 30px;
+        border-radius: 8px;
+        padding: 0;
+    }
+
+    .header-controls .icon-btn :deep(svg) {
+        width: 18px;
+        height: 18px;
+    }
 }
 
 /* 配置面板 + 服务状态的可滚动包裹层：封顶防止展开后挤占消息区，

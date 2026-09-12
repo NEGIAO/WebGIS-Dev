@@ -111,12 +111,12 @@
                             >
                                 <Check
                                     v-if="copiedIndex === index"
-                                    :size="14"
+                                    :size="18"
                                     class="ok"
                                 />
                                 <Copy
                                     v-else
-                                    :size="14"
+                                    :size="18"
                                 />
                             </button>
                             <button
@@ -125,7 +125,7 @@
                                 :title="t('chat.regenerate')"
                                 @click="emit('regenerate')"
                             >
-                                <RefreshCw :size="14" />
+                                <RefreshCw :size="18" />
                             </button>
                         </div>
                     </div>
@@ -146,12 +146,12 @@
                             >
                                 <Check
                                     v-if="copiedIndex === index"
-                                    :size="13"
+                                    :size="16"
                                     class="ok"
                                 />
                                 <Copy
                                     v-else
-                                    :size="13"
+                                    :size="16"
                                 />
                             </button>
                             <span
@@ -1206,5 +1206,33 @@ defineExpose({ scrollToBottom });
     border-color: #347d39;
     color: #cdd9e5;
     opacity: 1;
+}
+
+/* 移动端：无 hover，操作条常显；按钮 30 / 图标 18（单边留白 6px） */
+@media (max-width: 700px) {
+    .action-row {
+        opacity: 1;
+        gap: 2px;
+    }
+
+    .action-btn {
+        width: 30px;
+        height: 30px;
+        border-radius: 8px;
+        padding: 0;
+    }
+
+    .action-btn :deep(svg) {
+        width: 18px;
+        height: 18px;
+    }
+
+    /* 代码块复制按钮同样放宽触控 */
+    .markdown-body .code-block-wrapper .code-copy-btn {
+        opacity: 1;
+        min-height: 30px;
+        min-width: 30px;
+        padding: 4px 8px;
+    }
 }
 </style>

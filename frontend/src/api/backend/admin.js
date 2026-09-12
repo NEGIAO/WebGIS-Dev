@@ -256,6 +256,20 @@ export async function apiAdminGetAgentTokensPerUnit() {
     return backendAPI.get('/api/admin/config/agent-tokens-per-unit');
 }
 
+// ==================== 瓦片代理限流（L2）===================
+
+/** 获取瓦片/纠偏代理限流（每 IP 每分钟；0=不限流） */
+export async function apiAdminGetProxyRateLimit() {
+    return backendAPI.get('/api/admin/config/proxy-rate-limit');
+}
+
+/** 更新瓦片/纠偏代理限流 */
+export async function apiAdminUpdateProxyRateLimit(rateLimit) {
+    return backendAPI.post('/api/admin/config/proxy-rate-limit', {
+        rate_limit: Number(rateLimit),
+    });
+}
+
 /** 更新 Agent tokens_per_unit 配置 */
 export async function apiAdminUpdateAgentTokensPerUnit(tokensPerUnit) {
     return backendAPI.post('/api/admin/config/agent-tokens-per-unit', {

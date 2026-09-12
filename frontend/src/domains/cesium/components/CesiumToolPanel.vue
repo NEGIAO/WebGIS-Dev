@@ -56,7 +56,7 @@
                         @click="compactMode = !compactMode"
                     >
                         <Settings
-                            :size="16"
+                            :size="20"
                             stroke-width="2"
                         />
                     </button>
@@ -68,7 +68,7 @@
                         @click="setPanelOpen(false)"
                     >
                         <X
-                            :size="17"
+                            :size="20"
                             stroke-width="2"
                         />
                     </button>
@@ -155,7 +155,7 @@
                                 />
                                 <span>{{ t('cesium.load3DModel') }}</span>
                                 <ChevronDown
-                                    :size="11"
+                                    :size="14"
                                     stroke-width="2"
                                     class="scene-sample-chevron"
                                 />
@@ -171,7 +171,7 @@
                                         class="scene-sample-menu-item"
                                         @click="emit('import-tileset-sample', { type: 'city' }); sceneSampleMenuOpen = false"
                                     >
-                                        <MapPin :size="12" stroke-width="2" />
+                                        <MapPin :size="16" stroke-width="2" />
                                         <span>{{ t('cesium.sampleCity') }}</span>
                                     </button>
                                     <button
@@ -179,7 +179,7 @@
                                         class="scene-sample-menu-item"
                                         @click="emit('import-tileset-sample', { type: 'ion' }); sceneSampleMenuOpen = false"
                                     >
-                                        <Globe :size="12" stroke-width="2" />
+                                        <Globe :size="16" stroke-width="2" />
                                         <span>{{ t('cesium.sampleIon') }}</span>
                                     </button>
                                     <button
@@ -187,7 +187,7 @@
                                         class="scene-sample-menu-item"
                                         @click="emit('import-tileset-sample', { type: 'i3s' }); sceneSampleMenuOpen = false"
                                     >
-                                        <Building :size="12" stroke-width="2" />
+                                        <Building :size="16" stroke-width="2" />
                                         <span>{{ t('cesium.sampleI3s') }}</span>
                                     </button>
                                     <button
@@ -195,7 +195,7 @@
                                         class="scene-sample-menu-item"
                                         @click="emit('import-tileset-sample', { type: 'discreteLOD' }); sceneSampleMenuOpen = false"
                                     >
-                                        <Layers :size="12" stroke-width="2" />
+                                        <Layers :size="16" stroke-width="2" />
                                         <span>{{ t('cesium.sampleLod') }}</span>
                                     </button>
                                     <button
@@ -203,7 +203,7 @@
                                         class="scene-sample-menu-item"
                                         @click="emit('import-tileset-sample', { type: 'baimo' }); sceneSampleMenuOpen = false"
                                     >
-                                        <Building :size="12" stroke-width="2" />
+                                        <Building :size="16" stroke-width="2" />
                                         <span>{{ t('cesium.sampleBaimo') }}</span>
                                     </button>
                                 </div>
@@ -591,7 +591,7 @@
                                 />
                                 <span>{{ t('cesium.sampleData') }}</span>
                                 <ChevronDown
-                                    :size="11"
+                                    :size="14"
                                     stroke-width="2"
                                     class="sample-chevron"
                                 />
@@ -607,7 +607,7 @@
                                         class="sample-menu-item"
                                         @click="emit('import-tileset-sample', { type: 'city' }); sampleMenuOpen = false"
                                     >
-                                        <MapPin :size="12" stroke-width="2" />
+                                        <MapPin :size="16" stroke-width="2" />
                                         <span>{{ t('cesium.sampleCity') }}</span>
                                     </button>
                                     <button
@@ -615,7 +615,7 @@
                                         class="sample-menu-item"
                                         @click="emit('import-tileset-sample', { type: 'ion' }); sampleMenuOpen = false"
                                     >
-                                        <Globe :size="12" stroke-width="2" />
+                                        <Globe :size="16" stroke-width="2" />
                                         <span>{{ t('cesium.sampleIon') }}</span>
                                     </button>
                                     <button
@@ -623,7 +623,7 @@
                                         class="sample-menu-item"
                                         @click="emit('import-tileset-sample', { type: 'i3s' }); sampleMenuOpen = false"
                                     >
-                                        <Building :size="12" stroke-width="2" />
+                                        <Building :size="16" stroke-width="2" />
                                         <span>{{ t('cesium.sampleI3s') }}</span>
                                     </button>
                                     <button
@@ -631,7 +631,7 @@
                                         class="sample-menu-item"
                                         @click="emit('import-tileset-sample', { type: 'discreteLOD' }); sampleMenuOpen = false"
                                     >
-                                        <Layers :size="12" stroke-width="2" />
+                                        <Layers :size="16" stroke-width="2" />
                                         <span>{{ t('cesium.sampleLod') }}</span>
                                     </button>
                                     <button
@@ -639,7 +639,7 @@
                                         class="sample-menu-item"
                                         @click="emit('import-tileset-sample', { type: 'baimo' }); sampleMenuOpen = false"
                                     >
-                                        <Building :size="12" stroke-width="2" />
+                                        <Building :size="16" stroke-width="2" />
                                         <span>{{ t('cesium.sampleBaimo') }}</span>
                                     </button>
                                 </div>
@@ -2780,5 +2780,46 @@ function handleFileSelect(event) {
 
 .module-controls-wrapper :deep(.lil-gui .controller) {
     font-size: 11px !important;
+}
+
+/* 移动端：按钮 30 / 图标 18（单边留白 6px，与桌面一致）；场景样例菜单同步放大 */
+@media (max-width: 700px) {
+    .panel-actions {
+        gap: 2px;
+    }
+
+    .icon-btn {
+        width: 30px;
+        height: 30px;
+        border-radius: 8px;
+        padding: 0;
+    }
+
+    .icon-btn :deep(svg) {
+        width: 18px;
+        height: 18px;
+    }
+
+    /* Teleport 到 body 的场景样例菜单：菜单项图标/字号/行高放宽 */
+    .scene-sample-menu,
+    .sample-menu {
+        gap: 4px;
+        padding: 8px;
+    }
+
+    .scene-sample-menu-item,
+    .sample-menu-item {
+        min-height: 40px;
+        gap: 10px;
+        padding: 10px 12px;
+        font-size: 13px;
+    }
+
+    .scene-sample-menu-item :deep(svg),
+    .sample-menu-item :deep(svg) {
+        width: 16px;
+        height: 16px;
+        flex-shrink: 0;
+    }
 }
 </style>

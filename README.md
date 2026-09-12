@@ -81,7 +81,7 @@
 
 ## 🎯 项目简介
 
-**NEGIAO's WebGIS** 是一个功能完整、架构清晰的前后端分离 WebGIS 平台（当前版本 V3.6.1），前端托管于 GitHub Pages（正式域名 webgis.negiao.cn），后端以 Docker 部署在 Hugging Face Spaces，通过 RESTful API 通信，支持独立扩展。
+**NEGIAO's WebGIS** 是一个功能完整、架构清晰的前后端分离 WebGIS 平台（当前版本 V3.6.2），前端托管于 GitHub Pages（正式域名 webgis.negiao.cn），后端以 Docker 部署在 Hugging Face Spaces，通过 RESTful API 通信，支持独立扩展。
 
 > 📚 本 README 仅保留核心概览与导航。完整文档已模块化至 [`Docs/Guide/`](Docs/Guide/)，详见下方「文档导航」。
 >
@@ -394,11 +394,11 @@ tiles.negiao.cc.cd"]
 
 | 版本 | 日期 | 概要 |
 |------|------|------|
+| **V3.6.2** | 2026-09-12 | **瓦片代理限流改为 L2**：`PROXY_RATE_LIMIT` 管理员面板可配（system_config），请求时实时读取；默认/生产 env 为 600。详见[完整更新日志](Docs/Guide/CHANGELOG.md) |
 | **V3.6.1** | 2026-09-12 | **HF Hub Webhook 告警 + Cesium 移动端导航/欢迎语**：`/api/webhook` 快速 ACK + 后台轮询 Space 失败发 SMTP 告警；前端欢迎语恢复与导航控件移动端适配。详见[完整更新日志](Docs/Guide/CHANGELOG.md) |
 | **V3.6.0** | 2026-09-11 | **HF 后端恢复全量还原 + Worker 贪吃蛇代理**：应急游客模式关闭（登录注册链路、负缓存删除、flag 缺省归零）；Worker 新增贪吃蛇动画代理路由（NEGIAO.github.io 首页深浅双版）；README 演示入口与版本演进区整理。详见[完整更新日志](Docs/Guide/CHANGELOG.md) |
-| **V3.5.38** | 2026-09-10 | **落地页开源认可区 + Cloudflare Worker 边缘数据接口**：落地页新增 Stars/Forks 实时展示与 Star History 趋势图（白底、限宽 760px，附项目渊源与 README 动态版本号）；新增 `workers/github-stats`（`/api/stats` + `/api/chart`，边缘缓存 + 15 分钟暖缓存，自定义域名 `api.negiao.cn`）；前端 Worker 优先、直连兜底三级链路；标题下设求 Star/Fork 引导。详见[完整更新日志](Docs/Guide/CHANGELOG.md) |
 
-更早版本（V3.5.37 及以前）请查阅 [完整更新日志 →](Docs/Guide/CHANGELOG.md)
+更早版本（V3.5.38 及以前）请查阅 [完整更新日志 →](Docs/Guide/CHANGELOG.md)
 
 ---
 
@@ -420,6 +420,6 @@ tiles.negiao.cc.cd"]
 |:------:|:--------:|:--------:|
 | [GitHub](https://github.com/NEGIAO/WebGIS-Dev) | [webgis.negiao.cn](https://webgis.negiao.cn)（正式域名，GitHub Pages 托管） | [Hugging Face](https://NEGIAO-WebGIS.hf.space) |
 
-<sub>V3.6.1 · 完成 · 最后更新 2026-09-12</sub>
+<sub>V3.6.2 · 完成 · 最后更新 2026-09-12</sub>
 
 </div>

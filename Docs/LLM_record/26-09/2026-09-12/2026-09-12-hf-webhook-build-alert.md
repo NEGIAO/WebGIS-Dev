@@ -142,3 +142,24 @@ sequenceDiagram
 ## 遗留与风险（越权顺带发现）
 
 无额外越权改动。
+
+---
+
+## 零散修补（L1，不升版本号）
+
+### 2026-09-12 ChatPanelContent 移动端 header 按钮过小
+
+- **等级**：L1（单文件样式）
+- **症状**：`.header-controls .icon-btn` 固定 28×28；`.action-row .action-btn` 26×26 且仅 hover 显示，移动端难触达。
+- **改动**：
+  **全项目可点图标按钮扫描**（装饰性 section-icon/树节点 12px 保持）：
+  - `MyDownloadTasks.vue` `.icon-btn` 22→28、复制 svg 12→16
+  - `MapDownloader.vue` `.mini-icon-btn` 24→28（移动 30）、关闭 svg 14→16
+  - `TOCPanel.vue` `.mini-icon-btn` 24→28（移动 30）、`.action-icon-btn` 24→28（去移动 22 缩小）、Maximize/Eraser 13→16、Tab 图标 13→15
+  - `LayerPanel.vue` 搜索清除 X 11→14
+  - `ChatConfigPanel.vue` Save 14→16、Trash/Rotate 13→15
+  - `MapControlsBar.vue` Copy 13→15、Chevron 14→16
+  - `CesiumToolPanel.vue` 小箭头 11→14
+  移动端另保留按钮 30/sv18 与菜单项 min-height 40 的 media query。
+- **验证**：待用户移动端实机；本机未跑前端 build（纯 CSS）。
+- **Git**：未提交。

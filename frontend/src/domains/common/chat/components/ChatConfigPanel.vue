@@ -261,7 +261,7 @@
                 :disabled="config.userConfigSaving"
                 @click="config.saveUserConfig()"
             >
-                <Save :size="14" />
+                <Save :size="16" />
                 {{ config.userConfigSaving ? t('chat.saving') : t('chat.saveConfig') }}
             </button>
             <button
@@ -270,7 +270,7 @@
                 :title="t('chat.clearKeyTitle')"
                 @click="config.clearPersonalKey()"
             >
-                <Trash2 :size="13" />
+                <Trash2 :size="15" />
                 {{ t('chat.clearKey') }}
             </button>
             <button
@@ -279,7 +279,7 @@
                 :title="t('chat.resetDefaultTitle')"
                 @click="config.resetProviderOverrides()"
             >
-                <RotateCcw :size="13" />
+                <RotateCcw :size="15" />
                 {{ t('chat.resetDefault') }}
             </button>
         </div>

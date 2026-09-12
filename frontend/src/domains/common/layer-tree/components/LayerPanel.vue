@@ -41,7 +41,7 @@
                         aria-label="清除搜索"
                         @click="clearSearch"
                     >
-                        <X :size="11" />
+                        <X :size="14" />
                     </button>
                 </Transition>
             </div>

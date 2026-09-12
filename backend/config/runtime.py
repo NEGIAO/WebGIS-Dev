@@ -15,6 +15,7 @@ L2 运行时配置覆盖：管理员面板写入 system_config（DB），此处�
 from __future__ import annotations
 
 import logging
+from typing import Optional
 
 from .catalog import get_meta
 from .load import get_str
@@ -49,3 +50,24 @@ def get_effective_str(env_key: str, db_key: str = "", default: str = "") -> str:
     if db_value:
         return db_value
     return get_str(env_key, default)
+
+
+def get_effective_int(
+    env_key: str,
+    default: int = 0,
+    *,
+    db_key: str = "",
+    minimum: Optional[int] = None,
+    maximum: Optional[int] = None,
+) -> int:
+    """L2 优先的整型配置；非法值回退 default，并按 min/max 夹取。"""
+    raw = get_effective_str(env_key, db_key=db_key, default=str(default))
+    try:
+        value = int(str(raw).strip() or default)
+    except (TypeError, ValueError):
+        value = default
+    if minimum is not None and value < minimum:
+        value = minimum
+    if maximum is not None and value > maximum:
+        value = maximum
+    return value

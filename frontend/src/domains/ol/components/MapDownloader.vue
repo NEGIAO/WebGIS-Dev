@@ -13,7 +13,7 @@
                         {{ statusText }}
                     </span>
                     <button class="mini-icon-btn danger" type="button" aria-label="Close" @click="emit('close')">
-                        <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2" fill="none"><path d="M18 6L6 18M6 6l12 12"/></svg>
+                        <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none"><path d="M18 6L6 18M6 6l12 12"/></svg>
                     </button>
                 </div>
             </div>
@@ -935,8 +935,8 @@ onBeforeUnmount(() => {
 }
 
 .mini-icon-btn {
-    width: 24px;
-    height: 24px;
+    width: 28px;
+    height: 28px;
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -1586,6 +1586,16 @@ onBeforeUnmount(() => {
 
     .btn-group {
         justify-content: flex-end;
+    }
+
+    .mini-icon-btn {
+        width: 30px;
+        height: 30px;
+    }
+
+    .mini-icon-btn svg {
+        width: 16px;
+        height: 16px;
     }
 }
 </style>

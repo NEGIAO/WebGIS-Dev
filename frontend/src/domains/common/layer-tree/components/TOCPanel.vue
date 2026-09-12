@@ -45,7 +45,7 @@
             >
                 <component
                     :is="item.icon"
-                    :size="13"
+                    :size="15"
                     stroke-width="2"
                 />
                 <span>{{ t(item.label) }}</span>
@@ -266,7 +266,7 @@
                             @click="emit('interaction', 'ZoomToGraphics')"
                         >
                             <Maximize
-                                :size="13"
+                                :size="16"
                                 :stroke-width="2"
                             />
                         </button>
@@ -276,7 +276,7 @@
                             @click="emit('interaction', 'Clear')"
                         >
                             <Eraser
-                                :size="13"
+                                :size="16"
                                 :stroke-width="2"
                             />
                         </button>
@@ -1050,8 +1050,8 @@ function applyStyle() {
 }
 
 .mini-icon-btn {
-    width: 24px;
-    height: 24px;
+    width: 28px;
+    height: 28px;
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -1666,10 +1666,10 @@ function applyStyle() {
     background: var(--toc-bg-white);
     color: var(--toc-text-dark);
     border-radius: 7px;
-    width: 24px;
-    height: 24px;
+    width: 28px;
+    height: 28px;
     padding: 0;
-    font-size: 12px;
+    font-size: 13px;
     line-height: 1;
     display: inline-flex;
     align-items: center;
@@ -2346,9 +2346,15 @@ function applyStyle() {
     }
 
     .action-icon-btn {
-        width: 22px;
-        height: 22px;
-        font-size: 11px;
+        width: 28px;
+        height: 28px;
+        font-size: 13px;
+    }
+
+    .mini-icon-btn,
+    .toc-icon-btn {
+        width: 30px;
+        height: 30px;
     }
 }
 </style>

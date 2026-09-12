@@ -32,7 +32,7 @@ from .load import (
     reload_settings,
 )
 from .public import build_public_config
-from .runtime import get_effective_str, get_system_config_value
+from .runtime import get_effective_int, get_effective_str, get_system_config_value
 
 # 启动时加载当前布局对应的 env 文件（不覆盖已有系统环境变量）
 load_project_env()
@@ -58,6 +58,7 @@ __all__ = [
     "CONFIG_CATALOG",
     "build_public_config",
     "get_bool",
+    "get_effective_int",
     "get_effective_str",
     "get_float",
     "get_int",

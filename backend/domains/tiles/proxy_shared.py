@@ -15,7 +15,7 @@ from urllib.parse import urlparse
 import httpx
 from fastapi import HTTPException, Request
 
-from config import get_bool, get_int, get_str
+from config import get_bool, get_int, get_str, get_effective_int
 from core.http_headers import build_browser_headers, build_sec_ch_ua, referer_headers_for
 from core.net_guard import (
     host_matches_allowlist,
@@ -161,14 +161,21 @@ def _get_client_ip(request: Request) -> str:
 
 
 # 简单滑动窗口限流（每 IP 每分钟最多 N 次代理请求）
-PROXY_RATE_LIMIT = get_int("PROXY_RATE_LIMIT", 0)
+# L2：Admin system_config `proxy_rate_limit` > env PROXY_RATE_LIMIT > catalog 默认 600
+# 每次请求实时读取，管理员改完立即生效；0 = 不限流
 _rate_limit_store: Dict[str, List[float]] = defaultdict(list)
 _last_clean_time = time.time()
 
 
+def _effective_rate_limit() -> int:
+    """功能：读取当前代理限流阈值（L2 优先）。返回：>=0；0 表示不限流。"""
+    return get_effective_int("PROXY_RATE_LIMIT", 600, db_key="proxy_rate_limit", minimum=0, maximum=100000)
+
+
 def _rate_limit_check(request: Request) -> None:
     global _last_clean_time
-    if PROXY_RATE_LIMIT <= 0:
+    limit = _effective_rate_limit()
+    if limit <= 0:
         return
     ip = _get_client_ip(request)
     now = time.time()
@@ -188,7 +195,7 @@ def _rate_limit_check(request: Request) -> None:
     _rate_limit_store[ip] = [t for t in _rate_limit_store[ip] if t > window_start]
 
     # 限制频率过高请求
-    if len(_rate_limit_store[ip]) >= PROXY_RATE_LIMIT:
+    if len(_rate_limit_store[ip]) >= limit:
         raise HTTPException(status_code=429, detail="Too many requests")
     _rate_limit_store[ip].append(now)
 

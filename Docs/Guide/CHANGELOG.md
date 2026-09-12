@@ -6,6 +6,19 @@
 
 ## 版本记录
 
+### V3.6.2 (2026-09-12) — 瓦片代理限流改为 L2 管理员可配
+
+> **动机**：`/proxy/gcj2wgs` 等纠偏瓦片在浏览高峰大量 429，原 `PROXY_RATE_LIMIT` 为 L1 进程启动时读取，
+> 改 env 需重建镜像。升为 L2，管理员面板即时调整。
+>
+> **改动**：catalog `PROXY_RATE_LIMIT` → L2（**默认 600**）；`proxy_shared` 每请求 `get_effective_int` 读取
+> （DB `proxy_rate_limit` > env > 默认 600）；`GET/POST /api/admin/config/proxy-rate-limit`；
+> 管理面板「瓦片代理限流」（0=不限流）；`deploy/.env` / `.env.example` 基线 **600（>0，§11.1.9）**。
+>
+> **规范说明**：Force_command §11.1.9 禁止生产 `deploy/.env` 将 `PROXY_RATE_LIMIT` 置 0，
+> 且该节用户口头要求不得豁免。运行时管理员可设 0（操作选择）；仓库生产基线保持 >0。
+> 日志：[`Docs/LLM_record/26-09/2026-09-12/2026-09-12-proxy-rate-limit-l2.md`](../LLM_record/26-09/2026-09-12/2026-09-12-proxy-rate-limit-l2.md)。
+
 ### V3.6.1 (2026-09-12) — HF Hub Webhook 告警 + Cesium 移动端导航/欢迎语
 
 > **统一版本**（webhook L2 + 前端 debug 归并，避免与 origin `dd9b47ba` 双轨）：

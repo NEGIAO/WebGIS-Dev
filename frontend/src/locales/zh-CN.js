@@ -967,6 +967,13 @@ export default {
         saveAgentTokensPerUnit: '保存折算设置',
         agentTokensPerUnitSaveSuccess: 'Agent 配额折算已保存',
         agentTokensPerUnitSaveFailed: '保存失败: {error}',
+        // 瓦片代理限流（L2）
+        proxyRateLimitLabel: '瓦片代理限流（次 / 分钟 / IP）',
+        proxyRateLimitPlaceholder: '范围 0-100000；0=不限流（默认 600）',
+        proxyRateLimitHint: '纠偏与通用瓦片代理的每 IP 每分钟上限。改完立即生效。生产环境建议保持 >0，降低被第三方源站/平台判定滥用的风险。',
+        saveProxyRateLimit: '保存限流设置',
+        proxyRateLimitSaveSuccess: '代理限流已保存',
+        proxyRateLimitSaveFailed: '保存失败: {error}',
     },
     apiManagement: {
         title: 'API 管理页签',

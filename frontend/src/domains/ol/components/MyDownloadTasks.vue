@@ -70,7 +70,7 @@
                         :title="t('mapDownload.copyTaskId')"
                         @click="copyTaskId(task.task_id)"
                     >
-                        <svg viewBox="0 0 24 24" width="12" height="12" stroke="currentColor" stroke-width="2" fill="none">
+                        <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none">
                             <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
                             <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/>
                         </svg>
@@ -362,9 +362,9 @@ function resolveTaskRemaining(task) {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 22px;
-    height: 22px;
-    border-radius: 4px;
+    width: 28px;
+    height: 28px;
+    border-radius: 6px;
     border: 1px solid #e2e8f0;
     background: #ffffff;
     color: #64748b;
