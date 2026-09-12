@@ -1983,6 +1983,8 @@ watch(
     color: #67e8f9 !important;
 }
 
+/* 移动端导航样式已迁移至 vendors/cesium-navigation/styles/cesium-navigation.css（"移动端适配"段），勿在此重复定义 */
+
 
 :global(.cesium-geocoder .search-results) {
     z-index: 1401;

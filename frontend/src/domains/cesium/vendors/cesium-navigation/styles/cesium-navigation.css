@@ -45,7 +45,7 @@ screen and (max-height: 420px) {
 
 .navigation-controls {
   position: absolute;
-  right: 41px;
+  right: 42px;
   top: 210px;
   width: 30px;
   border: 1px solid rgba(255, 255, 255, 0.1);
@@ -165,14 +165,47 @@ screen and (max-height: 420px) {
   fill: #68ADFE;
 }
 
+/* =========================================================
+   移动端适配（替代上游默认的小屏隐藏行为）：
+   罗盘与缩放栏统一 scale(0.8) 等比缩小，保持桌面版比例与同轴关系；
+   位置按宿主页面顶部工具栏/FPS 胶囊（约占 y12–74）换算，贴右缘下移。
+   JS 侧 Knockout visible 绑定写内联样式，优先级不受影响。
+   ========================================================= */
 @media screen and (max-width: 700px),
 screen and (max-height: 420px) {
-  .navigation-controls {
-    display: none;
+  .navigation-controls,
+  .compass {
+    display: block;
   }
 
+  /* 罗盘 95px → 约 76px，放在顶部状态区下方，贴右缘 */
   .compass {
-    display: none;
+    right: 8px;
+    top: 84px;
+    transform: scale(0.8);
+    transform-origin: top right;
+  }
+
+  /* 缩放栏同样 ×0.8（30px → 约 24px），与罗盘同轴居中 */
+  .navigation-controls {
+    right: 33px;
+    top: 171px;
+    transform: scale(0.8);
+    transform-origin: top right;
+  }
+
+  /* 触控命中高度放宽（×0.8 后视觉约 32px），图标居中 */
+  .navigation-control,
+  .navigation-control-last {
+    min-height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  /* 复位图标：自带 left:10px 是给块布局居中的，flex 下会重复右偏，需清零 */
+  .navigation-control-icon-reset {
+    left: 0;
   }
 }
 

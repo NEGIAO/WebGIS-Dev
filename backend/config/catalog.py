@@ -253,6 +253,18 @@ CONFIG_CATALOG: Dict[str, ConfigMeta] = {
         "secret": False,
         "description": "Hugging Face Space 构建日志 SSE 端点",
     },
+    "HF_ALERT_EMAIL": {
+        "layer": "L1",
+        "default": "",
+        "secret": False,
+        "description": "Space 构建/运行失败告警收件人；空=回落 SMTP_USER",
+    },
+    "HF_WATCH_SPACE_ID": {
+        "layer": "L1",
+        "default": "NEGIAO/WebGIS",
+        "secret": False,
+        "description": "Webhook 触发后检查状态的 Space（author/name）",
+    },
     "DOWNLOAD_OUTPUT_DIR": {
         "layer": "L1",
         "default": "/tmp",
@@ -620,6 +632,12 @@ CONFIG_CATALOG: Dict[str, ConfigMeta] = {
         "default": "",
         "secret": True,
         "description": "OAuth state HMAC 密钥",
+    },
+    "HF_WEBHOOK_SECRET": {
+        "layer": "L3",
+        "default": "",
+        "secret": True,
+        "description": "HF Hub Webhook 投递密钥（空=不校验）",
     },
     "GOOGLE_OAUTH_CLIENT_ID": {
         "layer": "L3",

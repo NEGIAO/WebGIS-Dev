@@ -24,6 +24,7 @@ backend/
 │   ├── statistics.py                              # 访问统计接口
 │   ├── realtime_stats.py                          # 实时在线统计 SSE 推送（内存 tracker + SSE 连接计数 + 心跳兜底 + ticket 鉴权 + 定时/即时广播 + 快照缓存）
 │   ├── historical_imagery.py                      # 历史影像公开目录接口（ESRI Wayback 只读缓存目录）
+│   ├── webhook.py                                 # Hugging Face Hub Webhook 接收 + Space 失败邮件告警
 │   ├── agent_chat/                                # AI 对话代理（模块化拆分）
 │   │   ├── __init__.py                            # 门面 re-export
 │   │   ├── constants.py                           # 常量、环境变量
@@ -121,6 +122,7 @@ backend/
 │   ├── test_agent_map_context.py                  # AgentMapContextV1 Schema 与 prompt 格式测试
 │   ├── test_config_env_loading.py                 # 配置与环境变量加载测试
 │   ├── test_historical_imagery.py                 # 历史影像 _normalize_entries 排序/去重/XYZ URL 生成测试
+│   ├── test_webhook_helpers.py                    # HF Webhook 密钥头 / Space id 信任边界 / stage 提取单元测试
 │   ├── test_realtime_stats.py                     # SSE 主信号/普通鉴权活跃/显式兜底心跳回归测试
 │   ├── test_sqlite_recovery.py                    # SQL 清理、维护事件、恢复成功/失败与激活回滚测试
 │   └── tiles/                                     # 瓦片域测试

@@ -12,6 +12,7 @@ import asyncio
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.utils import formataddr
+from html import escape as html_escape
 
 from config import get_settings
 
@@ -170,6 +171,53 @@ async def send_verification_email(
     logger.info("准备发送验证码邮件: %s (用途: %s)", to_email, purpose)
     result = await asyncio.to_thread(_send_email_sync, to_email, subject, html_body)
     logger.info("验证码邮件发送结果: %s -> %s", to_email, "成功" if result else "失败")
+    return result
+
+
+def _build_alert_html(title: str, lines: list[str]) -> str:
+    """构建运维告警邮件 HTML。title 一律转义；lines 为内部已转义的 HTML 片段。"""
+    safe_title = html_escape(title, quote=True)
+    items = "\n".join(
+        f'<li style="margin:0 0 8px;color:#333;font-size:14px;line-height:1.6;">{line}</li>'
+        for line in lines
+    )
+    return f"""
+    <!DOCTYPE html>
+    <html>
+    <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
+    <body style="margin:0;padding:0;background-color:#f4f7f5;font-family:'Segoe UI',Arial,sans-serif;">
+      <table width="100%" cellpadding="0" cellspacing="0" style="background-color:#f4f7f5;padding:32px 0;">
+        <tr><td align="center">
+          <table width="520" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:12px;box-shadow:0 4px 20px rgba(0,0,0,0.08);overflow:hidden;">
+            <tr>
+              <td style="background:linear-gradient(135deg,#c0392b,#922b21);padding:24px 32px;text-align:center;">
+                <h1 style="color:#fff;margin:0;font-size:20px;font-weight:700;">NEGIAO's WebGIS</h1>
+                <p style="color:rgba(255,255,255,0.9);margin:8px 0 0;font-size:14px;">{safe_title}</p>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:28px 32px;">
+                <ul style="margin:0;padding-left:20px;">{items}</ul>
+                <p style="color:#999;font-size:12px;margin:20px 0 0;">此邮件由系统自动发送，请勿直接回复 · WebGIS 运维告警</p>
+              </td>
+            </tr>
+          </table>
+        </td></tr>
+      </table>
+    </body>
+    </html>
+    """
+
+
+async def send_alert_email(to_email: str, subject: str, lines: list[str]) -> bool:
+    """异步发送运维告警邮件（Space 构建/运行失败等）。"""
+    if not to_email:
+        logger.warning("告警邮件跳过：未配置收件人")
+        return False
+    html_body = _build_alert_html(subject, lines)
+    logger.info("准备发送告警邮件: %s (%s)", to_email, subject)
+    result = await asyncio.to_thread(_send_email_sync, to_email, subject, html_body)
+    logger.info("告警邮件发送结果: %s -> %s", to_email, "成功" if result else "失败")
     return result
 
 

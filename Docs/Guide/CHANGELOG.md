@@ -6,6 +6,18 @@
 
 ## 版本记录
 
+### V3.6.1 (2026-09-12) — HF Hub Webhook 告警 + Cesium 移动端导航/欢迎语
+
+> **统一版本**（webhook L2 + 前端 debug 归并，避免与 origin `dd9b47ba` 双轨）：
+> 补齐 `/api/webhook`（修 HF 连续 404 禁用），ACK 后后台轮询 Space `runtime.stage`，
+> `BUILD_ERROR`/`RUNTIME_ERROR` 经 SMTP 告警；前端恢复欢迎语、Cesium 导航控件移动端 scale 适配。
+>
+> 完整分析、方案对比、Mermaid、测试与红线自查见
+> [`Docs/LLM_record/26-09/2026-09-12/2026-09-12-hf-webhook-build-alert.md`](../LLM_record/26-09/2026-09-12/2026-09-12-hf-webhook-build-alert.md)。
+>
+> 配置新增：L3 `HF_WEBHOOK_SECRET`；L1 `HF_ALERT_EMAIL` / `HF_WATCH_SPACE_ID`（已同步 catalog + env）。
+> **待用户操作**：`git pull --ff-only` 后 commit + push；HF Webhooks 重新启用；按需配 `HF_ALERT_EMAIL`。
+
 ### V3.6.0 (2026-09-11) — HF 后端恢复全量还原 + Worker 贪吃蛇代理
 
 > **1、HF 封号应急全量还原**（对照 `492ca839` 逐项）：`deploy/.env` + `.env.local`

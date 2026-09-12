@@ -42,6 +42,7 @@ from api.monitor import init_monitor_log_streaming, router as monitor_router
 from api.spatial import router as spatial_router
 from api.realtime_stats import init_broadcaster, router as realtime_stats_router, start_periodic_broadcast, stop_periodic_broadcast
 from api.historical_imagery import router as historical_imagery_router
+from api.webhook import router as webhook_router, shutdown_webhook_watches
 from services.historical_imagery import (
     init_historical_imagery_storage,
     shutdown_historical_imagery_scheduler,
@@ -238,6 +239,12 @@ async def lifespan(app: FastAPI):
     stop_periodic_broadcast()
     logger.info("实时统计定时广播已停止")
 
+    # 取消 HF Webhook Space 监视后台任务
+    try:
+        await shutdown_webhook_watches()
+    except Exception as e:
+        logger.warning("Webhook 监视任务关闭异常: %s", e)
+
 
 # ==================== FastAPI 应用初始化 ====================
 
@@ -289,7 +296,7 @@ async def check_startup_state(request: Request, call_next):
     - 正常路径：init_auth_storage() 仅做一次布尔检查即返回。
     - 降级路径：尝试重新初始化认证存储，恢复成功则继续处理。
     """
-    allowlist = {"/", "/health", "/docs", "/redoc", "/openapi.json", "/api/info"}
+    allowlist = {"/", "/health", "/docs", "/redoc", "/openapi.json", "/api/info", "/api/webhook"}
     if request.url.path in allowlist:
         return await call_next(request)
 
@@ -439,6 +446,10 @@ logger.info("已注册实时统计 SSE 路由")
 # 挂载历史影像元数据目录路由
 app.include_router(historical_imagery_router)
 logger.info("已注册历史影像目录路由")
+
+# 挂载 Hugging Face Hub Webhook 接收路由
+app.include_router(webhook_router)
+logger.info("已注册 HF Webhook 接收路由")
 
 # --- 功能：健康检查 ---
 @app.get("/")
