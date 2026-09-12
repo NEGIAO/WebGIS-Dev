@@ -52,10 +52,17 @@ L2（跨后端配置/限流/管理 API + 管理面板 UI + 文档版本）
 
 ## 追加（L1）：前端瓦片 429 message 提醒
 
-- 新增 `common/utils/tileRateLimitNotify.js`：`notifyTileRateLimited`（15s 防抖 warning toast）+ `extractTileErrorDetail`。
+- 新增 `common/utils/tileRateLimitNotify.ts`：`notifyTileRateLimited`（15s 防抖 warning toast）+ `extractTileErrorDetail`。
 - `ol/tile-source/tileLifecycle.ts`：`requestTileAsBlobUrl` 识别 **HTTP 429**，解析 JSON `detail` 后 toast。
 - Cesium `basemapProviderFactory.ts`：provider `errorEvent` 若带 `statusCode===429` 则同样提示（尽力而为）。
 - 结构树已登记；门禁通过。
+
+## 追加（L1 实验）：Worker README 统计卡片 SVG
+
+- `workers/github-stats/src/index.js`：新增 `GET /api/readme-stats.svg`（自绘 tokyo-night 卡片：Stars/Forks/Followers/Repos/版本徽章；边缘缓存 10 分钟）。
+- 本地预览：`workers/github-stats/scripts/render-readme-stats-preview.mjs` → `preview/readme-stats-sample.svg`。
+- **未部署**：需在 `workers/github-stats` 执行 `npx wrangler deploy` 后才能从 `api.negiao.cn` 访问。
+- 是否写入主 README 由用户看完效果后决定。
 
 ## 性能指标
 

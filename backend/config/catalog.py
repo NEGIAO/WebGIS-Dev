@@ -172,7 +172,7 @@ CONFIG_CATALOG: Dict[str, ConfigMeta] = {
         "layer": "L1",
         "default": "",
         "secret": False,
-        "description": "前端 GitHub 开源数据边缘代理基址（构建期 VITE_，见 workers/github-stats/）：落地页 Stars/Forks/版本号/趋势图统一走它；为空则回退直连 GitHub",
+        "description": "前端 GitHub 开源数据边缘代理基址（构建期 VITE_，源码见 NEGIAO.github.io 仓库 workers/github-stats/）：落地页 Stars/Forks/版本号/趋势图统一走它；为空则回退直连 GitHub",
     },
     "GCJRE_MAX_TILES_PER_REQUEST": {
         "layer": "L1",

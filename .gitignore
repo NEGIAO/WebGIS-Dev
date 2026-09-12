@@ -104,7 +104,6 @@ gcj_rectify_cache/
 # ========== Cloudflare Workers 本地状态 ==========
 # wrangler login/deploy 生成的本机缓存（含账号信息），绝不入库
 .wrangler/
-workers/**/.wrangler/
 
 # ========== IDE ==========
 coverage
