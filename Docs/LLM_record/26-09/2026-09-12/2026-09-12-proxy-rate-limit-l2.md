@@ -47,8 +47,15 @@ L2（跨后端配置/限流/管理 API + 管理面板 UI + 文档版本）
 ## Code Review 补记（同版本）
 
 - `CesiumToolPanel` 完整菜单 `Globe :size="20"` 与兄弟 16 不一致 → 改回 **16**。
-- 代码/文案默认值与 catalog **600** 对齐（生产 env 仍 **300**）。
+- 代码/文案默认值与 catalog **600** 对齐（生产 env 用户已改为 600）。
 - **Git**：本地曾落后 origin `63e3b262`（同主题 debug 提交），push 前须 `git pull --ff-only`。
+
+## 追加（L1）：前端瓦片 429 message 提醒
+
+- 新增 `common/utils/tileRateLimitNotify.js`：`notifyTileRateLimited`（15s 防抖 warning toast）+ `extractTileErrorDetail`。
+- `ol/tile-source/tileLifecycle.ts`：`requestTileAsBlobUrl` 识别 **HTTP 429**，解析 JSON `detail` 后 toast。
+- Cesium `basemapProviderFactory.ts`：provider `errorEvent` 若带 `statusCode===429` 则同样提示（尽力而为）。
+- 结构树已登记；门禁通过。
 
 ## 性能指标
 

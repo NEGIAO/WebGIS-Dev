@@ -6,6 +6,7 @@
 import type { TileSourceDescriptor } from '@ol/basemap/constants/basemapConfig';
 import { getDescriptorById } from '@ol/basemap/constants/basemapConfig';
 import { useMessage } from '@common/shell/useMessage';
+import { notifyTileRateLimited } from '@common/utils/tileRateLimitNotify';
 
 /** 创建 Provider 所需的运行时上下文 */
 export type CesiumProviderContext = {
@@ -342,6 +343,24 @@ export function createCesiumImageryProvider(
         // 在 provider 上标记 descriptorId，便于后续追踪
         if (provider) {
             provider._descriptorId = descriptor.id;
+            // 瓦片加载失败时尽量识别 429 并 toast（Cesium 错误对象不一定带 status）
+            try {
+                const errorEvent = (provider as any)?.errorEvent;
+                if (errorEvent && typeof errorEvent.addEventListener === 'function') {
+                    errorEvent.addEventListener((tileError: any) => {
+                        const status =
+                            Number(tileError?.statusCode) ||
+                            Number(tileError?.status) ||
+                            Number(tileError?.error?.statusCode) ||
+                            0;
+                        if (status === 429) {
+                            notifyTileRateLimited();
+                        }
+                    });
+                }
+            } catch {
+                // Provider 未实现 errorEvent 时忽略
+            }
         }
 
         return provider;

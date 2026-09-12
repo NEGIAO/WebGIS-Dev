@@ -510,6 +510,7 @@ frontend/src/
 │   │   │   ├── mapDefaults.js  # 跨域地图默认参数单源（DEFAULT_SEARCH_ZOOM/MAX_SEARCH_ZOOM）
 │   │   │   ├── normalize.ts  # 二值标记规范化
 │   │   │   ├── pathUtils.js  # 路径工具
+│   │   │   ├── tileRateLimitNotify.ts  # 瓦片 429 限流 toast（15s 防抖，OL/Cesium 共用）
 │   │   │   ├── useMarkdownRenderer.js
 │   │   │   ├── viewScaleConverter.js  # 兼容入口（再导出 viewScale/ 模块；旧 API 签名不变）
 │   │   │   ├── viewScale/
