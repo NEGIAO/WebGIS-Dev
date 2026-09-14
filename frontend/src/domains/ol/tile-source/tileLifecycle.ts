@@ -15,6 +15,7 @@
 
 import { TILE_STATE_ERROR, TILE_REQUEST_TIMEOUT_MS } from './types';
 import { useMessage } from '@common/shell/useMessage';
+import { extractTileErrorDetail, notifyTileRateLimited } from '@common/utils/tileRateLimitNotify';
 import { TILE_PROXY_BASE_URL, TILE_PROXY_MODE } from '@/config/publicRuntime';
 
 // ==================== 代理通知（去重防抖） ====================
@@ -139,6 +140,12 @@ async function requestTileAsBlobUrl(
             mode: 'cors',
             credentials: 'omit',
         });
+        // 429：后端代理限流或上游限流 — 解析 body 后 toast，再按失败处理
+        if (resp.status === 429) {
+            const detail = await extractTileErrorDetail(resp);
+            notifyTileRateLimited(detail);
+            return null;
+        }
         if (!resp.ok) return null;
         const blob = await resp.blob();
         return URL.createObjectURL(blob);

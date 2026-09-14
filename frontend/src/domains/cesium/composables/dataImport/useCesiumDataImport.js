@@ -11,7 +11,7 @@ import { getExtension, flyToEntity, revokeBlobUrl, detachEntityFromScene } from 
 import { loadGeoJSON } from './loaders/geojsonLoader.js';
 import { loadKML, loadKMZ } from './loaders/kmlLoader.js';
 import { loadSHP } from './loaders/shpLoader.js';
-import { loadGLTF, loadGltfWithCoords } from './loaders/gltfLoader.js';
+import { loadGLTF, loadGltfWithCoords, loadGltfFromUrl } from './loaders/gltfLoader.js';
 import { loadCZML } from './loaders/czmlLoader.js';
 import { loadGeoTIFF } from './loaders/geotiffLoader.js';
 import { loadTilesetJSON, loadTilesetFromZip, importTilesetFromDirectory, TILESET_JSON_INDICATOR, MATERIAL_MODES, applyTilesetMaterial, loadSampleTileset, loadSampleBaimoTileset, loadSampleIonTileset, loadSampleI3sTileset, loadSampleDiscreteLODTileset, refitTilesetToTerrain } from './loaders/tilesetLoader.js';
@@ -171,13 +171,25 @@ export function useCesiumDataImport({ getViewer, getCesium, message, heightSampl
 
         try {
             // Entity 模型：从 viewer.entities 移除旧实体后按新坐标重建
+            // 远程 GLB 无 blobUrl，用 sourceUrl；本地 File 用 blobUrl
+            const uri = record.sourceUrl || record.blobUrl;
+            if (!uri) {
+                message.error('缺少模型地址，无法重定位');
+                return;
+            }
             const oldEntity = toRaw(record.entity);
             if (oldEntity?.model) {
                 viewer.entities.remove(oldEntity);
             } else {
                 viewer.scene.primitives.remove(oldEntity);
             }
-            const model = await loadGltfWithCoords(Cesium, viewer, record.blobUrl, record.name, coords);
+            const model = await loadGltfWithCoords(
+                Cesium,
+                viewer,
+                uri,
+                record.name,
+                coords,
+            );
 
             record.entity = model;
             record.position = { ...coords };
@@ -631,6 +643,15 @@ export function useCesiumDataImport({ getViewer, getCesium, message, heightSampl
         return id;
     }
 
+    /**
+     * 远程 GLB/GLTF 直链加载（与本地 File 导入同一条数据源注册路径）。
+     * @param {string} url - http(s) 直链
+     * @param {string} [name] - 显示名
+     */
+    async function loadRemoteGlb(url, name) {
+        return await loadGltfFromUrl({ url, name, ...loaderCtx() });
+    }
+
     function flyToDataSource(id) {
         const viewer = getViewer();
         const Cesium = getCesium();
@@ -719,6 +740,8 @@ export function useCesiumDataImport({ getViewer, getCesium, message, heightSampl
         loadDataFiles,
         importTilesetFromDirectory: () => importTilesetFromDirectory(loaderCtx()),
         loadedDataSources,
+        /** 资源 id 计数器（loader / 远程 GLB 共用） */
+        nextId,
         removeDataSource,
         clearAllDataSources,
         flyToDataSource,
@@ -738,6 +761,8 @@ export function useCesiumDataImport({ getViewer, getCesium, message, heightSampl
         loadSampleIonTileset: () => loadSampleIonTileset(loaderCtx()),
         loadSampleI3sTileset: () => loadSampleI3sTileset(loaderCtx()),
         loadSampleDiscreteLODTileset: () => loadSampleDiscreteLODTileset(loaderCtx()),
+        /** 远程 GLB/GLTF 直链（数据源注册与本地导入一致） */
+        loadRemoteGlb,
         registerExternalDataSource,
     };
 }

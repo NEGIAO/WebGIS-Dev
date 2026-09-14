@@ -1777,6 +1777,7 @@ export function useCesiumLayers({
      * 远程服务提交处理器（数据 Tab 新卡片发出）。
      * - Ion 类型 → 复用现有自动识别逻辑（3D Tiles → 地形 → 影像）
      * - I3S / 3D Tiles 类型 → 走 loadCustomUrl3DTiles 新路径
+     * - GLB/GLTF → 直链 Entity 模型，自动放相机视野中心
      */
     function handleRemoteServiceSubmit({ type, url }) {
         const normalized = String(url || '').trim();
@@ -1790,6 +1791,28 @@ export function useCesiumLayers({
                 return;
             }
             handleCustomIonAssetSubmit({ assetId: normalized });
+            return;
+        }
+        if (type === 'glb') {
+            if (!/^https?:\/\//i.test(normalized)) {
+                message.warning('GLB 需要完整的 http(s) 直链', { closable: true });
+                return;
+            }
+            if (typeof dataImport?.loadRemoteGlb !== 'function') {
+                message.error('数据导入模块未就绪，无法加载 GLB', { closable: true });
+                return;
+            }
+            message.info('正在加载远程 GLB…', { duration: 3000 });
+            void dataImport.loadRemoteGlb(normalized).catch((error) => {
+                console.error('[RemoteService] 远程 GLB 加载失败:', error);
+                const msg = String(error?.message || error);
+                message.error(
+                    msg.includes('CORS') || msg.includes('Failed to fetch') || msg.includes('NetworkError')
+                        ? '远程 GLB 加载失败：可能是跨域(CORS)或网络限制，请换可直连地址'
+                        : `远程 GLB 加载失败: ${msg}`,
+                    { closable: true },
+                );
+            });
             return;
         }
         void loadCustomUrl3DTiles(type, normalized);

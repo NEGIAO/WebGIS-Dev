@@ -44,6 +44,11 @@ export function flyToEntity(viewer, Cesium, entity, format) {
             if (rect) {
                 viewer.camera.flyTo({ destination: rect, duration: 2 });
             }
+        } else if (format === 'kml' || format === 'kmz' || format === 'geojson' || format === 'czml' || format === 'shp') {
+            // 矢量 DataSource（含 KMZ 解包后的 KML）
+            if (entity.entities?.values?.length > 0) {
+                viewer.flyTo(entity, { duration: 2 });
+            }
         } else if (entity.entities && entity.entities.values.length > 0) {
             viewer.flyTo(entity, { duration: 2 });
         }

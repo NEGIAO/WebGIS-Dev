@@ -30,6 +30,7 @@ const TYPE_LABELS: Record<string, string> = {
     terrain: '地形',
     draw: '绘制',
     route: '路线',
+    wayline: '航线',
 };
 
 /** 单条记录 → TOC layer 节点（形状对齐 toLayerNode 输出） */

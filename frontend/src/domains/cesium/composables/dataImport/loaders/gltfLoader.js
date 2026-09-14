@@ -76,6 +76,74 @@ export async function loadGLTF({ file, getCesium, getViewer, message, loadedData
 }
 
 /**
+ * 按远程 URL 加载 GLTF/GLB（不下载为本地 File）。
+ *
+ * 说明：
+ * - Cesium Entity model.uri 可直接用 https URL，无需先转 Blob。
+ * - 远程大模型不整包下载做坐标提取；无可靠嵌入坐标时自动放到相机视野中心。
+ * - 跨域失败由调用方 message 提示（需源站允许 CORS，或改走同源/后端代理）。
+ *
+ * @param {Object} p
+ * @param {string} p.url - 远程 .glb / .gltf 地址
+ * @param {string} [p.name] - 显示名
+ */
+export async function loadGltfFromUrl({ url, name, getCesium, getViewer, message, loadedDataSources, nextId }) {
+    const Cesium = getCesium();
+    const viewer = getViewer();
+    if (!Cesium || !viewer) throw new Error('Cesium 未初始化');
+    if (!loadedDataSources?.value) throw new Error('数据源列表未就绪');
+    const idCounter = nextId && typeof nextId.current === 'number' ? nextId : { current: 0 };
+
+    const trimmed = String(url || '').trim();
+    if (!trimmed) throw new Error('GLB URL 为空');
+    if (!/^https?:\/\//i.test(trimmed)) throw new Error('GLB 需要完整的 http(s) 直链');
+
+    const displayName = name || trimmed.split('/').pop()?.split('?')[0] || 'remote-glb';
+    const coords = await getAutoPlaceCoords(viewer, Cesium);
+    if (!coords) {
+        throw new Error('无法确定模型放置位置（请先将相机对准目标区域）');
+    }
+
+    const model = await loadGltfWithCoords(Cesium, viewer, trimmed, displayName, coords);
+    const id = `gltf_${++idCounter.current}`;
+    // 与本地 File 导入同一 record 契约：type='gltf' → TOC 显隐/透明度/定位/重定位/移除全链路可用
+    // blobUrl 仅本地 Blob 使用；远程用 sourceUrl（confirmGltfReposition 会优先 sourceUrl）
+    const record = {
+        id,
+        name: displayName,
+        type: 'gltf',
+        entity: model,
+        blobUrl: null,
+        sourceUrl: trimmed,
+        position: { ...coords },
+        visible: true,
+        opacity: 1,
+    };
+    loadedDataSources.value = [...loadedDataSources.value, record];
+
+    try {
+        const pos = Cesium.Cartesian3.fromDegrees(coords.lng, coords.lat, coords.height + 800);
+        viewer.camera.flyTo({
+            destination: pos,
+            orientation: {
+                heading: 0,
+                pitch: Cesium.Math.toRadians(-40),
+                roll: 0,
+            },
+            duration: 1.5,
+        });
+    } catch (e) {
+        console.warn('[CesiumDataImport] 远程 GLB 飞行定位失败:', e);
+    }
+    try { viewer.scene.requestRender?.(); } catch { /* ignore */ }
+
+    message?.success?.(
+        `远程模型 "${displayName}" 已加载并放置在 (${coords.lat.toFixed(4)}, ${coords.lng.toFixed(4)})`,
+    );
+    return record;
+}
+
+/**
  * 按坐标创建 Entity 模型（ModelGraphics）
  *
  * 贴地（官方机制，Cesium 内部采样地表、切换地形自动跟随）：
@@ -106,9 +174,13 @@ export async function loadGltfWithCoords(Cesium, viewer, blobUrl, name, coords) 
             scale: 1.0,
             show: true,
             color: Cesium.Color.WHITE,
+            // 大校园 GLB 在桌面/移动端都应有最小像素尺寸，避免过远时“消失”
+            minimumPixelSize: 64,
             heightReference,
         },
     });
+
+    try { viewer.scene.requestRender?.(); } catch { /* ignore */ }
 
     return entity;
 }

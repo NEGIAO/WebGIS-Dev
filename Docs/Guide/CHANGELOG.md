@@ -6,6 +6,16 @@
 
 ## 版本记录
 
+### V3.6.3 (2026-09-12) — 远程 GLB 数据源契约 + TOC 规范 + 瓦片 429 提醒
+
+> **统一本批变更**（远程 GLB / TOC 契约审计 / 限流 toast / Worker 已迁出说明 / Force_command 数据源注册前置）。
+>
+> **要点**：远程 GLB 经 `dataImport.loadRemoteGlb` 注册，record 含 `sourceUrl`；TOC 显隐/透明度/定位/重定位/移除对齐；KMZ 透明度与 wayline 标签补齐；OL/Cesium 瓦片 429 toast；Force_command §3 增加数据源注册前置。
+>
+> 日志：
+> [`2026-09-12-toc-datasource-contract-audit.md`](../LLM_record/26-09/2026-09-12/2026-09-12-toc-datasource-contract-audit.md) ·
+> [`2026-09-12-proxy-rate-limit-l2.md`](../LLM_record/26-09/2026-09-12/2026-09-12-proxy-rate-limit-l2.md)
+
 ### V3.6.2 (2026-09-12) — 瓦片代理限流改为 L2 管理员可配
 
 > **动机**：`/proxy/gcj2wgs` 等纠偏瓦片在浏览高峰大量 429，原 `PROXY_RATE_LIMIT` 为 L1 进程启动时读取，

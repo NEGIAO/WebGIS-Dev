@@ -206,6 +206,14 @@
                                         <Building :size="16" stroke-width="2" />
                                         <span>{{ t('cesium.sampleBaimo') }}</span>
                                     </button>
+                                    <button
+                                        type="button"
+                                        class="scene-sample-menu-item"
+                                        @click="emit('import-tileset-sample', { type: 'gxu' }); sceneSampleMenuOpen = false"
+                                    >
+                                        <Building :size="16" stroke-width="2" />
+                                        <span>{{ t('cesium.sampleGxu') }}</span>
+                                    </button>
                                 </div>
                             </Teleport>
                         </div>
@@ -642,6 +650,14 @@
                                         <Building :size="16" stroke-width="2" />
                                         <span>{{ t('cesium.sampleBaimo') }}</span>
                                     </button>
+                                    <button
+                                        type="button"
+                                        class="sample-menu-item"
+                                        @click="emit('import-tileset-sample', { type: 'gxu' }); sampleMenuOpen = false"
+                                    >
+                                        <Building :size="16" stroke-width="2" />
+                                        <span>{{ t('cesium.sampleGxu') }}</span>
+                                    </button>
                                 </div>
                             </Teleport>
                         </div>
@@ -665,6 +681,7 @@
                                 <option value="ion">{{ t('cesium.types.ion') }}</option>
                                 <option value="i3s">{{ t('cesium.types.i3s') }}</option>
                                 <option value="3dtiles">{{ t('cesium.types.tileset') }}</option>
+                                <option value="glb">{{ t('cesium.types.glb') }}</option>
                             </select>
                         </div>
                         <form

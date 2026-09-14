@@ -20,6 +20,7 @@
 9. **新功能必须封装**为独立 `.js` / `.ts` 文件，组件内不堆叠业务逻辑（`MapContainer.vue` 等巨型文件只出不进）
 10. **新增代码必须有注释**（功能 / 参数 / 返回 / 核心逻辑）
 11. **新增配置 key 顺序恒为**：登记 `deploy/.env.example` + `backend/config/catalog.py` → 再写读取代码 → 跑门禁
+12. **数据源注册前置**：任何场景数据加载必须入 TOC/数据源店（Cesium：`loadedDataSources` + `type` 契约；OL：layer-tree），并实现显隐/透明度/定位/移除等 adapter 能力；远程 URL 模型须存 `sourceUrl`。详见 Force_command §3
 
 ### 分层边界
 

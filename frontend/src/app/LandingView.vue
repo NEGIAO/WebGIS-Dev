@@ -494,7 +494,7 @@ const STAR_CHART_URL =
     'https://api.star-history.com/chart?repos=NEGIAO/WebGIS-Dev&type=timeline&legend=top-left&sealed_token=B5ReoH7FL9EMbjs7rJJ3APlIoYZwGKo3g2gC_4_0LxIrQ--e5uhUrYXR7UEBcnb3CU48BAX9--IyzI-TxTszy8HrMJ3oVSVvfowMjrMOxY8n477EUd4_Ip6F8EMaHsKX6H5b1JjudmBoRUn3HxJ1R6zxt3lO1CKGidFnlqFb2W_TXYy_sTk3AS3rn8v8';
 
 // ============ Cloudflare Worker 边缘代理（国内直连 GitHub 不稳定时的首选链路） ============
-// Worker（workers/github-stats/）在边缘抓 GitHub 并缓存 10 分钟，前端一次请求拿全量数据。
+// Worker（源码见 NEGIAO.github.io 仓库 workers/github-stats/）在边缘抓 GitHub 并缓存 10 分钟，前端一次请求拿全量数据。
 // 未配置（VITE_GITHUB_STATS_WORKER_URL 为空）则自动降级为直连 GitHub，有本地缓存兜底。
 const WORKER_STATS_URL = GITHUB_STATS_WORKER_URL ? `${GITHUB_STATS_WORKER_URL}/api/stats` : '';
 const WORKER_CHART_URL = GITHUB_STATS_WORKER_URL ? `${GITHUB_STATS_WORKER_URL}/api/chart` : '';

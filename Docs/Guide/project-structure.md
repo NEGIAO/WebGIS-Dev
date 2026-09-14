@@ -33,10 +33,7 @@ WebGIS_Dev/
 │   ├── .env.local                     # 本地开发环境配置（L1 不涉密，tracked，覆盖 .env：APP_ENV=development、localhost URL）
 │   └── .env.example                   # 配置全集 registry（L1/L2/L3 权威入口，不再作为复制模板）
 │
-├── workers/                           # Cloudflare 边缘服务（独立于前后端部署）
-│   └── github-stats/                  # GitHub 开源数据边缘 API（/api/stats + /api/chart，边缘缓存 + cron 暖缓存，域名 api.negiao.cn）
-│       ├── wrangler.toml              # Worker 部署配置（含 15 分钟暖缓存 cron）
-│       └── src/index.js               # 边缘函数：抓 GitHub 仓库 API + README 解析版本号 + 趋势图代理
+├── workers/                           # （已迁移：Cloudflare Worker 源码现居 NEGIAO.github.io 仓库 workers/，本仓库不再保留副本）
 │
 ├── Scripts/                           # 门禁与维护脚本
 │   ├── CheckConfigRegistry.py         # 配置登记门禁扫描（裸 getenv / 未登记 key / 散落 VITE_ / 硬编码域名）

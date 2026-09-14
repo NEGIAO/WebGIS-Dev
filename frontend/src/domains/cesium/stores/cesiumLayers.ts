@@ -25,6 +25,8 @@ const OPACITY_SUPPORTED_TYPES = new Set([
     '3dtiles',
     'geojson',
     'kml',
+    // KMZ 解包后同为 KML DataSource，透明度路径与 kml/geojson 同构
+    'kmz',
     'czml',
     'shp',
     'wayline',
@@ -40,7 +42,7 @@ const MANAGED_CATEGORIES = new Set(['draw', 'route']);
 export interface CesiumLayerRecord {
     id: string;
     name: string;
-    type: string;              // geojson|kml|czml|shp|tif|gltf|3dtiles|draw|route
+    type: string;              // geojson|kml|kmz|czml|shp|tif|gltf|3dtiles|wayline|draw|route|imagery
     /** 记录来源：data=导入数据（默认）；draw=绘制/测量；route=公交/驾车路线 */
     category?: 'data' | 'draw' | 'route';
     engine: 'cesium';

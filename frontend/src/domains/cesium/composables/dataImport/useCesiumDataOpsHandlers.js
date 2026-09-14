@@ -90,6 +90,11 @@ export function createCesiumDataOpsHandlers({
                 await dataImport.loadSampleDiscreteLODTileset();
             } else if (type === 'baimo') {
                 await dataImport.loadSampleBaimoTileset();
+            } else if (type === 'gxu') {
+                await dataImport.loadRemoteGlb(
+                    'https://wcqqq1214.github.io/gxu-campus-3d/models/base.glb',
+                    '广西大学校区',
+                );
             } else {
                 await dataImport.loadSampleTileset();
             }

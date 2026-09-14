@@ -74,8 +74,12 @@ export function setRecordVisible(Cesium, record, visible) {
     if (!entity) return;
     const next = !!visible;
 
-    // DataSource / Cesium3DTileset / Model / ImageryLayer 均支持 .show
+    // DataSource / Cesium3DTileset / Model / ImageryLayer / Entity 均支持 .show
     entity.show = next;
+    // Entity 形态 GLTF：ModelGraphics.show 同步，避免 Entity.show 与 model.show 不一致
+    if (entity.model) {
+        try { entity.model.show = next; } catch { /* ignore */ }
+    }
 
     // TIF 伴生的高程拉伸网格需同步
     const heightMesh = toRaw(record?.heightMesh);

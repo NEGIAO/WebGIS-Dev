@@ -47,8 +47,30 @@ L2（跨后端配置/限流/管理 API + 管理面板 UI + 文档版本）
 ## Code Review 补记（同版本）
 
 - `CesiumToolPanel` 完整菜单 `Globe :size="20"` 与兄弟 16 不一致 → 改回 **16**。
-- 代码/文案默认值与 catalog **600** 对齐（生产 env 仍 **300**）。
+- 代码/文案默认值与 catalog **600** 对齐（生产 env 用户已改为 600）。
 - **Git**：本地曾落后 origin `63e3b262`（同主题 debug 提交），push 前须 `git pull --ff-only`。
+
+## 追加（L1）：前端瓦片 429 message 提醒
+
+- 新增 `common/utils/tileRateLimitNotify.ts`：`notifyTileRateLimited`（15s 防抖 warning toast）+ `extractTileErrorDetail`。
+- `ol/tile-source/tileLifecycle.ts`：`requestTileAsBlobUrl` 识别 **HTTP 429**，解析 JSON `detail` 后 toast。
+- Cesium `basemapProviderFactory.ts`：provider `errorEvent` 若带 `statusCode===429` 则同样提示（尽力而为）。
+- 结构树已登记；门禁通过。
+
+## 追加（L1）：Cesium 远程服务加载 GLB 直链
+
+- `CesiumToolPanel.vue`：远程 3D 服务类型增加 **GLB/GLTF**。
+- `gltfLoader.js`：`loadGltfFromUrl`（Entity uri 用远程 URL，自动放相机视野中心，不整包下载提坐标）。
+- `useCesiumLayers.handleRemoteServiceSubmit`：`type==='glb'` 分支；CORS 失败友好提示。
+- 中英文案：`types.glb` / `placeholder.glb` / hint 更新。
+- 验证：`node --check` 通过；未跑浏览器实测（需可 CORS 的 GLB URL，如 GitHub raw 或自有域名）。
+
+## 追加（L1 实验）：Worker README 统计卡片 SVG
+
+- `workers/github-stats/src/index.js`：新增 `GET /api/readme-stats.svg`（自绘 tokyo-night 卡片：Stars/Forks/Followers/Repos/版本徽章；边缘缓存 10 分钟）。
+- 本地预览：`workers/github-stats/scripts/render-readme-stats-preview.mjs` → `preview/readme-stats-sample.svg`。
+- **未部署**：需在 `workers/github-stats` 执行 `npx wrangler deploy` 后才能从 `api.negiao.cn` 访问。
+- 是否写入主 README 由用户看完效果后决定。
 
 ## 性能指标
 

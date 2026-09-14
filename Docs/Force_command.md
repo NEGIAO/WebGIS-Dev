@@ -86,6 +86,14 @@
 - **注释义务**：新增函数必须有简洁注释说明「功能 / 参数 / 返回 / 核心逻辑」；同类逻辑函数组织在一起维护。
 - **配置 key 登记前置**：新增任何配置项，顺序恒为 **① 登记 `deploy/.env.example` + `backend/config/catalog.py` → ② 再写读取代码 → ③ 跑 `Scripts/CheckConfigRegistry.py`**。后端业务代码禁止裸读 `os.getenv`；前端业务代码禁止散落 `import.meta.env.VITE_*`（唯一入口 `src/config/publicRuntime.ts`）。
   - **例外：底图源 URL**。底图源 URL（如 Mapbox、MapTiler、GeovisEarth 等第三方瓦片服务）属于**静态资源地址**，非密钥类配置，允许在 `basemapConfig.ts` 等 constants 文件中直接硬编码。原因：① URL 与 token 耦合，拆分到环境变量反而增加维护复杂度；② 底图源变更属于功能变更而非配置变更，需走代码审查流程；③ 这些 URL 是公开可获取的资源地址，无保密需求。
+- **数据源注册前置（TOC / 统一图层管理）**：任何「能把可交互对象加进三维/二维场景」的功能（远程服务、URL 模型、文件导入、模块工作集…）**必须先走数据源注册**，再谈业务交互。禁止只 `entities.add` / `primitives.add` 却不入 `loadedDataSources`（或等价 TOC 元数据店）。
+  - **Cesium 标准契约**（权威：`stores/cesiumLayers.ts` + `composables/dataImport/`）：
+    1. 写入 `loadedDataSources` 记录：至少 `{ id, name, type, entity, ...业务字段 }`；远程 URL 模型另存 `sourceUrl`（禁止只留 `blobUrl`）。
+    2. `type` 必须落在 TOC 已知集合（`geojson|kml|kmz|czml|shp|tif|gltf|3dtiles|wayline|imagery…`）；新类型同步 `TYPE_LABELS` / `OPACITY_SUPPORTED_TYPES` / `cesiumLayerNodeBuilder` 动作位。
+    3. 场景操作经 adapter 闭环：**显隐 / 透明度 / flyTo / remove** 必须可用；gltf 另需 **reposition**（`sourceUrl || blobUrl`）；3dtiles 需 **setBaseHeight / setMaterialMode**。
+    4. 优先复用 `dataImport.load*` / `loadRemoteGlb` / `registerExternalDataSource`，禁止在 layers/components 里手写第二套 id 与入列逻辑。
+  - **OL 侧**对齐 `layer-tree` / layer store 注册，不得只加 map 却不进图层树。
+  - **验收**：新增加载路径后，在 TOC 里对新条目实测上述能力；缺一项即视为未完成。
 
 ### 阶段四：收尾（见第 7 节 DoD，逐项勾选）
 
@@ -165,6 +173,7 @@ L2/L3 任务在会话结束前逐项核对，**任何一项未过必须显式说
 - [ ] `Docs/Guide/CHANGELOG.md` 已追加条目
 - [ ] 涉及文件增删 → 对应 `*-structure.md` 结构树已同步（含功能注释）
 - [ ] 涉及配置 key → `.env.example` 与 `catalog.py` 已登记
+- [ ] **涉及场景数据加载 → 已按 §3「数据源注册前置」入 TOC 并验完 adapter 能力**
 - [ ] **门禁脚本已运行且通过**：
       `python Scripts/CheckStructureTree.py` （结构树漂移）
       `python Scripts/CheckConfigRegistry.py` （配置登记）
