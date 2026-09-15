@@ -144,16 +144,17 @@ WebGIS 前端（任意域名）
     ▼
 Cloudflare R2 瓦片存储（成功 → 直接返回）
     │
-    │  失败 → 走代理
+    │  失败 / 需纠偏 → 走瓦片代理
     │
     ▼
-后端瓦片代理：https://negiao-webgis.hf.space/proxy/...
+VPS tile-proxy：https://vpn.negiao.cn/proxy/...
     │
     ▼
 上游瓦片服务（Google / 高德 / 天地图 等）
 ```
 
-**代理模式**：`VITE_TILE_PROXY_MODE=fallback`（直连失败才走代理，减少后端负载）
+**说明**：瓦片中转与纠偏**不在** HF Space（平台禁止代理）。业务 API 仍为 `https://negiao-webgis.hf.space`。  
+**代理模式**：`VITE_TILE_PROXY_MODE=fallback`（直连失败才走 VPS 代理）。
 
 ---
 

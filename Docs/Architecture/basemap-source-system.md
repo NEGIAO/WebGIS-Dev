@@ -1,10 +1,18 @@
 # 丰富底图源体系架构说明
 
-日期：2026-07-21
+日期：2026-07-21（瓦片后端边界 2026-09-15 更新）
 
-适用范围：`frontend/src/domains/ol/basemap/`、`frontend/src/domains/ol/tile-source/`、`frontend/src/domains/ol/layer/` 及 `backend/domains/tiles/` 模块。
+> ⚠️ **瓦片纠偏/代理已迁出本仓库**（2026-09-15，HF 合规）。
+> - 开源实现：独立仓 **`tile-proxy`**
+> - 线上入口：`https://vpn.negiao.cn/proxy/*`（VPS）
+> - 本仓仅保留前端底图管理 + `core/coord_transform.py` 纯坐标
+> - 详见 [tile-rectify-system.md](tile-rectify-system.md)
+>
+> 下文若仍写 `backend/domains/tiles/` 或 `negiao-webgis.hf.space/proxy`，均指**历史实现**，以迁出说明为准。
 
-本文是长期参考文档，说明 WebGIS 3.0 中"丰富底图源体系"功能的双引擎配置模型、预设栈机制、瓦片请求生命周期、熔断回退策略、GCJ-02 火星坐标纠偏算法、高清瓦片优化及后端代理架构，供后续维护、扩展图源与调参时对照。
+适用范围：`frontend/src/domains/ol/basemap/`、`frontend/src/domains/ol/tile-source/`、`frontend/src/domains/ol/layer/`。
+
+本文是长期参考文档，说明 WebGIS 3.0 中"丰富底图源体系"功能的双引擎配置模型、预设栈机制、瓦片请求生命周期、熔断回退策略、GCJ-02 火星坐标纠偏算法、高清瓦片优化及代理接入方式，供后续维护、扩展图源与调参时对照。
 
 ## 1. 功能定位
 
@@ -20,16 +28,13 @@
 |------|------|
 | `frontend/src/domains/ol/basemap/constants/basemapConfig.ts` | **SSOT 唯一真相源**：OL 专用图层源定义（`LAYER_SOURCE_DEFINITIONS`）+ 底图预设栈（`BASEMAP_PRESETS`）+ Cesium 描述符派生（`getDescriptorById()`），约 1431 行 |
 | `frontend/src/domains/ol/basemap/constants/basemapResolver.ts` | 底图解析器：预设解析、图层配置生成、UI 选项列表导出 |
-| `frontend/src/domains/ol/tile-source/tileLifecycle.ts` | 瓦片请求生命周期：`prioritizeTileSourceRequest`（fetch + AbortController）、中断管理、代理兜底 |
+| `frontend/src/domains/ol/tile-source/tileLifecycle.ts` | 瓦片请求生命周期：`prioritizeTileSourceRequest`（fetch + AbortController）、中断管理、代理兜底（`TILE_PROXY_BASE_URL`） |
 | `frontend/src/domains/ol/tile-source/types.ts` | 类型定义与常量（超时、错误状态等） |
 | `frontend/src/domains/ol/basemap/composables/basemapLayerFactory.js` | OL 图层工厂：栅格/矢量瓦片图层创建、高清瓦片 `zDirection` 注入 |
 | `frontend/src/domains/ol/layer/composables/useTileHDRendering.js` | 高清瓦片渲染全局开关（`tileHDRendering` ref，持久化到 localStorage） |
 | `frontend/src/domains/ol/basemap/resilience/useBasemapResilience.js` | 底图容灾：切换验证、加载监测、熔断降级（`createBasemapResilience`） |
-| `backend/domains/tiles/` | 瓦片域：纠偏路由（`routes_rectify.py`）+ 直通代理（`routes_passthrough.py`）+ 通用infra（`proxy_shared.py`） |
-| `backend/domains/tiles/rectify/common/transform.py` | GCJ-02 坐标转换算法（WGS84/GCJ-02/BD-09 互转，牛顿迭代） |
-| `backend/domains/tiles/rectify/gcj/rectify.py` | 瓦片级纠偏：精确四角 QUAD 重采样合成 WGS84 对齐瓦片 |
-| `backend/domains/tiles/rectify/bd/mercator.py` | 百度官方 LL2MC/MC2LL 分段多项式投影 + BD 瓦片网格数学 |
-| `backend/domains/tiles/rectify/bd/rectify.py` | BD 网格 ↔ 标准 XYZ 跨网格重采样纠偏 |
+| ~~`backend/domains/tiles/`~~ | **已迁出** → 开源仓 `tile-proxy` + 线上 `vpn.negiao.cn/proxy/*` |
+| `backend/core/coord_transform.py` | 点坐标 GCJ/BD 纯数学（本仓残留，无瓦片 IO） |
 
 ## 3. 双引擎配置体系（SSOT 模式）
 
@@ -216,7 +221,7 @@ flowchart TD
 
 ### 7.1 算法原理
 
-`backend/domains/tiles/rectify/common/transform.py` 实现国测局偏移算法：
+点坐标算法在本仓 `backend/core/coord_transform.py`；**瓦片级纠偏不在本仓**（见 [tile-rectify-system.md](tile-rectify-system.md)）。
 
 - **正向加偏**（`wgs2gcj`）：对 WGS84 坐标施加非线性偏移
 - **逆向求解**（`gcj2wgs`）：**牛顿迭代法**，最多 20 次迭代，精度 `1e-6` 度（约 0.1 米）
@@ -342,44 +347,40 @@ URL 模板转换（`toCesiumUrlTemplate`）处理：
 
 每个 descriptorId 绑定独立 `AbortController`（`rotateAbortController`），切换底图时中断旧请求。
 
-## 11. 后端代理架构
+## 11. 后端代理架构（已迁出本仓）
 
-`backend/domains/tiles/` 提供三类路由（`tiles_router` 先纠偏后通配聚合挂载）：
+> **2026-09-15**：HF 禁止 Space 上的第三方内容中转。代理实现见开源仓 **`tile-proxy`**，线上入口 **`https://vpn.negiao.cn/proxy/*`**（VPS，CORS `*`）。前端经 `VITE_TILE_PROXY_BASE_URL` 访问，**与** `VITE_BACKEND_URL`（HF 业务 API）**分离**。
+
+路由契约（VPS / tile-proxy）：
 
 | 路由 | 功能 |
 |------|------|
-| `/proxy/{target_url:path}` | 通用流式代理，转发任意 HTTP(S) 资源 |
+| `/proxy/{target_url:path}` | 通用流式代理 |
 | `/proxy/gcj2wgs/{target_url:path}` | GCJ-02 → WGS84 瓦片纠偏 |
 | `/proxy/wgs2gcj/{target_url:path}` | WGS84 → GCJ-02 瓦片纠偏 |
-| `/proxy/bd2wgs/{target_url:path}` | 百度 BD-09 → WGS84 瓦片纠偏（跨网格重采样，`domains/tiles/rectify/bd/`） |
-| `/proxy/wgs2bd/{target_url:path}` | WGS84 → 百度 BD-09 瓦片纠偏（跨网格重采样，`domains/tiles/rectify/bd/`） |
-| `/tiles/ships66/{z}/{x}/{y}.png` | 船舶网专用代理（特殊请求头） |
+| `/proxy/bd2wgs/{target_url:path}` | 百度 BD-09 → WGS84（跨网格） |
+| `/proxy/wgs2bd/{target_url:path}` | WGS84 → BD-09 网格 |
+| `/tiles/ships66/{z}/{x}/{y}.png` | 船舶网专用（可选） |
 
-通用代理特性：
-- 协议补全：缺省协议统一补全为 `https://`
-- SSRF 防护：阻止私网/本地地址访问（`_is_private_host`）
-- 流式转发：`StreamingResponse` + `aiter_raw()`，不缓冲整个响应
-- 请求头兼容：使用 Chrome UA，优先接受图片格式
-- 超时配置：连接 5s，总计 20s（`httpx.Timeout(20.0, connect=5.0)`）
-- 连接池：`max_connections=100, max_keepalive_connections=20`
+护栏与缓存细节见开源仓 README；本仓 **无** `/proxy/*` 路由。
 
 ## 12. 局限与升级方向
 
 **现有局限：**
 
-1. **MFF 非标准图源不支持 Cesium**：Maps-for-Free 使用非标准 URL 格式（`z{z}/row{y}/{z}_{x}-{y}.jpg`），Cesium 侧直接返回 null 跳过。
-2. **矢量瓦片（PBF）仅 OL 可用**：Cesium 不支持 PBF 矢量瓦片渲染，`vector-tile` 类型在 3D 视图中不可用。
-3. **纠偏精度与性能权衡**：z ≤ 9 不纠偏（偏差可忽略），z > 9 需拼接多块源瓦片再裁剪，高缩放级别下首次请求延迟较高（依赖文件缓存缓解）。
-4. **熔断阈值固定**：`MAX_ERRORS = 3` 为硬编码，无法按图源质量动态调整（如某些免费图源偶发 404 属正常现象）。
-5. **代理单点**：后端代理部署在 `negiao-webgis.hf.space`（Hugging Face Spaces），存在冷启动延迟和可用性风险。
+1. **MFF 非标准图源不支持 Cesium**：Maps-for-Free 使用非标准 URL 格式，Cesium 侧直接返回 null 跳过。
+2. **矢量瓦片（PBF）仅 OL 可用**：Cesium 不支持 PBF 矢量瓦片渲染。
+3. **纠偏精度与性能权衡**：z ≤ 9 不纠偏；z > 9 需拼接源瓦片（实现见 tile-proxy）。
+4. **熔断阈值固定**：`MAX_ERRORS = 3` 硬编码。
+5. **代理单点**：瓦片代理在 VPS `vpn.negiao.cn`，与 HF 业务 API 分离；可用性取决于该 VPS。
 
 **升级方向：**
 
-1. 为 Cesium 实现自定义 `TileCoordinatesImageryProvider`，支持 MFF 等非标准 URL 格式。
-2. 探索 Cesium 3D Tiles / `Cesium3DTileset` 接入矢量瓦片，实现 3D 矢量渲染。
-3. 纠偏缓存引入 Redis / CDN 层，降低首次请求延迟；考虑 WebWorker 前端纠偏减少后端依赖。
-4. 熔断器引入滑动窗口 + 半开状态（circuit breaker pattern），支持自动恢复探测。
-5. 代理层支持多节点负载均衡与故障转移。
+1. 为 Cesium 实现自定义 `TileCoordinatesImageryProvider`，支持 MFF 等非标准 URL。
+2. 探索 Cesium 侧矢量瓦片方案。
+3. 纠偏缓存/多节点在 **tile-proxy** 仓演进。
+4. 熔断器引入滑动窗口 + 半开状态。
+5. 代理多节点在 tile-proxy / VPS 侧扩展。
 
 ## 13. 关键常量速查
 
@@ -391,10 +392,8 @@ URL 模板转换（`toCesiumUrlTemplate`）处理：
 | `ACTIVITY_TIMEOUT` | 10000 | `useBasemapResilience.js` | 无活动超时（ms） |
 | `WARNING_THRESHOLD` | 5 | `useBasemapResilience.js` | 累计错误警告阈值 |
 | `PROXY_NOTIFY_DEBOUNCE_MS` | 5000 | `tileLifecycle.ts` | 代理通知防抖（ms） |
-| `GCJ2WGS_MAX_ITERATIONS` | 20 | `domains/tiles/rectify/common/transform.py` | 牛顿迭代最大次数 |
-| `GCJ2WGS_TOLERANCE` | 1e-6 | `domains/tiles/rectify/common/transform.py` | 迭代收敛精度（度） |
-| `MAX_CONCURRENCY` | 100 | `domains/tiles/rectify/gcj/rectify.py` | 纠偏并发获取上限 |
-| `TILE_SIZE` | 256 | `domains/tiles/rectify/common/geo.py` | 标准瓦片像素尺寸 |
+| `GCJ2WGS_MAX_ITERATIONS` | 20 | `core/coord_transform.py` | 牛顿迭代最大次数 |
+| `GCJ2WGS_TOLERANCE` | 1e-6 | `core/coord_transform.py` | 迭代收敛精度（度） |
 | `DEFAULT_BASEMAP_PRESET_ID` | `'custom_China_Blender_preset_2'` | `basemapConfig.ts` | 默认底图预设 |
 | `checkTimeoutMs`（默认参数） | 3000 | `useBasemapResilience.js` | 切换验证超时（ms） |
 | `tileHDRendering`（默认值） | `true` | `useTileHDRendering.js` | 高清渲染默认开启 |

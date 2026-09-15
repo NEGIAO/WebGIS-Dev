@@ -1,1 +1,0 @@
-"""GCJ tile rectification helpers."""

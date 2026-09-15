@@ -85,7 +85,8 @@ BACKEND_PUBLIC_URL=https://negiao-webgis.hf.space
 FRONTEND_PUBLIC_URL=https://negiao.github.io/WebGIS-Dev
 VITE_BASE_URL=./
 VITE_BACKEND_URL=https://negiao-webgis.hf.space
-VITE_TILE_PROXY_BASE_URL=https://negiao-webgis.hf.space
+# 瓦片代理已迁出 HF，生产恒指 VPS
+VITE_TILE_PROXY_BASE_URL=https://vpn.negiao.cn
 VITE_TILE_PROXY_MODE=fallback
 ```
 

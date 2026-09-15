@@ -2,9 +2,12 @@
 WebGIS Backend - FastAPI 主应用入口
 
 功能模块：
-- 瓦片域：纠偏/直通代理 + 底图下载 (domains/tiles/)
 - 访客统计：地理位置统计功能 (api/statistics.py)
 - 通用接口：新闻、数据处理、健康检查等
+
+⚠️ HF 合规：瓦片纠偏/直通代理已完全迁出本仓库（开源仓 tile-proxy + VPS
+vpn.negiao.cn/proxy/*）。本 Space **不得**再挂任何 /proxy/*、/tiles/* 中转路由。
+坐标纠偏纯数学见 core/coord_transform.py（无网络 IO）。
 """
 
 import asyncio
@@ -26,9 +29,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
 from starlette.background import BackgroundTasks
-from domains.tiles import tiles_router as proxy_router, build_http_client, cache_cleanup_loop
-from domains.tiles.download.download import router as download_router
-from api.external_proxy import router as external_proxy_router
 from api.statistics import router as statistics_router
 from api.location import router as location_router
 from api.auth import init_auth_storage, router as auth_router, check_smtp_configured
@@ -36,8 +36,6 @@ from api.admin import router as admin_router
 from api.api_management import router as api_management_router
 from api.api_keys_management import router as api_keys_router, runtime_config_router
 from api.agent_chat import router as agent_chat_router, admin_router as agent_chat_admin_router
-from domains.tiles.download.task_scheduler import start_task_cleanup_scheduler, shutdown_task_cleanup_scheduler
-from domains.tiles.download.download_task import init_download_task_db
 from api.monitor import init_monitor_log_streaming, router as monitor_router
 from api.spatial import router as spatial_router
 from api.realtime_stats import init_broadcaster, router as realtime_stats_router, start_periodic_broadcast, stop_periodic_broadcast
@@ -155,27 +153,13 @@ async def lifespan(app: FastAPI):
         )
 
     try:
-        init_download_task_db()
-        logger.info("下载任务数据库初始化成功")
-    except Exception as e:
-        logger.error("下载任务数据库初始化失败: %s", str(e), exc_info=True)
-
-    try:
-        app.state.task_scheduler = start_task_cleanup_scheduler()
-    except Exception as e:
-        logger.error("任务调度器启动失败: %s", str(e), exc_info=True)
-
-    try:
         init_historical_imagery_storage()
         app.state.historical_imagery_scheduler = start_historical_imagery_scheduler()
     except Exception as e:
         logger.error("历史影像同步服务启动失败: %s", str(e), exc_info=True)
 
-    app.state.http_client = build_http_client()
+    app.state.http_client = httpx.AsyncClient(timeout=httpx.Timeout(20.0, connect=5.0))
     logger.info("HTTP 客户端初始化完成")
-
-    # 纠偏磁盘缓存周期清理（按龄 + 按容量；间隔 0 则任务内直接退出）
-    app.state.gcjre_cache_cleanup = asyncio.create_task(cache_cleanup_loop())
 
     # 启动整点报时后台任务（记录启动时间，报时时展示已运行时长）
     _startup_time = datetime.now().astimezone()
@@ -198,16 +182,6 @@ async def lifespan(app: FastAPI):
     yield
     # ---- Shutdown ----
     logger.info("WebGIS Backend 关闭...")
-    # 取消纠偏磁盘缓存清理任务
-    cleanup_task = getattr(app.state, "gcjre_cache_cleanup", None)
-    if cleanup_task is not None:
-        cleanup_task.cancel()
-        try:
-            await cleanup_task
-        except asyncio.CancelledError:
-            pass
-        logger.info("纠偏磁盘缓存清理任务已停止")
-
     # 取消整点报时任务
     chime_task = getattr(app.state, "hourly_chime", None)
     if chime_task is not None:
@@ -217,14 +191,6 @@ async def lifespan(app: FastAPI):
         except asyncio.CancelledError:
             pass
         logger.info("整点报时后台任务已停止")
-
-    scheduler = getattr(app.state, "task_scheduler", None)
-    if scheduler is not None:
-        try:
-            shutdown_task_cleanup_scheduler(scheduler)
-        except Exception as e:
-            logger.warning("任务调度器关闭异常: %s", e)
-        logger.info("任务调度器已停止")
 
     historical_scheduler = getattr(app.state, "historical_imagery_scheduler", None)
     if historical_scheduler is not None:
@@ -399,13 +365,8 @@ async def http_exception_handler(request: Request, exc: HTTPException):
 # ==================== 路由挂载 ====================
 
 
-# 挂载瓦片代理路由
-app.include_router(proxy_router)
-logger.info("已注册瓦片代理路由")
-
-# 挂载外部服务代理路由（高德/Nominatim/EPSG/IP）
-app.include_router(external_proxy_router)
-logger.info("已注册外部服务代理路由")
+# ⚠️ 禁止挂载任何 /proxy/*、/tiles/*、external 中转（HF 政策）。
+# 瓦片纠偏见开源仓 tile-proxy；部署于 VPS vpn.negiao.cn/proxy/*
 
 # 挂载认证路由
 app.include_router(auth_router)
@@ -439,10 +400,6 @@ logger.info("已注册运行时配置路由")
 app.include_router(agent_chat_router)
 app.include_router(agent_chat_admin_router)
 logger.info("已注册 Agent 对话路由")
-
-# 挂载下载任务路由
-app.include_router(download_router)
-logger.info("已注册下载任务路由")
 
 # 挂载监控路由
 app.include_router(monitor_router)

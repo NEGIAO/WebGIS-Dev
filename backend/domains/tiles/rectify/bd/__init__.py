@@ -1,1 +1,0 @@
-"""BD-09 (Baidu) tile rectification helpers."""

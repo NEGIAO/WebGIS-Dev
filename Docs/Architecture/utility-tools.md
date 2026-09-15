@@ -1,8 +1,14 @@
 # 实用工具集合架构说明
 
-日期：2026-07-21
+日期：2026-07-21（后端纠偏/下载 2026-09-15 迁出）
 
-适用范围：前端 `frontend/src/domains/ol/drawing/composables/useDrawMeasure.js`、`frontend/src/domains/ol/components/MapControlsBar.vue`、`frontend/src/domains/common/map-view/coordinateFormatter.js`、`frontend/src/domains/ol/utils/coordTransform.js`、`frontend/src/domains/common/compass/services/CompassManager.ts`、`frontend/src/domains/common/compass/stores/useCompassStore.ts`、`frontend/src/domains/common/shell/TopBar.vue`；后端 `backend/domains/tiles/download/`、`backend/domains/tiles/rectify/` 模块。
+> ⚠️ **底图批量下载与瓦片纠偏后端已迁出本仓库**。
+> - 开源实现：独立仓 **`tile-proxy`**（含纠偏；下载能力随该仓/自建部署）
+> - 线上纠偏入口：`https://vpn.negiao.cn/proxy/*`
+> - 本仓 `location` 仅用 `core/coord_transform.py` 做点坐标 GCJ
+> - 详见 [tile-rectify-system.md](tile-rectify-system.md)
+
+适用范围：前端 `frontend/src/domains/ol/drawing/composables/useDrawMeasure.js`、`frontend/src/domains/ol/components/MapControlsBar.vue`、`frontend/src/domains/common/map-view/coordinateFormatter.js`、`frontend/src/domains/ol/utils/coordTransform.js`、`frontend/src/domains/common/compass/services/CompassManager.ts`、`frontend/src/domains/common/compass/stores/useCompassStore.ts`、`frontend/src/domains/common/shell/TopBar.vue`。
 
 本文是长期参考文档，说明 WebGIS 3.0 中"实用工具"功能集合的算法原理、数据结构、前后端交互机制与实现细节，供后续维护、扩展与问题排查时对照。
 
@@ -14,9 +20,9 @@
 - **坐标拾取与格式化**：实时鼠标坐标显示、6 种格式切换、WGS84/GCJ-02 纠偏
 - **风水罗盘导航**：矢量/HUD 双模式罗盘，支持陀螺仪方向同步
 - **分享链接**：一键生成脱敏视角分享 URL
-- **在线底图下载**：后端异步瓦片抓取 + rasterio 拼接 GeoTIFF 导出
+- ~~在线底图下载 / 后端瓦片纠偏~~ → **已迁出**（开源仓 `tile-proxy` / 自建部署；本仓无 `/api/download`、无 `/proxy/*`）
 
-这些工具彼此解耦，各自通过独立的 composable / service / API 路由实现，可单独启用或移除。
+这些工具彼此解耦，各自通过独立的 composable / service 实现，可单独启用或移除。
 
 ## 2. 文件结构
 
@@ -32,11 +38,8 @@
 | `domains/common/compass/services/urlState.ts` | 罗盘 URL 状态读写：cs 参数编解码桥接 |
 | `domains/common/url-state/crypto.js` | BigInt 位打包编解码：经纬度/半径/相机状态 → Base62 短码 |
 | `domains/common/shell/TopBar.vue` | 分享链接：私有参数排除、s=1 标记、Native Share / 剪贴板 |
-| `backend/domains/tiles/download/download.py` | 下载 API 路由：POST /api/download/tasks 异步任务 + token + TTL |
-| `backend/domains/tiles/download/tile_engine.py` | 瓦片引擎：分辨率→层级换算、并发抓取、rasterio GeoTIFF 拼接与裁剪 |
-| `backend/domains/tiles/download/download_task.py` | 任务持久化：SQLModel + SQLite 任务表 CRUD |
-| `backend/domains/tiles/rectify/gcj/rectify.py` | GCJ-02 瓦片纠偏：精确四角 QUAD 重采样 |
-| `backend/domains/tiles/rectify/common/transform.py` | 坐标转换核心：WGS84/GCJ-02/BD-09 正逆向变换（牛顿迭代） |
+| `backend/core/coord_transform.py` | 点坐标 GCJ/BD 纯数学（本仓残留；`location` 用 `wgs2gcj`） |
+| ~~`backend/domains/tiles/**`~~ | **已迁出** → 开源仓 `tile-proxy`；线上 `https://vpn.negiao.cn/proxy/*` |
 
 ## 3. 距离/面积测量
 
@@ -104,10 +107,7 @@
 
 算法使用 WGS84 椭球参数（长半轴 `A = 6378245.0`，偏心率平方 `EE = 0.00669342162296594323`），通过 `outOfChina()` 判断是否在中国境内（经度 72.004~137.8347，纬度 0.8293~55.8271），境外坐标直接返回原值。
 
-后端 `domains/tiles/rectify/common/transform.py` 提供更完整的实现：
-- 正向 `wgs2gcj`：标准加偏
-- 逆向 `gcj2wgs`：**牛顿迭代法**（最多 20 次，精度 1e-6 度 ≈ 0.1m），比前端线性近似更精确
-- 额外支持 BD-09 百度坐标系互转（`gcj2bd` / `bd2gcj` / `wgs2bd` / `bd2wgs`）
+点坐标算法在本仓 `backend/core/coord_transform.py`（`wgs2gcj` / `gcj2wgs` 牛顿迭代等）。完整瓦片纠偏与下载实现在开源仓 **`tile-proxy`**，线上入口 `https://vpn.negiao.cn/proxy/*`。
 
 ## 5. 风水罗盘导航
 
@@ -216,121 +216,37 @@ flowchart TD
 2. **Clipboard API**：桌面端优先 `navigator.clipboard.writeText`
 3. **execCommand 回退**：非 HTTPS 环境降级为隐藏 textarea + `document.execCommand('copy')`
 
-## 7. 在线底图下载（GeoTIFF 导出）
+## 7. 在线底图下载（已迁出）
 
-### 7.1 API 设计
+> **状态**：本仓 **不再提供** `/api/download/*`。批量 GeoTIFF 导出实现见开源仓 `tile-proxy`（或历史文档）；HF Space 禁止此类第三方瓦片中转。
 
-后端 `domains/tiles/download/download.py` 提供三个端点（路由前缀 `/api/download`）：
+历史 API 形态（供对照旧前端/脚本）：`POST /api/download/tasks`、`GET /api/download/tasks/{id}`、`GET .../file`。
 
-| 端点 | 方法 | 功能 |
-|------|------|------|
-| `/api/download/tasks` | POST | 创建下载任务（需 API 鉴权） |
-| `/api/download/tasks/{task_id}` | GET | 轮询任务状态 |
-| `/api/download/tasks/{task_id}/file` | GET | 下载完成的 GeoTIFF 文件 |
+## 8. GCJ-02 瓦片纠偏（已迁出）
 
-请求参数（`CreateDownloadTaskRequest`）：
-- `tile_url_template`：瓦片 URL 模板（必须含 `{z}`/`{x}`/`{y}` 占位符）
-- `bbox`：范围 [min_x, min_y, max_x, max_y]
-- `resolution_m`：目标分辨率（米/像素，0.3~1000）
-- `bbox_crs`：范围坐标系（EPSG:4326 / EPSG:3857）
-- `clip_to_extent`：是否裁剪到精确范围
+> **状态**：本仓 **不再包含** 瓦片纠偏管线。  
+> - 开源实现：独立仓 `tile-proxy`  
+> - 线上入口：`https://vpn.negiao.cn/proxy/*`  
+> - 业务与路由契约：[tile-rectify-system.md](tile-rectify-system.md)
 
-### 7.2 异步任务流程
-
-```mermaid
-flowchart TD
-    POST(["POST /api/download/tasks"]) --> CREATE["创建任务<br/>SQLite 持久化"]
-    CREATE -->|"BackgroundTasks"| PROCESS["_process_download_task()"]
-    PROCESS --> NORM["_normalize_bbox()<br/>统一转 EPSG:4326"]
-    NORM --> BUILD["build_geotiff_from_tiles()<br/>瓦片抓取 + 拼接"]
-    BUILD --> CLIP{"clip_to_extent?"}
-    CLIP -->|是| CLIP_GEOM["clip_geotiff_to_bbox()<br/>rasterio 裁剪"]
-    CLIP -->|否| DONE
-    CLIP_GEOM --> DONE["update_task(status='success')"]
-```
-
-任务状态机：
-
-```mermaid
-stateDiagram-v2
-    [*] --> pending: POST /tasks
-    pending --> downloading: 开始抓取
-    downloading --> stitching: 拼接 GeoTIFF
-    stitching --> success: 完成
-    stitching --> failed: 异常
-    downloading --> failed: 异常
-    success --> [*]: TTL 30min 后过期
-    failed --> [*]
-```
-
-任务 TTL 为 30 分钟（`DEFAULT_TASK_TTL_MINUTES`），过期后文件接口返回 410。
-
-### 7.3 下载令牌机制
-
-文件下载接口支持可选的 token 校验：
-- `_generate_download_token()`：`{task_id}_{sha256前8位}_{secrets.token_urlsafe(32)}`
-- 令牌有效期 60 分钟（`DEFAULT_DOWNLOAD_TOKEN_LIFETIME_MINUTES`）
-- 任务状态查询接口在 `file_ready=true` 时自动签发令牌
-- 令牌缓存超过 1000 条时清理已过期条目
-
-### 7.4 瓦片引擎（tile_engine.py）
-
-核心函数 `build_geotiff_from_tiles()`：
-
-1. **分辨率→层级换算**：`resolution_to_zoom(resolution_m, lat)` 根据纬度计算 Web Mercator 每像素米数，`zoom = ceil(log2(meters_per_pixel / resolution_m))`，限制 [0, 22]
-2. **范围→瓦片网格**：`bbox4326_to_tile_range()` 将 WGS84 范围转为 XYZ 瓦片坐标范围
-3. **并发抓取**：`httpx.AsyncClient` + `asyncio.Semaphore(10)` 限流，每批 40 个瓦片，失败重试 3 次（指数退避 0.25s × 2^attempt）
-4. **GeoTIFF 拼接**：`rasterio.open(output_path, "w", ...)` 创建 GTiff（EPSG:3857、deflate 压缩、tiled 存储），逐瓦片 `_write_tile_array()` 写入对应 Window
-5. **波段标准化**：统一输出 3 波段 RGB——灰度复制为 3 波段、RGBA 去 Alpha、索引色 PNG 应用 colormap 转 RGB
-
-### 7.5 精确裁剪
-
-`clip_geotiff_to_bbox()` 在拼接完成后可选执行：
-- 将 WGS84 裁剪范围转为 EPSG:3857 坐标
-- 通过 `rasterio.windows.from_bounds` 计算像素窗口
-- 读取窗口数据、计算新仿射变换、写入新文件后替换原文件
-
-### 7.6 任务持久化
-
-`download_task.py` 使用 SQLModel + SQLite（默认 `/tmp/webgis_download_tasks.db`）：
-- `DownloadTask` 表：id / status / progress / message / file_path / created_at / updated_at
-- 提供 `create_task` / `get_task` / `update_task` / `list_tasks_before` 四个 CRUD 函数
-
-## 8. GCJ-02 瓦片纠偏（后端）
-
-`backend/domains/tiles/rectify/` 模块为 GCJ-02 加密瓦片提供像素级纠偏，使 WGS84 底图与 GCJ-02 瓦片对齐：
-
-### 8.1 纠偏流程（get_gcj2wgs_tile）
-
-1. 检查输出缓存（文件系统），命中直接返回
-2. `z ≤ 9`：偏差可忽略（< 1 像素），直接返回源瓦片
-3. `z > 9`：执行像素级纠偏
-   - 计算目标 WGS84 瓦片的 bbox
-   - `wgsbbox_to_gcjbbox()` 将 WGS84 范围转为 GCJ-02 范围
-   - 根据 GCJ-02 范围计算需要抓取的源瓦片网格
-   - 并发抓取源瓦片 → 拼接为大图 → 按精确范围裁剪为 256×256 输出
-
-### 8.2 坐标转换精度
-
-后端 `transform.py` 的 `gcj2wgs()` 使用牛顿迭代法（最多 20 次迭代，收敛阈值 1e-6 度 ≈ 0.1m），比前端的线性近似（`lon*2 - mgLon`）精度更高，适合瓦片级像素对齐。
+本仓仅保留 `core/coord_transform.py` 点坐标换算。
 
 ## 9. 局限与升级方向
 
 **现有局限：**
 
 1. **坐标格式无 UTM**：`coordinateFormatter.js` 仅支持地理坐标（经纬度）的 6 种显示格式，不支持 UTM / MGRS 等投影坐标，工程测量场景不便。
-2. **前端 GCJ-02 逆转为线性近似**：`coordTransform.js` 的 `gcj02ToWgs84` 使用单次线性逼近（`lon*2 - mgLon`），精度约 1~2m；后端已用牛顿迭代达到 0.1m，前端未同步。
+2. **前端 GCJ-02 逆转为线性近似**：`coordTransform.js` 的 `gcj02ToWgs84` 使用单次线性逼近（`lon*2 - mgLon`），精度约 1~2m；本仓 `core/coord_transform.py` 的 `gcj2wgs` 为牛顿迭代（约 0.1m），前端未同步。
 3. **测量无高程分量**：`ol/sphere` 的 `getLength` / `getArea` 基于椭球面，不考虑地形高程，山区实际地表距离会偏大。
 4. **罗盘主题本地化**：`useCompassStore` 的主题配置完全来自本地 JSON（`localThemes`），无远程主题市场接口。
-5. **下载任务无队列调度**：`download.py` 依赖 FastAPI `BackgroundTasks`（线程池），高并发时缺乏任务队列限流与优先级管理。
-6. **下载文件 TTL 固定**：30 分钟过期后文件即不可下载，无续期或持久化存储选项。
-7. **分享链接无短链服务**：`buildShareMarkedUrl` 直接输出完整 URL（含 Base62 编码参数），链接较长，无短链压缩。
+5. **分享链接无短链服务**：`buildShareMarkedUrl` 直接输出完整 URL（含 Base62 编码参数），链接较长，无短链压缩。
 
 **升级方向：**
 
 1. 增加 UTM / MGRS 坐标格式支持（可引入 `proj4js` 或 `mgrs` 库），满足工程测量与军事坐标需求。
-2. 前端 `gcj02ToWgs84` 升级为牛顿迭代或查表插值，与后端精度对齐。
+2. 前端 `gcj02ToWgs84` 升级为牛顿迭代或查表插值，与 `core/coord_transform.py` 精度对齐。
 3. 测量工具接入 DEM 高程数据，提供三维地表距离与坡度信息。
-4. 下载服务引入 Celery / Redis 任务队列，支持并发限制、优先级、断点续传。
-5. 分享链接接入短链服务（如 YOURLS），并支持有效期与访问统计。
-6. 罗盘支持远程主题市场与用户自定义主题上传。
+4. 分享链接接入短链服务（如 YOURLS），并支持有效期与访问统计。
+5. 罗盘支持远程主题市场与用户自定义主题上传。
+
+> 底图下载 / 瓦片纠偏的演进请在开源仓 `tile-proxy` 跟踪，不在本仓。

@@ -74,45 +74,7 @@ backend/
 │   └── runtime.py                                 # L2 运行时覆盖（Admin 面板 + system_config，绝密项禁止 DB 覆盖）
 │
 ├── data/                                          # 运行时数据目录
-│   ├── webgis_auth.db                             # SQLite 认证库（HF 网络挂载默认 DELETE journal）
-│   └── gcj_rectify_cache/                         # GCJ-02 纠偏瓦片缓存（运行时生成，大量 PNG）
-│
-├── domains/                                       # 业务域聚合（对齐前端 domains/：一域收拢路由 + 服务 + 底座库）
-│   ├── __init__.py
-│   └── tiles/                                     # 瓦片域：纠偏/直通代理路由 + 底图下载 + 纠偏底座库
-│       ├── __init__.py                            # 轻量包入口：PEP 562 惰性导出 tiles_router / cache_cleanup_*
-│       ├── _router.py                             # tiles_router 构建（纠偏→通配）+ build_http_client
-│       ├── cache_cleanup.py                       # GCJRE_CACHE 磁盘缓存按龄+按容量清理 + lifespan 周期 loop
-│       ├── proxy_shared.py                        # 瓦片代理通用infra：内存缓存/限流/出站客户端/SSRF/请求头/PROXY_* 配置
-│       ├── routes_rectify.py                      # 纠偏路由：/proxy/gcj2wgs、wgs2gcj、bd2wgs、wgs2bd
-│       ├── routes_passthrough.py                  # 直通路由：/tiles/ships66/*、/proxy/{target_url:path} 通配（后挂载）
-│       ├── infra/                                 # 瓦片出站面依赖（迁移独立服务整包带走）
-│       │   ├── __init__.py
-│       │   ├── net_guard.py                       # SSRF 护栏实现（core/net_guard 为兼容 re-export）
-│       │   └── http_headers.py                    # 浏览器出站头实现（core/http_headers 为兼容 re-export）
-│       ├── download/                              # 在线底图下载（由 download_xyz/ 整体搬入）
-│       │   ├── __init__.py
-│       │   ├── download.py                        # 下载逻辑（/api/download）
-│       │   ├── download_task.py                   # 下载任务
-│       │   ├── task_scheduler.py                  # 任务调度器
-│       │   └── tile_engine.py                     # 瓦片引擎
-│       └── rectify/                               # 纠偏底座库：GCJ-02 / BD-09 ↔ WGS84
-│           ├── __init__.py                        # 库统一出口（纠偏函数/URL 模板/坐标转换/get_cache_dir）
-│           ├── common/                            # 共用原语（依赖铁律：bd → common ← gcj）
-│           │   ├── __init__.py
-│           │   ├── transform.py                   # 纯坐标数学：wgs2gcj/gcj2wgs/gcj2bd/bd2gcj/wgs2bd/bd2wgs
-│           │   ├── url_template.py                # 瓦片 URL 模板解析/重建（与坐标系无关）
-│           │   ├── fetch.py                       # 上游瓦片拉取（并发/重试/浏览器头/Referer 白名单）
-│           │   ├── geo.py                         # slippy 网格数学 + 全局像素 + 瓦片缓存目录（默认 data/gcj_rectify_cache）
-│           │   ├── grid.py                        # 网格拉取/拼接/文件缓存/字节与网格数护栏
-│           │   └── quad.py                        # 精确四角 QUAD 重采样（几何无缝原语，调用方显式传核）
-│           ├── gcj/                               # GCJ-02 同网格纠偏（BILINEAR，1:1 保锐度）
-│           │   ├── __init__.py
-│           │   └── rectify.py                     # get_gcj2wgs/wgs2gcj 编排 + _GCJ_RESAMPLE（一行可切 NEAREST）
-│           └── bd/                                # 百度 BD-09 跨网格纠偏（BICUBIC，约 306→256 降采样）
-│               ├── __init__.py
-│               ├── mercator.py                    # 百度官方 LL2MC/MC2LL 分段多项式投影 + BD 瓦片网格数学（Y 轴向上、res=2^(18-z)）
-│               └── rectify.py                     # BD 网格 ↔ 标准 XYZ 精确四角 QUAD 纠偏
+│   └── webgis_auth.db                             # SQLite 认证库（HF 网络挂载默认 DELETE journal）
 │
 ├── services/                                      # 共享业务服务
 │   ├── __init__.py
@@ -122,8 +84,7 @@ backend/
 ├── scripts/                                       # 运维/辅助脚本
 │   ├── fetch_wayback_layers.py                    # ESRI Wayback 目录拉取 CLI（--json/--code/--urls/--pure-urls）
 │   ├── fetch_wayback_layers.js                    # 同上（Node.js 版）
-│   ├── check_app_import.py                        # 全量 import app 门禁（缺三方桩化、第一方缺失 loud 失败 + 路由表断言；目录搬迁强制项）
-│   └── test_tiles_import_order.py                 # 瓦片域导入顺序烟雾：core shim → tiles 包 → infra（防循环导入）
+│   └── check_app_import.py                        # 全量 import app 门禁 + 路由断言（禁止 /proxy|/tiles 中转）
 │
 ├── tests/                                         # 单元测试（按域分组；子目录无 __init__，各文件自插 backend 到 sys.path）
 │   ├── test_agent_map_context.py                  # AgentMapContextV1 Schema 与 prompt 格式测试
@@ -131,17 +92,16 @@ backend/
 │   ├── test_historical_imagery.py                 # 历史影像 _normalize_entries 排序/去重/XYZ URL 生成测试
 │   ├── test_webhook_helpers.py                    # HF Webhook 密钥头 / Space id 信任边界 / stage 提取单元测试
 │   ├── test_realtime_stats.py                     # SSE 主信号/普通鉴权活跃/显式兜底心跳回归测试
-│   ├── test_sqlite_recovery.py                    # SQL 清理、维护事件、恢复成功/失败与激活回滚测试
-│   └── tiles/                                     # 瓦片域测试
-│       ├── test_tiles_router.py                   # tiles_router 聚合回归：6 路由齐全 + 纠偏先于通配
-│       ├── test_cache_cleanup.py                  # 磁盘缓存清理：按龄/按容量/剪空目录/符号链接安全
-│       └── test_url_template.py                   # 瓦片 URL 模板解析/重建测试（通用 token 扫描 + 三常规模式回归）
+│   └── test_sqlite_recovery.py                    # SQL 清理、维护事件、恢复成功/失败与激活回滚测试
 │
-└── core/                                          # 横切基础能力（由 utils/ 原样下沉；config/ 暂留顶层，见重构方案）
+└── core/                                          # 横切基础能力
     ├── __init__.py                                # 包初始化
-    ├── http_headers.py                            # 兼容 re-export → domains.tiles.infra.http_headers
-    ├── net_guard.py                               # 兼容 re-export → domains.tiles.infra.net_guard（agent 等非瓦片面）
+    ├── coord_transform.py                         # GCJ/BD 坐标纯数学（无 IO；供 location 展示）
+    ├── net_guard.py                               # SSRF 主机判定（agent override_base_url；非公开代理）
     ├── sqlite_maintenance.py                      # database_maintenance_events 表与恢复 JSON manifest 同步
     ├── sqlite_recovery.py                         # 时间戳损坏备份、临时重建、校验、staging 激活、回滚与空库降级
     └── time_utils.py                              # 北京时间工具 + 整点报时后台任务
 ```
+
+> **`backend/domains/` 已删除**：瓦片纠偏/代理不在本仓库。开源实现见独立仓 `tile-proxy`；线上入口 `https://vpn.negiao.cn/proxy/*`。业务说明见 [`Docs/Architecture/tile-rectify-system.md`](../Architecture/tile-rectify-system.md)。HF Space 禁止任何第三方内容中转路由。
+

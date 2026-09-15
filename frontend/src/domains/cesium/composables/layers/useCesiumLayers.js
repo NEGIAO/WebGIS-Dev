@@ -18,6 +18,7 @@ import {
     composeIdentifyHeading,
 } from '@common/basemap/identifyPresentation';
 import { setCapabilitiesProxyBuilder } from '@common/basemap/capabilitiesProxy';
+import { tileProxyUrl } from '@/config/publicRuntime';
 import { applyCesiumIonToken } from '../core/cesiumRuntime';
 import {
     readStoredBoolean,
@@ -314,13 +315,10 @@ export function useCesiumLayers({
     cesiumIonToken,
     dataImport,
 }) {
-    // 能力文档代理兜底：内网自签/CORS 服务直连失败时经后端 /proxy 重试（与 OL 引擎同语义）。
+    // 能力文档代理兜底：内网自签/CORS 服务直连失败时经 VPS /proxy 重试（与 OL 引擎同语义）。
     // 按 owner 注册：3D 容器卸载时注销 'cesium' 键，自动回落常驻 OL 构造器
     setCapabilitiesProxyBuilder(
-        (url) =>
-            backendBaseUrl
-                ? `${String(backendBaseUrl).replace(/\/+$/, '')}/proxy/${url}`
-                : null,
+        (url) => (url ? tileProxyUrl(url) : null),
         'cesium',
     );
     let tdtBoundaryLayer = null;
@@ -683,7 +681,7 @@ export function useCesiumLayers({
         const Cesium = getCesium?.();
         return [
             new Cesium.UrlTemplateImageryProvider({
-                url: `${backendBaseUrl}/proxy/mt{s}.google.com/vt?lyrs=s&x={x}&y={y}&z={z}`,
+                url: tileProxyUrl('mt{s}.google.com/vt?lyrs=s&x={x}&y={y}&z={z}'),
                 subdomains: ['0', '1', '2', '3'],
                 tilingScheme: new Cesium.WebMercatorTilingScheme(),
                 maximumLevel: 20,

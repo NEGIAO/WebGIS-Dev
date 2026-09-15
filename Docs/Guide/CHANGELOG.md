@@ -6,6 +6,15 @@
 
 ## 版本记录
 
+### V3.6.5 (2026-09-15) — 瓦片纠偏迁出本仓（HF 合规 + 开源独立）
+
+> **HF 政策**：Space 禁止第三方内容中转。本仓删除 `backend/domains/**`、`api/external_proxy.py`、瓦片测试/脚本与 `core/http_headers.py`。
+> **保留**：`core/coord_transform.py`（纯坐标）、`core/net_guard.py`（agent SSRF，非公开代理）。
+> **迁出位置**：开源仓 `tile-proxy`；线上 `https://vpn.negiao.cn/proxy/*`（VPS `vpn.negiao.cn` → `src/backend/tile-proxy/`）。
+> 前端 `VITE_TILE_PROXY_BASE_URL=https://vpn.negiao.cn`；`VITE_BACKEND_URL` 仍为 HF Space。
+> 架构说明：[`tile-rectify-system.md`](../Architecture/tile-rectify-system.md)
+> 日志：[`2026-09-15-tile-proxy-vps-migration.md`](../LLM_record/26-09/2026-09-15/2026-09-15-tile-proxy-vps-migration.md)
+
 ### V3.6.4 (2026-09-12) — 瓦片域高聚合 + 磁盘缓存自动清理
 
 > SSRF 护栏与出站头实现迁入 `domains/tiles/infra/`；`core/net_guard`、`core/http_headers` 改为兼容 re-export。

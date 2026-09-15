@@ -67,7 +67,8 @@ npm run build:analyze
 
 ```env
 VITE_BACKEND_URL=http://localhost:7860
-VITE_TILE_PROXY_BASE_URL=http://localhost:7860
+# 本地后端已无 /proxy；瓦片代理走 VPS
+VITE_TILE_PROXY_BASE_URL=https://vpn.negiao.cn
 VITE_TILE_PROXY_MODE=fallback
 VITE_BASE_URL=./
 VITE_BACKEND_REQUEST_TIMEOUT_MS=20000

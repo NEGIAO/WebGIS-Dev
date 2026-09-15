@@ -291,7 +291,7 @@ import {
 } from 'vue';
 import { getRuntimeMapTokensSync, loadRuntimeMapTokens } from '@common/services/runtimeMapTokens';
 import { useLocale } from '@common/app/useLocale';
-import { BACKEND_BASE_URL } from '@/config/publicRuntime';
+import { BACKEND_BASE_URL, tileProxyUrl } from '@/config/publicRuntime';
 
 // Load non-default tabs on first use; keep them mounted afterward to preserve state.
 const ChatPanelContent = defineAsyncComponent(() =>
@@ -522,7 +522,7 @@ async function fetchNews(platform) {
     try {
         // 先尝试直连，失败（网络错误或 HTTP 非 ok）则走后端代理
         const url = `${NEWS_DIRECT_URL}?platform=${platform}`;
-        const proxyUrl = `${BACKEND_BASE_URL}/proxy/${NEWS_API_TARGET}?platform=${platform}`;
+        const proxyUrl = `${tileProxyUrl(NEWS_API_TARGET)}?platform=${platform}`;
         const directController = new AbortController();
         const directTimeoutId = setTimeout(() => directController.abort(), 8000);
         let resp;

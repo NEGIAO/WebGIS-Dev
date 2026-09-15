@@ -37,7 +37,8 @@ COPY README.md /src/README.md
 #    nginx 无需任何改写、原样透传（ARG 可覆写）
 COPY deploy/.env /src/deploy/.env
 ARG DOCKER_VITE_BACKEND_URL=/
-ARG DOCKER_VITE_TILE_PROXY_BASE_URL=/
+# 瓦片代理已迁 VPS；HF/Docker 构建默认直指 vpn.negiao.cn，勿再指 Space
+ARG DOCKER_VITE_TILE_PROXY_BASE_URL=https://vpn.negiao.cn
 RUN sed -i "s|^VITE_BACKEND_URL=.*|VITE_BACKEND_URL=${DOCKER_VITE_BACKEND_URL}|" /src/deploy/.env \
  && sed -i "s|^VITE_TILE_PROXY_BASE_URL=.*|VITE_TILE_PROXY_BASE_URL=${DOCKER_VITE_TILE_PROXY_BASE_URL}|" /src/deploy/.env \
  && npm run build

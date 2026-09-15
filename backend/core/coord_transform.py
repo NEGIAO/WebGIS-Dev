@@ -1,8 +1,9 @@
 # -*- coding: utf-8 -*-
 """
-GCJ-02 坐标转换模块
+GCJ-02 坐标转换（纯数学，无网络 IO）。
 
-基于国测局偏移算法实现 WGS84/GCJ-02/BD-09 坐标系之间的转换。
+自 tile-proxy 开源仓同源算法保留：WGS84/GCJ-02/BD-09 互转。
+本文件不属于任何代理面；HF Space 仅用 wgs2gcj 做展示坐标。
 
 原始算法来源：QGIS OffsetWGS84Core 插件 (C) 2017 sshuair
 许可证：GNU General Public License v2+

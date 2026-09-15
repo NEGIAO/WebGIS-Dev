@@ -2,7 +2,8 @@
 # -*- coding: utf-8 -*-
 """全量 import app 门禁（目录搬迁强制项）。
 
-背景（此前 P0）：瓦片域收拢时只验证了 tiles 路由子集，漏改的
+背景：HF 合规要求 Space 无第三方内容中转。本脚本 import 全量 app 并断言
+禁止出现 /proxy/*、/tiles/*、/api/download 等路由。
 `api/location.py` 旧 import 直到 Docker 启动才爆炸。本脚本保证：
 任何包移动/改名后，`import app` 在**缺三方依赖的环境也能完整执行**
 （三方缺件自动桩，第一方缺件则 loud 失败），并断言路由表不变量。
@@ -12,7 +13,7 @@
 
 退出码：0=通过；1=失败（第一方导入失败 / 路由缺失 / 顺序破坏）。
 只用标准库；桩名单覆盖 Docker 实有依赖（uv.lock），缺一即补一，
-第一方包名（app/api/config/core/domains/services/tests/scripts）永不桩。
+第一方包名（app/api/config/core/services/tests/scripts）永不桩。
 """
 
 from __future__ import annotations
@@ -28,7 +29,7 @@ BACKEND_DIR = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(BACKEND_DIR))
 
 # 第一方顶层包：出现在 ModuleNotFoundError 里即直接失败，禁止桩化
-FIRST_PARTY = {"app", "api", "config", "core", "domains", "services", "tests", "scripts"}
+FIRST_PARTY = {"app", "api", "config", "core", "services", "tests", "scripts"}
 
 # 三方桩：模块名 -> 需要预置的类级属性（类定义期就会访问的名字）
 _STUB_ATTRS: dict[str, list[str]] = {
@@ -115,31 +116,31 @@ def import_app_with_stubs(max_rounds: int = 30):
     raise RuntimeError("桩迭代超限仍未导入成功，请人工检查")
 
 
-RECTIFY_PATHS = (
-    "/proxy/gcj2wgs/{target_url:path}",
-    "/proxy/wgs2gcj/{target_url:path}",
-    "/proxy/bd2wgs/{target_url:path}",
-    "/proxy/wgs2bd/{target_url:path}",
+# HF 合规：本应用不得出现任何瓦片/通用中转路由
+FORBIDDEN_PATH_PREFIXES = (
+    "/proxy/",
+    "/tiles/",
+    "/api/download",
 )
-UNIVERSAL_PATH = "/proxy/{target_url:path}"
-SHIPS_PATH = "/tiles/ships66/{z}/{x}/{y}.png"
 
 
 def check_routes(app_module) -> list[str]:
     """断言路由表不变量，返回错误列表（空=通过）。"""
     errors: list[str] = []
     paths = [getattr(route, "path", None) for route in app_module.app.routes]
-    for expected in (*RECTIFY_PATHS, UNIVERSAL_PATH, SHIPS_PATH):
-        if expected not in paths:
-            errors.append(f"路由缺失：{expected}")
-    if UNIVERSAL_PATH in paths:
-        universal_index = paths.index(UNIVERSAL_PATH)
-        for expected in RECTIFY_PATHS:
-            if expected in paths and paths.index(expected) > universal_index:
-                errors.append(f"顺序破坏：{expected} 排在通配 {UNIVERSAL_PATH} 之后")
-    if not any((p or "").startswith("/api/download") for p in paths):
-        errors.append("下载路由缺失：/api/download*")
-    if len(paths) < 50:
+    for p in paths:
+        if not p:
+            continue
+        for bad in FORBIDDEN_PATH_PREFIXES:
+            if p == bad.rstrip("/") or p.startswith(bad):
+                errors.append(f"HF 合规：禁止路由仍存在 {p}")
+    # 认证等核心路由必须在
+    for expected in ("/api/auth/login", "/api/config/public"):
+        if not any((p or "") == expected or (p or "").startswith(expected) for p in paths):
+            # 允许实际路径带参数后缀，宽松匹配前缀
+            if not any((p or "").startswith(expected.rsplit("/", 1)[0]) for p in paths):
+                errors.append(f"核心路由疑似缺失：{expected}")
+    if len(paths) < 30:
         errors.append(f"路由总数异常偏少：{len(paths)}")
     return errors
 
@@ -160,7 +161,7 @@ def main() -> int:
             print(f"  - {err}")
         return 1
     n_routes = len(list(app_module.app.routes))
-    print(f"[OK] 路由断言通过（共 {n_routes} 条，纠偏先于通配，下载已挂载）")
+    print(f"[OK] 路由断言通过（共 {n_routes} 条，无 /proxy|/tiles 中转）")
     return 0
 
 

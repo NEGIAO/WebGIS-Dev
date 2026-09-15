@@ -168,13 +168,13 @@ tiles.negiao.cc.cd"]
 | **瓦片存储** | 1 个域名 | Cloudflare R2 对象存储的 XYZ 自定义瓦片服务 |
 
 **前后端通信**：
-- 前端通过 `VITE_BACKEND_URL`（构建期注入）调用后端 API
-- 自定义瓦片通过 `VITE_TILE_PROXY_BASE_URL` 走后端代理（fallback 模式：直连失败才代理）
-- 详见 [frontend/src/config/publicRuntime.ts](../../frontend/src/config/publicRuntime.ts)
+- 前端通过 `VITE_BACKEND_URL`（构建期注入）调用后端 API（Hugging Face Space）——**仅业务 API，无瓦片中转**
+- 瓦片纠偏/直通通过 `VITE_TILE_PROXY_BASE_URL` 访问 **VPS** `https://vpn.negiao.cn/proxy/*`（实现见独立仓 `tile-proxy`；架构说明 [tile-rectify-system.md](tile-rectify-system.md)）
+- 前端拼接入口：[frontend/src/config/publicRuntime.ts](../../frontend/src/config/publicRuntime.ts)
 
 ### 第五层：用户层
 
-无论用户通过哪个域名访问，最终都到达同一个前端 → 同一个后端 → 同一个瓦片库。
+无论用户通过哪个域名访问，最终都到达同一个前端；业务 API 在 HF Space，瓦片中转在 VPS `vpn.negiao.cn`。
 
 ---
 
@@ -239,8 +239,8 @@ tiles.negiao.cc.cd"]
                             │
                             └── 瓦片请求 ──────────► tiles.negiao.cc.cd（Cloudflare R2）
                                                       │
-                                                      └── 后端代理（fallback 模式）
-                                                      negiao-webgis.hf.space/proxy/*
+                                                      └── 纠偏/直通代理（fallback）
+                                                      vpn.negiao.cn/proxy/*（VPS，非 HF）
 ```
 
 ---

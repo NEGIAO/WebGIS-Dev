@@ -55,7 +55,7 @@ def _normalize_model(value: str) -> str:
 
 # --- override_base_url 安全护栏（方案文档：Docs/TODO/agent-override-key-leak-plan.md） ---
 # V3.4.64（P1-4 SSRF S1）：IP 字面量归一与内网判定迁入 core/net_guard.py 单点共用，
-# 瓦片域（直通/纠偏/下载）三处出站面共享同一判定；下列别名保留原函数名不改调用点与语义。
+# SSRF 主机判定（agent override_base_url）；本仓无公开 /proxy 中转
 
 _LOCAL_HOSTNAMES = LOCAL_HOSTNAMES
 _LOCAL_HOST_SUFFIXES = LOCAL_HOST_SUFFIXES
