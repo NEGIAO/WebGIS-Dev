@@ -80,10 +80,16 @@ backend/
 ├── domains/                                       # 业务域聚合（对齐前端 domains/：一域收拢路由 + 服务 + 底座库）
 │   ├── __init__.py
 │   └── tiles/                                     # 瓦片域：纠偏/直通代理路由 + 底图下载 + 纠偏底座库
-│       ├── __init__.py                            # tiles_router 聚合（纠偏先于通配挂载）+ build_http_client
+│       ├── __init__.py                            # 轻量包入口：PEP 562 惰性导出 tiles_router / cache_cleanup_*
+│       ├── _router.py                             # tiles_router 构建（纠偏→通配）+ build_http_client
+│       ├── cache_cleanup.py                       # GCJRE_CACHE 磁盘缓存按龄+按容量清理 + lifespan 周期 loop
 │       ├── proxy_shared.py                        # 瓦片代理通用infra：内存缓存/限流/出站客户端/SSRF/请求头/PROXY_* 配置
 │       ├── routes_rectify.py                      # 纠偏路由：/proxy/gcj2wgs、wgs2gcj、bd2wgs、wgs2bd
 │       ├── routes_passthrough.py                  # 直通路由：/tiles/ships66/*、/proxy/{target_url:path} 通配（后挂载）
+│       ├── infra/                                 # 瓦片出站面依赖（迁移独立服务整包带走）
+│       │   ├── __init__.py
+│       │   ├── net_guard.py                       # SSRF 护栏实现（core/net_guard 为兼容 re-export）
+│       │   └── http_headers.py                    # 浏览器出站头实现（core/http_headers 为兼容 re-export）
 │       ├── download/                              # 在线底图下载（由 download_xyz/ 整体搬入）
 │       │   ├── __init__.py
 │       │   ├── download.py                        # 下载逻辑（/api/download）
@@ -116,7 +122,8 @@ backend/
 ├── scripts/                                       # 运维/辅助脚本
 │   ├── fetch_wayback_layers.py                    # ESRI Wayback 目录拉取 CLI（--json/--code/--urls/--pure-urls）
 │   ├── fetch_wayback_layers.js                    # 同上（Node.js 版）
-│   └── check_app_import.py                        # 全量 import app 门禁（缺三方桩化、第一方缺失 loud 失败 + 路由表断言；目录搬迁强制项）
+│   ├── check_app_import.py                        # 全量 import app 门禁（缺三方桩化、第一方缺失 loud 失败 + 路由表断言；目录搬迁强制项）
+│   └── test_tiles_import_order.py                 # 瓦片域导入顺序烟雾：core shim → tiles 包 → infra（防循环导入）
 │
 ├── tests/                                         # 单元测试（按域分组；子目录无 __init__，各文件自插 backend 到 sys.path）
 │   ├── test_agent_map_context.py                  # AgentMapContextV1 Schema 与 prompt 格式测试
@@ -127,12 +134,13 @@ backend/
 │   ├── test_sqlite_recovery.py                    # SQL 清理、维护事件、恢复成功/失败与激活回滚测试
 │   └── tiles/                                     # 瓦片域测试
 │       ├── test_tiles_router.py                   # tiles_router 聚合回归：6 路由齐全 + 纠偏先于通配
+│       ├── test_cache_cleanup.py                  # 磁盘缓存清理：按龄/按容量/剪空目录/符号链接安全
 │       └── test_url_template.py                   # 瓦片 URL 模板解析/重建测试（通用 token 扫描 + 三常规模式回归）
 │
 └── core/                                          # 横切基础能力（由 utils/ 原样下沉；config/ 暂留顶层，见重构方案）
     ├── __init__.py                                # 包初始化
-    ├── http_headers.py                            # 出站浏览器特征头共享单点（UA 常量 + Referer 域名白名单），瓦片域三面（下载/纠偏/直通）共用
-    ├── net_guard.py                               # 出站 SSRF 护栏单点（IP 字面量归一/私网判定/DNS 复判/host 白名单），tiles+agent+download 三面共用
+    ├── http_headers.py                            # 兼容 re-export → domains.tiles.infra.http_headers
+    ├── net_guard.py                               # 兼容 re-export → domains.tiles.infra.net_guard（agent 等非瓦片面）
     ├── sqlite_maintenance.py                      # database_maintenance_events 表与恢复 JSON manifest 同步
     ├── sqlite_recovery.py                         # 时间戳损坏备份、临时重建、校验、staging 激活、回滚与空库降级
     └── time_utils.py                              # 北京时间工具 + 整点报时后台任务

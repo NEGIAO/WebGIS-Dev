@@ -26,7 +26,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
 from starlette.background import BackgroundTasks
-from domains.tiles import tiles_router as proxy_router, build_http_client
+from domains.tiles import tiles_router as proxy_router, build_http_client, cache_cleanup_loop
 from domains.tiles.download.download import router as download_router
 from api.external_proxy import router as external_proxy_router
 from api.statistics import router as statistics_router
@@ -174,6 +174,9 @@ async def lifespan(app: FastAPI):
     app.state.http_client = build_http_client()
     logger.info("HTTP 客户端初始化完成")
 
+    # 纠偏磁盘缓存周期清理（按龄 + 按容量；间隔 0 则任务内直接退出）
+    app.state.gcjre_cache_cleanup = asyncio.create_task(cache_cleanup_loop())
+
     # 启动整点报时后台任务（记录启动时间，报时时展示已运行时长）
     _startup_time = datetime.now().astimezone()
     app.state.hourly_chime = asyncio.create_task(hourly_chime_task(startup_time=_startup_time))
@@ -195,6 +198,16 @@ async def lifespan(app: FastAPI):
     yield
     # ---- Shutdown ----
     logger.info("WebGIS Backend 关闭...")
+    # 取消纠偏磁盘缓存清理任务
+    cleanup_task = getattr(app.state, "gcjre_cache_cleanup", None)
+    if cleanup_task is not None:
+        cleanup_task.cancel()
+        try:
+            await cleanup_task
+        except asyncio.CancelledError:
+            pass
+        logger.info("纠偏磁盘缓存清理任务已停止")
+
     # 取消整点报时任务
     chime_task = getattr(app.state, "hourly_chime", None)
     if chime_task is not None:

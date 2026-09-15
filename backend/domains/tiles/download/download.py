@@ -28,7 +28,7 @@ from api.auth.quota import (
 )
 from api.auth.system_config import _get_system_config_value_sync
 from config import get_bool, get_int, get_str
-from core.net_guard import is_disallowed_host
+from ..infra.net_guard import is_disallowed_host
 from .download_task import DownloadTask, create_task, get_task, update_task, list_active_tasks_by_user
 from .tile_engine import MAX_CONCURRENCY, MAX_LATITUDE, WEB_MERCATOR_EXTENT, bbox4326_to_tile_range, build_geotiff_from_tiles, clip_geotiff_to_bbox, resolution_to_zoom
 

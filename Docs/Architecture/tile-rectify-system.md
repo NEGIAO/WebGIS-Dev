@@ -56,6 +56,7 @@ flowchart TD
 | `bd/mercator.py` | 百度官方 BD09MC 分段多项式投影 + BD 网格数学 |
 | `bd/rectify.py` | BD↔WGS 编排（跨网格，BICUBIC），z±1 分辨率对齐 |
 | `routes_rectify.py` | 4 条 FastAPI 路由 + 错误码映射（400/504/502） |
+| `domains/tiles/cache_cleanup.py` | GCJRE_CACHE 磁盘缓存按龄+按容量清理 + lifespan 周期 loop |
 
 ## 3. 坐标数学层
 
@@ -142,9 +143,14 @@ flowchart TD
 | `GCJRE_TILE_MAX_MB` | 8 | `grid`：单片字节上限（→400） |
 | `GCJRE_MAX_IMAGE_PIXELS` | 16M | `grid`：解码像素硬上限（→400） |
 | `GCJRE_MAX_TILES_PER_REQUEST` | 64 | `grid`：单请求网格片数上限（→400） |
+| `GCJRE_CACHE_MAX_AGE_DAYS` | 7 | `cache_cleanup`：磁盘缓存最大保留天数（mtime）；0=关 |
+| `GCJRE_CACHE_MAX_MB` | 2048 | `cache_cleanup`：磁盘容量上限，超限从最旧删；0=关 |
+| `GCJRE_CACHE_CLEANUP_INTERVAL_S` | 3600 | `cache_cleanup`：后台周期清理间隔；0=关 |
 | `PROXY_TILE_CACHE_TTL_SECONDS` | 300（10–3600） | 内存瓦片缓存 TTL |
 | `PROXY_TILE_CACHE_MAX_SIZE` | 100000 | 内存瓦片缓存条目上限 |
 | `PROXY_RATE_LIMIT` | 0（关闭） | 每 IP 限流 |
+
+磁盘缓存清理（`domains/tiles/cache_cleanup.py`）：lifespan 周期跑「先按龄删过期 → 再按容量删最旧 → 剪空目录」；只动 `GCJRE_CACHE` 真实子路径下的普通文件。两维都设 0 则空跑。
 
 ## 8. 已知约束与维护忠告
 

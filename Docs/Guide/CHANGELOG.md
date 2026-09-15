@@ -6,6 +6,13 @@
 
 ## 版本记录
 
+### V3.6.4 (2026-09-12) — 瓦片域高聚合 + 磁盘缓存自动清理
+
+> SSRF 护栏与出站头实现迁入 `domains/tiles/infra/`；`core/net_guard`、`core/http_headers` 改为兼容 re-export。
+> 新增 `GCJRE_CACHE` 按龄（7 天）+ 按容量（2GB）周期清理（默认每小时；`GCJRE_CACHE_*` 三维可关）。
+> `/proxy/*`、`/tiles/*`、下载接口 URL 与行为不变。迁移说明见 `domains/tiles/__init__.py`。
+> 日志：[`2026-09-12-tiles-domain-cohesion.md`](../LLM_record/26-09/2026-09-12/2026-09-12-tiles-domain-cohesion.md)
+
 ### V3.6.3 (2026-09-12) — 远程 GLB 数据源契约 + TOC 规范 + 瓦片 429 提醒
 
 > **统一本批变更**（远程 GLB / TOC 契约审计 / 限流 toast / Worker 已迁出说明 / Force_command 数据源注册前置）。

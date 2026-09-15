@@ -4,7 +4,7 @@ from typing import Optional
 import httpx
 from httpx import AsyncClient
 
-from core.http_headers import BROWSER_USER_AGENT, build_browser_headers_no_br, referer_headers_for
+from ...infra.http_headers import BROWSER_USER_AGENT, build_browser_headers_no_br, referer_headers_for
 
 logger = logging.getLogger(__name__)
 

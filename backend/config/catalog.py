@@ -223,6 +223,24 @@ CONFIG_CATALOG: Dict[str, ConfigMeta] = {
         "description": "下载任务库路径",
     },
     "GCJRE_CACHE": {"layer": "L1", "default": "", "secret": False, "description": "纠偏缓存"},
+    "GCJRE_CACHE_MAX_AGE_DAYS": {
+        "layer": "L1",
+        "default": 7,
+        "secret": False,
+        "description": "纠偏磁盘缓存最大保留天数（mtime）；0=不按龄清理",
+    },
+    "GCJRE_CACHE_MAX_MB": {
+        "layer": "L1",
+        "default": 2048,
+        "secret": False,
+        "description": "纠偏磁盘缓存容量上限（MB），超限从最旧文件开始删；0=不按容量清理",
+    },
+    "GCJRE_CACHE_CLEANUP_INTERVAL_S": {
+        "layer": "L1",
+        "default": 3600,
+        "secret": False,
+        "description": "纠偏磁盘缓存周期清理间隔（秒）；0=关闭后台清理",
+    },
     "WEBGIS_LOG_STREAM_MODE": {
         "layer": "L1",
         "default": "auto",

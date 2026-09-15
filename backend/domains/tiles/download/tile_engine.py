@@ -13,7 +13,7 @@ from rasterio.io import MemoryFile
 from rasterio.transform import Affine
 from rasterio.windows import Window
 
-from core.http_headers import (
+from ..infra.http_headers import (
     BROWSER_USER_AGENT,
     build_browser_headers_no_br,
     referer_headers_for,

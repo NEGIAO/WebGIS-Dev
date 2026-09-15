@@ -16,8 +16,8 @@ import httpx
 from fastapi import HTTPException, Request
 
 from config import get_bool, get_int, get_str, get_effective_int
-from core.http_headers import build_browser_headers, build_sec_ch_ua, referer_headers_for
-from core.net_guard import (
+from .infra.http_headers import build_browser_headers, build_sec_ch_ua, referer_headers_for
+from .infra.net_guard import (
     host_matches_allowlist,
     is_disallowed_host,
     parse_host_allowlist,
