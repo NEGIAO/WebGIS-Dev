@@ -32,12 +32,11 @@ logger = logging.getLogger(__name__)
 # ==================== 活跃追踪辅助 ====================
 
 def _mark_active_safe(session: Dict[str, Any]) -> None:
-    """安全地标记用户活跃（不阻塞认证流程）。"""
+    """安全地标记用户活跃（不阻塞认证流程）。使用稳定 presence_id 计数。"""
     try:
-        username = str(session.get("username") or "").strip()
-        if username:
-            from api.realtime_stats import mark_user_active
-            mark_user_active(username)
+        from api.realtime_stats import mark_presence_active
+
+        mark_presence_active(session)
     except Exception:
         pass
 
@@ -79,6 +78,13 @@ async def _build_temporary_guest_session_async(request: Request) -> Dict[str, An
     }
 
 
+def _has_auth_credential_header(request: Request) -> bool:
+    """请求是否显式携带了登录凭据头（Authorization / X-Auth-Token）。"""
+    if str(request.headers.get("Authorization") or "").strip():
+        return True
+    return bool(str(request.headers.get("X-Auth-Token") or "").strip())
+
+
 async def require_login(request: Request) -> Dict[str, Any]:
     token = _extract_token(request)
     if not token:
@@ -102,7 +108,10 @@ async def require_login(request: Request) -> Dict[str, Any]:
         )
 
     if session is None:
-        if _is_guest_allow_request(request):
+        # V3.6.6：前端现对登录态也恒发 X-Guest-Device-Id。若仅凭 device-id
+        # 放行，过期 token 会被静默降级为临时游客，而非 401 提示重新登录。
+        # 仅当「未携带任何登录凭据」时才允许游客兜底。
+        if not _has_auth_credential_header(request) and _is_guest_allow_request(request):
             session = await _build_temporary_guest_session_async(request)
             _mark_active_safe(session)
             return session

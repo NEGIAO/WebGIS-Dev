@@ -91,10 +91,14 @@ const daysSinceRegister = computed(() => {
     return Math.max(1, Math.ceil((Date.now() - registered.getTime()) / 86400000));
 });
 
-/** 在线用户数：优先显示心跳/SSE 实时口径（15s 窗口）；未推送（undefined/null）时回退 DB 5min 口径 */
+/** 在线用户数：优先实时 tracker 口径（含游客）；其次统一 online_users；最后 DB 会话数 */
 const displayOnlineUsers = computed(() => {
-    const v = props.realtimeStats?.realtime_online_users;
-    return v === null || v === undefined ? (props.realtimeStats?.online_users || 0) : v;
+    const rt = props.realtimeStats || {};
+    const realtime = rt.realtime_online_users;
+    if (realtime !== null && realtime !== undefined) return realtime;
+    const unified = rt.online_users;
+    if (unified !== null && unified !== undefined) return unified;
+    return rt.online_users_db || 0;
 });
 
 /** 相对时间：刚刚/x 分钟前/x 小时前/昨天/日期 */

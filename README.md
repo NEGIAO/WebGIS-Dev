@@ -81,7 +81,7 @@
 
 ## 🎯 项目简介
 
-**NEGIAO's WebGIS** 是一个功能完整、架构清晰的前后端分离 WebGIS 平台（当前版本 V3.6.5），前端托管于 GitHub Pages（正式域名 webgis.negiao.cn），后端以 Docker 部署在 Hugging Face Spaces，通过 RESTful API 通信，支持独立扩展。
+**NEGIAO's WebGIS** 是一个功能完整、架构清晰的前后端分离 WebGIS 平台（当前版本 V3.6.6），前端托管于 GitHub Pages（正式域名 webgis.negiao.cn），后端以 Docker 部署在 Hugging Face Spaces，通过 RESTful API 通信，支持独立扩展。
 
 > 📚 本 README 仅保留核心概览与导航。完整文档已模块化至 [`Docs/Guide/`](Docs/Guide/)，详见下方「文档导航」。
 >
@@ -155,6 +155,8 @@
 > `LocalDev.bat` 为纯 ASCII 编码，兼容 GBK/UTF-8 系统；中文彩色输出由同目录 `Write-Color.ps1` 提供。
 
 **访问地址**：前端 http://localhost:5173 · 后端 API 文档 http://localhost:7860/docs
+
+> **本地开发默认管理员**：账号 `admin`，密码 `123456`。仅在 `SUPER_USER` 未配置且 `APP_ENV` 为 `development`/`dev`/`local`/`test` 时生效（`load.py` → `get_admin_password()`）；生产环境必须通过 HF Secrets 配置 `SUPER_USER`，否则管理员登录直接禁用。
 
 ### 手动启动（高级用户）
 
@@ -394,9 +396,9 @@ tiles.negiao.cc.cd"]
 
 | 版本 | 日期 | 概要 |
 |------|------|------|
+| **V3.6.6** | 2026-09-18 | **在线 presence + external_proxy 恢复 + OL 标注夹心**：tracker 稳定 `presence_id` 修「恒 2 人在线」；恢复 V3.6.5 误删的 `/api/proxy` JSON 代理；托管矢量层 geometry/label 双层（数据几何 < 瓦片标注 < 数据标注）；底图下载 404 注释与 tag 标记文档。详见[完整更新日志](Docs/Guide/CHANGELOG.md) |
 | **V3.6.5** | 2026-09-15 | **瓦片纠偏迁出本仓**：删 `domains/tiles` 与 external_proxy；开源仓 `tile-proxy` + 线上 `https://vpn.negiao.cn/proxy/*`；前端 `TILE_PROXY` 指 VPS。详见[完整更新日志](Docs/Guide/CHANGELOG.md) |
 | **V3.6.4** | 2026-09-12 | **瓦片域高聚合 + 磁盘缓存清理**：SSRF/出站头迁入 `domains/tiles/infra`；`GCJRE_CACHE` 按龄/按容量自动清理。接口不变。详见[完整更新日志](Docs/Guide/CHANGELOG.md) |
-| **V3.6.3** | 2026-09-12 | **远程 GLB 数据源契约 + TOC 规范**：GLB URL 入 TOC（显隐/透明度/定位/重定位/移除）；KMZ 透明度；瓦片 429 toast；Force_command 数据源注册前置。详见[完整更新日志](Docs/Guide/CHANGELOG.md) |
 
 更早版本（V3.6.2 及以前）请查阅 [完整更新日志 →](Docs/Guide/CHANGELOG.md)
 
@@ -420,6 +422,6 @@ tiles.negiao.cc.cd"]
 |:------:|:--------:|:--------:|
 | [GitHub](https://github.com/NEGIAO/WebGIS-Dev) | [webgis.negiao.cn](https://webgis.negiao.cn)（正式域名，GitHub Pages 托管） | [Hugging Face](https://NEGIAO-WebGIS.hf.space) |
 
-<sub>V3.6.5 · 完成 · 最后更新 2026-09-15</sub>
+<sub>V3.6.6 · 开发中 · 最后更新 2026-09-18</sub>
 
 </div>

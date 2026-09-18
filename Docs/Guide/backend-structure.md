@@ -18,11 +18,11 @@ backend/
 │   ├── admin.py                                   # 管理员相关接口
 │   ├── api_keys_management.py                     # API 主/备密钥管理 + L2 Agent/高德 Key 池 + 运行时地图 token 池下发
 │   ├── api_management.py                          # API 使用管理接口
-│   ├── external_proxy.py                          # 外部代理接口
+│   ├── external_proxy.py                          # 外部 JSON API 代理（高德/Nominatim/EPSG/IP）· V3.6.6 自 V3.6.5 删除后恢复挂载
 │   ├── location.py                                # 定位相关接口
 │   ├── monitor.py                                 # 日志监控接口
-│   ├── statistics.py                              # 访问统计接口
-│   ├── realtime_stats.py                          # 实时在线统计 SSE 推送（内存 tracker + SSE 连接计数 + 心跳兜底 + ticket 鉴权 + 定时/即时广播 + 快照缓存）
+│   ├── statistics.py                              # 访问统计接口（center/realtime 合并 tracker presence；online_users 统一实时口径）
+│   ├── realtime_stats.py                          # 实时在线统计 SSE（presence_id tracker + 连接 TTL + ticket + 广播 + presence ping/offline + admin online-debug）
 │   ├── historical_imagery.py                      # 历史影像公开目录接口（ESRI Wayback 只读缓存目录）
 │   ├── webhook.py                                 # Hugging Face Hub Webhook 接收 + Space 失败邮件告警
 │   ├── agent_chat/                                # AI 对话代理（模块化拆分）
@@ -48,7 +48,7 @@ backend/
 │   │   ├── schema.py                              # DDL、邮箱账号迁移与数据库维护事件同步
 │   │   ├── session.py                             # 会话管理、邮箱与受限绑定 session
 │   │   ├── system_config.py                       # 系统配置
-│   │   ├── user.py                                # 用户 CRUD + 旧 username 兼容键
+│   │   ├── user.py                                # 用户 CRUD + 游客名由 guest_uid 派生（防撞名）
 │   │   └── verification.py                        # 验证码生成/存储/校验/频率限制
 │   └── spatial/                                   # 空间分析 API（模块化拆分，统一 EPSG:3857）
 │       ├── __init__.py                            # 门面 re-export router
@@ -91,7 +91,7 @@ backend/
 │   ├── test_config_env_loading.py                 # 配置与环境变量加载测试
 │   ├── test_historical_imagery.py                 # 历史影像 _normalize_entries 排序/去重/XYZ URL 生成测试
 │   ├── test_webhook_helpers.py                    # HF Webhook 密钥头 / Space id 信任边界 / stage 提取单元测试
-│   ├── test_realtime_stats.py                     # SSE 主信号/普通鉴权活跃/显式兜底心跳回归测试
+│   ├── test_realtime_stats.py                     # presence_id / e: 不计入 / TTL 剔幽灵 / beacon / 游客名派生回归
 │   └── test_sqlite_recovery.py                    # SQL 清理、维护事件、恢复成功/失败与激活回滚测试
 │
 └── core/                                          # 横切基础能力

@@ -76,6 +76,9 @@ export function useUserLayerActions({
         if (!target) return;
         target.visible = !!visible;
         target.layer?.setVisible?.(target.visible);
+        if (target.labelLayer) {
+            target.labelLayer.setVisible?.(target.visible && !!target.labelVisible);
+        }
         emitUserLayersChange();
     }
 
@@ -85,6 +88,9 @@ export function useUserLayerActions({
         const val = Math.min(1, Math.max(0, Number(opacity)));
         target.opacity = Number.isFinite(val) ? val : 1;
         target.layer?.setOpacity?.(target.opacity);
+        if (target.labelLayer) {
+            target.labelLayer.setOpacity?.(target.opacity);
+        }
         emitUserLayersChange();
     }
 
@@ -107,10 +113,13 @@ export function useUserLayerActions({
         }
 
         const removed = userDataLayers[idx];
-        const layersToRemove = new Set([removed.layer, ...findMapLayersByManagedId(id)]);
+        const layersToRemove = new Set(
+            [removed.layer, removed.labelLayer, ...findMapLayersByManagedId(id)].filter(Boolean),
+        );
         removeDrawSourceFeatures(removed);
         layersToRemove.forEach((layer) => {
             if (!layer) return;
+            // 几何/标注共用 source：只清一次；clearLayerSource 内部应对二次调用安全
             clearLayerSource(layer);
             mapInstance.value.removeLayer(layer);
         });
@@ -140,6 +149,9 @@ export function useUserLayerActions({
         userDataLayers.forEach((item) => {
             item.visible = item.id === layerId;
             item.layer?.setVisible?.(item.visible);
+            if (item.labelLayer) {
+                item.labelLayer.setVisible?.(item.visible && !!item.labelVisible);
+            }
         });
         emitUserLayersChange();
     }
@@ -183,9 +195,19 @@ export function useUserLayerActions({
 
     function setUserLayerLabelVisibility({ layerId, visible }) {
         const target = findUserLayer(layerId);
-        if (!target || !target.autoLabel) return;
+        if (!target) return;
+        // 无 autoLabel 的图层也允许开关标注层显隐（用户数据导入默认 autoLabel=true）
         target.labelVisible = !!visible;
+        if (target.labelLayer) {
+            target.labelLayer.setVisible?.(!!target.visible && target.labelVisible);
+        }
         applyManagedLayerStyle(target);
+        // 重新钳制 zIndex：几何恒 < 瓦片标注 < 数据标注，避免开关标注后层级错乱
+        try {
+            refreshUserLayerZIndex?.();
+        } catch {
+            /* ignore */
+        }
         emitUserLayersChange();
     }
 

@@ -55,3 +55,10 @@ Space 不再提供瓦片中转；浏览器瓦片/能力文档请求打 `vpn.negi
 1. **同批清理（并入 V3.6.5）**：`backend/domains/` 整目录删除；`api/external_proxy.py` 删除；开源实现 `tile-proxy` + 线上 `https://vpn.negiao.cn/proxy/*`。前端 `/api/proxy/amap|nominatim` 将 404，需前端直连或自备 key。
 2. 前端需重新 build/Pages 发布后 `VITE_*` 才生效。
 3. 开源仓本地已初始化；是否推 GitHub 由用户决定。
+
+## 追加（V3.6.5 后回滚）
+
+- 用户反馈 `/api/proxy/amap/place/text` 404：`external_proxy` 被同批误删。
+- **已从 `1b731917^` 恢复** `backend/api/external_proxy.py` 并在 `app.py` 重新 `include_router`。
+- 路由前缀仍为 `/api/proxy`，与前端调用一致。
+- 说明：该模块为 JSON API 代理（高德/Nominatim/EPSG/IP），与已迁出的**瓦片**代理分离；是否继续跑在 HF Space 由用户部署决策（政策上同属「第三方中转」灰区）。

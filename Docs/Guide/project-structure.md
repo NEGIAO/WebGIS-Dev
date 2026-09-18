@@ -47,7 +47,7 @@ WebGIS_Dev/
 │   ├── Demo/                          # 前端静态 Demo 演示页面
 │   ├── Example_prompt.md
 │   ├── Force_command.md
-│   └── TODO/                          # 待办（含 bugfix-optimization-plan.md 修复优化规划）
+│   └── TODO/                          # 待办（含 bugfix-optimization-plan.md、plan-download-feature-git-marker.md）
 │
 ├── LocalDev.bat                       # Windows 一键启动脚本（容器化全栈：web+api 双服务）
 ├── Write-Color.ps1                    # LocalDev.bat 彩色输出辅助脚本
@@ -67,7 +67,8 @@ Docs/
 │   ├── 26-05/                         # 2026-05 日志
 │   ├── 26-06/                         # 2026-06 日志（含 06-28 / 06-29 等不规则命名子目录）
 │   ├── 26-07/                         # 2026-07 日志（按 YYYY-MM-DD 子目录归档，含 07-27 配置收敛、体积云画质/时间轴与大气修复、07-28 OAuth/云优化、Agent 地图命令总线重构）
-│   └── 26-08/                         # 2026-08 日志（含 08-01 底图 SSOT 重构、08-02 Review 修复、08-03 结构树同步）
+│   ├── 26-08/                         # 2026-08 日志（含 08-01 底图 SSOT 重构、08-02 Review 修复、08-03 结构树同步）
+│   └── 26-09/                         # 2026-09 日志（含 09-15 瓦片代理 VPS 迁移、09-18 在线 presence 身份修复）
 │
 ├── Architecture/                      # 架构设计文档
 │   ├── system-architecture.md         # 系统架构总览（五层分层架构：源码→CI/CD→部署→运行时→用户）

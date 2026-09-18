@@ -124,7 +124,9 @@ export function createManagedLayerStyleFeature({ styleTemplates, maxLabelLength 
 
         const preferredField = String(layerItem?.metadata?.labelField || '').trim();
         if (preferredField) {
-            const preferredValue = props[preferredField];
+            const preferredValue =
+                props[preferredField] ??
+                (typeof feature?.get === 'function' ? feature.get(preferredField) : undefined);
             if (
                 preferredValue !== null &&
                 preferredValue !== undefined &&
@@ -144,6 +146,9 @@ export function createManagedLayerStyleFeature({ styleTemplates, maxLabelLength 
             'TITLE',
             'label',
             'Label',
+            'labelText',
+            'text',
+            'address',
         ];
         for (const key of candidateKeys) {
             const value = props[key];
@@ -165,7 +170,7 @@ export function createManagedLayerStyleFeature({ styleTemplates, maxLabelLength 
             return String(firstUsableEntry[1]).trim();
         }
 
-        return getLayerLabelText(layerItem);
+        return '';
     };
 
     /**
@@ -190,6 +195,67 @@ export function createManagedLayerStyleFeature({ styleTemplates, maxLabelLength 
         }
 
         return null;
+    };
+
+    /**
+     * 克隆 Style 并去掉 Text（几何层专用）
+     * @param {Style|Style[]} style
+     * @returns {Style|Style[]}
+     */
+    const stripTextFromStyle = (style) => {
+        if (!style) return style;
+        if (Array.isArray(style)) return style.map((s) => stripTextFromStyle(s));
+        if (typeof style.clone === 'function') {
+            const cloned = style.clone();
+            try {
+                cloned.setText?.(undefined);
+            } catch {
+                /* ignore */
+            }
+            return cloned;
+        }
+        return style;
+    };
+
+    /**
+     * 几何样式：优先还原导入时备份的 KML/GeoJSON 原样式（去 Text），
+     * 保证「KMZ 原有色块/描边 + 可开关标注」同时成立。
+     * 备份在 managedLayerState.originalFeatureStyles（feature → Style）。
+     */
+    const buildGeometryStyle = (layerItem) => {
+        const baseStyleConfig = layerItem?.styleConfig || defaultStyleTemplate;
+        return (feature) => {
+            const original = layerItem?.originalFeatureStyles?.get?.(feature);
+            if (original) return stripTextFromStyle(original);
+            const existing = resolveFeatureStyle(feature);
+            if (existing) return stripTextFromStyle(existing);
+            return createStyleFromConfig(baseStyleConfig, { labelText: '' });
+        };
+    };
+
+    /**
+     * 标注样式：仅 Text（用于 DATA_LABEL 带标注层）
+     * 依赖 feature 属性 name 等字段；feature 须已清掉自身 Style 才会走本函数。
+     */
+    const buildLabelOnlyStyle = (layerItem) => {
+        const baseStyleConfig = layerItem?.styleConfig || defaultStyleTemplate;
+        if (!layerItem?.autoLabel || !layerItem?.labelVisible) {
+            return () => undefined;
+        }
+        layerItem.labelStyleCache = layerItem.labelStyleCache || new globalThis.Map();
+        return (feature) => {
+            const labelText = String(getFeatureLabelText(feature, layerItem) || '').trim();
+            if (!labelText) return undefined;
+            if (layerItem.labelStyleCache.has(labelText)) {
+                return layerItem.labelStyleCache.get(labelText);
+            }
+            const full = createStyleFromConfig(baseStyleConfig, { labelText });
+            const text = full.getText?.();
+            if (!text) return undefined;
+            const style = new Style({ text });
+            layerItem.labelStyleCache.set(labelText, style);
+            return style;
+        };
     };
 
     const buildManagedLayerStyle = (layerItem) => {
@@ -229,13 +295,18 @@ export function createManagedLayerStyleFeature({ styleTemplates, maxLabelLength 
 
     /**
      * 应用托管图层样式
-     * [性能优化] 保留已有的 labelStyleCache，避免不必要的缓存清空
-     * 只在缓存不存在时初始化，样式函数内部会复用已有缓存
+     * 双层架构：geometry 层只画几何，label 层只画文字（DATA_LABEL 带）
+     * 单层兼容：无 labelLayer 时回落旧 buildManagedLayerStyle
      */
     const applyManagedLayerStyle = (layerItem) => {
         if (!layerItem || typeof layerItem.layer?.setStyle !== 'function') return;
         if (!layerItem.labelStyleCache) {
             layerItem.labelStyleCache = new globalThis.Map();
+        }
+        if (layerItem.labelLayer && typeof layerItem.labelLayer.setStyle === 'function') {
+            layerItem.layer.setStyle(buildGeometryStyle(layerItem));
+            layerItem.labelLayer.setStyle(buildLabelOnlyStyle(layerItem));
+            return;
         }
         layerItem.layer.setStyle(buildManagedLayerStyle(layerItem));
     };
@@ -247,7 +318,7 @@ export function createManagedLayerStyleFeature({ styleTemplates, maxLabelLength 
     const forceRebuildStyle = (layerItem) => {
         if (!layerItem || typeof layerItem.layer?.setStyle !== 'function') return;
         layerItem.labelStyleCache = new globalThis.Map();
-        layerItem.layer.setStyle(buildManagedLayerStyle(layerItem));
+        applyManagedLayerStyle(layerItem);
     };
 
     return {
@@ -255,6 +326,8 @@ export function createManagedLayerStyleFeature({ styleTemplates, maxLabelLength 
         createStyleFromConfig,
         mergeStyleConfig,
         buildManagedLayerStyle,
+        buildGeometryStyle,
+        buildLabelOnlyStyle,
         applyManagedLayerStyle,
         forceRebuildStyle,
     };

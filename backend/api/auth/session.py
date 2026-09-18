@@ -151,12 +151,22 @@ def _get_session_sync(token: str) -> Optional[Dict[str, Any]]:
             except Exception:
                 pass  # 心跳属尽力而为，不因统计辅助字段影响鉴权
 
-        # 每次成功鉴权都标记用户活跃（用于实时在线统计）
+        # 每次成功鉴权都标记用户活跃（用于实时在线统计；presence_id 稳定身份）
         try:
-            username = str(data.get("username") or "").strip()
-            if username:
+            from api.realtime_stats import presence_id_from_fields
+
+            pid = presence_id_from_fields(
+                username=str(data.get("username") or ""),
+                role=str(data.get("role") or ""),
+                guest_uid=str(data.get("guest_uid") or ""),
+                guest_device_id=str(data.get("guest_device_id") or ""),
+                client_ip=str(data.get("ip") or ""),
+                user_agent=str(data.get("user_agent") or ""),
+            )
+            if pid:
                 from api.realtime_stats import mark_user_active
-                mark_user_active(username)
+
+                mark_user_active(pid)
         except Exception:
             pass  # 在线统计为辅助功能，任何异常不影响鉴权
 

@@ -6,9 +6,25 @@
 
 ## 版本记录
 
+### V3.6.6 (2026-09-18) — 在线 presence + external_proxy 恢复 + OL 标注夹心 + 下载搁置标注
+
+> **主题一 · 在线人数 presence（恒显示 2）**：tracker/ticket 改稳定 `presence_id`（`u:`/`g:`/`e:`）；无 device_id 的临时身份**不计入在线**；游客名由 `guest_uid` 派生；SSE TTL 75s + 关页 offline beacon + 页面打开时断线 presence ping（非 HF 防休眠）；`online_users` 统一 tracker；`GET /api/statistics/admin/online-debug`。
+> **Review 修复**：注册用户 presence 恒 `u:name`（session 残留 device_id 不再吞成 `g:`）；`require_login` 在携带无效 Authorization 时**不再**因恒发 `X-Guest-Device-Id` 静默降级为临时游客；登录用户 offline beacon 改走带 Authorization 的 keepalive fetch；共享 `http_client` 显式 `follow_redirects=False`。
+>
+> **主题二 · external_proxy 恢复**：V3.6.5 同批误删 `/api/proxy`（高德/Nominatim/EPSG/IP JSON API），前端 404。自 `1b731917^` 恢复并在 `app.py` 重新挂载。JSON API 代理与已迁出的瓦片中转分离；在 HF Space 上仍属第三方中转政策灰区，是否继续部署由用户决策。
+>
+> **主题三 · OL 数据标注夹心（geometry + label 双层）**：`zIndexBands` 调整为 **数据几何 DATA=200 < 瓦片标注 LABEL=600 < 数据标注 DATA_LABEL=700**；托管矢量层 Canvas 路径拆成 geometry/label 双层共源；feature 级样式备份后 `setStyle(null)`，几何层还原去 Text 的原样式，标注层只画文字；高亮/TOC 显隐/透明度/zIndex 同步 labelLayer。
+>
+> **主题四 · 底图下载搁置标注**：前端 `download.js` / MapDownloader / MyDownloadTasks / useDownloadStore 注明后端模块已删、接口 404；代码位置见 [`plan-download-feature-git-marker.md`](../TODO/plan-download-feature-git-marker.md)（本地 tag `tile-download-last`）。
+>
+> **其他**：TopBar 中国快捷定位 layer 22→26；README 补充本地开发默认管理员（`SUPER_USER` 未配置时）说明。
+>
+> 日志：[`2026-09-18-online-presence-identity-fix.md`](../LLM_record/26-09/2026-09-18/2026-09-18-online-presence-identity-fix.md) ·
+> [`2026-09-15-tile-proxy-vps-migration.md`](../LLM_record/26-09/2026-09-15/2026-09-15-tile-proxy-vps-migration.md)（proxy 回滚追加）
+
 ### V3.6.5 (2026-09-15) — 瓦片纠偏迁出本仓（HF 合规 + 开源独立）
 
-> **HF 政策**：Space 禁止第三方内容中转。本仓删除 `backend/domains/**`、`api/external_proxy.py`、瓦片测试/脚本与 `core/http_headers.py`。
+> **HF 政策**：Space 禁止第三方内容中转。本仓删除 `backend/domains/**`、瓦片测试/脚本与 `core/http_headers.py`（`api/external_proxy.py` 误删后已于 V3.6.6 恢复）。
 > **保留**：`core/coord_transform.py`（纯坐标）、`core/net_guard.py`（agent SSRF，非公开代理）。
 > **迁出位置**：开源仓 `tile-proxy`；线上 `https://vpn.negiao.cn/proxy/*`（VPS `vpn.negiao.cn` → `src/backend/tile-proxy/`）。
 > 前端 `VITE_TILE_PROXY_BASE_URL=https://vpn.negiao.cn`；`VITE_BACKEND_URL` 仍为 HF Space。

@@ -147,6 +147,7 @@
 </template>
 
 <script setup>
+// ⚠️ 底图下载依赖 /api/download/*，后端 V3.6.5 已删除该模块，当前 HF Space 返回 404
 import { useLocale } from '@common/app/useLocale';
 import { useDownloadStore } from '@common/data-import/stores/useDownloadStore';
 import { copyToClipboard } from '@common/utils/clipboard';

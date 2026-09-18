@@ -1,6 +1,10 @@
 import backendAPI from './backend';
 import { DOWNLOAD_REQUEST_TIMEOUT_MS } from '../config/publicRuntime';
 
+// ⚠️ V3.6.5 起后端已删除 domains/tiles/download/，以下接口在 HF Space 返回 404。
+// 代码位置与恢复方式见 Docs/TODO/plan-download-feature-git-marker.md（本地 tag tile-download-last）。
+// 待决定：捡回后端 / 迁 VPS / 前端隐藏入口。
+
 /**
  * 创建新的底图下载任务
  * @param {{ tile_url_template: string, bbox: number[], resolution_m: number }} payload

@@ -31,6 +31,7 @@ from pydantic import BaseModel
 from starlette.background import BackgroundTasks
 from api.statistics import router as statistics_router
 from api.location import router as location_router
+from api.external_proxy import router as external_proxy_router
 from api.auth import init_auth_storage, router as auth_router, check_smtp_configured
 from api.admin import router as admin_router
 from api.api_management import router as api_management_router
@@ -158,7 +159,12 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.error("历史影像同步服务启动失败: %s", str(e), exc_info=True)
 
-    app.state.http_client = httpx.AsyncClient(timeout=httpx.Timeout(20.0, connect=5.0))
+    # follow_redirects=False：共享 client 同时供 external_proxy / agent_upstream 使用，
+    # 禁止自动跟随跳转以防 SSRF-via-redirect（V3.6.6 review）。
+    app.state.http_client = httpx.AsyncClient(
+        timeout=httpx.Timeout(20.0, connect=5.0),
+        follow_redirects=False,
+    )
     logger.info("HTTP 客户端初始化完成")
 
     # 启动整点报时后台任务（记录启动时间，报时时展示已运行时长）
@@ -379,6 +385,10 @@ logger.info("已注册访客统计路由")
 # 挂载位置服务路由
 app.include_router(location_router)
 logger.info("已注册位置服务路由")
+
+# 挂载外部服务代理路由（高德/Nominatim/EPSG/IP）
+app.include_router(external_proxy_router)
+logger.info("已注册外部服务代理路由")
 
 # 挂载管理员路由
 app.include_router(admin_router)

@@ -495,7 +495,7 @@ frontend/src/
 │   │   │   │       └── SecurityTab.vue
 │   │   │   ├── composables/
 │   │   │   │   ├── useAuthIdentity.js
-│   │   │   │   └── useRealtimeStats.js  # SSE 实时在线统计推送（ticket 鉴权 + 指数退避重连）
+│   │   │   │   └── useRealtimeStats.js  # SSE 在线统计（ticket + 指数退避 + auth 变化重连 + offline beacon + 断线 presence ping）
 │   │   │   ├── services/
 │   │   │   │   └── auth.js  # 鉴权工具
 │   │   │   └── stores/
@@ -561,8 +561,8 @@ frontend/src/
 │       │   ├── LogMonitor.vue
 │       │   ├── MapContainer.vue  # OL 地图容器（底图/图层/绘制/测量/启动任务）
 │       │   ├── MapControlsBar.vue  # 地图控件栏（缩放/旋转/重置）
-│       │   ├── MapDownloader.vue  # 底图下载器（框选范围 + 任务提交）
-│       │   ├── MyDownloadTasks.vue  # 我的下载任务列表（查看/取消/下载）
+│       │   ├── MapDownloader.vue  # 底图下载器（框选范围 + 任务提交）⚠️ /api/download/* 后端 V3.6.5 已删，HF 404；见 Docs/TODO/plan-download-feature-git-marker.md
+│       │   ├── MyDownloadTasks.vue  # 我的下载任务列表（查看/取消/下载）⚠️ 同上，接口暂不可用
 │       │   ├── MapSwipeController.vue  # 卷帘对比控制器
 │       │   ├── MeasurePanel.vue
 │       │   └── SpatialAnalysisPanel.vue
@@ -594,7 +594,7 @@ frontend/src/
 │       │       └── drawingToolRegistry.js  # 绘制工具注册表
 │       ├── layer/
 │       │   ├── layerManager.js
-│       │   ├── zIndexBands.js  # zIndex 显示带 SSOT 常量（底图/数据统一带/区划/标注/系统，TOC 顺序覆写）
+│       │   ├── zIndexBands.js  # zIndex 显示带 SSOT（夹心：数据几何 DATA < 瓦片标注 LABEL < 数据标注 DATA_LABEL；托管层 geometry+label 双层）
 │       │   ├── components/
 │       │   │   ├── AttributeTable.vue
 │       │   │   └── LayerControlPanel.vue
@@ -609,8 +609,8 @@ frontend/src/
 │       │   │   └── useUserLayerApiFacade.js
 │       │   ├── feature/
 │       │   │   ├── useManagedFeatureHighlight.js
-│       │   │   │   ├── useManagedFeatureOperations.js
-│       │   │   │   └── useManagedFeatureSerialization.js
+│       │   │   ├── useManagedFeatureOperations.js
+│       │   │   └── useManagedFeatureSerialization.js
 │       │   └── style/
 │       │       ├── useManagedLayerStyle.js
 │       │       └── useStyleEditor.js

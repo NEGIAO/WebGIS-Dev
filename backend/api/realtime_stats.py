@@ -29,6 +29,7 @@
 """
 
 import asyncio
+import hashlib
 import json
 import logging
 import secrets
@@ -40,7 +41,13 @@ from typing import Any, Dict, Optional, Tuple
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.responses import StreamingResponse
 
-from api.auth.dependencies import require_login
+from api.auth.constants import (
+    ROLE_GUEST,
+    _build_guest_uid,
+    _normalize_guest_device_id,
+    normalize_role,
+)
+from api.auth.dependencies import require_admin, require_login
 
 logger = logging.getLogger(__name__)
 
@@ -48,6 +55,11 @@ logger = logging.getLogger(__name__)
 # SSE 不可达期间以"最近鉴权 API 活动"判定在线；90s 窗口容忍页面短暂空闲。
 HEARTBEAT_INTERVAL_SECONDS = 30  # 兼容旧前端心跳间隔参考值（当前前端已不发送）
 HEARTBEAT_WINDOW_SECONDS = 90
+
+# SSE 连接空闲 TTL：代理/半开连接在 disconnect 探测失灵时的兜底剔除。
+# 正常客户端每 10s 收 keep-alive，连接侧 last_seen 会被广播/探活路径刷新；
+# 超过 TTL 仍无任何写活动的连接视为幽灵，剔除并广播。
+SSE_CONNECTION_TTL_SECONDS = 75
 
 # ─── 广播策略 ───
 # 事件驱动为主（连接/断开/心跳过期即刻触发），经 COALESCE 窗口合并防风暴；
@@ -88,43 +100,77 @@ class OnlineUserTracker:
 
     def __init__(self, window: int = HEARTBEAT_WINDOW_SECONDS):
         self._active_window = window
-        # 心跳时间戳（兜底信号）：身份 → 最近心跳单调时刻
+        # 心跳时间戳（兜底信号）：presence_id → 最近心跳单调时刻
         self._users: OrderedDict[str, float] = OrderedDict()
-        # SSE 连接引用计数（主信号）：身份 → 存活连接数
+        # SSE 连接引用计数（主信号）：presence_id → 存活连接数
         self._conns: Dict[str, int] = {}
+        # 连接侧最近活动时刻：presence_id → monotonic（TTL 剔除幽灵连接）
+        self._conn_seen: Dict[str, float] = {}
         self._lock = _ThreadLock()
         self._last_cleanup = _time.monotonic()
 
     def mark_connection(self, user_id: str) -> None:
-        """SSE 连接建立时调用：身份引用计数 +1；新身份上线触发即时广播。"""
+        """SSE 连接建立时调用：presence_id 引用计数 +1；新身份上线触发即时广播。"""
+        if not user_id:
+            return
         is_new = False
+        now = _time.monotonic()
         with self._lock:
             is_new = user_id not in self._conns and user_id not in self._users
             # ticket 鉴权会先记一次活跃心跳；连接接管后删除该旧信号，
             # 避免 SSE 正常断开仍被心跳窗口幽灵保活。
             self._users.pop(user_id, None)
             self._conns[user_id] = self._conns.get(user_id, 0) + 1
+            self._conn_seen[user_id] = now
         if is_new:
             request_immediate_broadcast()
 
     def drop_connection(self, user_id: str) -> None:
-        """SSE 连接断开时调用：身份引用计数 -1（归零即移除，立即广播更新）。"""
+        """SSE 连接断开时调用：presence_id 引用计数 -1（归零即移除，立即广播更新）。"""
+        if not user_id:
+            return
         with self._lock:
             cnt = self._conns.get(user_id, 0) - 1
             if cnt <= 0:
                 self._conns.pop(user_id, None)
+                self._conn_seen.pop(user_id, None)
             else:
                 self._conns[user_id] = cnt
+                self._conn_seen[user_id] = _time.monotonic()
         request_immediate_broadcast()
+
+    def touch_connection(self, user_id: str) -> None:
+        """刷新连接侧活跃时刻（广播/keep-alive 路径调用，供 TTL 剔除幽灵连接）。"""
+        if not user_id:
+            return
+        with self._lock:
+            if user_id in self._conns:
+                self._conn_seen[user_id] = _time.monotonic()
+
+    def prune_stale_connections(self, ttl: int = SSE_CONNECTION_TTL_SECONDS) -> bool:
+        """剔除超过 TTL 无活动的 SSE 连接；有剔除返回 True。"""
+        now = _time.monotonic()
+        stale = []
+        with self._lock:
+            for pid, seen_at in list(self._conn_seen.items()):
+                if now - seen_at > ttl:
+                    stale.append(pid)
+            for pid in stale:
+                self._conns.pop(pid, None)
+                self._conn_seen.pop(pid, None)
+        return bool(stale)
 
     def mark_authenticated_activity(self, user_id: str) -> None:
         """记录普通鉴权活跃；已有 SSE 连接时不创建兜底心跳。"""
+        if not user_id:
+            return
         now = _time.monotonic()
         is_new = False
         with self._lock:
             # 健康 SSE 已是更强的在线信号；不要创建会在连接断开后
             # 继续存活一个完整窗口的兜底时间戳。
             if user_id in self._conns:
+                self._conn_seen[user_id] = now
                 return
             is_new = user_id not in self._users
             self._users.pop(user_id, None)
@@ -136,6 +182,8 @@ class OnlineUserTracker:
 
     def mark_heartbeat(self, user_id: str) -> None:
         """记录显式降级心跳；新身份出现时触发即时广播。"""
+        if not user_id:
+            return
         now = _time.monotonic()
         is_new = False
         with self._lock:
@@ -144,6 +192,8 @@ class OnlineUserTracker:
             # 已断开，也要保留这一合法兜底信号。
             self._users.pop(user_id, None)
             self._users[user_id] = now
+            if user_id in self._conns:
+                self._conn_seen[user_id] = now
             # 每分钟至多清理一次过期兜底记录。
             if now - self._last_cleanup > 60:
                 self._cleanup(now)
@@ -151,12 +201,48 @@ class OnlineUserTracker:
             # 新身份上线时尽力触发即时广播。
             request_immediate_broadcast()
 
+    def drop_presence(self, user_id: str) -> None:
+        """离线 beacon：立即撤销该身份的连接计数与兜底心跳。"""
+        if not user_id:
+            return
+        with self._lock:
+            self._conns.pop(user_id, None)
+            self._conn_seen.pop(user_id, None)
+            self._users.pop(user_id, None)
+        request_immediate_broadcast()
+
+    def snapshot_debug(self) -> Dict[str, Any]:
+        """管理员排查用：当前 tracker 内部状态快照。"""
+        with self._lock:
+            now = _time.monotonic()
+            self._cleanup(now)
+            conns = {pid: cnt for pid, cnt in self._conns.items()}
+            beats = {
+                pid: round(now - ts, 1)
+                for pid, ts in self._users.items()
+                if now - ts <= self._active_window
+            }
+            conn_age = {
+                pid: round(now - ts, 1) for pid, ts in self._conn_seen.items()
+            }
+            online = self._online_names()
+        return {
+            "online_count": len(online),
+            "online_presence_ids": sorted(online),
+            "sse_connections": conns,
+            "sse_conn_age_seconds": conn_age,
+            "fallback_heartbeat_age_seconds": beats,
+            "window_seconds": self._active_window,
+            "conn_ttl_seconds": SSE_CONNECTION_TTL_SECONDS,
+        }
+
     def _online_names(self) -> set:
         """当前在线身份集合（有存活连接 ∪ 窗口内有心跳）。须持锁调用。"""
         now = _time.monotonic()
         self._cleanup(now)
         beat_ids = {u for u, ts in self._users.items() if now - ts <= self._active_window}
-        return set(self._conns.keys()) | beat_ids
+        raw = set(self._conns.keys()) | beat_ids
+        return {pid for pid in raw if _is_countable_presence(pid)}
 
     def get_online_count(self) -> int:
         """返回当前在线独立用户数。"""
@@ -197,8 +283,19 @@ def get_online_tracker() -> OnlineUserTracker:
 
 
 def mark_user_active(username: str) -> None:
-    """记录普通鉴权活跃，但不覆盖健康 SSE 主信号。"""
+    """
+    记录普通鉴权活跃（兼容旧签名：可直接传 presence_id 或裸 username）。
+
+    推荐调用方改用 mark_presence_active(session) 以获得稳定身份键。
+    """
     _online_tracker.mark_authenticated_activity(username)
+
+
+def mark_presence_active(session: Dict[str, Any]) -> None:
+    """按会话字段计算 presence_id 并记录鉴权活跃。"""
+    pid = presence_id_from_session(session)
+    if pid:
+        _online_tracker.mark_authenticated_activity(pid)
 
 
 class StatsBroadcaster:
@@ -334,18 +431,19 @@ async def _schedule_coalesced_broadcast() -> None:
 # ─── 心跳过期扫描协程 ───
 async def _heartbeat_expiry_watch_loop() -> None:
     """
-    周期扫描兜底心跳过期项：有剔除即刻广播。
+    周期扫描兜底心跳过期项 + SSE 幽灵连接：有剔除即刻广播。
 
     语义：断网/关页用户停止心跳后，最迟 window + SCAN 秒内从在线数消失，
     而不是等下一次任意请求或保底周期才被发现（消除下线显示滞后）。
-    扫描为内存 O(在线数) 操作，开销可忽略。
+    另剔除超过 SSE_CONNECTION_TTL_SECONDS 无写活动的半开连接。
+    即使暂无 SSE 客户端也要清扫，避免无人订阅时 tracker 积压幽灵身份。
     """
     while True:
         try:
             await asyncio.sleep(HEARTBEAT_EXPIRY_SCAN_SECONDS)
-            if get_broadcaster().client_count == 0:
-                continue
-            if _online_tracker.prune_expired():
+            expired = _online_tracker.prune_expired()
+            stale_conn = _online_tracker.prune_stale_connections()
+            if (expired or stale_conn) and get_broadcaster().client_count > 0:
                 await _compute_and_broadcast_once()
         except asyncio.CancelledError:
             break
@@ -362,11 +460,11 @@ async def _compute_and_broadcast_once() -> None:
     asyncio.to_thread 执行；该函数自身维护全局 10 秒缓存，避免双层缓存
     把最坏陈旧时间叠加到 20 秒。在线人数始终基于内存 tracker 实时计算。
     """
-    from api.statistics import _get_realtime_global_stats_sync
+    from api.statistics import _get_realtime_global_stats_sync, _merge_online_tracker
 
     stats = dict(await asyncio.to_thread(_get_realtime_global_stats_sync))
-    stats["realtime_online_users"] = _online_tracker.get_online_count()
-    stats["realtime_online_userlist"] = _online_tracker.get_online_users()
+    # 统一 presence 口径：online_users 与 realtime_online_users 同源 tracker
+    stats = _merge_online_tracker(stats)
     await get_broadcaster().broadcast("online_stats", stats)
 
 
@@ -422,19 +520,24 @@ _stream_tickets: Dict[str, Tuple[str, float]] = {}  # ticket → (username, 过�
 _tickets_lock = _ThreadLock()
 
 
-def create_stream_ticket(username: str) -> str:
-    """生成一次性 SSE ticket（STREAM_TICKET_TTL_SECONDS 秒有效）。"""
+def create_stream_ticket(username: str, presence_id: str = "") -> str:
+    """生成一次性 SSE ticket（STREAM_TICKET_TTL_SECONDS 秒有效）。
+
+    ticket 载荷 = (presence_id 或回退 username, username)，stream 侧用
+    presence_id 做在线计数，username 仅作日志/兼容展示。
+    """
     ticket = secrets.token_urlsafe(24)
     expires_at = _time.monotonic() + STREAM_TICKET_TTL_SECONDS
+    key = (presence_id or username or "").strip() or username
     with _tickets_lock:
-        _stream_tickets[ticket] = (username, expires_at)
+        _stream_tickets[ticket] = (key, expires_at)
         _prune_tickets_locked()
     return ticket
 
 
 def consume_stream_ticket(ticket: str) -> Optional[str]:
     """
-    消费 ticket：有效则返回用户名并删除（一次性）；为空/无效/过期返回 None。
+    消费 ticket：有效则返回 presence_id（或旧格式 username）并删除；无效返回 None。
     """
     if not ticket:
         return None
@@ -456,6 +559,82 @@ def _prune_tickets_locked() -> None:
         _stream_tickets.pop(t, None)
 
 
+# ─── 在线身份（presence_id）───
+# 统计键必须稳定且全局唯一：
+# - 登录用户：u:{username}
+# - 有 device_id 的游客：g:{guest_uid}（uid 仅由设备 ID 派生）
+# - 无 device_id 的临时请求：e:{ip_ua_hash}（脚本/探针，不计入在线人数）
+# 禁止直接用 username：游客 username=user_N 存在并发撞名，分享模式假 token
+# 还会把 device-id 头吞掉，导致同一人被拆成多个身份或多人挤成一个。
+
+
+def presence_id_from_fields(
+    username: Optional[str] = None,
+    role: Optional[str] = None,
+    guest_uid: Optional[str] = None,
+    guest_device_id: Optional[str] = None,
+    client_ip: str = "",
+    user_agent: str = "",
+) -> str:
+    """从会话/请求字段计算稳定的在线身份键。
+
+    修复：临时游客会话也会带上随机 guest_uid（device_id 缺失时 uid 每请求一变）。
+    若无 device_id 则一律 e: 前缀、不计入在线，避免脚本/无头请求把 tracker 抬高。
+    """
+    name = str(username or "").strip()
+    uid = str(guest_uid or "").strip()
+    device_id = _normalize_guest_device_id(guest_device_id)
+    resolved_role = normalize_role(role, name)
+
+    # 账号身份优先：注册用户/管理员即使会话里残留 device_id 也计入 u:name，
+    # 避免「登录前后双身份」被 device-id 分支吞成 g:。
+    if name and resolved_role not in (ROLE_GUEST,):
+        return f"u:{name}"
+
+    if device_id:
+        return f"g:{uid or _build_guest_uid('', '', device_id)}"
+
+    if resolved_role == ROLE_GUEST or uid:
+        seed = uid or f"eph|{client_ip or ''}|{user_agent or ''}"
+        return f"e:{hashlib.sha256(seed.encode('utf-8')).hexdigest()[:16]}"
+
+    return ""
+
+
+def presence_id_from_session(session: Dict[str, Any]) -> str:
+    """鉴权会话 → presence_id。"""
+    return presence_id_from_fields(
+        username=session.get("username"),
+        role=session.get("role"),
+        guest_uid=session.get("guest_uid"),
+        guest_device_id=session.get("guest_device_id"),
+        client_ip=str(session.get("ip") or ""),
+        user_agent=str(session.get("user_agent") or ""),
+    )
+
+
+def presence_id_from_request(request: Request) -> str:
+    """未登录请求（presence ping/offline）→ presence_id。"""
+    from api.auth.constants import _extract_client_ip
+
+    device_id = _normalize_guest_device_id(request.headers.get("X-Guest-Device-Id"))
+    client_ip = _extract_client_ip(request)
+    user_agent = str(request.headers.get("User-Agent") or "")
+    return presence_id_from_fields(
+        username="",
+        role=ROLE_GUEST,
+        guest_uid="",
+        guest_device_id=device_id,
+        client_ip=client_ip,
+        user_agent=user_agent,
+    )
+
+
+def _is_countable_presence(presence_id: str) -> bool:
+    """临时 e: 身份（无 device_id 的脚本/探针）不计入在线人数。"""
+    return bool(presence_id) and not presence_id.startswith("e:")
+
+
 # ==================== SSE 端点 ====================
 
 router = APIRouter(prefix="/api", tags=["realtime-stats"])
@@ -468,10 +647,15 @@ async def statistics_ticket(session: Dict[str, Any] = Depends(require_login)):
 
     动机（V3.5.19）：避免完整会话 token 以 query param 形式进入 URL/日志；
     ticket 短时、一次性、仅能建立统计流连接，不作为任意 API 的凭据。
+
+    V3.6.6：ticket 载荷改为 presence_id（登录 u:name / 游客 g:guest_uid），
+    避免用 username 计数时的游客撞名与登录前后双身份。
     """
     username = str(session.get("username") or "")
+    pid = presence_id_from_session(session)
     return {
-        "ticket": create_stream_ticket(username),
+        "ticket": create_stream_ticket(username, presence_id=pid),
+        "presence_id": pid,
         "expires_in": STREAM_TICKET_TTL_SECONDS,
     }
 
@@ -498,6 +682,8 @@ async def statistics_stream(
             detail="流凭据无效、已过期或已被使用，请重新换取",
         )
 
+    # ticket 载荷已是 presence_id（旧格式可能仍是 username）
+    presence_id = username
     broadcaster = get_broadcaster()
 
     async def event_generator():
@@ -505,8 +691,8 @@ async def statistics_stream(
         try:
             # 在响应体真正开始迭代时才登记，确保登记与 finally 清理属于
             # 同一生成器生命周期；客户端过早断开不会留下幽灵连接。
-            queue = await broadcaster.register(username)
-            _online_tracker.mark_connection(username)
+            queue = await broadcaster.register(presence_id)
+            _online_tracker.mark_connection(presence_id)
 
             # 初始快照：连接建立后立即推送
             try:
@@ -520,6 +706,7 @@ async def statistics_stream(
                     payload = await asyncio.wait_for(
                         queue.get(), timeout=SSE_KEEPALIVE_SECONDS
                     )
+                    _online_tracker.touch_connection(presence_id)
                     yield payload
                 except asyncio.TimeoutError:
                     # 读路径探活：uvicorn 在 socket EOF/RST 时会向 receive 通道
@@ -528,6 +715,7 @@ async def statistics_stream(
                     if request.is_disconnected():
                         logger.debug("SSE 客户端已断开（disconnect 探测）")
                         break
+                    _online_tracker.touch_connection(presence_id)
                     yield ": keep-alive\n\n"
         except asyncio.CancelledError:
             pass
@@ -562,7 +750,74 @@ async def statistics_heartbeat(session: Dict[str, Any] = Depends(require_login))
 
     响应携带当前在线数。
     """
-    username = str(session.get("username") or "").strip()
-    if username:
-        _online_tracker.mark_heartbeat(username)
+    pid = presence_id_from_session(session)
+    if pid:
+        _online_tracker.mark_heartbeat(pid)
     return {"ok": True, "online": _online_tracker.get_online_count()}
+
+
+@router.post("/statistics/presence/ping")
+async def statistics_presence_ping(request: Request):
+    """
+    轻量在线保活：游客凭 X-Guest-Device-Id 即可，登录用户走 session 鉴权。
+
+    不查统计 DB、不消耗配额；仅刷新内存 tracker。用于 SSE 断开时的
+    比鉴权搭车更稳的兜底，以及关页 beacon 之前的保活。
+    """
+    from api.auth.constants import _extract_token
+
+    pid = ""
+    token = _extract_token(request)
+    if token:
+        from api.auth.session import _get_session_sync
+
+        try:
+            session = await asyncio.to_thread(_get_session_sync, token)
+        except Exception:
+            session = None
+        if session:
+            pid = presence_id_from_session(session)
+    if not pid:
+        pid = presence_id_from_request(request)
+    if pid:
+        _online_tracker.mark_heartbeat(pid)
+    return {"ok": True, "online": _online_tracker.get_online_count(), "presence_id": pid}
+
+
+@router.post("/statistics/presence/offline")
+async def statistics_presence_offline(request: Request):
+    """
+    关页/注销 beacon：立即撤销该身份的在线信号。
+
+    EventSource 关闭在代理半开场景下后端可能感知不到；pagehide 时
+    sendBeacon 到本端点，可把「幽灵在线」窗口压到接近 0。
+    """
+    from api.auth.constants import _extract_token
+
+    pid = ""
+    token = _extract_token(request)
+    if token:
+        from api.auth.session import _get_session_sync
+
+        try:
+            session = await asyncio.to_thread(_get_session_sync, token)
+        except Exception:
+            session = None
+        if session:
+            pid = presence_id_from_session(session)
+    if not pid:
+        pid = presence_id_from_request(request)
+    if pid:
+        _online_tracker.drop_presence(pid)
+    return {"ok": True, "online": _online_tracker.get_online_count()}
+
+
+@router.get("/statistics/admin/online-debug")
+async def statistics_online_debug(
+    _session: Dict[str, Any] = Depends(require_admin),
+) -> Dict[str, Any]:
+    """管理员排查：内存 tracker 在线身份明细（presence_id / SSE 计数 / 心跳年龄）。"""
+    return {
+        "status": "success",
+        "data": _online_tracker.snapshot_debug(),
+    }

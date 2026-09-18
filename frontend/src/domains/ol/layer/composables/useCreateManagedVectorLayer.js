@@ -46,7 +46,19 @@ export function useCreateManagedVectorLayer({
     styleTemplates,
     dataManager = null, // 可选的 DataManager 实例
 }) {
-    const { normalizeStyleConfig, buildManagedLayerStyle } = styleHelpers;
+    const {
+        normalizeStyleConfig,
+        buildManagedLayerStyle,
+        buildGeometryStyle,
+        buildLabelOnlyStyle,
+    } = styleHelpers;
+    // 防御：调用方未注入拆分样式时，回落单层样式，避免导入数据整批失败
+    const geometryStyleBuilder = typeof buildGeometryStyle === 'function'
+        ? buildGeometryStyle
+        : buildManagedLayerStyle;
+    const labelStyleBuilder = typeof buildLabelOnlyStyle === 'function'
+        ? buildLabelOnlyStyle
+        : () => () => undefined;
 
     const { serializeManagedFeatures, ensureFeatureId } = featureHelpers;
 
@@ -116,40 +128,48 @@ export function useCreateManagedVectorLayer({
         const id = createManagedLayerId();
         features.forEach((feature, index) => ensureFeatureId(feature, name, index));
 
-        // 4. 清除要素上的残留样式（如 KML 解析器设置的空数组/透明样式），
-        //    确保图层的 buildManagedLayerStyle 样式函数生效
-        // ★ 改造（2026-06-21）：先备份原始样式到 useFeatureStyleStore，
-        //    避免后续 setStyle(null) 后 KML/自定义样式永久丢失
+        // 4. 备份 feature 级样式 → 再 setStyle(null)
+        //    OL：feature 有具体 Style 时会**绕过** layer style，导致标注层永不绘制。
+        //    备份进 WeakMap + FeatureStyleStore，几何层再还原「去文字」的原样式。
+        const originalFeatureStyles = new WeakMap();
         try {
             const featureStyleStore = useFeatureStyleStore();
-            if (featureStyleStore && typeof featureStyleStore.saveOriginalStyle === 'function') {
-                features.forEach((f) => {
-                    const featureId = getFeatureIdFromFeature(f);
-                    if (featureId) {
-                        const s = f.getStyle();
-                        featureStyleStore.saveOriginalStyle(id, featureId, s ?? null);
-                    }
-                });
-            }
+            features.forEach((f) => {
+                const featureId = getFeatureIdFromFeature(f);
+                const s = f.getStyle?.() ?? null;
+                if (s && !(Array.isArray(s) && s.length === 0) && typeof s !== 'function') {
+                    originalFeatureStyles.set(f, s);
+                }
+                if (featureStyleStore && typeof featureStyleStore.saveOriginalStyle === 'function' && featureId) {
+                    featureStyleStore.saveOriginalStyle(id, featureId, s ?? null);
+                }
+                try {
+                    f.setStyle(null);
+                } catch {
+                    /* ignore */
+                }
+            });
         } catch (error) {
-            console.warn('[useCreateManagedVectorLayer] saveOriginalStyle failed:', error);
+            console.warn('[useCreateManagedVectorLayer] backup/clear feature styles failed:', error);
+            features.forEach((f) => {
+                try {
+                    f.setStyle(null);
+                } catch {
+                    /* ignore */
+                }
+            });
         }
 
-        features.forEach((f) => {
-            const s = f.getStyle();
-            // 清除：undefined、null、空数组、Function（让图层样式函数接管）
-            if (!s || (Array.isArray(s) && s.length === 0) || typeof s === 'function') {
-                f.setStyle(null);
-            }
-        });
+        managedLayerState.originalFeatureStyles = originalFeatureStyles;
 
-        // 5. 创建 VectorLayer（根据要素数量选择 Canvas 或 WebGL 渲染）
+        // 5. 创建双层：几何层（DATA）+ 标注层（DATA_LABEL）——夹心：数据几何 < 瓦片标注 < 数据标注
         const useWebGL = features.length > WEBGL_RENDER_THRESHOLD;
         let layer;
+        let labelLayer = null;
 
         if (useWebGL) {
-            // WebGL 渲染：性能更好，适合大数据量
             const { default: WebGLVectorLayer } = await import('ol/layer/WebGLVector');
+            // WebGL 路径：无法拆标注，几何+文字同层，z 取 DATA
             layer = new WebGLVectorLayer({
                 source: new VectorSource({ features }),
                 zIndex: Z_BAND.DATA,
@@ -157,12 +177,19 @@ export function useCreateManagedVectorLayer({
                 properties: { name, _useWebGL: true },
             });
         } else {
-            // Canvas 渲染：功能完整，适合小数据量
+            const sharedSource = new VectorSource({ features });
             layer = new VectorLayer({
-                source: new VectorSource({ features }),
+                source: sharedSource,
                 zIndex: Z_BAND.DATA,
-                style: buildManagedLayerStyle(managedLayerState),
+                // 几何层：还原备份的 KML 样式（去 Text）
+                style: geometryStyleBuilder(managedLayerState),
                 properties: { name },
+            });
+            labelLayer = new VectorLayer({
+                source: sharedSource,
+                zIndex: Z_BAND.DATA_LABEL,
+                style: labelStyleBuilder(managedLayerState),
+                properties: { name: `${name} · 标注`, isLabelLayer: true },
             });
         }
 
@@ -170,11 +197,15 @@ export function useCreateManagedVectorLayer({
         const serializedFeatures = serializeManagedFeatures(features, name);
 
         // 7. 将图层添加到地图
-
-        // 8. 创建及登记层数据记录
         layer.set?.('managedLayerId', id);
         layer.set?.('sourceType', sourceType);
         mapInstanceRef.value.addLayer(layer);
+        if (labelLayer) {
+            labelLayer.set?.('managedLayerId', id);
+            labelLayer.set?.('sourceType', sourceType);
+            labelLayer.setVisible?.(labelVisible);
+            mapInstanceRef.value.addLayer(labelLayer);
+        }
 
         // 同时更新 DataManager（数据与渲染分离架构）
         let dataManagerId = null;
@@ -203,8 +234,12 @@ export function useCreateManagedVectorLayer({
             metadata: normalizedMetadata,
             styleConfig: normalizedStyle,
             labelStyleCache: managedLayerState.labelStyleCache,
+            /** feature → 导入时备份的原 Style（几何层还原 KML 样式用） */
+            originalFeatureStyles,
             layer,
-            dataManagerId, // 保存 DataManager 的 ID，用于数据操作
+            /** 数据标注层（DATA_LABEL 带）；WebGL 大数据路径为 null */
+            labelLayer,
+            dataManagerId,
         });
 
         // 8. 触发层索引刷新和外部事件

@@ -40,11 +40,16 @@
  */
 import { onBeforeUnmount, ref } from 'vue';
 import backendAPI, { BACKEND_BASE_URL } from '@/api/backend/client';
+import { getAuthToken, getOrCreateGuestDeviceId } from '@common/user/services/auth';
 
 const SSE_ENDPOINT = '/api/statistics/stream';
 const TICKET_ENDPOINT = '/api/statistics/ticket';
+const PRESENCE_PING_ENDPOINT = '/api/statistics/presence/ping';
+const PRESENCE_OFFLINE_ENDPOINT = '/api/statistics/presence/offline';
 const INITIAL_RETRY_MS = 2000;
 const MAX_RETRY_MS = 30000;
+/** SSE 断开时的轻量保活间隔（仅内存 tracker，不查统计 DB） */
+const FALLBACK_PING_MS = 25000;
 
 // ─── 模块级单例状态（所有调用方共享同一连接）───
 const stats = ref(null);
@@ -55,6 +60,10 @@ let _retryMs = INITIAL_RETRY_MS;
 let _dead = false;
 let _connecting = false;
 let _connectionGeneration = 0;
+let _fallbackPingTimer = null;
+let _offlineBeaconBound = false;
+let _authWatchHandle = null;
+let _lastAuthToken = typeof getAuthToken === 'function' ? getAuthToken() : '';
 /** 已注册的 onStats 回调集合（多消费者共享同一连接） */
 const _callbacks = new Set();
 
@@ -105,10 +114,108 @@ async function _fetchTicket() {
     return typeof ticket === 'string' && ticket ? ticket : '';
 }
 
+/**
+ * SSE URL 仅能带一次性 ticket；EventSource 无法附带 Authorization / X-Guest-Device-Id。
+ * 后端 ticket 已在换取时解析 presence_id，连接侧只消费 ticket 载荷。
+ */
+
 function _buildUrl() {
     // 登录用户与游客（携带 X-Guest-Device-Id 的访客）都建立 SSE 推送通道；
     // 在线判定以后端连接存活与鉴权活跃为准。
     return `${String(BACKEND_BASE_URL || '').replace(/\/$/, '')}${SSE_ENDPOINT}`;
+}
+
+function _buildPresenceHeaders(extra = {}) {
+    const headers = { ...extra };
+    const token = typeof getAuthToken === 'function' ? getAuthToken() : '';
+    if (token) {
+        headers.Authorization = `Bearer ${token}`;
+    }
+    try {
+        const deviceId = getOrCreateGuestDeviceId();
+        if (deviceId) {
+            headers['X-Guest-Device-Id'] = deviceId;
+        }
+    } catch {
+        /* storage 不可用时忽略 */
+    }
+    return headers;
+}
+
+async function _sendPresenceBeacon(path) {
+    const url = `${String(BACKEND_BASE_URL || '').replace(/\/$/, '')}${path}`;
+    const headers = _buildPresenceHeaders({ 'Content-Type': 'application/json' });
+    const token = typeof getAuthToken === 'function' ? getAuthToken() : '';
+    const body = JSON.stringify({});
+    const fetchOptions = {
+        method: 'POST',
+        headers,
+        credentials: 'include',
+        body,
+        keepalive: true,
+    };
+    try {
+        // 登录用户必须走带 Authorization 的 keepalive fetch：sendBeacon 无法附带
+        // 认证头，若先用 beacon 成功则后端只会撤销 g:device 侧，u: 身份会残留到 TTL。
+        if (token) {
+            await fetch(url, fetchOptions);
+            return;
+        }
+        if (typeof navigator !== 'undefined' && typeof navigator.sendBeacon === 'function') {
+            const blob = new Blob([body], { type: 'application/json' });
+            if (navigator.sendBeacon(url, blob)) return;
+        }
+        await fetch(url, fetchOptions);
+    } catch {
+        /* beacon 尽力而为 */
+    }
+}
+
+function _stopFallbackPing() {
+    if (_fallbackPingTimer) {
+        clearInterval(_fallbackPingTimer);
+        _fallbackPingTimer = null;
+    }
+}
+
+function _startFallbackPing() {
+    _stopFallbackPing();
+    if (_dead) return;
+    _fallbackPingTimer = setInterval(async () => {
+        if (_dead || connected.value) return;
+        try {
+            await backendAPI.post(
+                PRESENCE_PING_ENDPOINT,
+                {},
+                { headers: _buildPresenceHeaders() },
+            );
+        } catch {
+            /* 保活失败交给 SSE 重试 */
+        }
+    }, FALLBACK_PING_MS);
+}
+
+function _bindOfflineBeacon() {
+    if (_offlineBeaconBound || typeof window === 'undefined') return;
+    const handler = () => {
+        void _sendPresenceBeacon(PRESENCE_OFFLINE_ENDPOINT);
+    };
+    window.addEventListener('pagehide', handler, { passive: true });
+    window.addEventListener('beforeunload', handler, { passive: true });
+    _offlineBeaconBound = true;
+}
+
+function _watchAuthChanges() {
+    if (typeof window === 'undefined') return;
+    if (_authWatchHandle) return;
+    _authWatchHandle = setInterval(() => {
+        const token = typeof getAuthToken === 'function' ? getAuthToken() : '';
+        if (token === _lastAuthToken) return;
+        _lastAuthToken = token;
+        if (_dead) return;
+        // 登录/登出后身份键会变（u:name ↔ g:guest_uid），必须重建 SSE
+        reconnect();
+    }, 2000);
 }
 
 /** 切回前台：SSE 已断时立即重置退避并重连（仅恢复连接，不发数据请求）。 */
@@ -143,6 +250,8 @@ async function connect() {
     const generation = ++_connectionGeneration;
     _connecting = true;
     _bindVisibilityListener();
+    _bindOfflineBeacon();
+    _watchAuthChanges();
 
     const baseUrl = _buildUrl();
     if (!baseUrl) {
@@ -162,6 +271,7 @@ async function connect() {
     if (_dead || generation !== _connectionGeneration) return;
     if (!url) {
         _connecting = false;
+        _startFallbackPing();
         _scheduleRetry();
         return;
     }
@@ -171,6 +281,7 @@ async function connect() {
         es = new EventSource(url, { withCredentials: true });
     } catch {
         _connecting = false;
+        _startFallbackPing();
         _scheduleRetry();
         return;
     }
@@ -184,6 +295,7 @@ async function connect() {
         }
         connected.value = true;
         _retryMs = INITIAL_RETRY_MS; // 连接成功后重置退避
+        _stopFallbackPing();
     };
 
     es.addEventListener('online_stats', (event) => {
@@ -200,8 +312,9 @@ async function connect() {
         connected.value = false;
         es.close();
         _eventSource = null;
-        // 断线即进入永久指数退避重连；在线与否交由后端依据
-        // "最近鉴权活跃"口径判定，前端不再发送任何兜底请求。
+        // 断线：指数退避重连；SSE 不可用期间用页面打开时的 presence ping 兜底
+        // （仅内存 tracker，非 HF keep-alive）。
+        _startFallbackPing();
         _scheduleRetry();
     };
 }
@@ -233,7 +346,12 @@ function _disconnect() {
 function disconnect() {
     _dead = true;
     _disconnect();
+    _stopFallbackPing();
     _unbindVisibilityListener();
+    if (_authWatchHandle) {
+        clearInterval(_authWatchHandle);
+        _authWatchHandle = null;
+    }
     if (_notifyScheduled && _notifyHandle !== null) {
         if (_notifyUsesAnimationFrame && typeof cancelAnimationFrame === 'function') {
             cancelAnimationFrame(_notifyHandle);
@@ -244,6 +362,7 @@ function disconnect() {
     _notifyScheduled = false;
     _notifyHandle = null;
     _pendingData = null;
+    void _sendPresenceBeacon(PRESENCE_OFFLINE_ENDPOINT);
 }
 
 function reconnect() {

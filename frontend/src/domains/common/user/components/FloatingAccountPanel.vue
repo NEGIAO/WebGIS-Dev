@@ -202,10 +202,14 @@ const basemapPreferenceOptions = computed(() => {
 const selfStats = computed(() => centerData.value?.self_stats || {});
 const quotaInfo = computed(() => centerData.value?.quota || {});
 const realtimeStats = computed(() => centerData.value?.realtime || {});
-/** 在线用户数：优先显示心跳/SSE 实时口径（15s 窗口）；未推送（undefined/null）时回退 DB 5min 口径 */
+/** 在线用户数：优先实时 tracker 口径（含游客）；其次统一 online_users；最后 DB 会话数 */
 const displayOnlineUsers = computed(() => {
-    const v = realtimeStats.value?.realtime_online_users;
-    return v === null || v === undefined ? (realtimeStats.value?.online_users || 0) : v;
+    const rt = realtimeStats.value || {};
+    const realtime = rt.realtime_online_users;
+    if (realtime !== null && realtime !== undefined) return realtime;
+    const unified = rt.online_users;
+    if (unified !== null && unified !== undefined) return unified;
+    return rt.online_users_db || 0;
 });
 const adminContact = computed(() => String(centerData.value?.admin_contact || '').trim());
 const recentMessages = computed(() => {
@@ -368,6 +372,10 @@ async function loadCenterData({ silent = false } = {}) {
         centerData.value = {
             ...centerData.value,
             ...(result || {}),
+            realtime: {
+                ...centerData.value.realtime,
+                ...((result && result.realtime) || {}),
+            },
         };
         hasLoadedCenterOnce.value = true;
     } catch (error) {

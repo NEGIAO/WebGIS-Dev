@@ -2,6 +2,7 @@
 用户 CRUD、访客身份管理、用户指标记录。
 """
 
+import re
 import secrets
 import sqlite3
 from typing import Any, Dict, Optional
@@ -142,24 +143,35 @@ def _update_user_display_name_sync(username: str, display_name: str) -> Optional
     return _get_user_sync(username)
 
 
+def _guest_username_from_uid(guest_uid: str) -> str:
+    """由 guest_uid 派生稳定用户名，避免 MAX(id)+1 并发撞名。"""
+    uid = str(guest_uid or "").strip()
+    if not uid:
+        return "guest_anon"
+    # guest_uid 形如 guest_{hex16}；压成合法用户名字符并截断
+    compact = re.sub(r"[^A-Za-z0-9_]", "", uid)[:24]
+    return compact or "guest_anon"
+
+
 def _get_or_create_guest_username_sync(guest_uid: str) -> str:
     """
-    获取或创建游客用户名。如果游客记录存在，返回其用户名；
-    否则创建新记录并返回基于 ID 的用户名（如 'user_1'）。
-    使用数据库事务和 UNIQUE 约束避免并发竞态。
+    获取或创建游客用户名。用户名由 guest_uid 确定性派生（非自增），
+    保证同一设备始终同一身份、不同设备永不撞名。
     """
+    resolved = _guest_username_from_uid(guest_uid)
+    now_iso = _iso(_utc_now())
+
     with _db_connection() as conn:
         existing = conn.execute(
-            "SELECT id, username FROM guest_identity_records WHERE guest_uid = ?",
+            "SELECT username FROM guest_identity_records WHERE guest_uid = ?",
             (guest_uid,),
         ).fetchone()
-
         if existing:
-            return str(dict(existing).get("username") or "user")
+            stored = str(dict(existing).get("username") or "").strip()
+            return stored or resolved
 
-        now_iso = _iso(_utc_now())
         try:
-            cursor = conn.execute(
+            conn.execute(
                 """
                 INSERT INTO guest_identity_records (
                     guest_uid,
@@ -168,22 +180,21 @@ def _get_or_create_guest_username_sync(guest_uid: str) -> str:
                     visit_count,
                     first_seen_at,
                     last_seen_at
-                ) VALUES (?, 'user_' || (SELECT COALESCE(MAX(id), 0) + 1 FROM guest_identity_records), 'guest', 0, ?, ?)
+                ) VALUES (?, ?, 'guest', 0, ?, ?)
+                ON CONFLICT(guest_uid) DO UPDATE SET
+                    last_seen_at = excluded.last_seen_at
                 """,
-                (guest_uid, now_iso, now_iso),
+                (guest_uid, resolved, now_iso, now_iso),
             )
             conn.commit()
-            row = conn.execute(
-                "SELECT username FROM guest_identity_records WHERE guest_uid = ?",
-                (guest_uid,),
-            ).fetchone()
-            return str(dict(row).get("username") or "user") if row else "user"
         except Exception:
-            row = conn.execute(
-                "SELECT username FROM guest_identity_records WHERE guest_uid = ?",
-                (guest_uid,),
-            ).fetchone()
-            return str(dict(row).get("username") or "user") if row else "user"
+            pass
+
+        row = conn.execute(
+            "SELECT username FROM guest_identity_records WHERE guest_uid = ?",
+            (guest_uid,),
+        ).fetchone()
+        return str(dict(row).get("username") or resolved) if row else resolved
 
 
 def _ensure_user_metric_row_sync(conn: sqlite3.Connection, username: str) -> None:

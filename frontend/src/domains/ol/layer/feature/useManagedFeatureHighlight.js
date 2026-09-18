@@ -16,13 +16,40 @@
  * - batchHighlightManagedFeatures(payload) → 新增多选批量
  */
 
-import { Style, Fill, Stroke, Circle as CircleStyle } from 'ol/style';
+import { Style, Fill, Stroke, Circle as CircleStyle, Text } from 'ol/style';
 import { useFeatureStyleStore } from '@ol/stores/useFeatureStyleStore';
 import {
     getFeatureIdFromFeature,
     getFeatureIdFromFeatureKey,
     getLayerIdFromFeatureKey,
 } from '@common/data-protocol/featureKey';
+
+/** 从要素属性读取可显示标注（与 managed 标注层同一套候选键） */
+function readFeatureLabelText(feature) {
+    const props = typeof feature?.getProperties === 'function' ? feature.getProperties() : null;
+    if (!props) return '';
+    const candidates = ['name', 'Name', 'NAME', '名称', 'title', 'Title', 'label', 'Label'];
+    for (const key of candidates) {
+        const value = props[key];
+        if (value === null || value === undefined) continue;
+        const text = String(value).trim();
+        if (text && text.toLowerCase() !== 'null') return text;
+    }
+    return '';
+}
+
+function createHighlightTextStyle(labelText) {
+    if (!labelText) return undefined;
+    return new Text({
+        text: labelText.length > 48 ? `${labelText.slice(0, 48)}...` : labelText,
+        font: '600 14px "Microsoft YaHei", "PingFang SC", sans-serif',
+        fill: new Fill({ color: '#ffffff' }),
+        stroke: new Stroke({ color: 'rgba(0, 0, 0, 0.8)', width: 3 }),
+        overflow: true,
+        textAlign: 'center',
+        offsetY: 0,
+    });
+}
 
 /**
  * 工厂函数 - 返回要素高亮相关的导出函数
@@ -32,14 +59,14 @@ import {
  */
 export function createManagedFeatureHighlightFeature({ findManagedFeature = () => null }) {
     /**
-     * 创建要素高亮样式
-     * 根据几何类型返回相应的高亮样式（点使用圆形，线面使用填充）
+     * 创建要素高亮样式（含文字：选中时标注不消失）
      * @param {Feature} feature - OL Feature 实例
      * @returns {Style} OL 样式对象
      */
     function createManagedFeatureHighlightStyle(feature) {
         const geometryType = feature?.getGeometry?.()?.getType?.() || '';
         const isPointLike = /Point$/i.test(geometryType);
+        const text = createHighlightTextStyle(readFeatureLabelText(feature));
 
         if (isPointLike) {
             return new Style({
@@ -48,31 +75,32 @@ export function createManagedFeatureHighlightFeature({ findManagedFeature = () =
                     fill: new Fill({ color: 'rgba(255, 69, 58, 0.95)' }),
                     stroke: new Stroke({ color: '#ffffff', width: 2 }),
                 }),
+                text,
             });
         }
 
         return new Style({
             fill: new Fill({ color: 'rgba(255, 69, 58, 0.18)' }),
             stroke: new Stroke({ color: '#ff4136', width: 4 }),
+            text,
         });
     }
 
     /**
-     * 内部：将 store 备份的样式还原到 feature（fallback 到 setStyle(null)）
-     * @param {OLFeature} feature OL Feature 实例
-     * @param {Style|null|undefined} originalStyle store 备份的样式
+     * 取消高亮后：必须 setStyle(null)，交回图层 style 函数
+     * （几何层还原 KML 备份样式，标注层继续画文字）
+     * 若把 originalStyle 写回 feature，OL 会再次绕过图层 style → 标注消失。
      */
     function restoreFeatureStyle(feature, originalStyle) {
         if (!feature || typeof feature.setStyle !== 'function') return;
         try {
-            if (originalStyle === undefined || originalStyle === null) {
-                feature.setStyle(null);
-            } else {
-                feature.setStyle(originalStyle);
-            }
+            // 统一置空：托管双层架构依赖 layer style；原样式在
+            // userDataLayers.originalFeatureStyles / FeatureStyleStore 中
+            feature.setStyle(null);
         } catch (error) {
             console.warn('[useManagedFeatureHighlight] restoreFeatureStyle failed:', error);
         }
+        void originalStyle;
     }
 
     /**

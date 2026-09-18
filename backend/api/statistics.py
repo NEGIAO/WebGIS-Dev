@@ -455,12 +455,20 @@ def _upsert_guest_identity_record_sync(record: Dict[str, Any]) -> None:
     longitude = _coerce_float(record.get("longitude"))
     user_agent = str(record.get("user_agent") or "")
 
+    # 用户名确定性由 guest_uid 派生；后端生成的 username（user_N/guest_*）优先
+    # 保留，避免覆盖历史展示名，但绝不再用 MAX(id)+1 自增。
+    from api.auth.user import _guest_username_from_uid
+
+    derived_username = _guest_username_from_uid(guest_uid)
+    stable_username = username if username and username != "user" else derived_username
+
     with _db_connection() as conn:
         # 【修复】改为单条 UPSERT（guest_uid 有 UNIQUE 约束）。
         # 原「先 SELECT 判断存在再分支 INSERT/UPDATE」在并发下有竞态：同一新游客
         # 双标签页同时首次访问 → 两个线程都判定 existing is None → 后一条 INSERT 触发
         # UNIQUE 冲突 IntegrityError → 500「记录访问失败」且该次访问丢失。
         # ON CONFLICT DO UPDATE 由 SQLite 原子处理插入/更新二选一，无需先读。
+        # username 插入值改为 guest_uid 派生，消除并发首访撞名导致在线身份合并。
         conn.execute(
             """
             INSERT INTO guest_identity_records (
@@ -478,7 +486,7 @@ def _upsert_guest_identity_record_sync(record: Dict[str, Any]) -> None:
                 visit_count,
                 first_seen_at,
                 last_seen_at
-            ) VALUES (?, 'user_' || (SELECT COALESCE(MAX(id), 0) + 1 FROM guest_identity_records), ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)
             ON CONFLICT(guest_uid) DO UPDATE SET
                 role = excluded.role,
                 guest_device_id = excluded.guest_device_id,
@@ -494,6 +502,7 @@ def _upsert_guest_identity_record_sync(record: Dict[str, Any]) -> None:
             """,
             (
                 guest_uid,
+                stable_username,
                 role,
                 guest_device_id,
                 ip,
@@ -937,13 +946,43 @@ def _merge_online_tracker(stats: Dict[str, Any]) -> Dict[str, Any]:
 
     DB 口径（online_users）只统计 sessions 表登录会话，游客
     （guest_identity_records）不在其内；而游客的在线信号只存在于内存
-    tracker。轮询型端点（center / realtime）合并后，游客侧看到的
-    realtime_online_users 与 SSE 广播口径一致（SSE 连接计数为主、
-    断线兜底心跳 90s 窗口为辅，见 api/realtime_stats.py）。
+    tracker。轮询型端点（center / realtime）合并后：
+
+    - realtime_online_users：tracker 口径（SSE + 兜底心跳，含游客）
+    - online_users：展示统一为 tracker 口径，避免前端回退到「仅登录会话」
+      的 DB 计数（该计数漏游客，曾导致显示恒为少数几个登录会话）
+    - online_users_db：保留原始 sessions 口径，供管理员对比
+    - online_guests_db：guest_identity_records 在活跃窗口内的游客数
     """
     tracker = get_online_tracker()
-    stats["realtime_online_users"] = tracker.get_online_count()
-    stats["realtime_online_userlist"] = tracker.get_online_users()
+    realtime_count = tracker.get_online_count()
+    realtime_list = tracker.get_online_users()
+
+    db_online = int(stats.get("online_users") or 0)
+    guest_online = 0
+    try:
+        from api.auth import ONLINE_WINDOW_MINUTES
+
+        now = _utc_now()
+        online_cutoff_iso = _iso(now - timedelta(minutes=ONLINE_WINDOW_MINUTES))
+        with _db_connection() as conn:
+            row = conn.execute(
+                """
+                SELECT COUNT(*) AS cnt FROM guest_identity_records
+                WHERE last_seen_at > ?
+                """,
+                (online_cutoff_iso,),
+            ).fetchone()
+        guest_online = int((dict(row).get("cnt") if row else 0) or 0)
+    except Exception:
+        guest_online = 0
+
+    stats["online_users_db"] = db_online
+    stats["online_guests_db"] = guest_online
+    stats["realtime_online_users"] = realtime_count
+    stats["realtime_online_userlist"] = realtime_list
+    # 展示主字段：始终以实时 tracker 为准（登录 + 游客，去重 presence）
+    stats["online_users"] = realtime_count
     return stats
 
 

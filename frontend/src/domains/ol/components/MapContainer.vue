@@ -346,14 +346,14 @@ const CRITICAL_TILE_READY_TIMEOUT_MS = 15000; // 首屏关键瓦片加载安全�
 const APP_DISPLAY_VERSION = __APP_VERSION__; // 应用显示版本号（构建时从 README.md 自动提取，无需手动维护）
 
 // 图层 z-index 分层方案（SSOT：@ol/layer/zIndexBands，值越大越在上层）
-// 固定系统层从数据带（Z_BAND.DATA = 200）中部以上派生，避免被 TOC 顶层数据图层盖住：
-// 绘制临时层 400 > 路线 500 > 起终点 510 > 搜索点 350（数据带容量 600 层内恒高于 TOC 数据图层）
+// 夹心：数据几何 DATA=200 < 瓦片标注 LABEL=600 < 数据标注 DATA_LABEL=700
+// 固定系统层从数据几何带（Z_BAND.DATA = 200）中部以上派生：
 const Z_INDEX = {
-    DRAW: Z_BAND.DATA + 200, // 绘制中的临时图形（高于全部已托管数据图层，容量 200 层内）
-    USER_LOCATION: Z_BAND.SYSTEM + 20, // 用户定位图层（系统叠加带）
-    BUS_ROUTE: Z_BAND.DATA + 300, // 公交/驾车路线图层（初始值，托管后由 refreshUserLayerZIndex 接管）
-    BUS_PICK: Z_BAND.DATA + 310, // 公交选点图层（略高于路线层）
-    SEARCH: Z_BAND.DATA + 150, // 搜索结果图层（瞬态 UI，高于一般数据、低于绘制临时层）
+    DRAW: Z_BAND.DATA + 200,
+    USER_LOCATION: Z_BAND.SYSTEM + 20,
+    BUS_ROUTE: Z_BAND.DATA + 300,
+    BUS_PICK: Z_BAND.DATA + 310,
+    SEARCH: Z_BAND.DATA + 150,
 };
 
 let TIANDITU_TK = getRuntimeMapTokensSync().tiandituTk;
@@ -577,6 +577,8 @@ const {
     createStyleFromConfig,
     mergeStyleConfig,
     buildManagedLayerStyle,
+    buildGeometryStyle,
+    buildLabelOnlyStyle,
     applyManagedLayerStyle,
 } = createManagedLayerStyleFeature({
     styleTemplates: STYLE_TEMPLATES,
@@ -642,6 +644,8 @@ const { createManagedVectorLayer } = useCreateManagedVectorLayer({
     styleHelpers: {
         normalizeStyleConfig,
         buildManagedLayerStyle,
+        buildGeometryStyle,
+        buildLabelOnlyStyle,
     },
     featureHelpers: {
         serializeManagedFeatures,

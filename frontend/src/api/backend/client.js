@@ -93,17 +93,15 @@ backendAPI.interceptors.request.use(
             config.headers.Authorization = `Bearer ${token}`;
         }
 
-        // 未登录访客恒发稳定设备身份（sessionStorage 每标签页独立），
-        // 使后端可识别每个访客客户端并纳入在线统计；分享模式额外带 X-Share-Mode。
-        if (!token) {
-            const guestDeviceId = getOrCreateGuestDeviceId();
-            if (guestDeviceId) {
-                config.headers['X-Guest-Device-Id'] = guestDeviceId;
-            }
-
-            if (readShareModeFromUrl()) {
-                config.headers['X-Share-Mode'] = '1';
-            }
+        // 恒发稳定设备身份（sessionStorage 每标签页独立）：登录/未登录都要带上，
+        // 后端 presence 统计依赖它区分游客身份；分享模式额外放行头。
+        const guestDeviceId = getOrCreateGuestDeviceId();
+        if (guestDeviceId) {
+            config.headers['X-Guest-Device-Id'] = guestDeviceId;
+        }
+        if (readShareModeFromUrl()) {
+            config.headers['X-Share-Mode'] = '1';
+            config.headers['X-Guest-Allow'] = '1';
         }
 
         // 传递用户公网 IP：后端在 Docker 环境拿到的 request.client.host 是容器网关 IP

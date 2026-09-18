@@ -161,7 +161,10 @@ def main() -> int:
             print(f"  - {err}")
         return 1
     n_routes = len(list(app_module.app.routes))
-    print(f"[OK] 路由断言通过（共 {n_routes} 条，无 /proxy|/tiles 中转）")
+    # 说明：断言仅禁 /proxy/* 与 /tiles/*（瓦片中转）与 /api/download。
+    # V3.6.6 恢复的 external_proxy 挂在 /api/proxy/*（高德/Nominatim/EPSG/IP JSON），
+    # 不在本不变量内；是否部署到 HF 仍由用户决策（政策灰区）。
+    print(f"[OK] 路由断言通过（共 {n_routes} 条，无 /proxy/* 与 /tiles/* 瓦片中转）")
     return 0
 
 

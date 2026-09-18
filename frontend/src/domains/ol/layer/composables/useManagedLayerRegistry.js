@@ -112,17 +112,19 @@ export function useManagedLayerRegistry({ emit, userDataLayers, drawSource, styl
     /**
      * 刷新全部托管图层的 zIndex（见 @ol/layer/zIndexBands）。
      *
-     * TOC 数据管理中的拖拽顺序（= 数组顺序 = order 字段）覆写默认层级：
-     * TOC 顶部图层（index 0）获得最高 zIndex，最先显示；
-     * 全部图层统一落在数据带 [Z_BAND.DATA, Z_BAND.DATA + N - 1]，
-     * 位于底图带（含卷帘）之上、区划/标注/系统带之下（容量 600 层内）。
+     * TOC 拖拽顺序覆写默认层级（TOC 顶部 = 带内最高 zIndex）：
+     * - 几何层 → Z_BAND.DATA + offset
+     * - 标注层 → Z_BAND.DATA_LABEL + offset（同序，夹在瓦片标注之上）
      */
     function refreshUserLayerZIndex() {
         const total = userDataLayers.length;
         userDataLayers.forEach((item, index) => {
             item.order = index;
-            const zIndex = Z_BAND.DATA + (total - 1 - index);
-            item.layer?.setZIndex?.(zIndex);
+            const offset = total - 1 - index;
+            item.layer?.setZIndex?.(Z_BAND.DATA + offset);
+            if (item.labelLayer) {
+                item.labelLayer?.setZIndex?.(Z_BAND.DATA_LABEL + offset);
+            }
         });
     }
 
