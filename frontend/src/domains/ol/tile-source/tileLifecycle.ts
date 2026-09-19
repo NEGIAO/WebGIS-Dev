@@ -6,25 +6,29 @@
  *
  * 核心机制：
  * - 每个源绑定一个 AbortController，tileLoadFunction 通过 fetch() + signal 加载瓦片
+ * - controller 每次加载时从 source 动态读取（避免闭包锁死旧 controller）
  * - abort() 会真正中断浏览器底层 TCP 连接（而非仅标记）
- * - epoch 计数器防止过期请求的结果被采纳
- * - 外部瓦片直连失败时自动走后端 /proxy/{URL} 代理（fallback 模式）
+ * - epoch 在请求开始时写入 tile，异步回调完成后再对比 source 最新 epoch
+ * - 外部瓦片直连失败时自动走后端 /proxy/{host+path} 代理（fallback 模式）
  * - 支持 VITE_TILE_PROXY_MODE=always 强制所有外部瓦片走代理
- * - 代理触发时通过 Message 组件弹出 toast 通知（5s 防抖去重）
+ * - 代理真正加载成功时才弹 toast（5s 防抖去重）
+ * - prioritizeTileSourceRequest 幂等：重复包装只补齐 controller
  */
 
 import { TILE_STATE_ERROR, TILE_REQUEST_TIMEOUT_MS } from './types';
 import { useMessage } from '@common/shell/useMessage';
 import { extractTileErrorDetail, notifyTileRateLimited } from '@common/utils/tileRateLimitNotify';
-import { TILE_PROXY_BASE_URL, TILE_PROXY_MODE } from '@/config/publicRuntime';
+import { TILE_PROXY_BASE_URL, TILE_PROXY_MODE, tileProxyUrl } from '@/config/publicRuntime';
 
 // ==================== 代理通知（去重防抖） ====================
+
+const LIFECYCLE_PRIORITY_MARK = 'tileLifecyclePriority';
 
 let lastProxyNotifyAt = 0;
 const PROXY_NOTIFY_DEBOUNCE_MS = 5000;
 
 /**
- * 直连失败 → 后端代理兜底时弹出提示
+ * 直连失败 → 后端代理兜底成功时弹出提示
  * 5s 防抖：快速切换底图时只弹一次，不打断用户操作
  */
 function notifyProxyFallback(): void {
@@ -40,7 +44,7 @@ function notifyProxyFallback(): void {
 }
 
 /**
- * always 模式下首次请求时弹出提示
+ * always 模式下首次请求成功时弹出提示
  */
 function notifyAlwaysProxy(): void {
     const now = Date.now();
@@ -93,6 +97,23 @@ function getSourceEpoch(source: any): number {
     return 0;
 }
 
+function getTileEpoch(tile: any): number {
+    if (!tile) return 0;
+    if (typeof tile.get === 'function') {
+        return Number(tile.get('epoch') || 0);
+    }
+    return Number(tile.epoch || 0);
+}
+
+function stampTileEpoch(tile: any, epoch: number): void {
+    if (!tile) return;
+    if (typeof tile.set === 'function') {
+        tile.set('epoch', epoch);
+        return;
+    }
+    tile.epoch = epoch;
+}
+
 function isHttpUrl(value: string): boolean {
     return /^https?:\/\//i.test(String(value || '').trim());
 }
@@ -103,8 +124,13 @@ function canProxyTileUrl(srcUrl: string): boolean {
 
     try {
         const tileUrl = new URL(srcUrl);
-        const backendUrl = new URL(TILE_PROXY_BASE_URL);
-        if (tileUrl.origin === backendUrl.origin) return false;
+        // TILE_PROXY_BASE_URL 可能为相对路径（同源部署）；解析失败时不按 origin 排除
+        try {
+            const backendUrl = new URL(TILE_PROXY_BASE_URL, window.location?.href || undefined);
+            if (tileUrl.origin === backendUrl.origin) return false;
+        } catch {
+            // 忽略基址解析失败，继续其余检查
+        }
         if (typeof window !== 'undefined' && tileUrl.origin === window.location.origin) return false;
         if (tileUrl.pathname.startsWith('/proxy/') || tileUrl.pathname.startsWith('/tiles/')) {
             return false;
@@ -116,10 +142,20 @@ function canProxyTileUrl(srcUrl: string): boolean {
     return true;
 }
 
-// 复用既有后端 /proxy/{URL}，仅在 fallback/always 模式下处理第三方 CORS 问题。
+/**
+ * 复用后端 /proxy/{host+path}（与 publicRuntime.tileProxyUrl 契约一致：不带协议）。
+ * 仅在 fallback/always 模式下处理第三方 CORS/网络问题。
+ */
 function buildTileProxyUrl(srcUrl: string): string | null {
     if (!canProxyTileUrl(srcUrl)) return null;
-    return `${TILE_PROXY_BASE_URL}/proxy/${srcUrl}`;
+    try {
+        const url = new URL(srcUrl);
+        const hostAndPath = `${url.host}${url.pathname}${url.search}`;
+        // SSOT：与 SidePanel/新闻等共用 publicRuntime.tileProxyUrl
+        return tileProxyUrl(hostAndPath);
+    } catch {
+        return null;
+    }
 }
 
 /**
@@ -128,6 +164,60 @@ function buildTileProxyUrl(srcUrl: string): string | null {
  */
 export function buildRequestProxyUrl(srcUrl: string): string | null {
     return buildTileProxyUrl(srcUrl);
+}
+
+/** 每瓦片独立超时：到点主动 abort，释放浏览器并发槽位 */
+function createTileTimeout(timeoutMs: number): {
+    signal: AbortSignal;
+    cleanup: () => void;
+} {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    return {
+        signal: controller.signal,
+        cleanup: () => clearTimeout(timer),
+    };
+}
+
+/**
+ * 组合 source 级 abort 与单瓦片超时 signal。
+ * 任一方 abort 时组合 signal 同步 abort。
+ */
+function createCombinedSignal(
+    sourceSignal: AbortSignal,
+    timeoutSignal: AbortSignal,
+): { signal: AbortSignal; cleanup: () => void } {
+    const controller = new AbortController();
+
+    const abortFromSource = () => controller.abort(sourceSignal.reason);
+    const abortFromTimeout = () => controller.abort(timeoutSignal.reason);
+
+    if (sourceSignal.aborted || timeoutSignal.aborted) {
+        controller.abort();
+    } else {
+        sourceSignal.addEventListener('abort', abortFromSource, { once: true });
+        timeoutSignal.addEventListener('abort', abortFromTimeout, { once: true });
+    }
+
+    return {
+        signal: controller.signal,
+        cleanup: () => {
+            sourceSignal.removeEventListener('abort', abortFromSource);
+            timeoutSignal.removeEventListener('abort', abortFromTimeout);
+        },
+    };
+}
+
+/** 动态取当前 AbortController；缺失或已 abort 时补齐新实例 */
+function resolveSourceAbortController(source: any): AbortController {
+    let controller = source?.get?.('abortController');
+    if (!(controller instanceof AbortController) || controller.signal.aborted) {
+        controller = new AbortController();
+        if (source && typeof source.set === 'function') {
+            source.set('abortController', controller);
+        }
+    }
+    return controller;
 }
 
 async function requestTileAsBlobUrl(
@@ -140,7 +230,7 @@ async function requestTileAsBlobUrl(
             mode: 'cors',
             credentials: 'omit',
         });
-        // 429：后端代理限流或上游限流 — 解析 body 后 toast，再按失败处理
+        // 429：代理限流或上游限流 — 解析 body 后 toast，再按失败处理
         if (resp.status === 429) {
             const detail = await extractTileErrorDetail(resp);
             notifyTileRateLimited(detail);
@@ -172,16 +262,23 @@ async function fetchTileAsBlobUrl(
 
     // always 模式：所有可代理的瓦片统一走后端
     if (TILE_PROXY_MODE === 'always' && proxyUrl) {
-        notifyAlwaysProxy();
-        return requestTileAsBlobUrl(proxyUrl, signal);
+        const proxied = await requestTileAsBlobUrl(proxyUrl, signal);
+        if (proxied) notifyAlwaysProxy();
+        return proxied;
     }
 
     // fallback 模式：直连优先，失败后走后端代理
     const directUrl = await requestTileAsBlobUrl(srcUrl, signal);
     if (directUrl || TILE_PROXY_MODE === 'off' || !proxyUrl || signal.aborted) return directUrl;
 
-    notifyProxyFallback();
-    return requestTileAsBlobUrl(proxyUrl, signal);
+    const proxiedUrl = await requestTileAsBlobUrl(proxyUrl, signal);
+    // 代理真正成功再提示，避免「已切换」但瓦片仍失败的误导
+    if (proxiedUrl) notifyProxyFallback();
+    return proxiedUrl;
+}
+
+function revokeBlobUrl(url: string | null): void {
+    if (url) URL.revokeObjectURL(url);
 }
 
 // ==================== 公开 API ====================
@@ -191,10 +288,10 @@ async function fetchTileAsBlobUrl(
  * 通过 fetch() + signal 实现真正的网络级中断。
  *
  * 工作流程：
- * 1. 每次 tile 加载前检查 epoch（防止过期请求的结果被采纳）
- * 2. 检查 signal.aborted（已被 abort 的请求直接标记错误）
- * 3. 用 fetch() + signal 加载图片（abort 时立即释放 TCP 连接）
- * 4. 成功后创建 blob URL 赋给 img.src
+ * 1. 动态读取 source 当前 AbortController（缺失/已 abort 时补齐）
+ * 2. 请求开始时把当前 abortEpoch 写入 tile
+ * 3. 用 fetch() + 组合 signal（source abort + 单瓦片超时）加载图片
+ * 4. 成功后创建 blob URL 赋给 img.src；回调时再对比 epoch
  */
 export function prioritizeTileSourceRequest<T>(source: T): T {
     // OpenLayers tile source 内部接口（set/get 动态属性）
@@ -205,67 +302,67 @@ export function prioritizeTileSourceRequest<T>(source: T): T {
         setTileLoadFunction?(fn: (tile: any, srcUrl: string) => void): void;
     }
     const src = source as TileSourceWithInternals;
-    if (!src || typeof src.set !== 'function') return source;
+    if (!src || typeof src.set !== 'function' || typeof src.get !== 'function') return source;
 
-    const controller = new AbortController();
-    src.set('abortController', controller);
+    // 幂等：已包装过只补齐 controller，避免叠加 setTileLoadFunction
+    if (src.get(LIFECYCLE_PRIORITY_MARK)) {
+        resolveSourceAbortController(src);
+        return source;
+    }
+
+    src.set(LIFECYCLE_PRIORITY_MARK, true);
+    resolveSourceAbortController(src);
 
     const originalTileLoadFn = src.getTileLoadFunction?.();
     if (typeof originalTileLoadFn === 'function') {
         src.setTileLoadFunction((tile: any, srcUrl: string) => {
-            const currentEpoch = getSourceEpoch(src);
-            const tileEpoch = Number(tile.get?.('epoch') || 0);
-            if (tileEpoch < currentEpoch) {
-                markTileAsError(tile);
-                return;
-            }
+            const controller = resolveSourceAbortController(src);
+            const sourceSignal = controller.signal;
 
-            const signal = controller.signal;
-            if (signal.aborted) {
-                markTileAsError(tile);
-                return;
-            }
+            const currentEpoch = getSourceEpoch(src);
+            stampTileEpoch(tile, currentEpoch);
 
             const img = tile.getImage?.();
             if (img instanceof HTMLImageElement) {
-                // 用 fetch() + AbortSignal 加载，使 abort() 能中断底层连接
                 let blobUrl: string | null = null;
+                const timeout = createTileTimeout(TILE_REQUEST_TIMEOUT_MS);
+                const combined = createCombinedSignal(sourceSignal, timeout.signal);
 
-                // 监听 abort 信号：释放 blob URL 防止内存泄漏
+                const cleanupListeners = () => {
+                    combined.cleanup();
+                    timeout.cleanup();
+                };
+
                 const onAbort = () => {
-                    if (blobUrl) {
-                        URL.revokeObjectURL(blobUrl);
-                        blobUrl = null;
-                    }
+                    revokeBlobUrl(blobUrl);
+                    blobUrl = null;
                     markTileAsError(tile);
                 };
-                signal.addEventListener('abort', onAbort, { once: true });
+                combined.signal.addEventListener('abort', onAbort, { once: true });
 
-                // 带超时的 fetch（防止被墙请求无限挂起）
-                const timeoutMs = TILE_REQUEST_TIMEOUT_MS;
-                const timeoutId = setTimeout(() => {
-                    // 超时后不主动 abort（由上层 abortTileSourceRequests 统一管理）
-                    // 仅标记 tile 为错误状态
+                if (combined.signal.aborted) {
+                    cleanupListeners();
                     markTileAsError(tile);
-                }, timeoutMs);
+                    return;
+                }
 
-                fetchTileAsBlobUrl(srcUrl, signal)
+                fetchTileAsBlobUrl(srcUrl, combined.signal)
                     .then((url) => {
-                        clearTimeout(timeoutId);
-                        signal.removeEventListener('abort', onAbort);
+                        cleanupListeners();
+                        combined.signal.removeEventListener('abort', onAbort);
 
-                        // 再次检查 epoch 和 signal（fetch 期间可能已 abort）
+                        // 回调时再比 epoch：fetch 期间可能已 abort / 换源
                         const latestEpoch = getSourceEpoch(src);
-                        const tileEpochNow = Number(tile.get?.('epoch') || 0);
-                        if (tileEpochNow < latestEpoch || signal.aborted) {
-                            if (url) URL.revokeObjectURL(url);
+                        const tileEpochNow = getTileEpoch(tile);
+                        if (tileEpochNow < latestEpoch || combined.signal.aborted) {
+                            revokeBlobUrl(url);
                             markTileAsError(tile);
                             return;
                         }
 
                         if (url) {
                             blobUrl = url;
-                            // 成功加载后立即 revoke：图片数据已解码进 img 元素，释放 object URL 不影响显示
+                            // 成功加载后立即 revoke：图片数据已解码进 img 元素
                             img.addEventListener('load', () => {
                                 URL.revokeObjectURL(url);
                             }, { once: true });
@@ -279,13 +376,13 @@ export function prioritizeTileSourceRequest<T>(source: T): T {
                         }
                     })
                     .catch(() => {
-                        clearTimeout(timeoutId);
-                        signal.removeEventListener('abort', onAbort);
+                        cleanupListeners();
+                        combined.signal.removeEventListener('abort', onAbort);
+                        revokeBlobUrl(blobUrl);
                         markTileAsError(tile);
                     });
             } else {
-                // 非 HTMLImageElement（如 Canvas），回退到原始 loadFunction
-                // 仍然检查 epoch 防止过期结果
+                // 非 HTMLImageElement（如 Canvas）回退到原始 loadFunction
                 originalTileLoadFn(tile, srcUrl);
             }
         });
@@ -312,10 +409,12 @@ export function abortTileSourceRequests(source: any): void {
         source.set('abortEpoch', currentEpoch + 1);
     }
 
-    // ② AbortController：中断所有 fetch() 请求，释放 TCP 连接
+    // ② AbortController：中断所有 fetch() 请求，释放 TCP 连接，并换新实例
     const controller = source.get('abortController');
     if (controller instanceof AbortController) {
         controller.abort('tile-source-aborted');
+    }
+    if (typeof source.set === 'function') {
         source.set('abortController', new AbortController());
     }
 

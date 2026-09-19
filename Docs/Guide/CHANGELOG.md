@@ -6,6 +6,18 @@
 
 ## 版本记录
 
+### V3.6.7 (2026-09-19) — OL 比例尺/鹰眼主题化 + 瓦片生命周期加固 + 侧栏壳层
+
+> **主题一 · OL 控件主题化**：`MapContainer.vue` 引入 `ol/ol.css` 与地图同 chunk；ScaleLine `bar+text`，浅白绿玻璃 HUD（主题 token），左中右刻度动态定位；OverviewMap/折叠按钮同主题。View `minZoom=1` / `maxZoom=22` / `multiWorld=true`；缩放显示低层级 `round`、中高层 `ceil`。
+>
+> **主题二 · 瓦片生命周期**：`tileLifecycle.ts` 幂等 `prioritizeTileSourceRequest`（防二次包装）；动态 AbortController + 单瓦片超时组合 signal；epoch 请求始末双检；代理 URL 改为 `/proxy/{host+path}` 并复用 `publicRuntime.tileProxyUrl`；toast 仅在代理真正成功后弹出。`xyzSource` 去掉 XYZ 二次包装。
+>
+> **主题三 · SidePanel 壳层**：`info-panel-shell` / `info-panel` 分层，折叠手柄可伸出且不参与圆角裁切；Review 修复：多余 `</div>`、移动端收起时手柄随 shell 被推出屏（改为只下移内容面板 + 手柄贴底可点）。
+>
+> **Review 修复**：鹰眼按钮默认底色恢复浅白绿渐变；`canProxyTileUrl` 对非绝对 `TILE_PROXY_BASE_URL` 不再整段判定失败；比例尺末端标注注释与 `top` 对齐。
+>
+> 日志：[`2026-09-19-staged-review-v367.md`](../LLM_record/26-09/2026-09-19/2026-09-19-staged-review-v367.md)
+
 ### V3.6.6 (2026-09-18) — 在线 presence + external_proxy 恢复 + OL 标注夹心 + 下载搁置标注
 
 > **主题一 · 在线人数 presence（恒显示 2）**：tracker/ticket 改稳定 `presence_id`（`u:`/`g:`/`e:`）；无 device_id 的临时身份**不计入在线**；游客名由 `guest_uid` 派生；SSE TTL 75s + 关页 offline beacon + 页面打开时断线 presence ping（非 HF 防休眠）；`online_users` 统一 tracker；`GET /api/statistics/admin/online-debug`。

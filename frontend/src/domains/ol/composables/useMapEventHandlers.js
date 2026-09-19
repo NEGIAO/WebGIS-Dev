@@ -227,8 +227,13 @@ export function createMapEventHandlers({
         olKeys.push(map.getView().on('change:resolution', () => {
             const zoom = map.getView().getZoom();
             if (zoom !== undefined) {
-                // 跟随 tileHDRendering 开关：开启→Math.ceil（高清上层），关闭→Math.floor（默认下层）
-                currentZoomRef.value = tileHDRendering.value ? Math.ceil(zoom) : Math.floor(zoom);
+                // 高清瓦片（HDR）在中高缩放用 ceil 对齐「实际请求的上层瓦片 z」；
+                // 低缩放（z<4）改为 round，避免 2.01 被显示成 3、看不到 z=1
+                if (tileHDRendering.value && zoom >= 4) {
+                    currentZoomRef.value = Math.ceil(zoom);
+                } else {
+                    currentZoomRef.value = Math.round(zoom);
+                }
             }
         }));
 

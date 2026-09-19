@@ -1900,6 +1900,7 @@ onMounted(async () => {
             />
 
             <!-- 侧边容器栏（右）-->
+             <!-- 拖拽 -->
             <div
                 class="side-panel-wrapper"
                 :class="{
@@ -2022,7 +2023,7 @@ onMounted(async () => {
     width: 100%;
     min-height: 0;
     gap: 2px;
-    padding: 5px 0;
+    padding: 0px 0;
     box-sizing: border-box;
     overflow: hidden;
 }

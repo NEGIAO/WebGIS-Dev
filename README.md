@@ -81,7 +81,7 @@
 
 ## 🎯 项目简介
 
-**NEGIAO's WebGIS** 是一个功能完整、架构清晰的前后端分离 WebGIS 平台（当前版本 V3.6.6），前端托管于 GitHub Pages（正式域名 webgis.negiao.cn），后端以 Docker 部署在 Hugging Face Spaces，通过 RESTful API 通信，支持独立扩展。
+**NEGIAO's WebGIS** 是一个功能完整、架构清晰的前后端分离 WebGIS 平台（当前版本 V3.6.7），前端托管于 GitHub Pages（正式域名 webgis.negiao.cn），后端以 Docker 部署在 Hugging Face Spaces，通过 RESTful API 通信，支持独立扩展。
 
 > 📚 本 README 仅保留核心概览与导航。完整文档已模块化至 [`Docs/Guide/`](Docs/Guide/)，详见下方「文档导航」。
 >
@@ -396,11 +396,11 @@ tiles.negiao.cc.cd"]
 
 | 版本 | 日期 | 概要 |
 |------|------|------|
+| **V3.6.7** | 2026-09-19 | **OL 比例尺/鹰眼主题化 + 瓦片生命周期加固 + 侧栏壳层**：ScaleLine/OverviewMap 浅白绿玻璃 HUD；View 缩放 `1–22`+`multiWorld`；tileLifecycle 幂等包装/超时 abort/代理 URL 契约；SidePanel shell 分层与移动端收起手柄修复。详见[完整更新日志](Docs/Guide/CHANGELOG.md) |
 | **V3.6.6** | 2026-09-18 | **在线 presence + external_proxy 恢复 + OL 标注夹心**：tracker 稳定 `presence_id` 修「恒 2 人在线」；恢复 V3.6.5 误删的 `/api/proxy` JSON 代理；托管矢量层 geometry/label 双层（数据几何 < 瓦片标注 < 数据标注）；底图下载 404 注释与 tag 标记文档。详见[完整更新日志](Docs/Guide/CHANGELOG.md) |
 | **V3.6.5** | 2026-09-15 | **瓦片纠偏迁出本仓**：删 `domains/tiles` 与 external_proxy；开源仓 `tile-proxy` + 线上 `https://vpn.negiao.cn/proxy/*`；前端 `TILE_PROXY` 指 VPS。详见[完整更新日志](Docs/Guide/CHANGELOG.md) |
-| **V3.6.4** | 2026-09-12 | **瓦片域高聚合 + 磁盘缓存清理**：SSRF/出站头迁入 `domains/tiles/infra`；`GCJRE_CACHE` 按龄/按容量自动清理。接口不变。详见[完整更新日志](Docs/Guide/CHANGELOG.md) |
 
-更早版本（V3.6.2 及以前）请查阅 [完整更新日志 →](Docs/Guide/CHANGELOG.md)
+更早版本（V3.6.4 及以前）请查阅 [完整更新日志 →](Docs/Guide/CHANGELOG.md)
 
 ---
 
@@ -422,6 +422,6 @@ tiles.negiao.cc.cd"]
 |:------:|:--------:|:--------:|
 | [GitHub](https://github.com/NEGIAO/WebGIS-Dev) | [webgis.negiao.cn](https://webgis.negiao.cn)（正式域名，GitHub Pages 托管） | [Hugging Face](https://NEGIAO-WebGIS.hf.space) |
 
-<sub>V3.6.6 · 开发中 · 最后更新 2026-09-18</sub>
+<sub>V3.6.7 · 开发中 · 最后更新 2026-09-19</sub>
 
 </div>

@@ -1,9 +1,10 @@
 <template>
+    <!-- 外壳：负责布局与折叠手柄溢出，不裁切 -->
     <div
-        class="info-panel"
+        class="info-panel-shell"
         :class="{ collapsed: isCollapsed, 'in-dihuan': props.locationInfo.isInDihuan }"
     >
-        <!-- 折叠开关 -->
+        <!-- 折叠开关（放在 shell 上，可伸出面板） -->
         <div
             class="toggle-handle"
             :title="isCollapsed ? t('shell.expandPanel') : t('shell.collapsePanel')"
@@ -32,9 +33,13 @@
             </svg>
         </div>
 
-        <!-- 面板内容区域 -->
+        <!-- 内层：overflow hidden + border-radius，子元素背景被圆角裁切 -->
         <div
             v-show="!isCollapsed"
+            class="info-panel"
+        >
+        <!-- 面板内容区域 -->
+        <div
             class="panel-content"
             :class="{
                 'no-padding':
@@ -268,6 +273,7 @@
             </div>
         </div>
     </div>
+</div>
 </template>
 
 <script setup>
@@ -291,7 +297,7 @@ import {
 } from 'vue';
 import { getRuntimeMapTokensSync, loadRuntimeMapTokens } from '@common/services/runtimeMapTokens';
 import { useLocale } from '@common/app/useLocale';
-import { BACKEND_BASE_URL, tileProxyUrl } from '@/config/publicRuntime';
+import { tileProxyUrl } from '@/config/publicRuntime';
 
 // Load non-default tabs on first use; keep them mounted afterward to preserve state.
 const ChatPanelContent = defineAsyncComponent(() =>
@@ -591,17 +597,28 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
-/* 布局容器 */
+/* 外壳：允许折叠手柄溢出，本身不做圆角裁切 */
+.info-panel-shell {
+    position: relative;
+    display: flex;
+    flex-direction: row;
+    width: 100%;
+    height: 100%;
+    overflow: visible;
+}
+
+/* 内层面板：overflow hidden 让子元素背景被 border-radius 裁切 */
 .info-panel {
     display: flex;
     flex-direction: row;
+    flex: 1;
+    min-width: 0;
     height: 100%;
     background: #fff;
     overflow: hidden;
     box-shadow: 2px 0 8px rgba(0, 0, 0, 0.1);
     transition: width 0.3s ease;
-    overflow: visible !important;
-    position: relative;
+    /* 简写顺序：左上 右上 右下 左下 */
     border-radius: 16px 0 0 16px;
 }
 
@@ -620,7 +637,7 @@ onUnmounted(() => {
     transition: all 0.2s ease;
     z-index: var(--z-toast);
 
-    /* 👇 向左偏移 15px 核心代码 */
+    /* 相对 shell 定位，伸出面板左侧 */
     position: absolute;
     left: -30px;
     top: 50%;
@@ -678,32 +695,31 @@ onUnmounted(() => {
 
 /* 移动端适配 */
 @media (max-width: 768px) {
-    .info-panel {
+    .info-panel-shell {
         display: flex;
-        /* 确保父容器是 Flex 布局 */
         flex-direction: column;
-        /* 垂直排列 */
         width: 100% !important;
-
-        /* 1. 设置面板高度为视口高度的 60% */
         height: 60vh;
-
         transition: transform 0.3s ease;
         overflow: visible;
-        /* 允许按钮溢出显示 */
-
-        /* 定位基准，确保收起动画逻辑清晰 */
         position: fixed;
         bottom: 0;
         left: 0;
     }
 
     /* 收起状态下的处理：将整个面板向下推 */
-    .info-panel.collapsed {
-        /* 向上平移 100% 负方向减去按钮高度，或者直接推下去 */
+    .info-panel-shell.collapsed {
         transform: translateY(100%);
-        /* 注意：如果完全推下去，按钮也会看不见。
-           通常配合 transition 使用，或者只推 60vh 的高度 */
+    }
+
+    .info-panel {
+        flex: 1;
+        width: 100%;
+        min-height: 0;
+        flex-direction: column;
+        /* 底部抽屉：圆角在上方 */
+        border-radius: 16px 16px 0 0;
+        overflow: hidden;
     }
 
     .toggle-handle {
@@ -745,10 +761,11 @@ onUnmounted(() => {
     gap: 0;
     padding: 0 !important;
     background: #fff;
+    border-radius: 16px 0 0 16px;
 }
 
 .news-header-bar {
-    padding: 16px 16px 8px;
+    padding: 8px;
     flex-shrink: 0;
     border-bottom: 1px solid #f0f0f0;
 }

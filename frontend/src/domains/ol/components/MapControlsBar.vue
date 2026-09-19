@@ -167,7 +167,7 @@ const DEFAULT_DECIMAL_PLACES = 6;
 /**
  * @prop {String} coordinateText - 当前坐标文本（格式："lng, lat"）
  * @prop {Object|null} coordinate - 原始坐标对象 { lng, lat }，组件内部负责格式化
- * @prop {Number|String} currentZoom - 当前地图缩放级别（0-22）
+ * @prop {Number|String} currentZoom - 当前地图缩放级别（1-22）
  */
 const props = defineProps({
     coordinate: {
@@ -225,15 +225,15 @@ const displayCoordinateText = computed(() => {
 /** 是否可以复制坐标（坐标有效时） */
 const canCopyCoordinate = computed(() => displayCoordinateText.value !== COORDINATE_PLACEHOLDER);
 
-/** 显示的缩放级别：与 alwaysPickFinerZoom 瓦片策略一致
- *  - useMapEventHandlers 写入 currentZoomRef 时已做取整（HDR开→ceil，HDR关→floor）
- *  - 此处 displayZoom 对整数值 ceil 结果不变（13→13），仅在外部传入非整数时兜底向上取整
- *  - 与 useMapEventHandlers.js L231 配合：两者最终一致，不会产生显示偏差 */
+/** 显示的缩放级别
+ *  - 中高缩放：与 HDR 取上层瓦片策略一致（ceil）
+ *  - 低缩放（<4）：与 useMapEventHandlers 的 round 一致，能显示到 z=1
+ */
 const displayZoom = computed(() => {
     const z = Number(props.currentZoom);
     if (!Number.isFinite(z)) return '--';
 
-    // 无论是 13（整）还是 13.01/13.51（非整），Math.ceil 处理后结果完全一致
+    if (z < 4) return Math.round(z);
     return Math.ceil(z);
 });
 
@@ -898,7 +898,7 @@ onUnmounted(() => {
 @media (max-width: 768px) {
     .map-controls-group {
         right: 12px;
-        bottom: 35px;
+        bottom: 33px;
         gap: 8px;
     }
 

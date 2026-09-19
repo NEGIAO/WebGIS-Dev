@@ -273,8 +273,8 @@ export async function createAutoTileSourceFromUrl(
     }
 
     try {
-        const xyzResult = createXyzSourceStrict(normalizedUrl, adapters);
-        return { ...xyzResult, source: prioritizeTileSourceRequest(xyzResult.source) };
+        // createXyzSourceStrict 内部已 prioritize，避免二次包装
+        return createXyzSourceStrict(normalizedUrl, adapters);
     } catch (error) {
         errors.push(`XYZ: ${toErrorMessage(error)}`);
     }
@@ -283,6 +283,7 @@ export async function createAutoTileSourceFromUrl(
         const wmsResult = await createWmsSourceStrict(normalizedUrl, {
             preferredLayers: options.preferredLayers,
         });
+        // 部分 WMS 路径内部不套生命周期；prioritize 现已幂等，安全兜底
         return { ...wmsResult, source: prioritizeTileSourceRequest(wmsResult.source) };
     } catch (error) {
         errors.push(`WMS: ${toErrorMessage(error)}`);
@@ -290,6 +291,7 @@ export async function createAutoTileSourceFromUrl(
 
     try {
         const wmtsResult = await createWmtsSourceStrict(normalizedUrl, adapters);
+        // WMTS GetTile/模板路径可能未套生命周期；prioritize 幂等，安全兜底
         return { ...wmtsResult, source: prioritizeTileSourceRequest(wmtsResult.source) };
     } catch (error) {
         errors.push(`WMTS: ${toErrorMessage(error)}`);

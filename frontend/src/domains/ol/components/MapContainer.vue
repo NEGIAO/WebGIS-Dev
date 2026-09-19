@@ -192,6 +192,9 @@ const emit = defineEmits([
 import { storeToRefs } from 'pinia';
 
 // --- OpenLayers 核心 ---
+// ol.css 必须与地图/控件同 chunk 引入：此前仅在懒加载 mapRuntimeDeps 中 import，
+// 本地 dev 下 Vite 按模块注入 CSS，MapContainer 可能先于 ol.css 挂载 → 控件无样式。
+import 'ol/ol.css';
 import Map from 'ol/Map';
 import View from 'ol/View';
 import { fromLonLat, toLonLat } from 'ol/proj';
@@ -1631,16 +1634,22 @@ function initMap() {
         view: new View({
             center: fromLonLat(initialViewState.center),
             zoom: initialViewState.zoom,
-            minZoom: 0, // 允许缩放到最低级别
+            // 下限 z=1（z=0 无业务意义）；上限 z=22（与主流底图源/控件文案一致，z=23+ 基本无瓦片）
+            minZoom: 1,
             maxZoom: 22,
+            multiWorld: true,
         }),
         controls,
     });
     // 创建比例尺控件（通过 addControl 添加，避免与 defaultControls 冲突）
+    // bar:true → 根节点 class 为 ol-scale-bar（不是 ol-scale-line）
     const scaleline = new ScaleLine({
         units: 'metric',
         bar: true,
-        minWidth: 100,
+        minWidth: 160,
+        maxWidth: 240,
+        steps: 4,
+        text: true,
     });
     mapInstance.value.addControl(scaleline);
 
@@ -2388,47 +2397,422 @@ onUnmounted(() => unregisterEngineHandlers('ol'));
     border: 1px solid white;
 }
 
-/* 鹰眼视图样式 */
+/* 鹰眼视图样式 —— 浅色玻璃，与比例尺 / MapControlsBar 主题一致 */
 :deep(.ol-custom-overviewmap) {
     position: absolute;
-    left: 5px;
-    top: 5px;
+    left: 8px;
+    top: 8px;
     right: auto;
     bottom: auto;
 }
 
 :deep(.ol-custom-overviewmap:not(.ol-collapsed)) {
-    border: 2px solid rgba(var(--brand-primary-rgb), 0.729);
-    border-radius: 4px;
-    background: rgba(255, 255, 255, 0.9);
+    border: 1px solid rgba(var(--brand-primary-rgb, 76, 175, 80), 0.28);
+    border-radius: 6px;
+    /* 与比例尺同款：浅白绿玻璃 */
+    background:
+        linear-gradient(
+            145deg,
+            rgba(var(--brand-accent-light-rgb, 91, 207, 137), 0.16) 0%,
+            rgba(var(--brand-primary-rgb, 76, 175, 80), 0.05) 30%,
+            rgba(255, 255, 255, 0.9) 100%
+        );
+    backdrop-filter: blur(12px) saturate(160%);
+    -webkit-backdrop-filter: blur(12px) saturate(160%);
+    box-shadow:
+        0 8px 24px rgba(0, 0, 0, 0.12),
+        inset 0 1px 0 rgba(255, 255, 255, 0.55);
+    padding: 1.5px;
+    overflow: hidden;
+    clip-path: polygon(
+        8px 0,
+        100% 0,
+        100% calc(100% - 8px),
+        calc(100% - 8px) 100%,
+        0 100%,
+        0 8px
+    );
+}
+
+:deep(.ol-custom-overviewmap.ol-collapsed) {
+    border: 1px solid rgba(var(--brand-primary-rgb, 76, 175, 80), 0.22);
+    border-radius: 6px;
+    background:
+        linear-gradient(
+            165deg,
+            rgba(var(--brand-accent-light-rgb, 91, 207, 137), 0.16) 0%,
+            rgba(var(--brand-primary-rgb, 76, 175, 80), 0.05) 30%,
+            rgba(255, 255, 255, 0.9) 100%
+        );
+    backdrop-filter: blur(12px) saturate(160%);
+    -webkit-backdrop-filter: blur(12px) saturate(160%);
+    box-shadow:
+        0 4px 12px rgba(0, 0, 0, 0.1),
+        inset 0 1px 0 rgba(255, 255, 255, 0.55);
 }
 
 :deep(.ol-custom-overviewmap .ol-overviewmap-map) {
     border: none;
+    border-radius: 4px;
     width: 200px;
     height: 200px;
+    background: rgba(var(--brand-primary-rgb, 76, 175, 80), 0.06);
 }
 
 :deep(.ol-custom-overviewmap .ol-overviewmap-box) {
-    border: 2px solid var(--brand-accent);
-    background: rgba(0, 170, 255, 0.2);
+    border: 2px solid var(--brand-accent, #57b861);
+    border-radius: 2px;
+    background: rgba(var(--brand-accent-rgb, 87, 184, 97), 0.18);
 }
 
+/* 折叠/展开按钮 « / » —— 内容居中；浅白绿底，与比例尺/主题一致 */
 :deep(.ol-custom-overviewmap button) {
-    background-color: rgba(0, 0, 0, 0.6);
-    color: white;
-    font-size: 16px;
-    font-weight: bold;
-    border: none;
-    border-radius: 2px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background:
+        linear-gradient(
+            rgba(255, 255, 255, 0.9) 100%
+        );
+    color: var(--brand-accent-dark, #0a6815);
+    font-family: var(--font-mono, 'SF Mono', 'JetBrains Mono', Consolas, monospace);
+    font-size: 14px;
+    font-weight: 700;
+    line-height: 1;
+    text-align: center;
+    border: 1px solid rgba(var(--brand-primary-rgb, 76, 175, 80), 0.32);
+    border-radius: 4px;
     cursor: pointer;
-    padding: 2px 6px;
+    padding: 4px 8px;
+    box-shadow:
+        0 2px 8px rgba(0, 0, 0, 0.08),
+        inset 0 1px 0 rgba(255, 255, 255, 0.55);
+    transition:
+        background 0.2s cubic-bezier(0.16, 1, 0.3, 1),
+        border-color 0.2s cubic-bezier(0.16, 1, 0.3, 1),
+        color 0.2s cubic-bezier(0.16, 1, 0.3, 1),
+        box-shadow 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+:deep(.ol-custom-overviewmap button > span) {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 1;
+    margin: 0;
+    padding: 0;
 }
 
 :deep(.ol-custom-overviewmap button:hover) {
-    background-color: rgba(0, 0, 0, 0.8);
+    background:
+        linear-gradient(
+            180deg,
+            rgba(var(--brand-accent-light-rgb, 91, 207, 137), 0.34) 0%,
+            rgba(var(--brand-primary-rgb, 76, 175, 80), 0.1) 55%,
+            rgba(255, 255, 255, 0.94) 100%
+        );
+    border-color: rgba(var(--brand-primary-rgb, 76, 175, 80), 0.55);
+    color: var(--brand-accent-dark, #0a6815);
+    box-shadow:
+        0 4px 12px rgba(0, 0, 0, 0.12),
+        inset 0 1px 0 rgba(255, 255, 255, 0.6);
 }
 
+:deep(.ol-custom-overviewmap button:active) {
+    background:
+        linear-gradient(
+            180deg,
+            rgba(var(--brand-primary-rgb, 76, 175, 80), 0.22) 0%,
+            rgba(var(--brand-accent-light-rgb, 91, 207, 137), 0.08) 50%,
+            rgba(255, 255, 255, 0.9) 100%
+        );
+}
+/* ==========================================================================
+   高端 WebGIS HUD 赛博科技风格比例尺
+   运行时 DOM：bar:true → .ol-scale-bar / .ol-scale-bar-inner
+               bar:false → .ol-scale-line / .ol-scale-line-inner
+   色彩一律走 --brand-accent-light(-rgb)，适配绿/蓝主题
+   ========================================================================== */
+
+:deep(.ol-scale-bar),
+:deep(.ol-scale-line) {
+    /* 左右边距一致；线段在面板内左对齐，右端标注靠 OL 的 left:barWidth 动态跟随 */
+    bottom: 8px;
+    left: 8px;
+    position: absolute;
+    z-index: var(--z-float, 100);
+    box-sizing: border-box;
+    /* 上：比例文字行 + 刻度行；右侧加宽，避免右端标注被 clip-path/面板边裁掉 */
+    padding: 24px 28px 10px 14px;
+    pointer-events: none;
+    overflow: visible;
+    margin: 0;
+
+    background:
+        linear-gradient(
+            180deg,
+            rgba(var(--brand-accent-light-rgb, 91, 207, 137), 0.12) 0%,
+            rgba(var(--brand-primary-rgb, 76, 175, 80), 0.04) 48%,
+            transparent 100%
+        ),
+        rgba(255, 255, 255, 0.88);
+    backdrop-filter: blur(12px) saturate(160%);
+    -webkit-backdrop-filter: blur(12px) saturate(160%);
+    border: 1px solid rgba(var(--brand-primary-rgb, 76, 175, 80), 0.28);
+    border-radius: 6px;
+    box-shadow:
+        0 8px 24px rgba(0, 0, 0, 0.12),
+        inset 0 1px 0 rgba(255, 255, 255, 0.65),
+        inset 0 0 12px rgba(var(--brand-accent-light-rgb, 91, 207, 137), 0.06);
+    /* 与上传 HUD 同语言的切角 */
+    clip-path: polygon(
+        10px 0,
+        100% 0,
+        100% calc(100% - 10px),
+        calc(100% - 10px) 100%,
+        0 100%,
+        0 10px
+    );
+    transition:
+        border-color 0.2s cubic-bezier(0.16, 1, 0.3, 1),
+        box-shadow 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* 顶部品牌高光线 */
+:deep(.ol-scale-bar)::before,
+:deep(.ol-scale-line)::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 12%;
+    right: 12%;
+    height: 1px;
+    pointer-events: none;
+    background: linear-gradient(
+        90deg,
+        transparent,
+        var(--brand-accent, #57b861),
+        transparent
+    );
+    opacity: 0.75;
+    box-shadow: 0 0 6px rgba(var(--brand-accent-rgb, 87, 184, 97), 0.35);
+}
+
+/* 左上 HUD 角标 */
+:deep(.ol-scale-bar)::after,
+:deep(.ol-scale-line)::after {
+    content: '';
+    position: absolute;
+    top: 8px;
+    left: 8px;
+    width: 6px;
+    height: 6px;
+    border-left: 1px solid rgba(var(--brand-accent-rgb, 87, 184, 97), 0.7);
+    border-top: 1px solid rgba(var(--brand-accent-rgb, 87, 184, 97), 0.7);
+    pointer-events: none;
+}
+
+:deep(.ol-scale-bar:hover),
+:deep(.ol-scale-line:hover) {
+    border-color: rgba(var(--brand-primary-rgb, 76, 175, 80), 0.55);
+    box-shadow:
+        0 10px 28px rgba(0, 0, 0, 0.16),
+        0 0 0 1px rgba(var(--brand-accent-light-rgb, 91, 207, 137), 0.2),
+        inset 0 1px 0 rgba(255, 255, 255, 0.7);
+}
+
+/* bar 模式：inner 作定位上下文；不要 justify-content:center，
+   否则线段偏离 left:0，OL 的 left:barWidth 会算错右端标注位置 */
+:deep(.ol-scale-bar-inner) {
+    display: flex !important;
+    position: relative;
+    align-items: flex-end;
+    justify-content: flex-start;
+    margin: 0;
+    padding: 20px 0 0;
+    border: none !important;
+    background: transparent !important;
+    will-change: contents, width;
+}
+
+/* line 模式兜底（bar:false） */
+:deep(.ol-scale-line-inner) {
+    margin: 0;
+    border: none !important;
+    color: var(--text-brand-dark, #2c4638) !important;
+    font-family: var(--font-mono, 'SF Mono', 'JetBrains Mono', Consolas, monospace) !important;
+    font-size: 13px !important;
+    font-weight: 600;
+    letter-spacing: 0.4px;
+    text-align: center;
+    text-shadow: none;
+}
+
+/* 比例文字 1 : N —— 单独一行，高于线段刻度标注
+   垂直位置：改 top（越大越往下；负值更高）。不要与 .ol-scale-step-text 共用 top */
+:deep(.ol-scale-bar .ol-scale-text),
+:deep(.ol-scale-line .ol-scale-text),
+:deep(.ol-scale-text) {
+    position: absolute !important;
+    top: -17px !important;
+    left: 50% !important;
+    right: auto !important;
+    bottom: auto !important;
+    width: auto !important;
+    max-width: calc(100% - 16px) !important;
+    margin: 0 !important;
+    transform: translateX(-50%) !important;
+    color: var(--brand-accent-dark, #0a6815) !important;
+    font-family: var(--font-mono, 'SF Mono', 'JetBrains Mono', Consolas, monospace) !important;
+    font-size: 12px !important;
+    font-weight: 600 !important;
+    letter-spacing: 0.8px;
+    text-align: center !important;
+    text-shadow: none;
+    white-space: nowrap;
+    z-index: 4;
+}
+
+/* 刻度数字：step 外包内相对线段上移；与末尾标注保持同一水平带
+   水平位置完全由 OL 动态计算（margin-left / left），此处只管视觉样式 */
+:deep(.ol-scale-step-text) {
+    position: absolute !important;
+    bottom: auto !important;
+    top: -18px !important;
+    color: var(--text-brand-dark, #2c4638) !important;
+    font-family: var(--font-mono, 'SF Mono', 'JetBrains Mono', Consolas, monospace) !important;
+    font-size: 12px !important;
+    font-weight: 600 !important;
+    letter-spacing: 0.5px;
+    font-variant-numeric: tabular-nums;
+    line-height: 1;
+    text-shadow: 0 0 4px rgba(255, 255, 255, 0.85);
+    white-space: nowrap;
+}
+
+/* 向上细刻度针（覆盖 OL 内联 top）— 视觉样式；不在 step 内的针才强制 absolute */
+:deep(.ol-scale-step-marker) {
+    background-color: var(--brand-accent, #57b861) !important;
+    width: 1px !important;
+    min-width: 1px !important;
+    height: 7px !important;
+    top: -7px !important;
+    float: none !important;
+    z-index: 2;
+    box-shadow: 0 0 3px rgba(var(--brand-accent-rgb, 87, 184, 97), 0.4);
+}
+
+/* 只给「包着色段的 step 外包 div」定位上下文，不要误伤 scale-text / 末尾刻度 */
+:deep(.ol-scale-bar-inner > div:has(> .ol-scale-singlebar)) {
+    position: relative;
+    display: flex;
+    align-items: flex-end;
+    line-height: 0;
+    flex: 0 0 auto;
+}
+
+/* inner 直属的比例文字 / 刻度 / 首针：脱离文档流，避免把色段挤偏 */
+:deep(.ol-scale-bar-inner > .ol-scale-text),
+:deep(.ol-scale-bar-inner > .ol-scale-step-text),
+:deep(.ol-scale-bar-inner > .ol-scale-step-marker) {
+    position: absolute !important;
+    flex: 0 0 auto !important;
+    width: auto !important;
+}
+
+/* step 外包内的针保持 relative（OL 语义），只微调向上 */
+:deep(.ol-scale-bar-inner > div:has(> .ol-scale-singlebar) > .ol-scale-step-marker) {
+    position: relative !important;
+    top: -7px !important;
+}
+
+/* OL 末尾刻度：inner 直属子节点，内联 left:${barWidth}px + margin-left:-stepWidth，
+   随缩放动态贴在线段右端。禁止覆盖 left/margin/text-align。
+   垂直对齐：step 内 top:-18px + inner padding-top(20) → 等效 top=2px */
+:deep(.ol-scale-bar-inner > .ol-scale-step-text) {
+    position: absolute !important;
+    right: auto !important;
+    top: 2px !important;
+    bottom: auto !important;
+    z-index: 3;
+}
+
+:deep(.ol-scale-singlebar) {
+    height: 7px !important;
+    border: none !important;
+    border-radius: 2px;
+    box-sizing: border-box !important;
+    z-index: 1;
+}
+
+/* OL 使用 .ol-scale-singlebar-even / -odd（不是 nth-child） */
+:deep(.ol-scale-singlebar-even) {
+    background: var(--brand-accent, #57b861) !important;
+    box-shadow:
+        0 0 4px rgba(var(--brand-accent-rgb, 87, 184, 97), 0.35),
+        inset 0 0 0 1px rgba(var(--brand-accent-rgb, 87, 184, 97), 0.2);
+}
+
+:deep(.ol-scale-singlebar-odd) {
+    background: rgba(var(--brand-primary-rgb, 76, 175, 80), 0.22) !important;
+    box-shadow: inset 0 0 0 1px rgba(var(--brand-primary-rgb, 76, 175, 80), 0.15);
+}
+
+/* 移动端：压缩面板并抬高，避免与底部控制条争抢
+   注意：选择器必须与桌面端同级或更具体，否则 !important 下桌面值会继续生效 */
+@media (max-width: 768px) {
+    :deep(.ol-scale-bar),
+    :deep(.ol-scale-line) {
+        bottom: 4px;
+        left: 4px;
+        padding: 22px 28px 8px 10px;
+        min-width: 180px;
+    }
+
+    :deep(.ol-scale-bar-inner) {
+        padding-top: 16px;
+    }
+
+    :deep(.ol-scale-bar .ol-scale-text),
+    :deep(.ol-scale-line .ol-scale-text),
+    :deep(.ol-scale-text) {
+        font-size: 11px !important;
+        top: -10px !important;
+    }
+
+    :deep(.ol-scale-step-text) {
+        font-size: 11px !important;
+        top: -14px !important;
+    }
+
+    /* 右端标注：与刻度同一水平线（inner padding 16 + step top -14 = 2） */
+    :deep(.ol-scale-bar-inner > .ol-scale-step-text) {
+        top: 2px !important;
+    }
+
+    :deep(.ol-scale-singlebar) {
+        height: 6px !important;
+    }
+
+    :deep(.ol-scale-step-marker) {
+        height: 6px !important;
+        top: -6px !important;
+    }
+
+    :deep(.ol-scale-bar-inner > div:has(> .ol-scale-singlebar) > .ol-scale-step-marker) {
+        top: -6px !important;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+
+    :deep(.ol-scale-bar),
+    :deep(.ol-scale-line),
+    :deep(.ol-scale-bar:hover),
+    :deep(.ol-scale-line:hover) {
+        transition: none;
+    }
+}
 /* 移动端适配鹰眼视图 */
 @media (max-width: 768px) {
     .compass-hud-wrapper {
