@@ -183,6 +183,9 @@ export default defineConfig(({ command, mode }) => {
         server: {
             host: '0.0.0.0',
             port: 5173,
+            // 固定端口：5173 被占时直接报错退出，禁止静默漂到 5174+。
+            // 手机/平板书签和局域网调试都依赖固定端口；僵尸进程由 predev 脚本清理。
+            strictPort: true,
             cors: true,
             proxy: (() => {
                 // 与生产 nginx 同构的后端顶级段全部原样透传（零改写），

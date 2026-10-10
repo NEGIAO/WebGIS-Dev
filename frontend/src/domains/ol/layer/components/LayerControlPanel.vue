@@ -257,7 +257,7 @@
             >
                 <div class="panel-header">
                     <Layers
-                        :size="13"
+                        :size="16"
                         :stroke-width="2"
                     />
                     <span class="panel-header-title">底图排序与显隐</span>
@@ -268,7 +268,7 @@
                         @click="showLayerManager = false"
                     >
                         <X
-                            :size="13"
+                            :size="16"
                             :stroke-width="2.2"
                         />
                     </button>
@@ -309,12 +309,12 @@
                         >
                             <EyeOff
                                 v-if="!layer.visible"
-                                :size="15"
+                                :size="16"
                                 :stroke-width="2"
                             />
                             <Eye
                                 v-else
-                                :size="15"
+                                :size="16"
                                 :stroke-width="2"
                             />
                         </button>
@@ -1585,7 +1585,8 @@ onBeforeUnmount(() => {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 8px;
+    gap: 8px;
+    padding: 8px 8px 8px 10px;
     background: var(--bg-brand-light);
     border-bottom: 1px solid var(--brand-primary-lighter);
     border-radius: 4px 4px 0 0;
@@ -1602,13 +1603,20 @@ onBeforeUnmount(() => {
     white-space: nowrap;
 }
 
+/* 图标尺寸单源落在 CSS：模板 :size 仅为无样式兜底 */
+.panel-header svg {
+    width: 16px;
+    height: 16px;
+    flex-shrink: 0;
+}
+
 .close-panel-btn {
     flex-shrink: 0;
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 22px;
-    height: 22px;
+    width: 26px;
+    height: 26px;
     border: none;
     border-radius: 50%;
     background: transparent;
@@ -1691,8 +1699,8 @@ onBeforeUnmount(() => {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 24px;
-    height: 24px;
+    width: 26px;
+    height: 26px;
     border: none;
     border-radius: 7px;
     background: transparent;
@@ -1719,6 +1727,17 @@ onBeforeUnmount(() => {
 
 .visibility-btn.off:hover {
     background: rgba(0, 0, 0, 0.06);
+}
+
+/* 图标尺寸单源：桌面基线由 CSS 锁定，与模板 :size 兜底一致 */
+.close-panel-btn svg {
+    width: 16px;
+    height: 16px;
+}
+
+.visibility-btn svg {
+    width: 18px;
+    height: 18px;
 }
 
 .layer-name {
@@ -1839,6 +1858,20 @@ onBeforeUnmount(() => {
         top: 5px;
         right: 3px;
     }
+}
+
+/* 根本修复：触摸样式与 JS 的 isTouchDevice 同源对齐。
+ * 窄屏命中前者（覆盖 F12 模拟），粗指针命中后者（覆盖真机/平板横屏触摸）。
+ * 任一命中即放大，桌面细指针宽屏不受影响。 */
+@media (max-width: 768px), (pointer: coarse) {
+    .layer-manager-panel { width: 240px; max-height: 60vh; }
+    .layer-item { padding: 8px; gap: 10px; font-size: 14px; }
+    .panel-header { padding: 10px 10px 10px 12px; }
+    .panel-header svg { width: 18px; height: 18px; }
+    .visibility-btn { width: 32px; height: 32px; }
+    .visibility-btn svg { width: 20px; height: 20px; }
+    .close-panel-btn { width: 30px; height: 30px; }
+    .close-panel-btn svg { width: 18px; height: 18px; }
 }
 
 /* Cesium overlay 开关 */

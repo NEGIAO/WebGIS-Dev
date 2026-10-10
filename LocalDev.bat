@@ -3,6 +3,7 @@ REM ============================================================
 REM WebGIS Local Dev Launcher v3.0
 REM Frontend: http://localhost:5173
 REM Backend:  http://localhost:7860
+REM Phone:    see Step 5 output for LAN URLs (hotspot 192.168.137.x recommended)
 REM ============================================================
 
 chcp 65001 >nul 2>&1
@@ -189,12 +190,37 @@ REM ====================================================================
 %WC% 204
 %WC% 708
 
-for /f "tokens=4 delims= " %%i in ('route print ^| findstr 0.0.0.0 ^| findstr /V "127.0.0.1" ^| findstr /V "255.255.255.255"') do (
-    set LOCAL_IP=%%i
-    goto :IP_FOUND
+REM --- Enumerate all usable LAN IPv4s (skip loopback/APIPA/virtual/VPN adapters).
+REM --- 192.168.137.x is the Windows mobile hotspot (ICS) subnet: recommended for phone debugging.
+REM --- Other IPs (campus/office WiFi) often sit behind AP isolation: listed as fallback only.
+REM --- NOTE: old logic took the first 0.0.0.0 route IP (usually campus WiFi), which misled hotspot users.
+%WC% 607
+set HOTSPOT_IP=
+set FIRST_IP=
+for /f "tokens=*" %%i in ('powershell -NoProfile -Command "Get-NetIPAddress -AddressFamily IPv4 | Where-Object { $_.IPAddress -notlike '127.*' -and $_.IPAddress -notlike '169.254.*' -and $_.InterfaceAlias -notlike '*Loopback*' -and $_.InterfaceAlias -notlike '*vEthernet*' -and $_.InterfaceAlias -notlike '*WSL*' -and $_.InterfaceAlias -notlike '*Docker*' -and $_.InterfaceAlias -notlike '*VPN*' -and $_.InterfaceAlias -notlike '*Virtual*' } | Select-Object -ExpandProperty IPAddress"') do (
+    if "!FIRST_IP!"=="" set FIRST_IP=%%i
+    echo %%i | findstr /B "192.168.137." >nul
+    if not errorlevel 1 (
+        set HOTSPOT_IP=%%i
+        %WC% 605 "http://%%i:5173"
+    ) else (
+        %WC% 606 "http://%%i:5173"
+    )
 )
-:IP_FOUND
-%WC% 602 "http://!LOCAL_IP!:5173"
+if "!HOTSPOT_IP!"=="" (
+    set LOCAL_IP=!FIRST_IP!
+) else (
+    set LOCAL_IP=!HOTSPOT_IP!
+)
+if "!LOCAL_IP!"=="" (
+    %WC% 610
+) else (
+    if "!HOTSPOT_IP!"=="" (
+        %WC% 609
+    ) else (
+        %WC% 608
+    )
+)
 %WC% 709
 echo.
 

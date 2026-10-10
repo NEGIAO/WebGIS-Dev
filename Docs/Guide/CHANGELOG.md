@@ -6,6 +6,14 @@
 
 ## 版本记录
 
+### V3.6.8 (2026-10-10) — 图层浮层图标移动端根本修复
+
+> **根因**：行为按触摸切（`isTouchDevice`）、样式只按宽度切（`max-width:768px`），F12 窄窗无触摸与真机/平板触摸必然走不同分支；另有模板 `:size` 与 CSS 双源、面板头无 `gap`/可压缩、关闭钮仅 22px。
+>
+> **修复**（`LayerControlPanel.vue`）：模板基线 `Layers/X/Eye 13-15→16`；CSS 单源锁定桌面基线（头 16/眼 18）；新增 `@media (max-width:768px),(pointer:coarse)` 统一放大（眼 20/按钮 32、关闭 30/图标 18、浮层 240px/60vh）；面板头补 `gap:8px` + `svg flex-shrink:0`。
+>
+> 日志：[`2026-10-10-fix-layer-icons-mobile.md`](../LLM_record/26-10/2026-10-10/2026-10-10-fix-layer-icons-mobile.md)
+
 ### V3.6.7 (2026-09-19) — OL 比例尺/鹰眼主题化 + 瓦片生命周期加固 + 侧栏壳层
 
 > **主题一 · OL 控件主题化**：`MapContainer.vue` 引入 `ol/ol.css` 与地图同 chunk；ScaleLine `bar+text`，浅白绿玻璃 HUD（主题 token），左中右刻度动态定位；OverviewMap/折叠按钮同主题。View `minZoom=1` / `maxZoom=22` / `multiWorld=true`；缩放显示低层级 `round`、中高层 `ceil`。

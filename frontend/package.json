@@ -4,6 +4,7 @@
     "private": true,
     "type": "module",
     "scripts": {
+        "predev": "node scripts/ensure-dev-port.mjs",
         "dev": "vite",
         "build": "vite build",
         "build:analyze": "vite build --mode analyze",
