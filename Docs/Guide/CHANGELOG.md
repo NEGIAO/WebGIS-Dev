@@ -6,6 +6,32 @@
 
 ## 版本记录
 
+### V3.6.10 (2026-10-10) — 图层触摸拖拽排序真实现
+
+> 前情：移动端手柄按设计隐藏（`v-if="!isTouchDevice"`），排序只能逐级置顶/置底。
+>
+> **实现**（`LayerControlPanel.vue`，父组件零改）：手柄三端常显；手柄发起式触摸拖拽状态机（`touchDragActive/Index/DropIndex` + `layerListRef` 行中点落点 + `touchcancel` 兜底），与长按菜单/列表滚动互斥（单指手柄起点+位移>10px=拖拽，行内静止500ms=菜单，行内滑动=滚动）；提交与桌面同形 `{type:'reorder',dragIndex,dropIndex}`，复用 `useLayerControlHandlers:517-530` 语义；`.touch-drop-target` 插入线 + 手柄 `touch-action:none` + 粗指针手柄 18px。
+>
+> 日志：[`2026-10-10-touch-drag-sort.md`](../LLM_record/26-10/2026-10-10/2026-10-10-touch-drag-sort.md)
+
+### V3.6.9 (2026-10-10) — 图层浮层全部图标修复
+
+> V3.6.8 收编头/眼 4 处后，用户指认 `drag-handle`（`GripVertical 12px`）依然小，本次把剩余 10 处全部按同范式收编。
+>
+> **模板基线**：`12→14`（下拉箭头/年份×2/手柄/子菜单箭头）、`13→14`（经纬线/重置）、`14→16`（HD/控制行 Layers/加载勾）。
+> **CSS 单源**：`.icon-toggle svg 16px`、三箭头 `14px`、加载勾 `16px`、手柄 `inline-flex + 14px`。
+> **双条件扩展**：主行钮 `30px`/图标 `19px`、三箭头 `16px`、加载勾 `18px`；手柄系桌面专属（`v-if="!isTouchDevice"` 不变），不进放大的块。
+>
+> 日志：[`2026-10-10-fix-all-layer-icons.md`](../LLM_record/26-10/2026-10-10/2026-10-10-fix-all-layer-icons.md)
+
+### V3.6.8 (2026-10-10) — 图层浮层图标移动端根本修复
+
+> **根因**：行为按触摸切（`isTouchDevice`）、样式只按宽度切（`max-width:768px`），F12 窄窗无触摸与真机/平板触摸必然走不同分支；另有模板 `:size` 与 CSS 双源、面板头无 `gap`/可压缩、关闭钮仅 22px。
+>
+> **修复**（`LayerControlPanel.vue`）：模板基线 `Layers/X/Eye 13-15→16`；CSS 单源锁定桌面基线（头 16/眼 18）；新增 `@media (max-width:768px),(pointer:coarse)` 统一放大（眼 20/按钮 32、关闭 30/图标 18、浮层 240px/60vh）；面板头补 `gap:8px` + `svg flex-shrink:0`。
+>
+> 日志：[`2026-10-10-fix-layer-icons-mobile.md`](../LLM_record/26-10/2026-10-10/2026-10-10-fix-layer-icons-mobile.md)
+
 ### V3.6.7 (2026-09-19) — OL 比例尺/鹰眼主题化 + 瓦片生命周期加固 + 侧栏壳层
 
 > **主题一 · OL 控件主题化**：`MapContainer.vue` 引入 `ol/ol.css` 与地图同 chunk；ScaleLine `bar+text`，浅白绿玻璃 HUD（主题 token），左中右刻度动态定位；OverviewMap/折叠按钮同主题。View `minZoom=1` / `maxZoom=22` / `multiWorld=true`；缩放显示低层级 `round`、中高层 `ceil`。

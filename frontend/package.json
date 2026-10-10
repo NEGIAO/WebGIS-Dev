@@ -4,6 +4,7 @@
     "private": true,
     "type": "module",
     "scripts": {
+        "predev": "node scripts/ensure-dev-port.mjs",
         "dev": "vite",
         "build": "vite build",
         "build:analyze": "vite build --mode analyze",
@@ -30,7 +31,7 @@
         "echarts": "^6.0.0",
         "highlight.js": "^11.11.1",
         "jszip": "^3.10.1",
-        "katex": "^0.16.11",
+        "katex": "^0.18.2",
         "knockout": "^3.5.3",
         "lil-gui": "^0.21.0",
         "marked": "^18.0.5",
@@ -41,7 +42,7 @@
         "protobufjs": "^7.6.5",
         "shpjs": "^6.2.0",
         "three": "^0.185.0",
-        "vue": "^3.5.13",
+        "vue": "^3.5.43",
         "vue-router": "^4.6.3"
     },
     "dependencies-dev-additions": {},

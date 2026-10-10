@@ -19,7 +19,7 @@
                     @click.stop="onToggleHD"
                 >
                     <ImageIcon
-                        :size="14"
+                        :size="16"
                         :stroke-width="2"
                     />
                 </button>
@@ -35,7 +35,7 @@
                     <ChevronDown
                         class="dropdown-arrow"
                         :class="{ 'arrow-up': isSelectDropdownOpen }"
-                        :size="12"
+                        :size="14"
                         :stroke-width="2.2"
                     />
                 </div>
@@ -78,7 +78,7 @@
                             <ChevronRight
                                 class="year-chevron"
                                 :class="{ open: isHistoryYearOpen('sentinel', group.year) }"
-                                :size="12"
+                                :size="14"
                                 :stroke-width="2.2"
                             />
                         </button>
@@ -106,7 +106,7 @@
                             <ChevronRight
                                 class="year-chevron"
                                 :class="{ open: isHistoryYearOpen('esri', group.year) }"
-                                :size="12"
+                                :size="14"
                                 :stroke-width="2.2"
                             />
                         </button>
@@ -141,7 +141,7 @@
                     @click="toggleLayerManager"
                 >
                     <Layers
-                        :size="14"
+                        :size="16"
                         :stroke-width="1.9"
                         :color="white"
                     />
@@ -153,7 +153,7 @@
                     @click="emit('toggle-graticule')"
                 >
                     <Grid3x3
-                        :size="13"
+                        :size="14"
                         :stroke-width="2"
                     />
                     <span>经纬线</span>
@@ -165,7 +165,7 @@
                     @click="emit('reset-basemap-chain')"
                 >
                     <RotateCcw
-                        :size="13"
+                        :size="14"
                         :stroke-width="2"
                     />
                 </button>
@@ -207,7 +207,7 @@
                 @click="submitCustomUrl"
             >
                 <Check
-                    :size="14"
+                    :size="16"
                     :stroke-width="2.4"
                 />
             </button>
@@ -257,7 +257,7 @@
             >
                 <div class="panel-header">
                     <Layers
-                        :size="13"
+                        :size="16"
                         :stroke-width="2"
                     />
                     <span class="panel-header-title">底图排序与显隐</span>
@@ -268,18 +268,21 @@
                         @click="showLayerManager = false"
                     >
                         <X
-                            :size="13"
+                            :size="16"
                             :stroke-width="2.2"
                         />
                     </button>
                 </div>
-                <div class="layer-list">
+                <div
+                    ref="layerListRef"
+                    class="layer-list"
+                >
                     <div
                         v-for="(layer, index) in layerList"
                         :key="layer.id"
                         class="layer-item"
                         :draggable="!isTouchDevice"
-                        :class="{ dragging: draggingIndex === index, 'is-off': !layer.visible }"
+                        :class="{ dragging: draggingIndex === index, 'is-off': !layer.visible, 'touch-drop-target': touchDragActive && touchDropIndex === index && touchDragIndex !== index }"
                         @dragstart="onDragStart($event, index)"
                         @dragend="onDragEnd"
                         @dragover.prevent
@@ -288,14 +291,14 @@
                         @touchstart="onLayerTouchStart(layer, index, $event)"
                         @touchmove="onLayerTouchMove"
                         @touchend="onLayerTouchEnd"
+                        @touchcancel="onLayerTouchCancel"
                     >
                         <span
-                            v-if="!isTouchDevice"
                             class="drag-handle"
                             title="拖拽排序"
                         >
                             <GripVertical
-                                :size="12"
+                                :size="14"
                                 :stroke-width="2"
                             />
                         </span>
@@ -309,12 +312,12 @@
                         >
                             <EyeOff
                                 v-if="!layer.visible"
-                                :size="15"
+                                :size="16"
                                 :stroke-width="2"
                             />
                             <Eye
                                 v-else
-                                :size="15"
+                                :size="16"
                                 :stroke-width="2"
                             />
                         </button>
@@ -343,7 +346,7 @@
                     <span>URL 操作</span>
                     <ChevronRight
                         class="submenu-arrow"
-                        :size="12"
+                        :size="14"
                         :stroke-width="2.2"
                     />
                     <div
@@ -544,6 +547,15 @@ const longPressTimer = ref(null);
 const longPressTouchStart = ref({ x: 0, y: 0, target: null });
 const LONG_PRESS_DURATION = 500; // 长按时间阈值（毫秒）
 const LONG_PRESS_DRIFT = 10; // 移动距离阈值（像素）
+
+/**
+ * 手柄发起式触摸拖拽状态（与长按菜单、列表滚动互斥）。
+ * 复用 draggingIndex 的 .dragging 视觉；提交 payload 与桌面 onDrop 同形。
+ */
+const layerListRef = ref(null); // 图层列表容器，用于按行中点计算落点
+const touchDragActive = ref(false); // 是否处于触摸拖拽中
+const touchDragIndex = ref(-1); // 被拖行下标
+const touchDropIndex = ref(-1); // 落点下标
 
 const PANEL_WIDTH = 200;
 const PANEL_GAP = 6;
@@ -908,7 +920,31 @@ function clearLongPressTimer() {
 }
 
 /**
- * 处理 touchstart 事件，启动长按计时
+ * 按触点纵坐标计算落点下标：首个中点在触点下方的行即插入位，尾部钳制为末行。
+ * @param {number} clientY 触点 clientY
+ * @returns {number} 有效落点下标，无列表时 -1
+ */
+function updateTouchDropIndex(clientY) {
+    const items = layerListRef.value?.querySelectorAll?.('.layer-item');
+    if (!items?.length) return -1;
+    for (let i = 0; i < items.length; i += 1) {
+        const rect = items[i].getBoundingClientRect?.();
+        if (!rect) continue;
+        if (clientY < rect.top + rect.height / 2) return i;
+    }
+    return items.length - 1;
+}
+
+/** 重置触摸拖拽状态（不提交） */
+function resetTouchDrag() {
+    touchDragActive.value = false;
+    touchDragIndex.value = -1;
+    touchDropIndex.value = -1;
+    draggingIndex.value = -1;
+}
+
+/**
+ * 处理 touchstart 事件：起点在手柄上进拖拽，否则走长按计时（右键菜单）。
  */
 function onLayerTouchStart(layer, index, event) {
     if (!isTouchDevice.value) return;
@@ -916,9 +952,27 @@ function onLayerTouchStart(layer, index, event) {
     const touches = event.touches;
     if (touches.length !== 1) {
         clearLongPressTimer();
+        resetTouchDrag();
         return;
     }
 
+    // 手柄发起式拖拽：与长按菜单互斥，进拖拽就不起长按计时
+    const fromHandle = !!(event.target?.closest?.('.drag-handle'));
+    if (fromHandle) {
+        clearLongPressTimer();
+        touchDragActive.value = true;
+        touchDragIndex.value = index;
+        touchDropIndex.value = index;
+        draggingIndex.value = index;
+        longPressTouchStart.value = {
+            x: touches[0].clientX,
+            y: touches[0].clientY,
+            target: event.currentTarget,
+        };
+        return;
+    }
+
+    resetTouchDrag();
     longPressTouchStart.value = {
         x: touches[0].clientX,
         y: touches[0].clientY,
@@ -938,10 +992,24 @@ function onLayerTouchStart(layer, index, event) {
 }
 
 /**
- * 处理 touchmove 事件，如果移动距离过大则取消长按
+ * 处理 touchmove 事件：拖拽中更新落点并阻止滚动；非拖拽时移动超阈值取消长按。
  */
 function onLayerTouchMove(event) {
-    if (!isTouchDevice.value || !longPressTimer.value) return;
+    if (!isTouchDevice.value) return;
+
+    // 拖拽中：只锁本次手势的滚动，不影响平时列表滚动
+    if (touchDragActive.value) {
+        if (event.cancelable) event.preventDefault();
+        const touches = event.touches;
+        if (!touches || touches.length !== 1) {
+            resetTouchDrag();
+            return;
+        }
+        touchDropIndex.value = updateTouchDropIndex(touches[0].clientY);
+        return;
+    }
+
+    if (!longPressTimer.value) return;
 
     const touches = event.touches;
     if (touches.length !== 1) {
@@ -959,9 +1027,33 @@ function onLayerTouchMove(event) {
 }
 
 /**
- * 处理 touchend 事件，清除长按计时
+ * 处理 touchend 事件：拖拽中按落点提交 reorder（与桌面 onDrop 同形），否则清长按计时。
  */
 function onLayerTouchEnd() {
+    if (touchDragActive.value) {
+        const dragIndex = touchDragIndex.value;
+        const dropIndex = touchDropIndex.value;
+        resetTouchDrag();
+        clearLongPressTimer();
+        if (
+            Number.isInteger(dragIndex) && Number.isInteger(dropIndex)
+            && dragIndex >= 0 && dropIndex >= 0
+            && dragIndex !== dropIndex
+        ) {
+            emit('update-order', {
+                type: 'reorder',
+                dragIndex,
+                dropIndex,
+            });
+        }
+        return;
+    }
+    clearLongPressTimer();
+}
+
+/** 处理 touchcancel 事件：手势被系统接管时直接重置，不提交 */
+function onLayerTouchCancel() {
+    resetTouchDrag();
     clearLongPressTimer();
 }
 
@@ -1222,6 +1314,48 @@ onBeforeUnmount(() => {
 
 .icon-toggle.danger:hover {
     background: rgba(var(--danger-rgb), 0.16);
+}
+
+/* 图标尺寸单源（全部）：桌面基线由 CSS 锁定，模板 :size 仅为无样式兜底 */
+.icon-toggle svg {
+    width: 16px;
+    height: 16px;
+    flex-shrink: 0;
+}
+
+.dropdown-arrow {
+    width: 14px;
+    height: 14px;
+}
+
+.year-chevron {
+    width: 14px;
+    height: 14px;
+    flex-shrink: 0;
+}
+
+.submenu-arrow {
+    width: 14px;
+    height: 14px;
+    flex-shrink: 0;
+}
+
+.custom-url-btn svg {
+    width: 16px;
+    height: 16px;
+}
+
+.drag-handle {
+    display: inline-flex;
+    align-items: center;
+    /* 仅锁手柄自身：按住手柄滑动=拖拽，行内其余区域照常滚动 */
+    touch-action: none;
+}
+
+.drag-handle svg {
+    width: 14px;
+    height: 14px;
+    flex-shrink: 0;
 }
 
 /* ===== 底图选择器 ===== */
@@ -1585,7 +1719,8 @@ onBeforeUnmount(() => {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 8px;
+    gap: 8px;
+    padding: 8px 8px 8px 10px;
     background: var(--bg-brand-light);
     border-bottom: 1px solid var(--brand-primary-lighter);
     border-radius: 4px 4px 0 0;
@@ -1602,13 +1737,20 @@ onBeforeUnmount(() => {
     white-space: nowrap;
 }
 
+/* 图标尺寸单源落在 CSS：模板 :size 仅为无样式兜底 */
+.panel-header svg {
+    width: 16px;
+    height: 16px;
+    flex-shrink: 0;
+}
+
 .close-panel-btn {
     flex-shrink: 0;
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 22px;
-    height: 22px;
+    width: 26px;
+    height: 26px;
     border: none;
     border-radius: 50%;
     background: transparent;
@@ -1661,6 +1803,11 @@ onBeforeUnmount(() => {
     background: var(--border-light);
 }
 
+/* 触摸拖拽落点：目标行顶部插入线 */
+.layer-item.touch-drop-target {
+    box-shadow: 0 -2px 0 var(--brand-primary);
+}
+
 /* 隐藏图层整行淡化 */
 .layer-item.is-off {
     background: rgba(0, 0, 0, 0.03);
@@ -1691,8 +1838,8 @@ onBeforeUnmount(() => {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 24px;
-    height: 24px;
+    width: 26px;
+    height: 26px;
     border: none;
     border-radius: 7px;
     background: transparent;
@@ -1719,6 +1866,17 @@ onBeforeUnmount(() => {
 
 .visibility-btn.off:hover {
     background: rgba(0, 0, 0, 0.06);
+}
+
+/* 图标尺寸单源：桌面基线由 CSS 锁定，与模板 :size 兜底一致 */
+.close-panel-btn svg {
+    width: 16px;
+    height: 16px;
+}
+
+.visibility-btn svg {
+    width: 18px;
+    height: 18px;
 }
 
 .layer-name {
@@ -1839,6 +1997,28 @@ onBeforeUnmount(() => {
         top: 5px;
         right: 3px;
     }
+}
+
+/* 根本修复：触摸样式与 JS 的 isTouchDevice 同源对齐。
+ * 窄屏命中前者（覆盖 F12 模拟），粗指针命中后者（覆盖真机/平板横屏触摸）。
+ * 任一命中即放大，桌面细指针宽屏不受影响。 */
+@media (max-width: 768px), (pointer: coarse) {
+    .layer-manager-panel { width: 240px; max-height: 60vh; }
+    .layer-item { padding: 8px; gap: 10px; font-size: 14px; }
+    .panel-header { padding: 10px 10px 10px 12px; }
+    .panel-header svg { width: 18px; height: 18px; }
+    .visibility-btn { width: 32px; height: 32px; }
+    .visibility-btn svg { width: 20px; height: 20px; }
+    .close-panel-btn { width: 30px; height: 30px; }
+    .close-panel-btn svg { width: 18px; height: 18px; }
+    /* 主行与下拉：触摸目标与箭头同步放大（drag-handle 系桌面专属，不进本块） */
+    .icon-toggle { min-width: 30px; height: 30px; }
+    .icon-toggle svg { width: 19px; height: 19px; }
+    .dropdown-arrow { width: 16px; height: 16px; }
+    .year-chevron { width: 16px; height: 16px; }
+    .submenu-arrow { width: 16px; height: 16px; }
+    .custom-url-btn svg { width: 18px; height: 18px; }
+    .drag-handle svg { width: 18px; height: 18px; }
 }
 
 /* Cesium overlay 开关 */
