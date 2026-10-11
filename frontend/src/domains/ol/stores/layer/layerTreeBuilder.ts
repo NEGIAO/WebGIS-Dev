@@ -373,7 +373,7 @@ export function toLayerNode(layer: LayerStoreLayer, level: number, group: string
         expanded: false,
         level,
         featureCount: Number(standardItem?.featureCount) || Number(layer.featureCount) || 0,
-        labelVisible: layer.labelVisible !== false,
+        labelVisible: layer.labelVisible === true,
         showCheckbox: true,
         raw: layer,
         standardTocItem: standardItem,

@@ -91,7 +91,8 @@ export function useCreateManagedVectorLayer({
      * @param {string} params.sourceType - Data source type
      * @param {Array} params.features - OL Feature array
      * @param {Object} params.styleConfig - Style configuration
-     * @param {boolean} params.autoLabel - Whether to enable auto labels
+     * @param {boolean} [params.autoLabel=true] - Whether to enable label capability (menu toggle availability)
+     * @param {boolean} [params.labelVisible=false] - Label initial visibility (default off, manual open)
      * @param {Object} params.metadata - Layer metadata
      * @param {boolean} params.fitView - Whether to fit map view to layer extent
      * @returns {Promise<string|null>} Layer ID if created, null if creation failed
@@ -102,7 +103,8 @@ export function useCreateManagedVectorLayer({
         sourceType,
         features,
         styleConfig,
-        autoLabel = false,
+        autoLabel = true,
+        labelVisible = false,
         metadata = null,
         fitView = false,
     }) {
@@ -110,7 +112,9 @@ export function useCreateManagedVectorLayer({
 
         // 1. 规范化样式配置
         const normalizedStyle = normalizeStyleConfig(styleConfig || styleTemplates.classic);
-        const labelVisible = !!autoLabel;
+        // 标注能力（autoLabel）与初始可见（labelVisible）解耦：
+        // 默认能力开（保证 TOC 菜单可手动打开）、默认不可见（首屏无压盖）
+        const initialLabelVisible = !!labelVisible;
 
         // 2. 规范化元数据
         const normalizedMetadata = normalizeLayerMetadata(metadata, features);
@@ -119,7 +123,7 @@ export function useCreateManagedVectorLayer({
         const managedLayerState = {
             name,
             autoLabel: !!autoLabel,
-            labelVisible,
+            labelVisible: initialLabelVisible,
             metadata: normalizedMetadata,
             styleConfig: normalizedStyle,
             labelStyleCache: new globalThis.Map(),
@@ -203,7 +207,7 @@ export function useCreateManagedVectorLayer({
         if (labelLayer) {
             labelLayer.set?.('managedLayerId', id);
             labelLayer.set?.('sourceType', sourceType);
-            labelLayer.setVisible?.(labelVisible);
+            labelLayer.setVisible?.(initialLabelVisible);
             mapInstanceRef.value.addLayer(labelLayer);
         }
 
@@ -230,7 +234,7 @@ export function useCreateManagedVectorLayer({
             featureCount: features.length,
             features: serializedFeatures,
             autoLabel: managedLayerState.autoLabel,
-            labelVisible,
+            labelVisible: initialLabelVisible,
             metadata: normalizedMetadata,
             styleConfig: normalizedStyle,
             labelStyleCache: managedLayerState.labelStyleCache,

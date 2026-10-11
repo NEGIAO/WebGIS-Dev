@@ -81,8 +81,8 @@ export function useManagedLayerRegistry({ emit, userDataLayers, drawSource, styl
                 featureCount: item.featureCount,
                 features: Array.isArray(item.features) ? item.features : [],
                 opacity: item.opacity ?? 1,
-                autoLabel: !!item.autoLabel,
-                labelVisible: item.labelVisible !== false,
+                autoLabel: item.autoLabel !== false,
+                labelVisible: item.labelVisible === true,
                 category: item.metadata?.category,
                 crs: item.metadata?.crs ? String(item.metadata.crs).toLowerCase() : undefined,
                 longitude: Number.isFinite(item.metadata?.longitude)

@@ -395,6 +395,7 @@ import { useUserPreferencesStore } from '../stores';
 import { ASSET_BASE_URL, GITHUB_STATS_WORKER_URL } from '../config/publicRuntime';
 import {
     Bot,
+    Building2,
     ChartArea,
     Cloud,
     CloudSun,
@@ -439,7 +440,7 @@ const logoUrl = `${normalizedBase}images/icon.webp`;
 // Hugging Face 官方 logo（public/images/hf-logo.svg，品牌资产彩色版）
 const hfLogoUrl = `${normalizedBase}images/hf-logo.svg`;
 
-// 核心功能卡片：图标 + i18n key，避免 9 段近似模板重复
+// 核心功能卡片：图标 + i18n key，避免 10 段近似模板重复
 const FEATURES = Object.freeze([
     { key: 'feature1', icon: Globe },
     { key: 'feature2', icon: Layers },
@@ -450,6 +451,7 @@ const FEATURES = Object.freeze([
     { key: 'feature7', icon: Bot },
     { key: 'feature8', icon: ShieldCheck },
     { key: 'feature9', icon: Wrench },
+    { key: 'feature10', icon: Building2 },
 ]);
 
 const features = computed(() =>

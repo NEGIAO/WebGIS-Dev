@@ -557,7 +557,9 @@ export function createMapSearchAndCoordinateInputFeature({
         const layerName =
             String(payload.layerName || labelName || displayName).trim() || displayName;
         const labelField = String(payload.labelField || '名称').trim() || '名称';
+        // 标注能力默认开（保证菜单可手动打开），初始可见默认关（首屏无压盖，需手动打开）
         const shouldAutoLabel = payload.autoLabel !== false;
+        const shouldLabelVisible = payload.labelVisible === true;
         const extraProperties =
             payload?.properties && typeof payload.properties === 'object'
                 ? { ...payload.properties }
@@ -596,6 +598,7 @@ export function createMapSearchAndCoordinateInputFeature({
             sourceType: 'draw',
             features: [pointFeature],
             autoLabel: shouldAutoLabel,
+            labelVisible: shouldLabelVisible,
             metadata: {
                 longitude: Number(rawLng.toFixed(6)),
                 latitude: Number(rawLat.toFixed(6)),

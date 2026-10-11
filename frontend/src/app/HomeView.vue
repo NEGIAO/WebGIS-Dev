@@ -145,7 +145,7 @@ const isMagicMode = ref(false);
 const magicEffectData = ref('');
 const isSidePanelCollapsed = ref(true);
 const shouldLoadSidePanel = ref(false);
-const activeSidePanelTab = ref('info'); // 'info' | 'chat' | 'toolbox' | 'bus' | 'drive' | 'compass'
+const activeSidePanelTab = ref('info'); // 'info' | 'chat' | 'toolbox' | 'bus' | 'drive' | 'compass' | 'buildings'
 const toolboxTab = ref('layers');
 const userLayers = ref([]);
 const featureQueryResult = ref(null);
@@ -385,6 +385,27 @@ function openDrivePlanner() {
         shouldLoadSidePanel.value = true;
     }
     isSidePanelCollapsed.value = false;
+}
+
+function openBuildingsPanel() {
+    stopCompassTransientInteractions();
+    activeSidePanelTab.value = 'buildings';
+    if (!shouldLoadSidePanel.value) {
+        shouldLoadSidePanel.value = true;
+    }
+    isSidePanelCollapsed.value = false;
+}
+
+/**
+ * 建筑抓取三维框选的 Viewer / 命名空间提供器（经 SidePanel 透传给面板）。
+ * 2D 框选走 ExtentPicker 的 olMap 注入，无需此处提供。
+ */
+function getCesiumViewerForPicker() {
+    return cesiumContainerRef.value?.getViewer?.() || null;
+}
+
+function getCesiumNamespaceForPicker() {
+    return cesiumContainerRef.value?.getCesium?.() || null;
 }
 
 function getMapUserLocation(enableHighAccuracy = true) {
@@ -1734,6 +1755,7 @@ onMounted(async () => {
                 @open-compass="openCompassPanel"
                 @open-bus="openBusPlanner"
                 @open-drive="openDrivePlanner"
+                @open-buildings="openBuildingsPanel"
                 @toggle-weather-board="toggleWeatherBoardMode"
                 @activate-feature="handleActivateFeature"
                 @jump-view="handleTopBarJumpView"
@@ -1928,6 +1950,8 @@ onMounted(async () => {
                     :latest-search-poi="latestSearchPoi"
                     :should-load-weather="shouldLoadWeatherChartPanel"
                     :get-user-location="getMapUserLocation"
+                    :get-cesium-viewer="getCesiumViewerForPicker"
+                    :get-cesium-namespace="getCesiumNamespaceForPicker"
                     :start-bus-point-pick="startBusPointPick"
                     :draw-route-on-map="drawRouteOnMap"
                     :zoom-to-bus-route-step="zoomToBusRouteStep"

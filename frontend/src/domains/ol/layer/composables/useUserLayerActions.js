@@ -196,7 +196,7 @@ export function useUserLayerActions({
     function setUserLayerLabelVisibility({ layerId, visible }) {
         const target = findUserLayer(layerId);
         if (!target) return;
-        // 无 autoLabel 的图层也允许开关标注层显隐（用户数据导入默认 autoLabel=true）
+        // 标注能力（autoLabel）与可见（labelVisible）已解耦：默认能力开、默认不可见，手动开关只改可见
         target.labelVisible = !!visible;
         if (target.labelLayer) {
             target.labelLayer.setVisible?.(!!target.visible && target.labelVisible);

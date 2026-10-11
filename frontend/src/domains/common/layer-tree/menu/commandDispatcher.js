@@ -152,7 +152,7 @@ export function dispatchContextMenuCommand({ key, node, selectedLayerIds = [] } 
             type: 'toggle-layer-label-visibility',
             payload: {
                 layerId: nodeId,
-                visible: node?.labelVisible === false,
+                visible: !(node?.labelVisible === true),
             },
         });
         return events;

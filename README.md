@@ -81,7 +81,7 @@
 
 ## 🎯 项目简介
 
-**NEGIAO's WebGIS** 是一个功能完整、架构清晰的前后端分离 WebGIS 平台（当前版本 V3.6.10），前端托管于 GitHub Pages（正式域名 webgis.negiao.cn），后端以 Docker 部署在 Hugging Face Spaces，通过 RESTful API 通信，支持独立扩展。
+**NEGIAO's WebGIS** 是一个功能完整、架构清晰的前后端分离 WebGIS 平台（当前版本 V3.6.11），前端托管于 GitHub Pages（正式域名 webgis.negiao.cn），后端以 Docker 部署在 Hugging Face Spaces，通过 RESTful API 通信，支持独立扩展。
 
 > 📚 本 README 仅保留核心概览与导航。完整文档已模块化至 [`Docs/Guide/`](Docs/Guide/)，详见下方「文档导航」。
 >
@@ -396,9 +396,9 @@ tiles.negiao.cc.cd"]
 
 | 版本 | 日期 | 概要 |
 |------|------|------|
+| **V3.6.11** | 2026-10-10 | **腾讯建筑白模抓取入库（整合版）**：TopBar 菜单入口 → SidePanel 新页签（双引擎框选/级别/进度/自动入库/下载）；抓取编排 + 面板 + 三维框选镜像组件；Cesium 按高度拔高、`crs` 兼容、locale 重键修复；落地页 +1 功能卡。详见[完整更新日志](Docs/Guide/CHANGELOG.md) |
 | **V3.6.10** | 2026-10-10 | **图层触摸拖拽排序真实现**：手柄三端常显 + 手柄发起式触摸拖拽（与长按菜单/滚动互斥），落点发与桌面同形 `reorder`，复用父组件语义零协议新增。详见[完整更新日志](Docs/Guide/CHANGELOG.md) |
 | **V3.6.9** | 2026-10-10 | **图层浮层全部图标修复**：剩余 10 处基线收编（12→14/13→14/14→16）+ 六组 CSS 单源 + 双条件放大扩展到主行/下拉/年份/加载；`drag-handle` 修桌面尺寸、行为不变。详见[完整更新日志](Docs/Guide/CHANGELOG.md) |
-| **V3.6.8** | 2026-10-10 | **图层浮层图标移动端根本修复**：图标尺寸 CSS 单源 + `(max-width:768px),(pointer:coarse)` 双条件，与 `isTouchDevice` 对齐，根治 F12/真机不一致；面板头补 gap/防压缩/按钮放大。详见[完整更新日志](Docs/Guide/CHANGELOG.md) |
 
 更早版本（V3.6.4 及以前）请查阅 [完整更新日志 →](Docs/Guide/CHANGELOG.md)
 
@@ -422,6 +422,6 @@ tiles.negiao.cc.cd"]
 |:------:|:--------:|:--------:|
 | [GitHub](https://github.com/NEGIAO/WebGIS-Dev) | [webgis.negiao.cn](https://webgis.negiao.cn)（正式域名，GitHub Pages 托管） | [Hugging Face](https://NEGIAO-WebGIS.hf.space) |
 
-<sub>V3.6.10 · 开发中 · 最后更新 2026-10-10</sub>
+<sub>V3.6.11 · 开发中 · 最后更新 2026-10-10</sub>
 
 </div>

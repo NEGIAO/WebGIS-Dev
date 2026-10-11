@@ -346,7 +346,7 @@ const menuCapabilities = computed(() => {
         canStyle: !!actions.style,
         canOpenAoiPanel: !!actions.openAoiPanel,
         canToggleLabel,
-        isLabelVisible: props.node?.labelVisible !== false,
+        isLabelVisible: props.node?.labelVisible === true,
         canCopyCoordinates: !!actions.copyCoordinates,
         canToggleLayerCRS: !!actions.toggleLayerCRS,
         canExportData,

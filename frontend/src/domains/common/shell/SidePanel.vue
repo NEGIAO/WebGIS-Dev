@@ -48,6 +48,7 @@
                     activeTab === 'bus' ||
                     activeTab === 'drive' ||
                     activeTab === 'compass' ||
+                    activeTab === 'buildings' ||
                     activeTab === 'info',
             }"
         >
@@ -158,7 +159,22 @@
                 />
             </div>
 
-            <!-- 模式 6: 天气看板 -->
+            <!-- 模式 6: 腾讯建筑白模抓取 -->
+            <div
+                v-show="activeTab === 'buildings'"
+                class="toolbox-content"
+            >
+                <TencentBuildingPanel
+                    v-if="loadedTabs.has('buildings')"
+                    :get-cesium-viewer="getCesiumViewer"
+                    :get-cesium="getCesiumNamespace"
+                    :active-engine="activeEngine"
+                    @upload-data="$emit('upload-data', $event)"
+                    @close="$emit('switch-tab', 'info')"
+                />
+            </div>
+
+            <!-- 模式 7: 天气看板 -->
             <div
                 v-show="activeTab === 'weather'"
                 class="toolbox-content weather-tab-content"
@@ -166,7 +182,7 @@
                 <WeatherChartPanel v-if="loadedTabs.has('weather') && shouldLoadWeather" />
             </div>
 
-            <!-- 模式 7: 热点新闻 -->
+            <!-- 模式 8: 热点新闻 -->
             <div
                 v-show="activeTab === 'info'"
                 class="news-dashboard"
@@ -319,6 +335,9 @@ const RoutePlannerPanel = defineAsyncComponent(() =>
 const CompassControlPanel = defineAsyncComponent(() =>
     import('@common/compass/components/CompassControlPanel.vue'),
 );
+const TencentBuildingPanel = defineAsyncComponent(() =>
+    import('@common/data-import/components/TencentBuildingPanel.vue'),
+);
 const WeatherChartPanel = defineAsyncComponent(() =>
     import('@common/weather/components/WeatherChartPanel.vue'),
 );
@@ -350,7 +369,7 @@ const props = defineProps({
     },
     activeTab: {
         type: String,
-        default: 'info', // 'info(hotnews)' | 'chat' | 'toolbox' | 'bus' | 'drive' | 'compass'
+        default: 'info', // 'info(hotnews)' | 'chat' | 'toolbox' | 'bus' | 'drive' | 'compass' | 'buildings'
     },
     toolboxTab: {
         type: String,
@@ -390,6 +409,16 @@ const props = defineProps({
         default: () => ({ key: 'info', label: '' }),
     },
     getUserLocation: {
+        type: Function,
+        default: null,
+    },
+    /** 三维框选的 Viewer 提供器（HomeView 注入，透传给建筑抓取面板） */
+    getCesiumViewer: {
+        type: Function,
+        default: null,
+    },
+    /** 三维框选的 Cesium 命名空间提供器 */
+    getCesiumNamespace: {
         type: Function,
         default: null,
     },

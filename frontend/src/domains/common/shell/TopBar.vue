@@ -82,6 +82,16 @@
                                 />
                                 {{ t('topbar.drivePlanner') }}
                             </button>
+                            <button
+                                class="menu-item"
+                                @click="handleOpenBuildings"
+                            >
+                                <building2-icon
+                                    :size="16"
+                                    class="m-icon"
+                                />
+                                {{ t('topbar.buildings') }}
+                            </button>
                         </div>
 
                         <div class="menu-divider"></div>
@@ -325,6 +335,7 @@ import {
     Compass as CompassIcon,
     Bus as BusIcon,
     Car as CarIcon,
+    Building2 as Building2Icon,
     CloudSun as CloudSunIcon,
     Map as MapIcon,
     MapPin as MapPinIcon,
@@ -363,6 +374,7 @@ const emit = defineEmits([
     'open-compass',
     'open-bus',
     'open-drive',
+    'open-buildings',
     'toggle-weather-board',
     'activate-feature',
     'jump-view',
@@ -424,6 +436,12 @@ function handleOpenDrivePlanner() {
     showToolMenu.value = false;
     emit('activate-feature', { key: 'drive', label: t('topbar.drivePlanner') });
     emit('open-drive');
+}
+
+function handleOpenBuildings() {
+    showToolMenu.value = false;
+    emit('activate-feature', { key: 'buildings', label: t('topbar.buildings') });
+    emit('open-buildings');
 }
 
 function handleToggleWeatherBoard() {

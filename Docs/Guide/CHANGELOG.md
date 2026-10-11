@@ -6,6 +6,18 @@
 
 ## 版本记录
 
+### V3.6.11 (2026-10-10) — 腾讯建筑白模抓取入库（整合版）
+
+> 本批暂存区整合为单版本（Review 记录见本条日志；分步过程日志另见 4 篇 topic 日志）。
+>
+> **入口与面板**：TopBar 功能菜单新增「建筑抓取」（`open-buildings` + `activate-feature`），`HomeView.openBuildingsPanel` 打开 SidePanel 新懒加载页签；`data-import/useTencentBuildingFetch.js`（范围校验/量估算/进度+取消/包 File）+ `data-import/components/TencentBuildingPanel.vue`（双引擎框选/级别/进度/自动入库/下载，品牌主题 + Lucide）。
+> **双引擎框选**：2D 复用 `ExtentPicker`（DragBox），3D 新建镜像 `CesiumExtentPicker`（左键拖拽 + `pickEllipsoid`，拾取期禁用旋转、红预览/蓝覆盖）；手动输入保留。
+> **入库与拔高**：结果包 `.geojson` File 走既有 `upload-data` 通道，2D/3D 自动进 TOC 对应分组（零新 type、零配置 key）；打包剥离非标准顶层 `crs`（Cesium 否则抛 `crs.properties is undefined`，源码为据）；Cesium 按高度属性置 `height=0 + extrudedHeight`，无高度保持贴地。
+> **文案与首页**：`topbar.buildings` + `shell.buildings` 中英（含重键修复）；落地页核心功能 +1 卡。
+>
+> 方案：[`tencent-building-import-plan.md`](../Architecture/tencent-building-import-plan.md) ·
+> 日志：[`2026-10-10-staged-review-v3611.md`](../LLM_record/26-10/2026-10-10/2026-10-10-staged-review-v3611.md)
+
 ### V3.6.10 (2026-10-10) — 图层触摸拖拽排序真实现
 
 > 前情：移动端手柄按设计隐藏（`v-if="!isTouchDevice"`），排序只能逐级置顶/置底。

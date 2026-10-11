@@ -375,6 +375,7 @@ frontend/src/
 │   │   │       ├── explanationLookup.ts  # 罗盘宫位解释查询
 │   │   │       └── themeExplanationMapper.ts  # 主题-解释文件映射
 │   │   ├── components/
+│   │   │   ├── CesiumExtentPicker.vue  # 三维范围框选（ScreenSpace 左键拖拽 + 椭球拾取，ExtentPicker 镜像，V3.6.14）
 │   │   │   ├── ExtentPicker.vue  # 地图范围框选（自包含 DragBox）
 │   │   │   └── Magic/
 │   │   │       ├── useDelaunay.js
@@ -406,6 +407,7 @@ frontend/src/
 │   │   │   ├── useGisLoader.ts
 │   │   │   ├── useKmzLoader.js
 │   │   │   ├── useSharedResourceLoader.ts
+│   │   │   ├── useTencentBuildingFetch.js  # 腾讯建筑白模抓取编排（范围→抓取→GeoJSON→包File入库，V3.6.11）
 │   │   │   ├── vectorUtils.js  # 矢量工具（文本解码/类型归一）
 │   │   │   ├── webglRasterRenderer.js  # WebGL 栅格渲染
 │   │   │   ├── crs/
@@ -419,7 +421,10 @@ frontend/src/
 │   │   │   │   ├── kmlParser.ts  # KML/KMZ 解析
 │   │   │   │   ├── kmlStyleParser.js  # KML 样式解析
 │   │   │   │   ├── shpParser.ts  # Shapefile 解析
+│   │   │   │   ├── tencentBuildingFetcher.js  # 腾讯建筑白模矢量抓取（浏览器直跑，输出 WGS-84 GeoJSON）
 │   │   │   │   └── tifLoader.ts  # GeoTIFF 加载
+│   │   │   ├── components/
+│   │   │   │   └── TencentBuildingPanel.vue  # 腾讯建筑抓取面板（范围表单+进度+入库/下载，V3.6.11）
 │   │   │   └── stores/
 │   │   │       └── useDownloadStore.ts  # 下载任务状态
 │   │   ├── data-protocol/
