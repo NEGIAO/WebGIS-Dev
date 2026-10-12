@@ -407,6 +407,7 @@ frontend/src/
 │   │   │   ├── useGisLoader.ts
 │   │   │   ├── useKmzLoader.js
 │   │   │   ├── useSharedResourceLoader.ts
+│   │   │   ├── useAmapBuildingFetch.js  # 高德建筑白模抓取编排（管理端 amap_key + 固定 z14 + 框选裁剪，V3.6.12）
 │   │   │   ├── useTencentBuildingFetch.js  # 腾讯建筑白模抓取编排（范围→抓取→GeoJSON→包File入库，V3.6.11）
 │   │   │   ├── vectorUtils.js  # 矢量工具（文本解码/类型归一）
 │   │   │   ├── webglRasterRenderer.js  # WebGL 栅格渲染
@@ -417,6 +418,7 @@ frontend/src/
 │   │   │   │   └── crsUtils.js  # CRS 检测与注册
 │   │   │   ├── parsers/
 │   │   │   │   ├── amapAoiParser.js  # 高德 AOI 解析
+│   │   │   │   ├── amapBuildingFetcher.js  # 高德建筑白模矢量抓取（管理端 amap_key，输出 WGS-84 GeoJSON，默认直连）
 │   │   │   │   ├── dbfParser.ts  # DBF 解析
 │   │   │   │   ├── kmlParser.ts  # KML/KMZ 解析
 │   │   │   │   ├── kmlStyleParser.js  # KML 样式解析
@@ -424,7 +426,7 @@ frontend/src/
 │   │   │   │   ├── tencentBuildingFetcher.js  # 腾讯建筑白模矢量抓取（浏览器直跑，输出 WGS-84 GeoJSON）
 │   │   │   │   └── tifLoader.ts  # GeoTIFF 加载
 │   │   │   ├── components/
-│   │   │   │   └── TencentBuildingPanel.vue  # 腾讯建筑抓取面板（范围表单+进度+入库/下载，V3.6.11）
+│   │   │   │   └── TencentBuildingPanel.vue  # 建筑抓取面板（腾讯/高德双源 + 范围表单 + 进度 + 入库/下载，V3.6.12）
 │   │   │   └── stores/
 │   │   │       └── useDownloadStore.ts  # 下载任务状态
 │   │   ├── data-protocol/

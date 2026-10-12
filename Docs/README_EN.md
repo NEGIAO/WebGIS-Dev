@@ -91,6 +91,7 @@
 | 🗺️ 2D/3D Dual Engine | OpenLayers 2D + Cesium 3D one-click switch, bidirectional view state sync, URL share & restore |
 | 🌐 Rich Basemap Sources | 20+ tile sources, circuit-breaker fallback, GCJ-02 rectification, custom XYZ integration |
 | 📥 Multi-Format Data Import | GeoJSON / KML / SHP / GLB / CZML / 3D Tiles drag-and-drop loading, 2D/3D dual pipeline |
+| 🏢 Building Fetch | Tencent/Amap dual source: bbox fetch of footprints + heights (WGS-84 GeoJSON), auto-import into 2D/3D layers; Tencent keyless (z16–18), Amap via admin `amap_key` (fixed z14, auto-clipped to bbox) |
 | 📐 Spatial Analysis | Buffer / Overlay / Voronoi / Cluster / Fishnet and 8 more operators (Shapely backend for precise computation) |
 | ✨ 3D Effects | Volumetric cloud ray marching, Bruneton atmosphere, BSM cloud shadows, wind field particles, flood simulation |
 | 🛣️ Route Planning | Tianditu driving/transit dual pipeline, search point selection & route rendering |

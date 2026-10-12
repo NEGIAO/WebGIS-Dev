@@ -20,6 +20,36 @@
         </div>
 
         <div class="txb-body">
+            <div
+                class="txb-source-tabs"
+                role="tablist"
+            >
+                <button
+                    type="button"
+                    class="txb-source-tab"
+                    data-s="tencent"
+                    :class="{ active: source === 'tencent' }"
+                    :disabled="isFetching"
+                    @click="source = 'tencent'"
+                >
+                    <Building2 :size="13" />
+                    {{ t('shell.buildings.sourceTencent') }}
+                </button>
+                <button
+                    type="button"
+                    class="txb-source-tab"
+                    data-s="amap"
+                    :class="{ active: source === 'amap' }"
+                    :disabled="isFetching"
+                    @click="source = 'amap'"
+                >
+                    <MapPin :size="13" />
+                    {{ t('shell.buildings.sourceAmap') }}
+                </button>
+            </div>
+            <div class="txb-source-desc">
+                {{ isAmap ? t('shell.buildings.sourceDescAmap') : t('shell.buildings.sourceDescTencent') }}
+            </div>
             <div class="txb-section-title">{{ t('shell.buildings.range') }}</div>
             <div class="txb-grid">
                 <label class="txb-field">
@@ -63,7 +93,10 @@
             <div class="txb-row">
                 <label class="txb-zoom">
                     <span>{{ t('shell.buildings.zoom') }}</span>
-                    <select v-model.number="zoom">
+                    <select
+                        v-if="!isAmap"
+                        v-model.number="zoom"
+                    >
                         <option
                             v-for="z in zoomOptions"
                             :key="z"
@@ -72,6 +105,10 @@
                             z{{ z }}
                         </option>
                     </select>
+                    <span
+                        v-else
+                        class="txb-zoom-fixed"
+                    >z14（{{ t('shell.buildings.zoomFixed') }}）</span>
                 </label>
             </div>
 
@@ -80,6 +117,7 @@
                 v-if="props.activeEngine !== 'cesium'"
                 :disabled="isFetching"
                 @extent-change="onExtentPicked"
+                @extent-clear="clearFormBbox"
             />
             <CesiumExtentPicker
                 v-else
@@ -87,6 +125,7 @@
                 :get-cesium="props.getCesium"
                 :disabled="isFetching"
                 @extent-change="onExtentPicked"
+                @extent-clear="clearFormBbox"
             />
 
             <div
@@ -167,17 +206,18 @@
             </div>
 
             <div class="txb-note">
-                {{ t('shell.buildings.disclaimer') }}
+                {{ isAmap ? t('shell.buildings.disclaimerAmap') : t('shell.buildings.disclaimer') }}
             </div>
         </div>
     </div>
 </template>
 
 <script setup>
-import { computed, reactive, ref } from 'vue';
+import { computed, reactive, ref, watch } from 'vue';
 import {
     Building2,
     Download,
+    MapPin,
     TriangleAlert,
     X,
 } from '@lucide/vue';
@@ -185,6 +225,11 @@ import ExtentPicker from '@common/components/ExtentPicker.vue';
 import CesiumExtentPicker from '@common/components/CesiumExtentPicker.vue';
 import { useLocale } from '@common/app/useLocale';
 import { useMessage } from '@common/shell/useMessage';
+import {
+    AMAP_DEFAULT_ZOOM,
+    estimateAmapTiles,
+    useAmapBuildingFetch,
+} from '../useAmapBuildingFetch';
 import {
     TXB_DEFAULT_ZOOM,
     TXB_ZOOM_OPTIONS,
@@ -218,22 +263,41 @@ const emit = defineEmits(['upload-data', 'close']);
 
 const { t } = useLocale();
 const message = useMessage();
-const {
-    status,
-    isFetching,
-    progress,
-    error,
-    result,
-    fileName,
-    startFetch,
-    cancel,
-    buildImportFile,
-    downloadResult,
-} = useTencentBuildingFetch();
+
+/** 数据源：tencent（腾讯白模，免 key）| amap（高德白模，走管理端 L2 key） */
+const source = ref('tencent');
+const isAmap = computed(() => source.value === 'amap');
+const txb = useTencentBuildingFetch();
+const amb = useAmapBuildingFetch();
+/** 当前源实例；下述桥接把内层 ref 拍平，模板/逻辑写法与单源时一致 */
+const cur = computed(() => (isAmap.value ? amb : txb));
+/** 桥接：在 getter 内取内层 .value（computed 不拍平返回的 ref，不能直接透传） */
+const status = computed(() => cur.value.status.value);
+const isFetching = computed(() => cur.value.isFetching.value);
+const progress = computed(() => cur.value.progress.value);
+const error = computed(() => cur.value.error.value);
+const result = computed(() => cur.value.result.value);
+const fileName = computed(() => cur.value.fileName.value);
+const cancel = (...args) => cur.value.cancel(...args);
+const buildImportFile = (...args) => cur.value.buildImportFile(...args);
+const downloadResult = (...args) => cur.value.downloadResult(...args);
+const startFetch = (...args) => cur.value.startFetch(...args);
 
 const form = reactive({ minLng: '', minLat: '', maxLng: '', maxLat: '' });
 const zoom = ref(TXB_DEFAULT_ZOOM);
+/** 静态级别数组，无需 computed 包裹 */
 const zoomOptions = TXB_ZOOM_OPTIONS;
+watch(source, (s) => {
+    zoom.value = s === 'amap' ? AMAP_DEFAULT_ZOOM : TXB_DEFAULT_ZOOM;
+});
+
+/** 框选器点“清除”时同步清空表单（表单是抓取的事实来源） */
+function clearFormBbox() {
+    form.minLng = '';
+    form.minLat = '';
+    form.maxLng = '';
+    form.maxLat = '';
+}
 
 /** 解析表单为数值 bbox，非法返回 null */
 function parsedBbox() {
@@ -249,12 +313,14 @@ function parsedBbox() {
 
 const engineLabel = computed(() => (props.activeEngine === 'cesium' ? '3D' : '2D'));
 
-/** 抓取量估算（输入合法时显示，防手滑拉全城） */
+/** 抓取量估算（输入合法时显示，防手滑拉全城；按源走各自瓦片格网） */
 const estimate = computed(() => {
     const bbox = parsedBbox();
     if (!bbox) return null;
     try {
-        return estimateTxbTiles(bbox, zoom.value);
+        return isAmap.value
+            ? estimateAmapTiles(bbox, zoom.value)
+            : estimateTxbTiles(bbox, zoom.value);
     } catch {
         return null;
     }
@@ -270,7 +336,7 @@ const progressPercent = computed(() => {
 /** 错误码转文案（composable 只抛短码，文案归 i18n） */
 const errorText = computed(() => {
     if (!error.value) return '';
-    const known = ['empty', 'nan', 'order', 'range', 'oversize'];
+    const known = ['empty', 'nan', 'order', 'range', 'oversize', 'key_required'];
     if (known.includes(error.value)) return t(`shell.buildings.err_${error.value}`);
     return t('shell.buildings.fetchFailed', { error: error.value });
 });
@@ -293,6 +359,7 @@ async function onFetch() {
         message.warning(t('shell.buildings.err_nan'));
         return;
     }
+    // 高德侧 key 由 composable 内取管理端 L2 配置，此处统一只传 bbox/zoom
     const fc = await startFetch(bbox, zoom.value);
     if (!fc) return;
     if (!fc.features.length) {
@@ -383,6 +450,56 @@ async function onFetch() {
     font-weight: 700;
 }
 
+.txb-source-tabs {
+    display: flex;
+    gap: 4px;
+    padding: 3px;
+    border-radius: 9px;
+    background: rgba(var(--brand-primary-rgb), 0.08);
+}
+
+.txb-source-tab {
+    flex: 1;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+    padding: 5px 6px;
+    border: none;
+    border-radius: 7px;
+    background: transparent;
+    color: var(--toc-text-secondary);
+    font-size: 12px;
+    cursor: pointer;
+}
+
+.txb-source-tab.active {
+    background: #ffffff;
+    color: var(--brand-accent-dark);
+    font-weight: 700;
+    box-shadow: 0 1px 3px rgba(var(--brand-primary-dark-rgb), 0.18);
+}
+
+/* 高德 tab 用绿色系区分（腾讯保持品牌蓝） */
+.txb-source-tab.active[data-s="amap"] {
+    background: #f0fdf4;
+    color: #15803d;
+}
+
+.txb-source-desc {
+    padding: 6px 8px;
+    border-radius: 8px;
+    background: var(--toc-primary-bg);
+    color: var(--toc-text-secondary);
+    font-size: 11px;
+    line-height: 1.5;
+}
+
+.txb-source-tab:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+}
+
 .txb-grid {
     display: grid;
     grid-template-columns: 1fr 1fr;
@@ -426,6 +543,15 @@ async function onFetch() {
     gap: 3px;
     color: var(--toc-text-secondary);
     font-size: 11px;
+}
+
+.txb-zoom-fixed {
+    display: inline-flex;
+    align-items: center;
+    height: 28px;
+    padding: 0 8px;
+    color: var(--toc-text-secondary);
+    font-size: 12px;
 }
 
 .txb-estimate {

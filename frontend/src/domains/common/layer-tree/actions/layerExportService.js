@@ -177,6 +177,16 @@ export function triggerTextDownload(fileName, content, mimeType) {
 }
 
 /**
+ * 取要素原始属性并剔除 OL geometry 对象（不可序列化，且导出几何已单列）。
+ * @returns {object} 可 JSON 序列化的属性浅拷贝
+ */
+function stripGeometryFromProperties(feature) {
+    const props = feature?.getProperties?.() || {};
+    const { geometry: _dropped, ...attrs } = props;
+    return attrs;
+}
+
+/**
  * 获取要素的显示名称（用于导出）
  */
 export function getFeatureNameForExport(feature, fallbackName) {
@@ -293,6 +303,8 @@ export function createLayerExporter({ message, _gcj02ToWgs84, _wgs84ToGcj02 }) {
                 geojsonFeatures.push({
                     type: 'Feature',
                     properties: {
+                        // 原要素属性优先带出（如 height_m/tile），缺了 Cesium 侧白模就没高度
+                        ...stripGeometryFromProperties(feature),
                         ID: featureId,
                         名称: name,
                         几何类型: geomType || '未知',

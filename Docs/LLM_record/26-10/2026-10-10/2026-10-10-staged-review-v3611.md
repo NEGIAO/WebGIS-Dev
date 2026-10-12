@@ -117,6 +117,10 @@ flowchart LR
 - 提交前建议用户自行确认暂存区即此 20 文件（`git status` 已附核对方式），Agent 不操作 git。
 - 未实机运行。
 
+## 零散修补（L1，不单 bump 版本）
+
+- 2026-10-10 导出 GeoJSON 丢失 `height_m`：定界为**导出侧遗漏**（注册侧无辜——Cesium 拔高能读到高度即证）。`layerExportService.js` GeoJSON 分支手写 4 固定字段；已加 `stripGeometryFromProperties` 把原属性带出（剔除 OL geometry 对象，导出 4 字段后置覆盖同名）。单文件，eslint 全绿，无版本号变更。
+
 ## 门禁
 
 - `python Scripts/CheckStructureTree.py`：通过（486 项/0 漂移）

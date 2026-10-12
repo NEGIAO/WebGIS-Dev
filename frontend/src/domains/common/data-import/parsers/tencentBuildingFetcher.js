@@ -156,7 +156,8 @@ export function parseTxTileBuildings(payload, tileX, tileY, z) {
  * @param {object} [options]
  * @param {number} [options.z=18]
  * @param {AbortSignal} [options.signal]
- * @param {string} [options.proxyBase=''] - 如 '/proxy'，拼到 URL 前走同源中转
+ * @param {string} [options.proxyBase=''] - 同源中转基址前缀，默认 '' 走直连；
+ *   非空时须以 '/' 结尾（如 '/proxy/'），与 URL 直接拼接（`${proxyBase}https://…`）
  */
 export async function fetchTxBatch(tmsTiles, options = {}) {
     const { z = 18, signal, proxyBase = '' } = options;
