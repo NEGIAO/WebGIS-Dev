@@ -46,10 +46,32 @@
                     <MapPin :size="13" />
                     {{ t('shell.buildings.sourceAmap') }}
                 </button>
+                <button
+                    type="button"
+                    class="txb-source-tab"
+                    data-s="tianditu"
+                    :class="{ active: source === 'tianditu' }"
+                    :disabled="isFetching"
+                    @click="source = 'tianditu'"
+                >
+                    <MapPin :size="13" />
+                    {{ t('shell.buildings.sourceTianditu') }}
+                </button>
             </div>
             <div class="txb-source-desc">
-                {{ isAmap ? t('shell.buildings.sourceDescAmap') : t('shell.buildings.sourceDescTencent') }}
+                {{ isAmap ? t('shell.buildings.sourceDescAmap') : (isTianditu ? t('shell.buildings.sourceDescTianditu') : t('shell.buildings.sourceDescTencent')) }}
             </div>
+            <label class="txb-field txb-token-field">
+                <span>{{ isTianditu ? t('shell.buildings.tiandituTk') : (isAmap ? t('shell.buildings.amapKey') : t('shell.buildings.sourceCredential')) }}</span>
+                <input
+                    v-model="sourceCredential"
+                    type="password"
+                    autocomplete="off"
+                    :placeholder="isTianditu
+                        ? t('shell.buildings.tiandituTkPlaceholder')
+                        : (isAmap ? t('shell.buildings.amapKeyPlaceholder') : t('shell.buildings.sourceCredentialTencentPlaceholder'))"
+                />
+            </label>
             <div class="txb-section-title">{{ t('shell.buildings.range') }}</div>
             <div class="txb-grid">
                 <label class="txb-field">
@@ -206,7 +228,7 @@
             </div>
 
             <div class="txb-note">
-                {{ isAmap ? t('shell.buildings.disclaimerAmap') : t('shell.buildings.disclaimer') }}
+                {{ isAmap ? t('shell.buildings.disclaimerAmap') : (isTianditu ? t('shell.buildings.disclaimerTianditu') : t('shell.buildings.disclaimer')) }}
             </div>
         </div>
     </div>
@@ -230,6 +252,12 @@ import {
     estimateAmapTiles,
     useAmapBuildingFetch,
 } from '../useAmapBuildingFetch';
+import {
+    estimateTdtTiles,
+    TDT_DEFAULT_ZOOM,
+    TDT_ZOOM_OPTIONS,
+    useTdtBuildingFetch,
+} from '../useTdtBuildingFetch';
 import {
     TXB_DEFAULT_ZOOM,
     TXB_ZOOM_OPTIONS,
@@ -264,13 +292,15 @@ const emit = defineEmits(['upload-data', 'close']);
 const { t } = useLocale();
 const message = useMessage();
 
-/** 数据源：tencent（腾讯白模，免 key）| amap（高德白模，走管理端 L2 key） */
+/** 数据源：tencent（腾讯）| amap（高德）| tianditu（天地图，走管理端 L2 tk） */
 const source = ref('tencent');
 const isAmap = computed(() => source.value === 'amap');
+const isTianditu = computed(() => source.value === 'tianditu');
 const txb = useTencentBuildingFetch();
 const amb = useAmapBuildingFetch();
+const tdb = useTdtBuildingFetch();
 /** 当前源实例；下述桥接把内层 ref 拍平，模板/逻辑写法与单源时一致 */
-const cur = computed(() => (isAmap.value ? amb : txb));
+const cur = computed(() => (isAmap.value ? amb : (isTianditu.value ? tdb : txb)));
 /** 桥接：在 getter 内取内层 .value（computed 不拍平返回的 ref，不能直接透传） */
 const status = computed(() => cur.value.status.value);
 const isFetching = computed(() => cur.value.isFetching.value);
@@ -284,11 +314,14 @@ const downloadResult = (...args) => cur.value.downloadResult(...args);
 const startFetch = (...args) => cur.value.startFetch(...args);
 
 const form = reactive({ minLng: '', minLat: '', maxLng: '', maxLat: '' });
+const sourceCredential = ref('');
 const zoom = ref(TXB_DEFAULT_ZOOM);
 /** 静态级别数组，无需 computed 包裹 */
-const zoomOptions = TXB_ZOOM_OPTIONS;
+const zoomOptions = computed(() => (isTianditu.value ? TDT_ZOOM_OPTIONS : TXB_ZOOM_OPTIONS));
 watch(source, (s) => {
-    zoom.value = s === 'amap' ? AMAP_DEFAULT_ZOOM : TXB_DEFAULT_ZOOM;
+    zoom.value = s === 'amap'
+        ? AMAP_DEFAULT_ZOOM
+        : (s === 'tianditu' ? TDT_DEFAULT_ZOOM : TXB_DEFAULT_ZOOM);
 });
 
 /** 框选器点“清除”时同步清空表单（表单是抓取的事实来源） */
@@ -320,7 +353,7 @@ const estimate = computed(() => {
     try {
         return isAmap.value
             ? estimateAmapTiles(bbox, zoom.value)
-            : estimateTxbTiles(bbox, zoom.value);
+            : (isTianditu.value ? estimateTdtTiles(bbox, zoom.value) : estimateTxbTiles(bbox, zoom.value));
     } catch {
         return null;
     }
@@ -336,7 +369,7 @@ const progressPercent = computed(() => {
 /** 错误码转文案（composable 只抛短码，文案归 i18n） */
 const errorText = computed(() => {
     if (!error.value) return '';
-    const known = ['empty', 'nan', 'order', 'range', 'oversize', 'key_required'];
+    const known = ['empty', 'nan', 'order', 'range', 'oversize', 'key_required', 'tdt_key_required', 'tdt_permission'];
     if (known.includes(error.value)) return t(`shell.buildings.err_${error.value}`);
     return t('shell.buildings.fetchFailed', { error: error.value });
 });
@@ -359,8 +392,8 @@ async function onFetch() {
         message.warning(t('shell.buildings.err_nan'));
         return;
     }
-    // 高德侧 key 由 composable 内取管理端 L2 配置，此处统一只传 bbox/zoom
-    const fc = await startFetch(bbox, zoom.value);
+    // 用户临时输入的 tk 优先，留空时由 composable 使用管理端 L2 配置。
+    const fc = await startFetch(bbox, zoom.value, sourceCredential.value.trim());
     if (!fc) return;
     if (!fc.features.length) {
         message.warning(t('shell.buildings.empty'));

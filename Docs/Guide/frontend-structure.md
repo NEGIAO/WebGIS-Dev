@@ -408,6 +408,7 @@ frontend/src/
 │   │   │   ├── useKmzLoader.js
 │   │   │   ├── useSharedResourceLoader.ts
 │   │   │   ├── useAmapBuildingFetch.js  # 高德建筑白模抓取编排（管理端 amap_key + 固定 z14 + 框选裁剪，V3.6.12）
+│   │   │   ├── useTdtBuildingFetch.js  # 天地图建筑抓取编排（临时 tk / 管理端 tianditu_tk + z15–18 + 入库下载）
 │   │   │   ├── useTencentBuildingFetch.js  # 腾讯建筑白模抓取编排（范围→抓取→GeoJSON→包File入库，V3.6.11）
 │   │   │   ├── vectorUtils.js  # 矢量工具（文本解码/类型归一）
 │   │   │   ├── webglRasterRenderer.js  # WebGL 栅格渲染
@@ -423,11 +424,12 @@ frontend/src/
 │   │   │   │   ├── kmlParser.ts  # KML/KMZ 解析
 │   │   │   │   ├── kmlStyleParser.js  # KML 样式解析
 │   │   │   │   ├── shpParser.ts  # Shapefile 解析
-│   │   │   │   ├── tdtBuildingFetcher.js  # 天地图建筑矢量抓取（用户新增，未 review；含站内公用 tk，待定夺）
+│   │   │   │   ├── tdtBuildingFetcher.js  # 天地图建筑矢量抓取（浏览器 VTS 解码、权限错误处理）
+│   │   │   │   ├── tdtBuildingTopology.js  # 天地图建筑跨瓦片 Union（无第三方依赖、接缝窄带优化）
 │   │   │   │   ├── tencentBuildingFetcher.js  # 腾讯建筑白模矢量抓取（浏览器直跑，输出 WGS-84 GeoJSON）
 │   │   │   │   └── tifLoader.ts  # GeoTIFF 加载
 │   │   │   ├── components/
-│   │   │   │   └── TencentBuildingPanel.vue  # 建筑抓取面板（腾讯/高德双源 + 范围表单 + 进度 + 入库/下载，V3.6.12）
+│   │   │   │   └── TencentBuildingPanel.vue  # 建筑抓取面板（腾讯/高德/天地图 + tk 输入 + 范围表单 + 进度 + 入库/下载）
 │   │   │   └── stores/
 │   │   │       └── useDownloadStore.ts  # 下载任务状态
 │   │   ├── data-protocol/

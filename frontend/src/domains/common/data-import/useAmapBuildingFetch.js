@@ -115,7 +115,7 @@ export function useAmapBuildingFetch() {
      * @param {number} zoom 抓取级别
      * @returns {Promise<object|null>} GeoJSON，取消/失败返回 null
      */
-    async function startFetch(bbox, zoom = AMAP_DEFAULT_ZOOM) {
+    async function startFetch(bbox, zoom = AMAP_DEFAULT_ZOOM, inputKey = '') {
         const bad = validateAmapBbox(bbox);
         if (bad) {
             status.value = 'error';
@@ -124,8 +124,8 @@ export function useAmapBuildingFetch() {
         }
         // 管理端 L2 密钥（API 密钥管理 → amap_key），与地质/天气等模块同通道
         await loadRuntimeMapTokens().catch(() => {});
-        const managedKey = String(getRuntimeMapTokensSync().amapKey || '').trim();
-        if (!managedKey) {
+        const key = String(inputKey || getRuntimeMapTokensSync().amapKey || '').trim();
+        if (!key) {
             status.value = 'error';
             error.value = 'key_required';
             return null;
@@ -143,7 +143,7 @@ export function useAmapBuildingFetch() {
                 { bbox: [bbox.minLng, bbox.minLat, bbox.maxLng, bbox.maxLat] },
                 {
                     zoom,
-                    key: managedKey,
+                    key,
                     batchDelay: AMAP_BATCH_DELAY,
                     signal: aborter.signal,
                     onProgress: (done, total, count) => {
