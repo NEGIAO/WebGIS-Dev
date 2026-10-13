@@ -149,6 +149,8 @@ export function buildContextMenuItems({ node, capabilities = {}, selectionState 
 
         const ops = [];
         if (capabilities.canZoom) ops.push({ key: TOC_MENU_COMMANDS.ZOOM, label: '缩放至图层' });
+        if (capabilities.canImportTo3D)
+            ops.push({ key: TOC_MENU_COMMANDS.IMPORT_TO_3D, label: '导入到 3D' });
         if (capabilities.canRemove)
             ops.push({
                 key: TOC_MENU_COMMANDS.REMOVE,

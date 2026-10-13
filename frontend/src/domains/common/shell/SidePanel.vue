@@ -106,6 +106,7 @@
                     @draw-amap-aoi-from-json="$emit('draw-amap-aoi-from-json', $event)"
                     @toggle-layer-crs="$emit('toggle-layer-crs', $event)"
                     @export-layer-data="$emit('export-layer-data', $event)"
+                    @import-to-3d="$emit('import-to-3d', $event)"
                     @rename-layer="$emit('rename-layer', $event)"
                     @layer-selected="$emit('layer-selected', $event)"
                 />
@@ -535,6 +536,7 @@ defineEmits([
     'draw-amap-aoi-from-json',
     'toggle-layer-crs',
     'export-layer-data',
+    'import-to-3d',
     'rename-layer',
     'layer-selected',
 ]);

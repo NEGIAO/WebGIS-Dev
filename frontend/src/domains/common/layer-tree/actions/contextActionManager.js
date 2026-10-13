@@ -167,6 +167,11 @@ export function handleLayerTreeContextAction({
         return true;
     }
 
+    if (type === 'import-to-3d') {
+        emit?.('import-to-3d', { layerId: evt.layerId });
+        return true;
+    }
+
     if (type === 'export-layer-data') {
         const format = normalizeTocExportFormat(evt.format);
         if (!canLayerExportFormat(resolveLayerActionsById?.(evt.layerId), format)) {

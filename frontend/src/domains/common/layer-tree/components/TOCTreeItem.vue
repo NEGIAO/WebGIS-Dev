@@ -246,6 +246,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue';
 import {
     ArrowLeftRight,
+    Boxes,
     ChevronRight,
     Copy,
     Droplet,
@@ -279,6 +280,7 @@ import {
     buildContextMenuItems,
     dispatchContextMenuCommand,
 } from '../';
+import { TOC_LAYER_DRAG_MIME } from '../protocol';
 
 defineOptions({ name: 'TOCTreeItem' });
 
@@ -355,6 +357,7 @@ const menuCapabilities = computed(() => {
         canExportGeoJSON,
         canExportKML,
         canZoom: !!actions.zoom,
+        canImportTo3D: !!actions.importTo3D,
         canRemove: !!actions.remove,
         removeLabel: actions.removeTip || '移除图层',
         currentOpacity: props.node?.opacity ?? 1,
@@ -382,6 +385,7 @@ const MENU_ICONS = {
     opacity: Droplet,
     properties: Info,
     zoom: ZoomIn,
+    'import-to-3d': Boxes,
     remove: Trash2,
     reposition: MapPin,
     'stretch-height': Mountain,
@@ -557,8 +561,10 @@ function handleMaterialChange(mode) {
 
 function handleDragStart(evt) {
     if (!props.node.draggable) return;
-    // 携带拖拽源 id，供 drop 目标识别来源
+    // 携带拖拽源 id，供 drop 目标识别来源：
+    // text/plain 维持行内排序，自定义 MIME 供跨容器落点（如 Cesium 画布）识别图层拖拽
     evt.dataTransfer?.setData('text/plain', props.node.id);
+    evt.dataTransfer?.setData(TOC_LAYER_DRAG_MIME, props.node.id);
     emitAction('drag-layer-start', { layerId: props.node.id });
 }
 

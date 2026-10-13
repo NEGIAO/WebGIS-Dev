@@ -169,6 +169,7 @@ import { createCesiumDataOpsHandlers } from '../composables/dataImport/useCesium
 import { useCesiumToolModules } from '../composables/toolModules/useCesiumToolModules';
 import { useCesiumLayersStore } from '@cesium-domain/stores/cesiumLayers';
 import { registerEngineHandlers, unregisterEngineHandlers } from '@common/layer-tree/actions/unifiedActionRouter';
+import { TOC_LAYER_DRAG_MIME } from '@common/layer-tree/protocol';
 import { getCesiumGroundResolution } from '@common/utils/viewScale/browserAdapter';
 import { createCesiumDrawMeasureFeature } from '../composables/draw/useCesiumDrawMeasure';
 import { createCesiumRouteFeature } from '../composables/draw/useCesiumRouteRendering';
@@ -200,6 +201,7 @@ const emit = defineEmits([
     'view-sync',
     'ready',
     'load-failed',
+    'drop-ol-layer',
 ]);
 
 const showPlayerGuide = ref(true);
@@ -1084,12 +1086,24 @@ function onDragLeave(event) {
     isDragOver.value = false;
 }
 
-/** 拖拽释放 — 解析文件并导入 */
+/** 拖拽释放 — TOC 图层优先，其次文件导入 */
 async function onDrop(event) {
     isDragOver.value = false;
     if (!cesiumReady.value) return;
 
-    const files = event.dataTransfer?.files;
+    const transfer = event.dataTransfer;
+    const hasFiles = !!transfer?.files?.length;
+    // TOC 二维图层拖入（无文件 + 自定义 MIME）：直接上抛，由 HomeView 走右键导入同一投递链路；
+    // cesium:/rsvc: 节点不在此通道（右键菜单同样没有该项），静默忽略
+    if (!hasFiles && Array.from(transfer?.types || []).includes(TOC_LAYER_DRAG_MIME)) {
+        const layerId = String(transfer.getData(TOC_LAYER_DRAG_MIME) || '').trim();
+        if (layerId && !layerId.startsWith('cesium:') && !layerId.startsWith('rsvc:')) {
+            emit('drop-ol-layer', { layerId });
+        }
+        return;
+    }
+
+    const files = transfer?.files;
     if (!files || files.length === 0) return;
 
     try {

@@ -197,6 +197,7 @@ import { storeToRefs } from 'pinia';
 import 'ol/ol.css';
 import Map from 'ol/Map';
 import View from 'ol/View';
+import GeoJSON from 'ol/format/GeoJSON';
 import { fromLonLat, toLonLat } from 'ol/proj';
 import { defaults as defaultControls } from 'ol/control';
 import ScaleLine from 'ol/control/ScaleLine';
@@ -1975,6 +1976,29 @@ const exportLayerCoordinates = (payload) => {
     exporterFn(payload, { userDataLayers });
 };
 
+/**
+ * 导出用户图层为 GeoJSON 文本（WGS-84，保留原始属性；供跨引擎投递如导入 3D）。
+ * @param {{layerId: string}} payload
+ * @returns {{name: string, text: string} | null} 无图层/无要素时返回 null
+ */
+function exportUserLayerGeoJSON(payload = {}) {
+    const layerId = String(payload?.layerId || '').trim();
+    if (!layerId) return null;
+    const target = userDataLayers.find((item) => String(item?.id) === layerId);
+    const features = target?.layer?.getSource?.()?.getFeatures?.() || [];
+    if (!target || !features.length) return null;
+    try {
+        const format = new GeoJSON();
+        const obj = format.writeFeaturesObject(features, {
+            dataProjection: 'EPSG:4326',
+            featureProjection: 'EPSG:3857',
+        });
+        return { name: target.name || 'layer', text: JSON.stringify(obj) };
+    } catch {
+        return null;
+    }
+}
+
 // [隶属] 组件交互-对外能力暴露
 // [作用] 向父组件公开地图核心动作（导入、绘制、路线、图层管理等）。
 // [交互] HomeView 等父组件通过 ref 调用这些方法。
@@ -2003,6 +2027,7 @@ defineExpose({
     updateViewByParams,
     locateAddress,
     addUserDataLayer,
+    exportUserLayerGeoJSON,
     activateInteraction,
     clearInteractions,
     getCurrentLocation,

@@ -416,6 +416,8 @@ export function toLayerNode(layer: LayerStoreLayer, level: number, group: string
                 poiid,
             },
             zoom: capabilities.zoom !== false,
+            // 导入到 3D：非栅格图层开放（经 GeoJSON 序列化投递 Cesium，自带属性与拔高）
+            importTo3D: !isRasterLayer(layer),
             remove: capabilities.remove !== false,
             removeTip: group === 'search' ? '清空' : '移除',
             viewEvent: 'view-layer',

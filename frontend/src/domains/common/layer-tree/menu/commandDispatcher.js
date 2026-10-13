@@ -199,6 +199,11 @@ export function dispatchContextMenuCommand({ key, node, selectedLayerIds = [] } 
         return events;
     }
 
+    if (commandKey === TOC_MENU_COMMANDS.IMPORT_TO_3D) {
+        events.push({ type: 'import-to-3d', payload: { layerId: nodeId } });
+        return events;
+    }
+
     if (commandKey === TOC_MENU_COMMANDS.REMOVE) {
         pushConfiguredEvent(
             events,

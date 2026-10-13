@@ -423,6 +423,7 @@ frontend/src/
 │   │   │   │   ├── kmlParser.ts  # KML/KMZ 解析
 │   │   │   │   ├── kmlStyleParser.js  # KML 样式解析
 │   │   │   │   ├── shpParser.ts  # Shapefile 解析
+│   │   │   │   ├── tdtBuildingFetcher.js  # 天地图建筑矢量抓取（用户新增，未 review；含站内公用 tk，待定夺）
 │   │   │   │   ├── tencentBuildingFetcher.js  # 腾讯建筑白模矢量抓取（浏览器直跑，输出 WGS-84 GeoJSON）
 │   │   │   │   └── tifLoader.ts  # GeoTIFF 加载
 │   │   │   ├── components/

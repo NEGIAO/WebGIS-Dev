@@ -82,6 +82,21 @@ export async function loadGeoJSON({ file, getCesium, getViewer, message, loadedD
         throw new Error('GeoJSON 文件格式无效，无法解析为 JSON');
     }
 
+    // 入口统一兼容：抓取器输出的裸字符串顶层 crs（如 'WGS84'）会使
+    // Cesium 以 "crs.properties is undefined" 抛错（OL 则忽略）。
+    // 数据本就是 WGS-84（两引擎默认），此处直接剥离（对象形式保留）——
+    // 面板打包侧的 toSpecGeoJSON 只覆盖面板链路，文件拖放/2D 转 3D/Node 落盘
+    // 都走这里，一处管所有来源。
+    if (
+        geojsonData &&
+        typeof geojsonData === 'object' &&
+        geojsonData.crs !== undefined &&
+        (typeof geojsonData.crs !== 'object' || geojsonData.crs === null)
+    ) {
+        const { crs: _dropped, ...rest } = geojsonData;
+        geojsonData = rest;
+    }
+
     const dataSource = await Cesium.GeoJsonDataSource.load(geojsonData, {
         clampToGround: true,
         stroke: Cesium.Color.fromCssColorString('#3ddc84'),

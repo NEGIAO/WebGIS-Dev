@@ -1,5 +1,11 @@
 export const TOC_EXPORT_FORMATS = Object.freeze(['csv', 'txt', 'geojson', 'kml']);
 
+/**
+ * TOC 图层跨容器拖拽的 DataTransfer 类型（与排序用的 text/plain 并存，互不干扰）。
+ * 放置目标（如 Cesium 画布）凭此识别图层拖拽，文件拖拽走 files 通道。
+ */
+export const TOC_LAYER_DRAG_MIME = 'application/x-webgis-layer';
+
 const TOC_EXPORT_FORMAT_SET = new Set(TOC_EXPORT_FORMATS);
 
 export const TOC_MENU_COMMANDS = Object.freeze({
@@ -31,6 +37,7 @@ export const TOC_MENU_COMMANDS = Object.freeze({
     EXPORT_GEOJSON: 'export-geojson',
     EXPORT_KML: 'export-kml',
     ZOOM: 'zoom',
+    IMPORT_TO_3D: 'import-to-3d',
     REMOVE: 'remove',
     RENAME: 'rename',
     OPACITY: 'opacity',

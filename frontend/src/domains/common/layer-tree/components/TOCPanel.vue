@@ -647,6 +647,7 @@ const emit = defineEmits([
     'draw-amap-aoi-from-json',
     'toggle-layer-crs',
     'export-layer-data',
+    'import-to-3d',
     'rename-layer',
 ]);
 

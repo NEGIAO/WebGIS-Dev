@@ -16,7 +16,7 @@
  *   或经同源后端 /proxy 中转（见 proxyBase）。原演示 key 已实测无数据并删除。
  *   某省瓦片偶发 OVERSEA_FORBIDDEN 时会自动切 access_oversea=1 重试。
  *
- * 逆向全过程见学习笔记：Pages/Note/md/tencent-building-reverse.md（高德篇待补）
+ * 逆向全过程见学习笔记：Pages/Note/md/tencent-building-reverse.md（第 12 节高德篇）
  * Node 版（同逻辑，带文件落盘）：Pages/Note/resources/amap-building-reverse/amap_building_to_geojson.mjs
  */
 

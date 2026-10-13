@@ -1500,6 +1500,30 @@ function handleExportLayerData(payload) {
     mapContainerRef.value?.exportLayerCoordinates?.(payload);
 }
 
+/**
+ * 二维图层导入 3D（TOC 右键“导入到 3D”）。
+ * 数据源已在 OL 注册（id/属性俱全），此处仅序列化为 GeoJSON 文本，
+ * 包 File 后走既有 Cesium importUserData 通道（自动建档进三维分组 + 按高度拔高）。
+ */
+async function handleImportOlLayerTo3D(payload = {}) {
+    const layerId = String(payload?.layerId || '').trim();
+    if (!layerId) return;
+    const snapshot = mapContainerRef.value?.exportUserLayerGeoJSON?.({ layerId });
+    if (!snapshot?.text) {
+        message.warning('该图层没有可导入 3D 的矢量要素');
+        return;
+    }
+    if (!is3DMode.value || !cesiumContainerRef.value) {
+        message.warning('请先切换到 3D 视图，再导入该图层');
+        return;
+    }
+    const safeName = String(snapshot.name || 'layer').replace(/[\\/:*?"<>|]+/g, '_') || 'layer';
+    const file = new File([snapshot.text], `${safeName}.geojson`, {
+        type: 'application/geo+json',
+    });
+    await Promise.resolve(cesiumContainerRef.value?.importUserData?.({ resources: [file] }));
+}
+
 function handleUserLayersChange(layers) {
     userLayers.value = layers || [];
     // 直接更新 Pinia store，不依赖下游 TOCPanel watcher 的 prop 链
@@ -1900,6 +1924,7 @@ onMounted(async () => {
                         @ready="handleCesiumReady"
                         @load-failed="handleCesiumLoadFailed"
                         @view-sync="handleViewSync"
+                        @drop-ol-layer="handleImportOlLayerTo3D"
                     />
                 </div>
             </div>
@@ -1983,6 +2008,7 @@ onMounted(async () => {
                     @draw-amap-aoi-from-json="handleDrawAmapAoiFromJson"
                     @toggle-layer-crs="handleToggleLayerCRS"
                     @export-layer-data="handleExportLayerData"
+                    @import-to-3d="handleImportOlLayerTo3D"
                     @switch-tab="handleSwitchSidePanelTab"
                     @toggle-panel="toggleSidePanel"
                     @close-chat="handleCloseChat"

@@ -81,7 +81,7 @@
 
 ## 🎯 项目简介
 
-**NEGIAO's WebGIS** 是一个功能完整、架构清晰的前后端分离 WebGIS 平台（当前版本 V3.6.12），前端托管于 GitHub Pages（正式域名 webgis.negiao.cn），后端以 Docker 部署在 Hugging Face Spaces，通过 RESTful API 通信，支持独立扩展。
+**NEGIAO's WebGIS** 是一个功能完整、架构清晰的前后端分离 WebGIS 平台（当前版本 V3.6.13），前端托管于 GitHub Pages（正式域名 webgis.negiao.cn），后端以 Docker 部署在 Hugging Face Spaces，通过 RESTful API 通信，支持独立扩展。
 
 > 📚 本 README 仅保留核心概览与导航。完整文档已模块化至 [`Docs/Guide/`](Docs/Guide/)，详见下方「文档导航」。
 >
@@ -397,9 +397,9 @@ tiles.negiao.cc.cd"]
 
 | 版本 | 日期 | 概要 |
 |------|------|------|
+| **V3.6.13** | 2026-10-13 | **二维图层导入 3D**：TOC 右键「导入到 3D」（非栅格行）＋拖到三维画布松手即导入，OL 序列化 GeoJSON 文本 → 包 File 走既有 Cesium 通道（自动建档＋高度拔高）；未切 3D 时明示降级。详见[完整更新日志](Docs/Guide/CHANGELOG.md) |
 | **V3.6.12** | 2026-10-12 | **建筑抓取双源**：面板腾讯/高德二选一；高德走管理端 `amap_key`（缺 key 报错，不进仓库）＋腾讯 z16–18 / 高德锁死 z14＋分源范围上限＋框外楼自动裁剪；观察项修复（返回裁剪包/接清除/代理立约/免责统一）。详见[完整更新日志](Docs/Guide/CHANGELOG.md) |
 | **V3.6.11** | 2026-10-10 | **腾讯建筑白模抓取入库（整合版）**：TopBar 菜单入口 → SidePanel 新页签（双引擎框选/级别/进度/自动入库/下载）；抓取编排 + 面板 + 三维框选镜像组件；Cesium 按高度拔高、`crs` 兼容、locale 重键修复；落地页 +1 功能卡。详见[完整更新日志](Docs/Guide/CHANGELOG.md) |
-| **V3.6.10** | 2026-10-10 | **图层触摸拖拽排序真实现**：手柄三端常显 + 手柄发起式触摸拖拽（与长按菜单/滚动互斥），落点发与桌面同形 `reorder`，复用父组件语义零协议新增。详见[完整更新日志](Docs/Guide/CHANGELOG.md) |
 
 更早版本（V3.6.4 及以前）请查阅 [完整更新日志 →](Docs/Guide/CHANGELOG.md)
 
@@ -423,6 +423,6 @@ tiles.negiao.cc.cd"]
 |:------:|:--------:|:--------:|
 | [GitHub](https://github.com/NEGIAO/WebGIS-Dev) | [webgis.negiao.cn](https://webgis.negiao.cn)（正式域名，GitHub Pages 托管） | [Hugging Face](https://NEGIAO-WebGIS.hf.space) |
 
-<sub>V3.6.12 · 开发中 · 最后更新 2026-10-12</sub>
+<sub>V3.6.13 · 开发中 · 最后更新 2026-10-13</sub>
 
 </div>
