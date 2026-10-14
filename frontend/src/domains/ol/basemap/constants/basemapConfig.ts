@@ -1448,6 +1448,29 @@ export const LAYER_SOURCE_DEFINITIONS: LayerSourceDefinition[] = [
             ),
     },
     {
+        id: 'vector_tengxun_wgs',
+        name: '腾讯地图(WGS)',
+        category: 'vector',
+        group: '矢量',
+        // 腾讯电子底图（GCJ-02）→ 经后端 /proxy/gcj2wgs 纠偏到 WGS84；与 vector_tengxun 同源，
+        // 仅差纠偏代理。上游 y={-y} 为 TMS 翻转 Y（OpenLayers / Cesium 均支持），故不使用 query 拼裸 {y}。
+        // 上游 y={-y} 为 TMS 翻转 Y（OpenLayers / Cesium 均支持）。自定义图源手动输入场景下，
+        // urlUtils.looksLikeXYZTemplate 现已放宽为「含 {…} 占位符即认」（兼容 {-y} 等非标准 token），
+        // 故本 URL 作为自定义源也能被正确识别为 XYZ（见 Docs/TODO/bugfix-optimization-plan.md）。
+        url: gcj2wgsProxyUrl(
+            'https://rt0.map.gtimg.com/realtimerender?z={z}&x={x}&y={-y}&type=vector&style=0',
+        ),
+        serviceType: 'xyz',
+        createSource: () =>
+            prioritizeTileSourceRequest(
+                new XYZ({
+                    url: gcj2wgsProxyUrl(
+                        'https://rt0.map.gtimg.com/realtimerender?z={z}&x={x}&y={-y}&type=vector&style=0',
+                    ),
+                }),
+            ),
+    },
+    {
         id: 'vector_Google_clean',
         name: 'Google简洁(wgs)',
         category: 'vector',

@@ -408,7 +408,7 @@ frontend/src/
 │   │   │   ├── useKmzLoader.js
 │   │   │   ├── useSharedResourceLoader.ts
 │   │   │   ├── useAmapBuildingFetch.js  # 高德建筑白模抓取编排（管理端 amap_key + 固定 z14 + 框选裁剪，V3.6.12）
-│   │   │   ├── useTdtBuildingFetch.js  # 天地图建筑抓取编排（临时 tk / 管理端 tianditu_tk + z15–18 + 入库下载）
+│   │   │   ├── useTdtBuildingFetch.js  # 天地图抓取编排（建筑单层 + 全量多选分层 startVectorFetch + 分层出包，V3.6.17）
 │   │   │   ├── useTencentBuildingFetch.js  # 腾讯建筑白模抓取编排（范围→抓取→GeoJSON→包File入库，V3.6.11）
 │   │   │   ├── vectorUtils.js  # 矢量工具（文本解码/类型归一）
 │   │   │   ├── webglRasterRenderer.js  # WebGL 栅格渲染
@@ -425,11 +425,14 @@ frontend/src/
 │   │   │   │   ├── kmlStyleParser.js  # KML 样式解析
 │   │   │   │   ├── shpParser.ts  # Shapefile 解析
 │   │   │   │   ├── tdtBuildingFetcher.js  # 天地图建筑矢量抓取（浏览器 VTS 解码、权限错误处理）
-│   │   │   │   ├── tdtBuildingTopology.js  # 天地图建筑跨瓦片 Union（无第三方依赖、接缝窄带优化）
+│   │   │   │   ├── tdtBuildingTopology.js  # 天地图建筑跨瓦片 Union（无第三方依赖、接缝窄带优化；clipRingToRectMulti 半平面多环裁剪，V3.6.17）
+│   │   │   │   ├── tdtVectorFetcher.js  # 天地图全量 12 层矢量抓取（浏览器三编码解码 + 分层输出，V3.6.17）
+│   │   │   │   ├── tdtVectorLayers.js  # 天地图 12 层字典（码→中文含义→关键属性→拓扑策略，V3.6.17）
+│   │   │   │   ├── tdtVectorTopology.js  # 天地图全量分层拓扑（CE/AP 按 id 合：buffer 盒裁剪 + 瓦片核心裁剪恢复（多环化，V3.6.17） + 接缝条件 Union + 守恒回退 + 洞嵌套；CK/BM 按 S8 分组连通融合；点线裁剪去重；残余重叠洞感知审计，AP 豁免纯包含，V3.6.17）
 │   │   │   │   ├── tencentBuildingFetcher.js  # 腾讯建筑白模矢量抓取（浏览器直跑，输出 WGS-84 GeoJSON）
 │   │   │   │   └── tifLoader.ts  # GeoTIFF 加载
 │   │   │   ├── components/
-│   │   │   │   └── TencentBuildingPanel.vue  # 建筑抓取面板（腾讯/高德/天地图 + tk 输入 + 范围表单 + 进度 + 入库/下载）
+│   │   │   │   └── TencentBuildingPanel.vue  # 建筑抓取面板（腾讯/高德/天地图 + 天地图 12 层多选分层 + 入库/下载，V3.6.17）
 │   │   │   └── stores/
 │   │   │       └── useDownloadStore.ts  # 下载任务状态
 │   │   ├── data-protocol/

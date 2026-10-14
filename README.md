@@ -38,14 +38,16 @@
 
 <div align="center">
 
-
 | **🗺️ 底图卷帘对比** | **🧭 罗盘寻龙点穴** |
 | :---: | :---: |
 | <a href="https://github.com/user-attachments/assets/c8cb6f16-04e0-4b9a-983f-22538e0bd65a"><img src="https://github.com/user-attachments/assets/c8cb6f16-04e0-4b9a-983f-22538e0bd65a" width="400" /></a> | <a href="https://github.com/user-attachments/assets/acbb5a56-bff7-44c3-848b-dbe178c52301"><img src="https://github.com/user-attachments/assets/acbb5a56-bff7-44c3-848b-dbe178c52301" width="400" /></a> |
 | **📐 二维数据管理** | **☁️ 三维漫游云景** |
 | <a href="https://github.com/user-attachments/assets/0852330e-c973-4a0b-8adc-4bd1cd85e0fa"><img src="https://github.com/user-attachments/assets/0852330e-c973-4a0b-8adc-4bd1cd85e0fa" width="400" /></a> | <a href="https://github.com/user-attachments/assets/7bedba67-d965-4640-ac32-f5d75630e434"><img src="https://github.com/user-attachments/assets/7bedba67-d965-4640-ac32-f5d75630e434" width="400" /></a> |
 | **🤖 智能助手交互** | **🌊 动态淹没分析** |
-| <a href="https://github.com/user-attachments/assets/2dbbb794-ef3e-4d7a-b16b-4f381053fec3"><img src="https://github.com/user-attachments/assets/2dbbb794-ef3e-4d7a-b16b-4f381053fec3" width="400" /></a> | <a href="https://github.com/user-attachments/assets/e26761db-8f91-4f05-90f2-106b28223ab5"><img src="https://github.com/user-attachments/assets/e26761db-8f91-4f05-90f2-106b28223ab5" width="400" /></a> |
+| <a href="https://github.com/user-attachments/assets/2dbbb794-ef3e-4d7a-b16b-4f381053fec3"><img src="https://github.com/user-attachments/assets/42e3a0e1-1cc5-444f-b9f8-b71caf8d9b0a" width="400" /></a> | <a href="https://github.com/user-attachments/assets/e26761db-8f91-4f05-90f2-106b28223ab5"><img src="https://github.com/user-attachments/assets/e26761db-8f91-4f05-90f2-106b28223ab5" width="400" /></a> |
+
+<div align="center">🗺️ 矢量瓦片逆向解析</div>
+<img width="1280" height="718" alt="QQ20261015-213105" src="https://github.com/user-attachments/assets/b823dd99-1f51-46a2-821c-7778e2b008e6" />
 
 </div>
 
@@ -57,6 +59,7 @@
 - [📑 目录](#-目录)
 - [🎯 项目简介](#-项目简介)
   - [核心能力](#核心能力)
+  - [建筑抓取合规声明（必读）](#建筑抓取合规声明必读)
 - [🚀 快速开始](#-快速开始)
   - [环境要求](#环境要求)
   - [配置（双 env 文件架构，先看这一处）](#配置双-env-文件架构先看这一处)
@@ -81,7 +84,7 @@
 
 ## 🎯 项目简介
 
-**NEGIAO's WebGIS** 是一个功能完整、架构清晰的前后端分离 WebGIS 平台（当前版本 V3.6.14），前端托管于 GitHub Pages（正式域名 webgis.negiao.cn），后端以 Docker 部署在 Hugging Face Spaces，通过 RESTful API 通信，支持独立扩展。
+**NEGIAO's WebGIS** 是一个功能完整、架构清晰的前后端分离 WebGIS 平台（当前版本 V3.6.17），前端托管于 GitHub Pages（正式域名 webgis.negiao.cn），后端以 Docker 部署在 Hugging Face Spaces，通过 RESTful API 通信，支持独立扩展。
 
 > 📚 本 README 仅保留核心概览与导航。完整文档已模块化至 [`Docs/Guide/`](Docs/Guide/)，详见下方「文档导航」。
 >
@@ -96,7 +99,7 @@
 | 🗺️ 2D/3D 双引擎 | OpenLayers 2D + Cesium 3D 一键切换，视图状态双向同步，URL 分享还原 |
 | 🌐 丰富底图源 | 70+ 瓦片图源、熔断回退、GCJ-02 纠偏、自定义 XYZ 接入 |
 | 📥 多格式数据导入 | GeoJSON / KML / SHP / GLB / CZML / 3D Tiles 拖拽加载，2D/3D 双管线 |
-| 🏢 建筑白模抓取 | 腾讯/高德双源二选一：框选范围抓取建筑轮廓 + 楼高（WGS-84 GeoJSON），自动入库 2D/3D 图层管理；腾讯免 key（z16–18），高德走管理端 `amap_key`（固定 z14，框外楼自动裁剪） |
+| 🏢 建筑白模抓取 | 支持建筑1 / 建筑2 / 矢量瓦片 三类数据源：框选范围抓取建筑轮廓、楼高及相关属性（WGS-84 GeoJSON），自动入库 2D/3D 图层管理；支持分源级别与凭证配置，并提供跨瓦片同标识建筑融合能力 |
 | 📐 空间分析 | 缓冲区 / 叠加 / 泰森多边形 / 聚合 / 渔网等 8 算子（Shapely 后端精确计算） |
 | ✨ 三维特效 | 体积云 ray marching、Bruneton 大气、BSM 云影、风场粒子、洪水淹没模拟 |
 | 🛩️ 面状航线规划 | 测区绘制、弓字形/五向倾斜采集、AGL 仿地、DJI KMZ 导入导出，toolPanel 模块卡片直驱并接入统一图层管理 |
@@ -104,6 +107,14 @@
 | 🤖 AI 空间助手 | LLM 集成，三种接入模式（默认 / 个人 Key / 后端代理） |
 | 🔐 账号体系 | 邮箱注册登录、Google/GitHub 一键注册登录与绑定、三级身份、会话鉴权、双 AI 配额管理 |
 | 🧰 实用工具 | 测量、坐标拾取、风水罗盘、卷帘分析、天气、主题切换、图层管理 |
+
+### 建筑抓取合规声明（必读）
+
+- 仅允许在你已获得官方授权的场景下使用建筑抓取能力；
+- 严禁绕过权限、规避访问控制、破解或其他未授权技术手段；
+- 严禁批量采集、离线库化、二次分发或用于未授权商用；
+- 使用者必须自行遵守数据源服务条款、当地法律法规及平台政策；
+- 项目默认提供范围/频率控制与前端合规确认提示，使用者仍需承担最终合规责任。
 
 ---
 
@@ -397,10 +408,9 @@ tiles.negiao.cc.cd"]
 
 | 版本 | 日期 | 概要 |
 |------|------|------|
+| **V3.6.17** | 2026-10-14 | **暂存区多批次归并：天地图矢量全量抓取 + AP 拓扑修复 + 裁剪多环化 + 建筑抓取合规强化**。新建浏览器版 12 层矢量解码与分层拓扑（逐函数/逐规则对齐权威 mjs），修复「全层 0 要素」与「AP 跨瓦 union 全失败 → 自相交/叠片」；面裁剪由**单环 Sutherland–Hodgman** 改为**半平面多环裁剪**，修复 CE 7 个「环被瓦片边切开后沿边重复走」的自相交（CE 非法几何 10 → 3，残留 3 个为上游源数据缺陷）；天地图 tab 更名「矢量瓦片」并支持多选分层入库；建筑源匿名化为建筑1/建筑2 并新增合规勾选与首次弹窗确认。AP 专项回归 35/35、mjs selftest 11/11、12 层统计逐层一致、CE 与 mjs 权威 out=1311 完全一致。详见[完整更新日志](Docs/Guide/CHANGELOG.md) |
 | **V3.6.14** | 2026-10-13 | **天地图建筑权限与拓扑修复**：支持用户临时输入拥有矢量瓦片权限的 tk，识别 301010 权限错误；移植无第三方依赖的跨瓦片 Union，按 `elemid` 消除公共边界并保留失败回退。详见[完整更新日志](Docs/Guide/CHANGELOG.md) |
 | **V3.6.13** | 2026-10-13 | **二维图层导入 3D**：TOC 右键「导入到 3D」（非栅格行）＋拖到三维画布松手即导入，OL 序列化 GeoJSON 文本 → 包 File 走既有 Cesium 通道（自动建档＋高度拔高）；未切 3D 时明示降级。详见[完整更新日志](Docs/Guide/CHANGELOG.md) |
-| **V3.6.12** | 2026-10-12 | **建筑抓取双源**：面板腾讯/高德二选一；高德走管理端 `amap_key`（缺 key 报错，不进仓库）＋腾讯 z16–18 / 高德锁死 z14＋分源范围上限＋框外楼自动裁剪；观察项修复（返回裁剪包/接清除/代理立约/免责统一）。详见[完整更新日志](Docs/Guide/CHANGELOG.md) |
-| **V3.6.11** | 2026-10-10 | **腾讯建筑白模抓取入库（整合版）**：TopBar 菜单入口 → SidePanel 新页签（双引擎框选/级别/进度/自动入库/下载）；抓取编排 + 面板 + 三维框选镜像组件；Cesium 按高度拔高、`crs` 兼容、locale 重键修复；落地页 +1 功能卡。详见[完整更新日志](Docs/Guide/CHANGELOG.md) |
 
 更早版本（V3.6.4 及以前）请查阅 [完整更新日志 →](Docs/Guide/CHANGELOG.md)
 
@@ -424,6 +434,6 @@ tiles.negiao.cc.cd"]
 |:------:|:--------:|:--------:|
 | [GitHub](https://github.com/NEGIAO/WebGIS-Dev) | [webgis.negiao.cn](https://webgis.negiao.cn)（正式域名，GitHub Pages 托管） | [Hugging Face](https://NEGIAO-WebGIS.hf.space) |
 
-<sub>V3.6.14 · 开发中 · 最后更新 2026-10-13</sub>
+<sub>V3.6.17 · 开发中 · 最后更新 2026-10-14</sub>
 
 </div>

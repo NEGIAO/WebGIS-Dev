@@ -27,41 +27,177 @@ function globalTileToLngLat(x, y, zoom) {
     ];
 }
 
-/** Clip a decoded ring to the tile core so buffer geometry cannot leak into output. */
-function clipRingToTile(ring) {
-    let output = ring.slice();
-    const limits = [
-        [0, (point) => point[0] >= 0],
-        [1, (point) => point[0] <= EXTENT],
-        [2, (point) => point[1] >= 0],
-        [3, (point) => point[1] <= EXTENT],
-    ];
-    for (const [side, inside] of limits) {
-        if (!output.length) break;
-        const next = [];
-        for (let index = 0; index < output.length; index += 1) {
-            const a = output[index];
-            const b = output[(index + 1) % output.length];
-            const insideA = inside(a);
-            const insideB = inside(b);
-            if (insideA !== insideB) {
-                const axis = side < 2 ? 0 : 1;
-                const bound = side === 0 || side === 2 ? 0 : EXTENT;
-                const denominator = b[axis] - a[axis];
-                if (Math.abs(denominator) > GEOM_EPS) {
-                    const t = (bound - a[axis]) / denominator;
-                    next.push([
-                        a[0] + (b[0] - a[0]) * t,
-                        a[1] + (b[1] - a[1]) * t,
-                    ]);
-                }
-            }
-            if (insideB) next.push(b);
-        }
-        output = next;
+/** 去重复相邻点。 */
+function dedupeRing(ring) {
+    const out = [];
+    for (const point of ring) {
+        if (!out.length || !samePoint(out[out.length - 1], point)) out.push(point);
     }
-    if (output.length && !samePoint(output[0], output[output.length - 1])) output.push(output[0]);
-    return output;
+    return out;
+}
+
+/** 开环化：摘掉重合尾点，便于按 (i+1)%n 环形遍历。 */
+function openRing(ring) {
+    const out = ring.slice();
+    if (out.length > 1 && samePoint(out[0], out[out.length - 1])) out.pop();
+    return out;
+}
+
+/** 闭合环：首尾相同，且无重复相邻点。 */
+function closeRing(ring) {
+    const cleaned = dedupeRing(ring);
+    if (cleaned.length && !samePoint(cleaned[0], cleaned[cleaned.length - 1])) cleaned.push(cleaned[0].slice());
+    return cleaned;
+}
+
+/**
+ * 单条裁剪线的半平面裁剪：**返回多个环**。
+ *
+ * 单环 Sutherland–Hodgman 的致命缺陷：当一个环被裁剪线切成 k>1 块时它只能输出 1 个环，
+ * 于是用「沿裁剪线把各块首尾串起来」的退化桥连接——这条桥与各块自身的贴边段**重叠**，
+ * 环沿同一条线被走了两遍，形成零宽走廊，GEOS 判 Self-intersection / Ring Self-intersection。
+ * 实测：CE 层 1311 个建筑面里有 7 个由此产生非法几何，且权威 mjs 同源（同算法同缺陷）。
+ *
+ * 本实现分三步，是标准的「凸窗口 Weiler–Atherton」在矩形上的特化：
+ *   1) 沿环遍历收集**内侧子链**（每条从入口交点到出口交点）；
+ *   2) 把所有交点按「沿裁剪线的坐标」排序后**两两配对**——简单环与一条直线相交，其交点
+ *      依序交替界定内/外区间，故相邻成对恰好就是内侧区间，也就是需要补上的那条弦；
+ *   3) 从任一未消费的子链出发沿弦链式前进（落到某子链入口就正向走、落到出口就反向走），
+ *      回到起点即闭合成环。被切开的 k 块自然得到 k 个合法环，U 形连通块也能正确串成一个环。
+ *
+ * @param {Array} ring 输入环（闭合或开环均可）
+ * @param {number} axis 0=按 x 裁，1=按 y 裁
+ * @param {number} bound 裁剪线在该轴上的坐标
+ * @param {boolean} keepGreater true=保留 axis>=bound 一侧
+ * @returns {Array<Array>} 闭合环数组（可能为空）
+ */
+function clipRingHalfPlane(ring, axis, bound, keepGreater) {
+    const open = openRing(ring);
+    const n = open.length;
+    if (n < 3) return [];
+    const inside = keepGreater ? (point) => point[axis] >= bound : (point) => point[axis] <= bound;
+    // 从环外顶点起遍历：这样每条内侧子链都必然先「入口」后「出口」，收尾不会残留悬挂子链。
+    let start = -1;
+    for (let index = 0; index < n; index += 1) {
+        if (!inside(open[index])) {
+            start = index;
+            break;
+        }
+    }
+    if (start < 0) return [closeRing(open)];
+
+    const subpaths = [];
+    const crossings = [];
+    const pushCrossing = (point, subpathIndex, end) => {
+        crossings.push({ point, along: point[1 - axis], subpathIndex, end });
+        return crossings.length - 1;
+    };
+    let run = null;
+    let runEntry = -1;
+    for (let step = 0; step < n; step += 1) {
+        const a = open[(start + step) % n];
+        const b = open[(start + step + 1) % n];
+        const insideA = inside(a);
+        const insideB = inside(b);
+        if (insideA && insideB) {
+            if (!run) {
+                run = [a.slice()];
+                runEntry = -1;
+            }
+            run.push(b.slice());
+            continue;
+        }
+        if (!insideA && !insideB) continue;
+        const denominator = b[axis] - a[axis];
+        if (Math.abs(denominator) <= GEOM_EPS) continue;
+        const t = (bound - a[axis]) / denominator;
+        const cross = [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
+        if (insideB) {
+            run = [cross, b.slice()];
+            runEntry = pushCrossing(cross, subpaths.length, 'entry');
+        } else {
+            if (!run) {
+                run = [a.slice()];
+                runEntry = pushCrossing(a, subpaths.length, 'entry');
+            }
+            run.push(cross);
+            const exitKey = pushCrossing(cross, subpaths.length, 'exit');
+            subpaths.push({ points: run, entryKey: runEntry, exitKey });
+            run = null;
+            runEntry = -1;
+        }
+    }
+    if (run) {
+        const exitKey = pushCrossing(run[0], subpaths.length, 'exit');
+        subpaths.push({ points: run, entryKey: runEntry, exitKey });
+    }
+    if (!subpaths.length) return [];
+
+    // 交点按沿裁剪线坐标排序 → 相邻两两配对即「内侧区间」。
+    const order = crossings.map((_, index) => index)
+        .sort((i, j) => crossings[i].along - crossings[j].along || i - j);
+    const partner = new Array(crossings.length).fill(-1);
+    for (let index = 0; index + 1 < order.length; index += 2) {
+        partner[order[index]] = order[index + 1];
+        partner[order[index + 1]] = order[index];
+    }
+
+    const rings = [];
+    const used = new Array(subpaths.length).fill(false);
+    for (let seed = 0; seed < subpaths.length; seed += 1) {
+        if (used[seed]) continue;
+        const startKey = subpaths[seed].entryKey;
+        const points = [];
+        let cursor = seed;
+        let forward = true;
+        for (let guard = 0; guard <= subpaths.length; guard += 1) {
+            used[cursor] = true;
+            const source = subpaths[cursor].points;
+            const sequence = forward ? source : source.slice().reverse();
+            for (let index = points.length ? 1 : 0; index < sequence.length; index += 1) {
+                points.push(sequence[index].slice());
+            }
+            const endKey = forward ? subpaths[cursor].exitKey : subpaths[cursor].entryKey;
+            const next = partner[endKey];
+            if (next < 0) break;
+            points.push(crossings[next].point.slice());
+            if (next === startKey) break;
+            cursor = crossings[next].subpathIndex;
+            forward = crossings[next].end === 'entry';
+        }
+        const closed = closeRing(points);
+        if (closed.length >= 4) rings.push(closed);
+    }
+    return rings;
+}
+
+/**
+ * 面裁剪到任意矩形：**返回多个环**（替代旧单环 Sutherland–Hodgman）。
+ * 4 条边依次做半平面裁剪，每一条边都可能把 1 个环拆成多个。
+ */
+function clipRingToRectMulti(ring, x0, y0, x1, y1) {
+    let rings = [closeRing(ring)];
+    const planes = [[0, x0, true], [0, x1, false], [1, y0, true], [1, y1, false]];
+    for (const [axis, bound, keepGreater] of planes) {
+        const next = [];
+        for (const current of rings) {
+            if (current.length < 3) continue;
+            for (const out of clipRingHalfPlane(current, axis, bound, keepGreater)) next.push(out);
+        }
+        rings = next;
+        if (!rings.length) return [];
+    }
+    return rings.filter((current) => current.length >= 4);
+}
+
+/** 面裁剪到任意矩形（返回多个环）。clipRingToTile 为其 [0,4096] 特例。 */
+function clipRingToRect(ring, x0, y0, x1, y1) {
+    return clipRingToRectMulti(ring, x0, y0, x1, y1);
+}
+
+/** 面裁剪到瓦片核心 [0,4096]（去 buffer；返回多个环）。 */
+function clipRingToTile(ring) {
+    return clipRingToRectMulti(ring, 0, 0, EXTENT, EXTENT);
 }
 
 /** Determine whether a ring participates in the narrow cross-tile seam band. */
@@ -252,8 +388,9 @@ export function mergeTdtBuildings(records) {
         }
         const group = groups.get(record.id);
         for (const ring of record.rings || []) {
-            const clipped = clipRingToTile(ring);
-            if (clipped.length >= 4) {
+            // 核心裁剪可能把 1 个环拆成多个（贴瓦片边被切开），逐个收编。
+            for (const clipped of clipRingToTile(ring)) {
+                if (clipped.length < 4) continue;
                 group.parts.push({ ring: clipped, tx: record.tx, ty: record.ty, zoom: record.zoom });
                 group.tileKeys.add(`${record.tx},${record.ty},${record.zoom}`);
                 group.touchesSeam = group.touchesSeam || touchesTileSeam(clipped);
@@ -303,4 +440,4 @@ export function mergeTdtBuildings(records) {
     };
 }
 
-export { clipRingToTile, unionRings };
+export { clipRingToTile, clipRingToRect, clipRingToRectMulti, unionRings };
