@@ -112,6 +112,7 @@ function parseCommands(buf, depth = 0) {
     let current = null;
     const paths = [];
     const direct = [];
+    let closedAny = false;
     while (offset < buf.length) {
         const command = readVarint(buf, offset);
         if (!command) break;
@@ -119,7 +120,9 @@ function parseCommands(buf, depth = 0) {
         const id = command.value & 7;
         let count = command.value >>> 3;
         if (![2, 3, 7].includes(id) || count > 5000) {
-            direct.length = 0;
+            // 优雅降级（16_53576_25998 BM#2案）：已有闭合环则保留既有（尾部渣），
+            // 无闭合环仍整体拒绝（防错位误收）。此前直接清零会丢整栋。
+            if (!(closedAny && paths.length)) direct.length = 0;
             break;
         }
         if (id === 2) {
@@ -130,6 +133,7 @@ function parseCommands(buf, depth = 0) {
             if (current?.length >= 3) {
                 current.push(current[0]);
                 paths.push(current);
+                closedAny = true;
             }
             current = null;
             continue;

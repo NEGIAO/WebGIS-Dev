@@ -6,6 +6,38 @@
 
 ## 版本记录
 
+### V3.6.17 (2026-10-14) — 暂存区多批次归并：天地图矢量全量抓取 + 矢量瓦片 0 要素修复 + AP 拓扑修复 + 建筑抓取合规强化
+
+> **归并说明**：本条为暂存区多批次改动的**单一版本归并**（用户 P1 指令定版 V3.6.17）。原分列的 `V3.6.15` / `V3.6.18` / `V3.6.19` 条目与 2026-10-13 的 `V3.6.17` 条目已**全部并入本条**，内容无删减。
+> 归并理由：这些改动同处一个暂存区、链路强耦合（解码 → 分层拓扑 → hook → 面板 → 文案），拆成多版本无法独立回滚；且历史版本号在 README / CHANGELOG / git commit 之间已互相漂移（commit `V3.6.16` 实际发布的是 V3.6.14）。
+
+> **一、天地图全量矢量抓取（12 层）**
+> 天地图 tab 更名「矢量瓦片」，新增 12 层多选勾选（含全选 / 全不选；空选禁抓并提示，不再静默回退全量）；
+> 新建 `parsers/tdtVectorLayers.js`（码 → 中文含义 → 关键属性 → 拓扑策略的唯一字典）、
+> `parsers/tdtVectorFetcher.js`（浏览器版全量解码：XOR 还原 + 标准/前导/裸层三编码 + Value 整数族 + ClosePath 修复 + 洞嵌套）、
+> `parsers/tdtVectorTopology.js`（分层拓扑：CE 按 elemid 合 / AP 按 objectid 合 / CK·BM 按 S8 分组连通融合 / BV 原样直出 / 点层 buffer 保留 + 同 id 去重 / 线层逐段核心裁剪 + 属性键去重 / 残余重叠洞感知审计；Union 面积守恒失败回退）；
+> `useTdtBuildingFetch` 新增 `startVectorFetch` + 分层出包/下载（老 `startFetch` 零回归）；面板分层结果明细 + 分层多 File 入库；中英各新增 53 个文案键。腾讯/高德 tab 零触碰。
+
+> **二、矢量瓦片「全层 0 要素」修复（解码链对齐 mjs）**
+> 根因三处：① 旧解码器几何链只做 f1 嵌套下降、**从不直读命令流**（真实瓦片 f1 几何即 MoveTo2 / LineTo3 / ClosePath7 + zigzag 差分命令流），致所有标准层 0 要素；② 前导层从 `body`（= `raw.slice(5)`）而非 `raw` 解析，入口错位恒丢；③ `ringArea` 公式尾项误写 `x_i`，致面积守恒校验全链失真。
+> `tdtVectorFetcher.js` 按权威 `tdt_vector_fetch.mjs` 逐函数重写（splitFields / parseTop / detectLayers / parseCommands / findCommands / parseValue 整数族 / parsePreambleLayer / parseBareBlock / decodeTileFull），`tdtVectorTopology.js` 逐规则重写。
+
+> **三、AP 拓扑缺陷修复（核心裁剪恢复 + 裁剪环洁净 + 分层审计）**
+> 实机导出的 AP（区级行政区划面）GeoJSON 存在 8/35 非法几何（自相交）、7 个叠片 MultiPolygon、52 处环内重复点、28/35 误报 `_topo_review`。源瓦片数据经实测干净，缺陷全在处理链：
+> ① **前端移植丢失瓦片核心裁剪**（致命）：`mergeIdPolygons` 只裁 buffer 盒 `[-82,4178]`、未裁核心 `[0,4096]`，跨瓦同 id 片段在 164 单位接缝带内互相重叠，`unionRings` 的 even-odd 进出判定对重叠输入失效（实测仅 91.8% 面积），被 99% 守恒闸门拦下 → 8/8 跨瓦要素全部 `union_fallback`，重叠片段原样输出为 MultiPolygon 叠片 → 自相交。恢复核心裁剪后 `union=8 fallback=0`。
+> ② **Sutherland–Hodgman 裁剪插入重复顶点**（两仓库共有）：`(i+1)%len` 环形遍历遇上已闭合环（首 == 尾）会把首点再计入一次，**每个输出环必多 1 个零长边**（实测 51 环 → 52 处）。入口开环化 + 出口去零长边后归零。
+> ③ **分层数据被平面语义审计误报**（两仓库共有）：AP 是区级行政区划面（分层），实测 24 组重叠**全部为纯包含**（大区含小区，33 个小要素两两互不相交）。审计新增 `allowContainment`，AP 跳过纯包含、只报部分重叠；CE/CK/BM 严格语义不变。
+> 同步修复权威实现 `NEGIAO.github.io` 的 `tdt_vector_fetch.mjs`（裁剪洁净 + 审计分层）。
+> **另修复两处暂存代码缺陷**：CE 的 `A6` 行政区划码被误数字化为 Number（会丢前导零、与 mjs 产生类型漂移）；CE 的 `elemid` 正则硬校验会静默丢弃不合形状的整栋建筑（改为「有值就用、无值给唯一合成 id」，既不丢数据也不错误合并）。
+
+> **四、建筑抓取合规强化与匿名展示**
+> 建筑抓取前端展示由具体来源名改为「建筑1 / 建筑2 / 矢量瓦片」；新增合规勾选（必勾）+ 首次抓取弹窗确认（会话级记忆 `sessionStorage`）；错误与提示文案同步改为匿名表达；README 增补「建筑抓取合规声明（必读）」，明确授权边界、禁止批量采集与再分发、禁止绕过权限控制。
+
+> **验证（Agent 已执行）**：以 9 块真实 z16 瓦片（x 54883–54885 / y 26774–26776）离线复跑权威 mjs 与前端**完整链路**（解码 → 分层拓扑），**12 层要素数与统计逐层一致**——BI 341 / BV 9 / CE 1311（union=41 fallback=1 review=32）/ CK 19（fused=11）/ BM 2 / BK 7 / AA 1408 / AB 88 / AP 35（union=8）/ AD 5 / AM 8 / respt 0；11 层几何 union 面积差 **0.0000%**、仅 mjs 差 / 仅前端差 ≤ **0.000017%**；AP 专项回归 28/28、既有解码一致性 20/20、拓扑行为 14/14、mjs selftest 7/7；i18n 静态键完整性 1852 键、暂存文件 0 缺失；ESLint 全绿；双门禁通过。
+
+> **日志**：[`2026-10-14-staged-review-v3.6.17.md`](../LLM_record/26-10/2026-10-14/2026-10-14-staged-review-v3.6.17.md)（本次归并与 code review）
+> 分项日志：[`2026-10-14-tdt-full-vector-fetch.md`](../LLM_record/26-10/2026-10-14/2026-10-14-tdt-full-vector-fetch.md) ／ [`2026-10-14-tdt-vector-decode-fix.md`](../LLM_record/26-10/2026-10-14/2026-10-14-tdt-vector-decode-fix.md) ／ [`2026-10-14-tdt-ap-topology-fix.md`](../LLM_record/26-10/2026-10-14/2026-10-14-tdt-ap-topology-fix.md)
+
 ### V3.6.14 (2026-10-13) — 天地图建筑权限与拓扑修复
 
 > 天地图抓取面板新增临时 tk 输入，用户输入优先且不会保存；留空时使用管理端 `tianditu_tk`。VTS 返回 `301010` 时显示“没有矢量瓦片权限”的明确提示，不再伪装成空结果。

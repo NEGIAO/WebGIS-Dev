@@ -1,12 +1,54 @@
 <template>
     <div class="txb-panel">
+        <div
+            v-if="complianceDialogOpen"
+            class="txb-dialog-backdrop"
+            role="presentation"
+            @click.self="resolveComplianceDialog(false)"
+        >
+            <section
+                class="txb-dialog"
+                role="dialog"
+                aria-modal="true"
+                :aria-labelledby="complianceDialogTitleId"
+            >
+                <h3
+                    :id="complianceDialogTitleId"
+                    class="txb-dialog-title"
+                >
+                    {{ t('shell.buildings.complianceTitle') }}
+                </h3>
+                <p class="txb-dialog-message">
+                    {{ t('shell.buildings.compliancePopup') }}
+                </p>
+                <div class="txb-dialog-actions">
+                    <button
+                        type="button"
+                        class="txb-btn txb-btn-ghost"
+                        @click="resolveComplianceDialog(false)"
+                    >
+                        {{ t('shell.buildings.complianceCancel') }}
+                    </button>
+                    <button
+                        type="button"
+                        class="txb-btn txb-btn-primary"
+                        @click="resolveComplianceDialog(true)"
+                    >
+                        {{ t('shell.buildings.complianceContinue') }}
+                    </button>
+                </div>
+            </section>
+        </div>
+
         <div class="txb-header">
             <span class="txb-header-icon">
                 <Building2 :size="16" />
             </span>
             <div class="txb-header-text">
-                <div class="txb-title">{{ t('shell.buildings.title') }}</div>
-                <div class="txb-subtitle">{{ t('shell.buildings.subtitle', { engine: engineLabel }) }}</div>
+                <div class="txb-title">{{ isTianditu ? t('shell.buildings.vectorTitle') : t('shell.buildings.title') }}</div>
+                <div class="txb-subtitle">{{ isTianditu
+                    ? t('shell.buildings.vectorSubtitle', { engine: engineLabel })
+                    : t('shell.buildings.subtitle', { engine: engineLabel }) }}</div>
             </div>
             <button
                 type="button"
@@ -134,6 +176,46 @@
                 </label>
             </div>
 
+            <!-- 天地图全量：多选勾选（含全选），腾讯/高德 tab 不渲染 -->
+            <div
+                v-if="isTianditu"
+                class="txb-layers"
+            >
+                <div class="txb-section-title">{{ t('shell.buildings.vectorLayers') }}</div>
+                <label class="txb-layer-all">
+                    <input
+                        type="checkbox"
+                        :checked="allVectorLayersChecked"
+                        :disabled="isFetching"
+                        @change="toggleAllVectorLayers"
+                    />
+                    <span>{{ t('shell.buildings.vectorLayersAll') }}</span>
+                </label>
+                <div class="txb-layer-grid">
+                    <label
+                        v-for="opt in vectorLayerOptions"
+                        :key="opt.value"
+                        class="txb-layer-item"
+                        :title="opt.desc"
+                    >
+                        <input
+                            type="checkbox"
+                            :value="opt.value"
+                            :checked="selectedLayerList.includes(opt.value)"
+                            :disabled="isFetching"
+                            @change="toggleVectorLayer(opt.value)"
+                        />
+                        <span>{{ opt.label }}</span>
+                    </label>
+                </div>
+                <div
+                    v-if="!selectedLayerList.length"
+                    class="txb-layer-hint"
+                >
+                    {{ t('shell.buildings.vectorLayersEmpty') }}
+                </div>
+            </div>
+
             <!-- 框选：OL 用 DragBox 自包含组件，Cesium 用三维拾取镜像版 -->
             <ExtentPicker
                 v-if="props.activeEngine !== 'cesium'"
@@ -166,7 +248,7 @@
                     @click="onFetch"
                 >
                     <Building2 :size="14" />
-                    {{ t('shell.buildings.fetch') }}
+                    {{ isTianditu ? t('shell.buildings.vectorFetch') : t('shell.buildings.fetch') }}
                 </button>
                 <button
                     v-else
@@ -207,8 +289,22 @@
                 class="txb-result"
             >
                 <div class="txb-result-text">
-                    {{ t('shell.buildings.result', { count: result.featureCount, seconds: (result.elapsedMs / 1000).toFixed(1) }) }}
+                    {{ isTiandituVectorResult
+                        ? t('shell.buildings.vectorResult', { count: result.featureCount, seconds: (result.elapsedMs / 1000).toFixed(1), layers: vectorLayerCount })
+                        : t('shell.buildings.result', { count: result.featureCount, seconds: (result.elapsedMs / 1000).toFixed(1) }) }}
                 </div>
+                <!-- 全量分层明细：每层要素数（供用户核对 12 层产出） -->
+                <ul
+                    v-if="isTiandituVectorResult"
+                    class="txb-vector-stats"
+                >
+                    <li
+                        v-for="(stat, code) in result.layerStats"
+                        :key="code"
+                    >
+                        {{ code }} · {{ vectorLayerLabel(code) }}：{{ layerFeatureCount(code) }}
+                    </li>
+                </ul>
                 <div
                     v-if="!result.featureCount"
                     class="txb-empty"
@@ -227,6 +323,22 @@
                 </div>
             </div>
 
+            <div class="txb-compliance">
+                <label class="txb-compliance-check">
+                    <input
+                        v-model="complianceAccepted"
+                        type="checkbox"
+                    />
+                    <span>{{ t('shell.buildings.complianceAgree') }}</span>
+                </label>
+                <ul class="txb-compliance-list">
+                    <li>{{ t('shell.buildings.complianceRuleAuth') }}</li>
+                    <li>{{ t('shell.buildings.complianceRuleBulk') }}</li>
+                    <li>{{ t('shell.buildings.complianceRuleNoBypass') }}</li>
+                    <li>{{ t('shell.buildings.complianceRuleTerms') }}</li>
+                </ul>
+            </div>
+
             <div class="txb-note">
                 {{ isAmap ? t('shell.buildings.disclaimerAmap') : (isTianditu ? t('shell.buildings.disclaimerTianditu') : t('shell.buildings.disclaimer')) }}
             </div>
@@ -235,7 +347,7 @@
 </template>
 
 <script setup>
-import { computed, reactive, ref, watch } from 'vue';
+import { computed, onMounted, reactive, ref, watch } from 'vue';
 import {
     Building2,
     Download,
@@ -253,7 +365,7 @@ import {
     useAmapBuildingFetch,
 } from '../useAmapBuildingFetch';
 import {
-    estimateTdtTiles,
+    estimateTdtVectorTiles,
     TDT_DEFAULT_ZOOM,
     TDT_ZOOM_OPTIONS,
     useTdtBuildingFetch,
@@ -264,6 +376,7 @@ import {
     estimateTxbTiles,
     useTencentBuildingFetch,
 } from '../useTencentBuildingFetch';
+import { ALL_TDT_VECTOR_LAYERS, TDT_VECTOR_LAYER_META, tdtVectorLayerOptions } from '../parsers/tdtVectorLayers.js';
 
 /**
  * 腾讯建筑白模抓取面板：范围表单 + 抓取进度 + 入库/下载。
@@ -310,12 +423,52 @@ const result = computed(() => cur.value.result.value);
 const fileName = computed(() => cur.value.fileName.value);
 const cancel = (...args) => cur.value.cancel(...args);
 const buildImportFile = (...args) => cur.value.buildImportFile(...args);
-const downloadResult = (...args) => cur.value.downloadResult(...args);
+const downloadResult = (...args) => {
+    // 天地图全量走分层下载，其余走单文件下载。
+    if (isTianditu.value && tdb.vectorResult.value) return tdb.downloadVectorResult(...args);
+    return cur.value.downloadResult(...args);
+};
 const startFetch = (...args) => cur.value.startFetch(...args);
+/** 天地图多选选项（码 + 中文含义，腾讯/高德扩展口同形状） */
+const vectorLayerOptions = computed(() => tdtVectorLayerOptions().filter((o) => o.value !== 'all'));
+/** 选中层码数组（模板直接消费，避免嵌套 ref 不解包） */
+const selectedLayerList = computed(() => tdb.selectedLayers.value || []);
+/** 是否全选（与 hook selectedLayers 双向） */
+const allVectorLayersChecked = computed(() => tdb.selectedLayers.value.length === ALL_TDT_VECTOR_LAYERS.length);
+/** 全量结果判定（result 带 vector 标记才走分层展示/入库） */
+const isTiandituVectorResult = computed(() => isTianditu.value && !!result.value?.vector);
+const vectorLayerCount = computed(() => (result.value?.layerStats ? Object.keys(result.value.layerStats).length : 0));
+
+function toggleVectorLayer(code) {
+    // 允许清空到 0 层（抓取按钮禁用 + 提示，不再静默回退全量）
+    const set = new Set(tdb.selectedLayers.value);
+    if (set.has(code)) set.delete(code);
+    else set.add(code);
+    tdb.selectedLayers.value = ALL_TDT_VECTOR_LAYERS.filter((c) => set.has(c));
+}
+
+function toggleAllVectorLayers() {
+    // 全选 ⇄ 全不选：已全选则清空，否则全选
+    tdb.selectedLayers.value = allVectorLayersChecked.value ? [] : ALL_TDT_VECTOR_LAYERS.slice();
+}
+
+function vectorLayerLabel(code) {
+    return TDT_VECTOR_LAYER_META[code]?.label || code;
+}
+
+function layerFeatureCount(code) {
+    return tdb.vectorResult.value?.layers?.[code]?.features?.length || 0;
+}
 
 const form = reactive({ minLng: '', minLat: '', maxLng: '', maxLat: '' });
 const sourceCredential = ref('');
 const zoom = ref(TXB_DEFAULT_ZOOM);
+const complianceAccepted = ref(false);
+const complianceConfirmed = ref(false);
+const complianceDialogOpen = ref(false);
+const complianceDialogResolve = ref(null);
+const complianceDialogTitleId = 'building-compliance-dialog-title';
+const COMPLIANCE_CONFIRM_STORAGE_KEY = 'webgis_building_fetch_compliance_confirmed_v1';
 /** 静态级别数组，无需 computed 包裹 */
 const zoomOptions = computed(() => (isTianditu.value ? TDT_ZOOM_OPTIONS : TXB_ZOOM_OPTIONS));
 watch(source, (s) => {
@@ -323,6 +476,28 @@ watch(source, (s) => {
         ? AMAP_DEFAULT_ZOOM
         : (s === 'tianditu' ? TDT_DEFAULT_ZOOM : TXB_DEFAULT_ZOOM);
 });
+
+onMounted(() => {
+    try {
+        complianceConfirmed.value = sessionStorage.getItem(COMPLIANCE_CONFIRM_STORAGE_KEY) === '1';
+    } catch {
+        complianceConfirmed.value = false;
+    }
+});
+
+function requestComplianceConfirmation() {
+    complianceDialogOpen.value = true;
+    return new Promise((resolve) => {
+        complianceDialogResolve.value = resolve;
+    });
+}
+
+function resolveComplianceDialog(confirmed) {
+    complianceDialogOpen.value = false;
+    const resolve = complianceDialogResolve.value;
+    complianceDialogResolve.value = null;
+    if (resolve) resolve(confirmed);
+}
 
 /** 框选器点“清除”时同步清空表单（表单是抓取的事实来源） */
 function clearFormBbox() {
@@ -351,15 +526,16 @@ const estimate = computed(() => {
     const bbox = parsedBbox();
     if (!bbox) return null;
     try {
-        return isAmap.value
-            ? estimateAmapTiles(bbox, zoom.value)
-            : (isTianditu.value ? estimateTdtTiles(bbox, zoom.value) : estimateTxbTiles(bbox, zoom.value));
+        if (isAmap.value) return estimateAmapTiles(bbox, zoom.value);
+        if (isTianditu.value) return estimateTdtVectorTiles(bbox, zoom.value);
+        return estimateTxbTiles(bbox, zoom.value);
     } catch {
         return null;
     }
 });
 
-const canFetch = computed(() => !!parsedBbox() && !isFetching.value);
+const canFetch = computed(() => !!parsedBbox() && !isFetching.value
+    && (!isTianditu.value || selectedLayerList.value.length > 0));
 
 const progressPercent = computed(() => {
     if (!progress.value.total) return 0;
@@ -369,7 +545,7 @@ const progressPercent = computed(() => {
 /** 错误码转文案（composable 只抛短码，文案归 i18n） */
 const errorText = computed(() => {
     if (!error.value) return '';
-    const known = ['empty', 'nan', 'order', 'range', 'oversize', 'key_required', 'tdt_key_required', 'tdt_permission'];
+    const known = ['empty', 'nan', 'order', 'range', 'oversize', 'key_required', 'tdt_key_required', 'tdt_permission', 'layers_required'];
     if (known.includes(error.value)) return t(`shell.buildings.err_${error.value}`);
     return t('shell.buildings.fetchFailed', { error: error.value });
 });
@@ -387,9 +563,39 @@ function onExtentPicked({ extent } = {}) {
 
 /** 开始抓取；成功后按当前引擎自动入库（上层 upload-data 按引擎路由） */
 async function onFetch() {
+    if (!complianceAccepted.value) {
+        message.warning(t('shell.buildings.err_compliance_required'));
+        return;
+    }
+    if (!complianceConfirmed.value) {
+        const ok = await requestComplianceConfirmation();
+        if (!ok) {
+            return;
+        }
+        complianceConfirmed.value = true;
+        try {
+            sessionStorage.setItem(COMPLIANCE_CONFIRM_STORAGE_KEY, '1');
+        } catch {
+            // ignore storage failures
+        }
+    }
+
     const bbox = parsedBbox();
     if (!bbox) {
         message.warning(t('shell.buildings.err_nan'));
+        return;
+    }
+    // 天地图走全量分层抓取（多选层码），腾讯/高德走各自单源抓取。
+    if (isTianditu.value) {
+        const out = await tdb.startVectorFetch(bbox, zoom.value, sourceCredential.value.trim(), tdb.selectedLayers.value);
+        if (!out) return;
+        const files = tdb.buildVectorImportFiles();
+        if (!files.length) {
+            message.warning(t('shell.buildings.empty'));
+            return;
+        }
+        emit('upload-data', { resources: files });
+        message.success(t('shell.buildings.vectorImported', { layers: files.length, count: result.value?.featureCount || 0 }));
         return;
     }
     // 用户临时输入的 tk 优先，留空时由 composable 使用管理端 L2 配置。
@@ -531,6 +737,55 @@ async function onFetch() {
 .txb-source-tab:disabled {
     opacity: 0.55;
     cursor: not-allowed;
+}
+
+/* 全量多选：全选行 + 12 层两列勾选（与范围表单同语言） */
+.txb-layers {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 8px;
+    border: 1px dashed rgba(var(--brand-primary-rgb), 0.3);
+    border-radius: 8px;
+    background: rgba(var(--brand-primary-rgb), 0.04);
+}
+
+.txb-layer-all {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--toc-text-primary);
+    font-size: 12px;
+    font-weight: 700;
+}
+
+.txb-layer-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 4px 8px;
+}
+
+.txb-layer-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
+    color: var(--toc-text-secondary);
+    font-size: 11px;
+    line-height: 1.4;
+}
+
+.txb-layer-hint {
+    color: var(--danger);
+    font-size: 11px;
+    line-height: 1.4;
+}
+
+.txb-vector-stats {
+    margin: 6px 0 0;
+    padding-left: 16px;
+    color: var(--toc-text-secondary);
+    font-size: 11px;
+    line-height: 1.6;
 }
 
 .txb-grid {
@@ -684,6 +939,74 @@ async function onFetch() {
 .txb-note {
     color: var(--toc-text-light);
     font-size: 11px;
+    line-height: 1.5;
+}
+
+.txb-dialog-backdrop {
+    position: fixed;
+    z-index: var(--z-modal-high);
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+    background: rgba(15, 23, 42, 0.46);
+}
+
+.txb-dialog {
+    width: min(440px, 100%);
+    border: 1px solid rgba(var(--brand-primary-rgb), 0.22);
+    border-radius: 12px;
+    background: var(--toc-bg-dialog, #ffffff);
+    box-shadow: var(--toc-shadow-dialog, 0 16px 48px rgba(15, 23, 42, 0.24));
+    padding: 18px;
+}
+
+.txb-dialog-title {
+    margin: 0 0 10px;
+    color: var(--toc-text-primary);
+    font-size: 16px;
+}
+
+.txb-dialog-message {
+    margin: 0;
+    color: var(--toc-text-secondary);
+    font-size: 12px;
+    line-height: 1.7;
+    white-space: pre-line;
+}
+
+.txb-dialog-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: 18px;
+}
+
+.txb-compliance {
+    border: 1px solid rgba(var(--brand-primary-rgb), 0.22);
+    border-radius: 8px;
+    background: rgba(var(--brand-primary-rgb), 0.06);
+    padding: 8px 10px;
+}
+
+.txb-compliance-check {
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
+    margin-bottom: 6px;
+    color: var(--toc-text-primary);
+    line-height: 1.5;
+}
+
+.txb-compliance-check input {
+    margin-top: 2px;
+}
+
+.txb-compliance-list {
+    margin: 0;
+    padding-left: 16px;
+    color: var(--toc-text-secondary);
     line-height: 1.5;
 }
 

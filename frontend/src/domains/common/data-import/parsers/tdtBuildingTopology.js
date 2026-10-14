@@ -29,7 +29,11 @@ function globalTileToLngLat(x, y, zoom) {
 
 /** Clip a decoded ring to the tile core so buffer geometry cannot leak into output. */
 function clipRingToTile(ring) {
+    // 开环化：Sutherland 用 (index+1)%len 环形遍历，而闭合环（首==尾）会让首点被再计入一次，
+    // 旧版因此给【每个】输出环插入 1 个零长边（凹环还会沿裁剪边留下退化桥→自相交）。
+    // 入参已闭合，先摘掉重合尾点，遍历即回到标准 S-H。
     let output = ring.slice();
+    if (output.length > 1 && samePoint(output[0], output[output.length - 1])) output.pop();
     const limits = [
         [0, (point) => point[0] >= 0],
         [1, (point) => point[0] <= EXTENT],
@@ -60,8 +64,14 @@ function clipRingToTile(ring) {
         }
         output = next;
     }
-    if (output.length && !samePoint(output[0], output[output.length - 1])) output.push(output[0]);
-    return output;
+    // 去零长边后闭合：保证输出环无重复相邻点（旧版每环必多 1 点，见上方注释）
+    const cleaned = [];
+    for (const point of output) {
+        if (!cleaned.length || !samePoint(cleaned[cleaned.length - 1], point)) cleaned.push(point);
+    }
+    if (cleaned.length > 1 && samePoint(cleaned[0], cleaned[cleaned.length - 1])) cleaned.pop();
+    if (cleaned.length && !samePoint(cleaned[0], cleaned[cleaned.length - 1])) cleaned.push(cleaned[0]);
+    return cleaned;
 }
 
 /** Determine whether a ring participates in the narrow cross-tile seam band. */
