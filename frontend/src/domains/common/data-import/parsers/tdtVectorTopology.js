@@ -24,8 +24,13 @@
  *   7) 裁剪环洁净：Sutherland 以环形取模遍历，闭合环会让首点被再计入一次；
  *      旧版 clipRingToRect/clipRingToTile 给每个输出环插入 1 个零长边（凹环沿裁剪边
  *      留下退化桥→自相交）。现先开环化、输出前再去零长边，环内不再有重复相邻点。
+ *   8) 裁剪**多环化**：单环 Sutherland 无法表达「环被裁剪线切成 k>1 块」，只能用一条
+ *      沿边退化桥把各块串成一个环——该桥与各块自身的贴边段重叠，环沿同一条线走两遍，
+ *      形成零宽走廊（GEOS 判 Self-intersection）。实测 CE 层 1311 个建筑面有 7 个因此非法。
+ *      现 clipRingToRectMulti 按半平面逐边裁剪、内侧子链各自沿裁剪线闭合回自身入口，
+ *      被切开的 k 块自然得到 k 个合法环；调用方一律按「环数组」消费。
  */
-import { clipRingToTile, unionRings } from './tdtBuildingTopology.js';
+import { clipRingToTile, clipRingToRectMulti, unionRings } from './tdtBuildingTopology.js';
 
 const EXTENT = 4096;
 /** CE/AP 入围裁剪盒（对齐 mjs：buffer 盒替代整要素丢弃，bbox 边缘不断楼）。 */
@@ -74,52 +79,6 @@ function pointInRing(ring, pt) {
         if (a[1] > pt[1] !== b[1] > pt[1] && pt[0] < ((b[0] - a[0]) * (pt[1] - a[1])) / (b[1] - a[1]) + a[0]) inside = !inside;
     }
     return inside;
-}
-
-/** 面裁剪到任意矩形（对齐 mjs clipRingToRect：逐边 Sutherland；输出必闭合且无重复相邻点）。 */
-function clipRingToRect(ring, x0, y0, x1, y1) {
-    // 开环化：Sutherland 用 (i+1)%len 环形遍历，而闭合环（首==尾）会让首点被再计入一次，
-    // 旧版因此给【每个】输出环插入 1 个零长边（凹环还会沿裁剪边留下退化桥→自相交）。
-    // 入参已闭合，先摘掉重合尾点，遍历即回到标准 S-H。
-    let output = ring.slice();
-    if (output.length > 1 && samePoint(output[0], output[output.length - 1])) output.pop();
-    const limits = [
-        [0, (p) => p[0] >= x0],
-        [0, (p) => p[0] <= x1],
-        [1, (p) => p[1] >= y0],
-        [1, (p) => p[1] <= y1],
-    ];
-    const bounds = [x0, x1, y0, y1];
-    for (let side = 0; side < 4; side++) {
-        if (!output.length) break;
-        const axis = side < 2 ? 0 : 1;
-        const bound = bounds[side];
-        const inside = limits[side][1];
-        const next = [];
-        for (let i = 0; i < output.length; i++) {
-            const a = output[i];
-            const b = output[(i + 1) % output.length];
-            const ia = inside(a);
-            const ib = inside(b);
-            if (ia !== ib) {
-                const den = b[axis] - a[axis];
-                if (Math.abs(den) > GEOM_EPS) {
-                    const t = (bound - a[axis]) / den;
-                    next.push([a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t]);
-                }
-            }
-            if (ib) next.push(b);
-        }
-        output = next;
-    }
-    // 去零长边后闭合：保证输出环无重复相邻点（旧版每环必多 1 点，见上方注释）
-    const cleaned = [];
-    for (const point of output) {
-        if (!cleaned.length || !samePoint(cleaned[cleaned.length - 1], point)) cleaned.push(point);
-    }
-    if (cleaned.length > 1 && samePoint(cleaned[0], cleaned[cleaned.length - 1])) cleaned.pop();
-    if (cleaned.length && !samePoint(cleaned[0], cleaned[cleaned.length - 1])) cleaned.push(cleaned[0]);
-    return cleaned;
 }
 
 /** 环是否跨瓦接缝带（对齐 mjs touchesTileSeam）。 */
@@ -256,8 +215,9 @@ function mergeIdPolygons(records, opt) {
             // touchesTileSeam 才成立、needsUnion 才会触发、同 id 跨瓦片段才会真正 Union。
             // 用 buffer 盒会留下彼此重叠的重复片段 → 非法 MultiPolygon + 自相交 + 重叠审计误报。
             const closed = ring.length >= 3 && !samePoint(ring[0], ring[ring.length - 1]) ? [...ring, ring[0]] : ring.slice();
-            const clipped = clipRingToTile(closed);
-            if (clipped.length >= 4) {
+            // 核心裁剪可能把 1 个环拆成多个（贴瓦片边被切开），逐个收编为独立片段。
+            for (const clipped of clipRingToTile(closed)) {
+                if (clipped.length < 4) continue;
                 g.parts.push({ ring: clipped, tx: r.tx, ty: r.ty, zoom: r.zoom });
                 g.tileKeys.add(`${r.tx},${r.ty},${r.zoom}`);
                 if (touchesTileSeam(clipped)) g.seam = true;
@@ -478,8 +438,9 @@ function closedRingsOf(record) {
 function bufferClippedRingsOf(record) {
     const rings = [];
     for (const ring of closedRingsOf(record)) {
-        const c = clipRingToRect(ring, CLIP_LO, CLIP_LO, CLIP_HI, CLIP_HI);
-        if (c.length >= 4) rings.push(c);
+        for (const c of clipRingToRectMulti(ring, CLIP_LO, CLIP_LO, CLIP_HI, CLIP_HI)) {
+            if (c.length >= 4) rings.push(c);
+        }
     }
     return rings;
 }
@@ -588,12 +549,14 @@ function fuseByS8(records, zoom) {
         const s8 = String(record.props?.S8 ?? '__none__');
         if (!byS8.has(s8)) byS8.set(s8, []);
         for (const ring of closedRingsOf(record)) {
-            const c = clipRingToTile(ring);
-            if (c.length < 4) {
+            const clippedRings = clipRingToTile(ring);
+            if (!clippedRings.length) {
                 stats.clipped += 1;
                 continue;
             }
-            byS8.get(s8).push({ ring: c, tx: record.tx, ty: record.ty, zoom, partial: !!record.partial, s8v: record.props?.S8 ?? null });
+            for (const c of clippedRings) {
+                byS8.get(s8).push({ ring: c, tx: record.tx, ty: record.ty, zoom, partial: !!record.partial, s8v: record.props?.S8 ?? null });
+            }
         }
     }
     const features = [];
