@@ -218,7 +218,7 @@ function createVectorTileSourceStrict(url: string): AutoTileSourceResult {
         throw new Error('未识别为矢量切片服务');
     }
     if (!looksLikeXYZTemplate(url)) {
-        throw new Error('矢量切片 URL 缺少 {z}/{x}/{y} 模板占位符');
+        throw new Error('矢量切片 URL 缺少 {…} 模板占位符');
     }
     return {
         source: createVectorTileSourceFromUrl(url),
@@ -244,7 +244,7 @@ function createXyzSourceStrict(
     }
 
     if (!looksLikeXYZTemplate(url)) {
-        throw new Error('URL 中未检测到 {z}/{x}/{y} 模板占位符');
+        throw new Error('URL 中未检测到 {…} 模板占位符');
     }
 
     return {

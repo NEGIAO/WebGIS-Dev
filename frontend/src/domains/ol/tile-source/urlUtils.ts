@@ -48,7 +48,10 @@ export function setSearchParamCaseInsensitive(urlObj: URL, key: string, value: s
 }
 
 export function looksLikeXYZTemplate(url: string): boolean {
-    return /\{z\}/i.test(url) && /\{x\}/i.test(url) && /\{y\}/i.test(url);
+    // 仅判定是否含「{...} 占位符」，不再限定内部必须是 x/y/z。
+    // 支持非标准瓦片（如 TMS 翻转 Y 的 y={-y}、{-z}/{-x}/{-y}、{TileMatrix}/{TileCol}/{TileRow} 等）：
+    // 用户只需在占位符内做 - 之类的纠正即可，检测器不应因 token 名称而拒绝。
+    return /\{[^{}]+\}/.test(url);
 }
 
 export function looksLikeVectorTileUrl(url: string): boolean {
