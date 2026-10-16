@@ -574,8 +574,8 @@ frontend/src/
 │       │   ├── LogMonitor.vue
 │       │   ├── MapContainer.vue  # OL 地图容器（底图/图层/绘制/测量/启动任务）
 │       │   ├── MapControlsBar.vue  # 地图控件栏（缩放/旋转/重置）
-│       │   ├── MapDownloader.vue  # 底图下载器（框选范围 + 任务提交）⚠️ /api/download/* 后端 V3.6.5 已删，HF 404；见 Docs/TODO/plan-download-feature-git-marker.md
-│       │   ├── MyDownloadTasks.vue  # 我的下载任务列表（查看/取消/下载）⚠️ 同上，接口暂不可用
+│       │   ├── MapDownloader.vue  # 底图下载器（框选范围 + 任务提交）
+│       │   ├── MyDownloadTasks.vue  # 我的下载任务列表（查看/取消/下载）
 │       │   ├── MapSwipeController.vue  # 卷帘对比控制器
 │       │   ├── MeasurePanel.vue
 │       │   └── SpatialAnalysisPanel.vue

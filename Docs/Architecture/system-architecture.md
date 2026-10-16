@@ -168,13 +168,13 @@ tiles.negiao.cc.cd"]
 | **瓦片存储** | 1 个域名 | Cloudflare R2 对象存储的 XYZ 自定义瓦片服务 |
 
 **前后端通信**：
-- 前端通过 `VITE_BACKEND_URL`（构建期注入）调用后端 API（Hugging Face Space）——**仅业务 API，无瓦片中转**
-- 瓦片纠偏/直通通过 `VITE_TILE_PROXY_BASE_URL` 访问 **VPS** `https://vpn.negiao.cn/proxy/*`（实现见独立仓 `tile-proxy`；架构说明 [tile-rectify-system.md](tile-rectify-system.md)）
+- 前端通过 `VITE_BACKEND_URL`（构建期注入）调用后端 API（Hugging Face Space）——业务 API；瓦片域（`/proxy/*`、`/tiles/*`、`/api/download/*`）V3.6.18 起整域恢复，专服下载管线（模板抓瓦片 → 纠偏 → GeoTIFF → 配额扣减），**不面向前端地图显示**
+- 瓦片纠偏/直通（前端地图显示）通过 `VITE_TILE_PROXY_BASE_URL` 访问 **VPS** `https://vpn.negiao.cn/proxy/*`（前端入口不变；后端下载管线实现见本仓 `backend/domains/tiles/`，V3.6.18 恢复；架构说明 [tile-rectify-system.md](tile-rectify-system.md)）
 - 前端拼接入口：[frontend/src/config/publicRuntime.ts](../../frontend/src/config/publicRuntime.ts)
 
 ### 第五层：用户层
 
-无论用户通过哪个域名访问，最终都到达同一个前端；业务 API 在 HF Space，瓦片中转在 VPS `vpn.negiao.cn`。
+无论用户通过哪个域名访问，最终都到达同一个前端；业务 API 在 HF Space，前端瓦片中转在 VPS `vpn.negiao.cn`（后端下载管线的瓦片抓取在 HF Space 本域完成，V3.6.18 起）。
 
 ---
 

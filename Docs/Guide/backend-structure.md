@@ -13,6 +13,17 @@ backend/
 ├── pyproject.toml  # Python 项目依赖
 ├── README.md  # 本文件
 ├── uv.lock  # uv 依赖锁定文件
+├── domains/                                       # 领域模块（V3.6.18 恢复瓦片域）
+│   └── tiles/                                     # 瓦片域：纠偏 + 直通代理 + 磁盘缓存清理 + 底图下载
+│       ├── __init__.py                            # 包出口（PEP 562 惰性导出）
+│       ├── _router.py                             # 路由聚合（纠偏 → 通配，顺序不可打乱）
+│       ├── routes_rectify.py                      # /proxy/{gcj2wgs,wgs2gcj,bd2wgs,wgs2bd}/… 纠偏代理
+│       ├── routes_passthrough.py                  # /proxy/{target_url:path} + /tiles/ships66 直通代理
+│       ├── proxy_shared.py                        # 内存 TTL 缓存 / 限流 / SSRF / 出站客户端
+│       ├── cache_cleanup.py                       # 纠偏磁盘缓存按龄+按容量清理 + 后台 loop
+│       ├── infra/                                 # SSRF 护栏 shim（转接 core/net_guard）+ 浏览器出站头
+│       ├── rectify/                               # GCJ/BD 纠偏库（bd/ + gcj/ + common/）
+│       └── download/                              # 底图下载（任务/调度/瓦片引擎/GeoTIFF 拼装）
 ├── api/                                           # API 路由模块
 │   ├── __init__.py                                # 路由注册入口
 │   ├── admin.py                                   # 管理员相关接口
@@ -103,5 +114,8 @@ backend/
     └── time_utils.py                              # 北京时间工具 + 整点报时后台任务
 ```
 
-> **`backend/domains/` 已删除**：瓦片纠偏/代理不在本仓库。开源实现见独立仓 `tile-proxy`；线上入口 `https://vpn.negiao.cn/proxy/*`。业务说明见 [`Docs/Architecture/tile-rectify-system.md`](../Architecture/tile-rectify-system.md)。HF Space 禁止任何第三方内容中转路由。
+> **`backend/domains/tiles/`（V3.6.18 恢复）**：瓦片域整域回归本仓——纠偏路由（`/proxy/gcj2wgs/…` 等）+ 直通代理（`/proxy/{target_url:path}`、`/tiles/ships66/…`）+ 底图下载（`/api/download/*`）。
+> 分工：前端底图显示仍走香港 VPS（`vpn.negiao.cn/proxy/*`，瓦片域名未变）；本仓中转路由服务于**下载管线**（后端按瓦片模板抓取、按需纠偏、拼装 GeoTIFF，配额走 `/api/auth/download-quota`）。
+> 是否在 HF Space 暴露中转路由属部署侧合规决策（同 external_proxy 先例）；严守「Space 无第三方中转」的环境可在宿主侧不挂 `tiles_router`/`download_router`。
+> 业务说明见 [`Docs/Architecture/tile-rectify-system.md`](../Architecture/tile-rectify-system.md)；下载功能沿革见 [`Docs/TODO/plan-download-feature-git-marker.md`](../TODO/plan-download-feature-git-marker.md)。
 

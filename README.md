@@ -84,7 +84,7 @@
 
 ## 🎯 项目简介
 
-**NEGIAO's WebGIS** 是一个功能完整、架构清晰的前后端分离 WebGIS 平台（当前版本 V3.6.17），前端托管于 GitHub Pages（正式域名 webgis.negiao.cn），后端以 Docker 部署在 Hugging Face Spaces，通过 RESTful API 通信，支持独立扩展。
+**NEGIAO's WebGIS** 是一个功能完整、架构清晰的前后端分离 WebGIS 平台（当前版本 V3.6.18），前端托管于 GitHub Pages（正式域名 webgis.negiao.cn），后端以 Docker 部署在 Hugging Face Spaces，通过 RESTful API 通信，支持独立扩展。
 
 > 📚 本 README 仅保留核心概览与导航。完整文档已模块化至 [`Docs/Guide/`](Docs/Guide/)，详见下方「文档导航」。
 >
@@ -408,6 +408,7 @@ tiles.negiao.cc.cd"]
 
 | 版本 | 日期 | 概要 |
 |------|------|------|
+| **V3.6.18** | 2026-10-16 | **瓦片域整域恢复：纠偏 + 直通代理 + 底图下载回归本仓**。从本地 tag `tile-download-last`（V3.6.4）恢复 `backend/domains/tiles/`（28 文件）并接入 `app.py`（router/任务 DB/清理调度器/缓存清理）；前端地图显示仍走香港 VPS，本仓中转路由专服下载管线（模板抓瓦片 → 纠偏 → GeoTIFF → 配额扣减）；SSRF 护栏收敛为 `core/net_guard.py` 单点；门禁脚本同步放行。E2E 实机通过。详见[完整更新日志](Docs/Guide/CHANGELOG.md) |
 | **V3.6.17** | 2026-10-14 | **暂存区多批次归并：天地图矢量全量抓取 + AP 拓扑修复 + 裁剪多环化 + 建筑抓取合规强化**。新建浏览器版 12 层矢量解码与分层拓扑（逐函数/逐规则对齐权威 mjs），修复「全层 0 要素」与「AP 跨瓦 union 全失败 → 自相交/叠片」；面裁剪由**单环 Sutherland–Hodgman** 改为**半平面多环裁剪**，修复 CE 7 个「环被瓦片边切开后沿边重复走」的自相交（CE 非法几何 10 → 3，残留 3 个为上游源数据缺陷）；天地图 tab 更名「矢量瓦片」并支持多选分层入库；建筑源匿名化为建筑1/建筑2 并新增合规勾选与首次弹窗确认。AP 专项回归 35/35、mjs selftest 11/11、12 层统计逐层一致、CE 与 mjs 权威 out=1311 完全一致。详见[完整更新日志](Docs/Guide/CHANGELOG.md) |
 | **V3.6.14** | 2026-10-13 | **天地图建筑权限与拓扑修复**：支持用户临时输入拥有矢量瓦片权限的 tk，识别 301010 权限错误；移植无第三方依赖的跨瓦片 Union，按 `elemid` 消除公共边界并保留失败回退。详见[完整更新日志](Docs/Guide/CHANGELOG.md) |
 | **V3.6.13** | 2026-10-13 | **二维图层导入 3D**：TOC 右键「导入到 3D」（非栅格行）＋拖到三维画布松手即导入，OL 序列化 GeoJSON 文本 → 包 File 走既有 Cesium 通道（自动建档＋高度拔高）；未切 3D 时明示降级。详见[完整更新日志](Docs/Guide/CHANGELOG.md) |
@@ -434,6 +435,6 @@ tiles.negiao.cc.cd"]
 |:------:|:--------:|:--------:|
 | [GitHub](https://github.com/NEGIAO/WebGIS-Dev) | [webgis.negiao.cn](https://webgis.negiao.cn)（正式域名，GitHub Pages 托管） | [Hugging Face](https://NEGIAO-WebGIS.hf.space) |
 
-<sub>V3.6.17 · 开发中 · 最后更新 2026-10-14</sub>
+<sub>V3.6.18 · 开发中 · 最后更新 2026-10-16</sub>
 
 </div>

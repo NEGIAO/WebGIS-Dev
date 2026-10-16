@@ -1,16 +1,16 @@
-# 瓦片纠偏系统（已迁出本仓库）
+# 瓦片纠偏系统（前端显示走 VPS；后端下载管线已整域恢复）
 
-日期：2026-09-15  
-状态：**实现不在 WebGIS-Dev**。本页只保留业务说明与接入契约，供前端/运维对照。
+日期：2026-09-15（迁出）→ 2026-10-16（V3.6.18 部分恢复）
+状态：**前端地图显示的纠偏入口不在 WebGIS-Dev**（走 VPS）；**后端瓦片域 V3.6.18 起整域恢复**（纠偏/直通/下载），专服下载管线。
 
-## 1. 迁出结论
+## 1. 迁出结论（2026-09-15，V3.6.5）
 
 | 项 | 位置 |
 |---|---|
-| **开源实现** | 独立仓 `tile-proxy`（GCJ-02 / BD-09 ↔ WGS84 逐瓦片纠偏 + 直通代理） |
-| **线上入口** | `https://vpn.negiao.cn/proxy/*`（Azure VPS，nginx → 127.0.0.1:9002） |
-| **本仓库残留** | 仅 `backend/core/coord_transform.py` 纯坐标数学（无网络 IO，供 `location` 展示 GCJ） |
-| **HF Space** | **禁止**挂载任何 `/proxy/*`、`/tiles/*` 中转（平台 Content Policy） |
+| **前端显示入口** | 独立仓 `tile-proxy` + VPS `https://vpn.negiao.cn/proxy/*`（Azure VPS，nginx → 127.0.0.1:9002）——**未变** |
+| **后端下载管线（V3.6.18 恢复）** | 本仓 `backend/domains/tiles/`（纠偏 + 直通代理 + 底图下载），仅下载链路使用，不面向前端地图 |
+| **本仓库残留（纯数学）** | `backend/core/coord_transform.py`（无网络 IO，供 `location` 展示 GCJ） |
+| **HF Space** | 是否挂载 `/proxy/*`、`/tiles/*`、`/api/download` 属**部署侧合规决策**（V3.6.18 起由用户定版；同 external_proxy 先例） |
 
 ```mermaid
 flowchart LR
@@ -63,4 +63,5 @@ CORS：`Access-Control-Allow-Origin: *`（任意前端源）。
 
 ## 6. 历史
 
-实现原在本仓 `backend/domains/tiles/`。因 HF 禁止 Space 上的第三方内容中转，于 2026-09-15 整包迁出；本仓库不再包含纠偏代理业务代码。
+实现原在本仓 `backend/domains/tiles/`。因 HF 禁止 Space 上的第三方内容中转，于 2026-09-15（V3.6.5）整包迁出至独立仓 + VPS，本仓库一度不再包含纠偏代理业务代码。
+2026-10-16（V3.6.18）按用户决策从本地 tag `tile-download-last`（V3.6.4）**整域恢复**：前端地图显示仍走 VPS（不变），本仓 `/proxy/*`、`/tiles/*`、`/api/download` 专服下载管线（含配额链路）。恢复沿革与验证记录见 [`Docs/TODO/plan-download-feature-git-marker.md`](../TODO/plan-download-feature-git-marker.md)。

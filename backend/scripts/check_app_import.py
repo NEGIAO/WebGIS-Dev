@@ -2,11 +2,10 @@
 # -*- coding: utf-8 -*-
 """全量 import app 门禁（目录搬迁强制项）。
 
-背景：HF 合规要求 Space 无第三方内容中转。本脚本 import 全量 app 并断言
-禁止出现 /proxy/*、/tiles/*、/api/download 等路由。
-`api/location.py` 旧 import 直到 Docker 启动才爆炸。本脚本保证：
-任何包移动/改名后，`import app` 在**缺三方依赖的环境也能完整执行**
-（三方缺件自动桩，第一方缺件则 loud 失败），并断言路由表不变量。
+背景：保证任何包移动/改名后，`import app` 在**缺三方依赖的环境也能完整执行**
+（三方缺件自动桩，第一方缺件则 loud 失败），并断言核心路由不变量。
+（V3.6.18 起瓦片域恢复，/proxy/*、/tiles/*、/api/download 不再视为禁止路径；
+详见 FORBIDDEN_PATH_PREFIXES 处注释。）
 
 用法（backend/ 目录下）：
     python scripts/check_app_import.py
@@ -116,12 +115,14 @@ def import_app_with_stubs(max_rounds: int = 30):
     raise RuntimeError("桩迭代超限仍未导入成功，请人工检查")
 
 
-# HF 合规：本应用不得出现任何瓦片/通用中转路由
-FORBIDDEN_PATH_PREFIXES = (
-    "/proxy/",
-    "/tiles/",
-    "/api/download",
-)
+# 瓦片/下载路由不变量（V3.6.18 恢复瓦片域后调整）：
+# V3.6.5 曾以「HF 合规」为由禁止 /proxy/*、/tiles/*、/api/download；
+# V3.6.18 起瓦片域（纠偏 + 下载）整域恢复：前端地图显示仍走 VPS，
+# 本仓中转路由服务于下载管线。是否在 HF Space 暴露属部署侧决策
+# （同 external_proxy 先例，见脚本末尾说明）。
+# 若某环境需严守「Space 无三方中转」，在宿主持不挂 proxy_router/download_router 即可，
+# 本脚本不再把上述路由路径本身判为失败。
+FORBIDDEN_PATH_PREFIXES: tuple[str, ...] = ()
 
 
 def check_routes(app_module) -> list[str]:
@@ -133,7 +134,7 @@ def check_routes(app_module) -> list[str]:
             continue
         for bad in FORBIDDEN_PATH_PREFIXES:
             if p == bad.rstrip("/") or p.startswith(bad):
-                errors.append(f"HF 合规：禁止路由仍存在 {p}")
+                errors.append(f"禁止路由仍存在 {p}")
     # 认证等核心路由必须在
     for expected in ("/api/auth/login", "/api/config/public"):
         if not any((p or "") == expected or (p or "").startswith(expected) for p in paths):
@@ -161,10 +162,11 @@ def main() -> int:
             print(f"  - {err}")
         return 1
     n_routes = len(list(app_module.app.routes))
-    # 说明：断言仅禁 /proxy/* 与 /tiles/*（瓦片中转）与 /api/download。
-    # V3.6.6 恢复的 external_proxy 挂在 /api/proxy/*（高德/Nominatim/EPSG/IP JSON），
-    # 不在本不变量内；是否部署到 HF 仍由用户决策（政策灰区）。
-    print(f"[OK] 路由断言通过（共 {n_routes} 条，无 /proxy/* 与 /tiles/* 瓦片中转）")
+    # 说明：断言仅校验核心路由存在与路由总数下限。
+    # V3.6.6 恢复的 external_proxy 挂在 /api/proxy/*（高德/Nominatim/EPSG/IP JSON）；
+    # V3.6.18 恢复的瓦片域挂在 /proxy/*、/tiles/*、/api/download（下载管线用）。
+    # 是否部署到 HF 仍由用户决策（政策灰区）。
+    print(f"[OK] 路由断言通过（共 {n_routes} 条）")
     return 0
 
 

@@ -329,7 +329,7 @@
 
 
 <script setup>
-// ⚠️ 底图下载依赖 /api/download/*，后端 V3.6.5 已删除该模块，当前 HF Space 返回 404
+// 底图下载面板：对接 /api/download/*（V3.6.18 已随后端瓦片域整域恢复）
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { apiDownloadCancelTask, apiDownloadTaskFile } from '@/api/download';
 import { apiEstimateDownloadCost } from '@/api/backend/admin';

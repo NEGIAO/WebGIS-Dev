@@ -6,6 +6,31 @@
 
 ## 版本记录
 
+### V3.6.18 (2026-10-16) — 瓦片域整域恢复：纠偏 + 直通代理 + 底图下载回归本仓
+
+> **背景**：V3.6.5 将瓦片纠偏/代理迁出 HF（开源仓 tile-proxy + VPS `vpn.negiao.cn/proxy/*`），并删除 `backend/domains/**`（含底图下载）；V3.6.6 把前端下载入口标注为"后端已删/404"搁置，留下本地 tag `tile-download-last`（= V3.6.4 `4a701dad`）。
+> 本次按用户决策从 `tile-download-last` **整域恢复**，并明确分工与合规边界。
+
+> **一、后端瓦片域恢复（28 个文件）**
+> `backend/domains/tiles/` 整域回归：纠偏路由（`/proxy/{gcj2wgs,wgs2gcj,bd2wgs,wgs2bd}/…`）+ 直通代理（`/proxy/{target_url:path}`、`/tiles/ships66/…`）+ 磁盘缓存清理（`cache_cleanup_loop`，lifespan 挂载/卸载）+ 底图下载（`/api/download/*`：创建/状态/取消/文件/估算/我的任务）。
+> `app.py` 恢复对应接线：两个 router 挂载、`init_download_task_db()`、任务清理调度器（APScheduler）启停、纠偏缓存清理任务取消。
+> SSRF 护栏不复制第二份：`domains/tiles/infra/net_guard.py` 改为转接 `core/net_guard.py` 的 shim（全仓单一点）；`infra/http_headers.py`（浏览器出站头）原样恢复。
+
+> **二、分工与合规边界（本次定版）**
+> 前端底图显示**不变**：仍走香港 VPS `vpn.negiao.cn/proxy/*`（`VITE_TILE_PROXY_BASE_URL` 未动），瓦片域名不变。
+> 本仓 `/proxy/*`、`/tiles/*`、`/api/download` 服务于**下载管线**：下载时后端按瓦片模板直接抓取（模板可填 VPS 纠偏地址或原始源站），按需纠偏、拼装 GeoTIFF（rasterio），配额走 `/api/auth/download-quota/estimate` + `api/auth/quota.py` 扣减/退还，TTL 走 `/api/admin/config/download-ttl`。
+> 是否在 HF Space 暴露中转路由属部署侧合规决策（同 external_proxy 先例）；严守"Space 无三方中转"的环境可不挂 `tiles_router` / `download_router`。
+
+> **三、前端恢复**
+> 清除 V3.6.6 的"后端已删/404"搁置注释（`api/download.js`、`useDownloadStore.ts`、`MapDownloader.vue`、`MyDownloadTasks.vue`）；UI 本身自 V3.6.5 起未删，TOC 面板入口（`TOCPanel.vue` → `MapDownloader`）一直可达，无需改动。
+
+> **四、门禁与文档**
+> `backend/scripts/check_app_import.py`：`/proxy/*`、`/tiles/*`、`/api/download` 不再判为禁止路径（V3.6.5 的 HF 合规断言随本次恢复作废，改为部署侧决策注释）；核心路由与路由总数断言保留。
+> 文档同步：`Docs/TODO/plan-download-feature-git-marker.md`（搁置 → 已恢复，含验证记录）、`Docs/Guide/backend-structure.md`（domains/tiles 目录树回归）。
+
+> **五、验证（2026-10-16 本地）**
+> `check_app_import.py` 通过（131 条路由，无三方桩）；E2E（TestClient + 高德瓦片源，Windows 本机）：建号 → estimate-tiles（2 瓦片）→ 配额估算（cost=1/limit=1000）→ 建任务 → 后台抓瓦片 → progress 100%（"已裁剪到精确范围"）→ 文件下载（TIFF 魔数 `II*\0` 校验通过）→ 取消链路 200。冒烟覆盖全部 6 个下载端点（未登录 401）+ 4 条纠偏路由可达。
+
 ### V3.6.17 (2026-10-14) — 暂存区多批次归并：天地图矢量全量抓取 + 矢量瓦片 0 要素修复 + AP 拓扑修复 + 建筑抓取合规强化 + 裁剪多环化
 
 > **归并说明**：本条为暂存区多批次改动的**单一版本归并**（用户 P1 指令定版 V3.6.17）。原分列的 `V3.6.15` / `V3.6.18` / `V3.6.19` 条目与 2026-10-13 的 `V3.6.17` 条目已**全部并入本条**，内容无删减。

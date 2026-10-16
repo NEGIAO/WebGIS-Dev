@@ -2,11 +2,15 @@
 WebGIS Backend - FastAPI 主应用入口
 
 功能模块：
+- 瓦片域：纠偏/直通代理 + 底图下载 (domains/tiles/)
 - 访客统计：地理位置统计功能 (api/statistics.py)
 - 通用接口：新闻、数据处理、健康检查等
 
-⚠️ HF 合规：瓦片纠偏/直通代理已完全迁出本仓库（开源仓 tile-proxy + VPS
-vpn.negiao.cn/proxy/*）。本 Space **不得**再挂任何 /proxy/*、/tiles/* 中转路由。
+⚠️ 瓦片域分工（V3.6.18 恢复后）：前端底图显示走香港 VPS
+（vpn.negiao.cn/proxy/*，瓦片域名未变）；本仓 /proxy/*、/tiles/*、
+/api/download 服务于下载管线（下载时后端按模板抓瓦片、纠偏、拼 GeoTIFF，
+并经 /api/auth/download-quota 配额链路扣减/退还）。
+是否在 HF Space 暴露中转路由属部署侧合规决策（同 external_proxy 先例）。
 坐标纠偏纯数学见 core/coord_transform.py（无网络 IO）。
 """
 
@@ -29,6 +33,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
 from starlette.background import BackgroundTasks
+from domains.tiles import tiles_router as proxy_router, cache_cleanup_loop
+from domains.tiles.download.download import router as download_router
+from domains.tiles.download.task_scheduler import start_task_cleanup_scheduler, shutdown_task_cleanup_scheduler
+from domains.tiles.download.download_task import init_download_task_db
 from api.statistics import router as statistics_router
 from api.location import router as location_router
 from api.external_proxy import router as external_proxy_router
@@ -154,6 +162,17 @@ async def lifespan(app: FastAPI):
         )
 
     try:
+        init_download_task_db()
+        logger.info("下载任务数据库初始化成功")
+    except Exception as e:
+        logger.error("下载任务数据库初始化失败: %s", str(e), exc_info=True)
+
+    try:
+        app.state.task_scheduler = start_task_cleanup_scheduler()
+    except Exception as e:
+        logger.error("任务调度器启动失败: %s", str(e), exc_info=True)
+
+    try:
         init_historical_imagery_storage()
         app.state.historical_imagery_scheduler = start_historical_imagery_scheduler()
     except Exception as e:
@@ -166,6 +185,9 @@ async def lifespan(app: FastAPI):
         follow_redirects=False,
     )
     logger.info("HTTP 客户端初始化完成")
+
+    # 纠偏磁盘缓存周期清理（按龄 + 按容量；间隔 0 则任务内直接退出）
+    app.state.gcjre_cache_cleanup = asyncio.create_task(cache_cleanup_loop())
 
     # 启动整点报时后台任务（记录启动时间，报时时展示已运行时长）
     _startup_time = datetime.now().astimezone()
@@ -188,6 +210,16 @@ async def lifespan(app: FastAPI):
     yield
     # ---- Shutdown ----
     logger.info("WebGIS Backend 关闭...")
+    # 取消纠偏磁盘缓存清理任务
+    cleanup_task = getattr(app.state, "gcjre_cache_cleanup", None)
+    if cleanup_task is not None:
+        cleanup_task.cancel()
+        try:
+            await cleanup_task
+        except asyncio.CancelledError:
+            pass
+        logger.info("纠偏磁盘缓存清理任务已停止")
+
     # 取消整点报时任务
     chime_task = getattr(app.state, "hourly_chime", None)
     if chime_task is not None:
@@ -204,6 +236,14 @@ async def lifespan(app: FastAPI):
             shutdown_historical_imagery_scheduler(historical_scheduler)
         except Exception as e:
             logger.warning("历史影像同步调度器关闭异常: %s", e)
+
+    scheduler = getattr(app.state, "task_scheduler", None)
+    if scheduler is not None:
+        try:
+            shutdown_task_cleanup_scheduler(scheduler)
+        except Exception as e:
+            logger.warning("任务调度器关闭异常: %s", e)
+        logger.info("任务调度器已停止")
 
     # 关闭 IP 定位服务（释放连接池，打印缓存统计）
     try:
@@ -371,8 +411,9 @@ async def http_exception_handler(request: Request, exc: HTTPException):
 # ==================== 路由挂载 ====================
 
 
-# ⚠️ 禁止挂载任何 /proxy/*、/tiles/*、external 中转（HF 政策）。
-# 瓦片纠偏见开源仓 tile-proxy；部署于 VPS vpn.negiao.cn/proxy/*
+# 挂载瓦片代理路由（纠偏 + 直通；服务于下载管线，前端地图显示走 VPS）
+app.include_router(proxy_router)
+logger.info("已注册瓦片代理路由")
 
 # 挂载认证路由
 app.include_router(auth_router)
@@ -410,6 +451,10 @@ logger.info("已注册运行时配置路由")
 app.include_router(agent_chat_router)
 app.include_router(agent_chat_admin_router)
 logger.info("已注册 Agent 对话路由")
+
+# 挂载下载任务路由（底图下载；配额走 /api/auth/download-quota）
+app.include_router(download_router)
+logger.info("已注册下载任务路由")
 
 # 挂载监控路由
 app.include_router(monitor_router)
