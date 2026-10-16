@@ -34,6 +34,15 @@
 
 ---
 
+> ## ⚠️ 分支合规警示
+>
+> 你正在查看的是 **`tiles-full-v3.6.18` 全功能分支**：包含瓦片纠偏代理（`/proxy/*`）与底图下载（`/api/download/*`），
+> **仅限本地开发 / 自建 VPS / 二开使用**。Hugging Face Content Policy 禁止 Space 运行代理模式——
+> **请勿将本分支部署到 Hugging Face Spaces**（Space 部署基线为 `main` 分支）。
+> 详见 [`Docs/Guide/tiles-full-branch.md`](Docs/Guide/tiles-full-branch.md)。
+
+---
+
 ## 🌟 核心功能预览
 
 <div align="center">
