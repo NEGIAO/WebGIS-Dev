@@ -314,6 +314,8 @@ import { apiGetRuntimeDefaults } from '@/api/backend';
 // --- 工具函数 ---
 import { gcj02ToWgs84, wgs84ToGcj02 } from '@common/data-import/crs/coordTransform';
 import { createLayerExporter, isVectorManagedLayer } from '@common/layer-tree/actions/layerExportService';
+// URL 查询参数统一读取（hash query 优先、route.query 兜底），见 urlQueryReader 约定
+import { getCurrentQuerySnapshot } from '@common/url-state/urlQueryReader';
 
 // --- 子组件 ---
 import LayerControlPanel from '@ol/layer/components/LayerControlPanel.vue';
@@ -1227,11 +1229,16 @@ onMounted(async () => {
         // ★ 默认底图优先级（仅在 URL 未显式指定 l= 参数时生效）：
         //   用户偏好 default_basemap > 管理员全局默认 default_basemap_index
         // 注意：parseUrlToState() 会用硬编码默认值填充 layerIndex，所以不能用它判断
-        const urlParams = new URLSearchParams(window.location.search);
-        const hasExplicitLayerParam =
-            urlParams.has('l') ||
-            urlParams.has('layer') ||
-            urlParams.has('layerId');
+        // [Fix] 路由为 hash 模式（createWebHashHistory），地址栏参数位于 # 之后，
+        // window.location.search 恒为空串。必须走 urlQueryReader 快照（hash query 优先、
+        // search 兜底）判断显式底图参数，否则分享链接的 l 会被默认底图覆盖，
+        // 只能等 waitForCriticalTileReady（最坏 15s）结束后才在 applyDeferredUrlParams 纠正，
+        // 表现为「近 10s 才切换到 URL 指定底图」。
+        const startupQuery = getCurrentQuerySnapshot();
+        const startupSearchParams = new URLSearchParams(window.location.search || '');
+        const hasExplicitLayerParam = ['l', 'layer', 'layerId'].some(
+            (key) => startupQuery[key] !== undefined || startupSearchParams.has(key),
+        );
         if (!hasExplicitLayerParam) {
             // 1) 用户偏好（useUserPreferencesStore bootstrap 时写入的 runtime 缓存）
             const preferredBasemapId = readCachedPreferredBasemap();

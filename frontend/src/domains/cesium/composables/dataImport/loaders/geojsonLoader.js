@@ -3,7 +3,7 @@
  * GeoJSON/JSON 格式加载器
  */
 
-import { flyToEntity, forceDataSourceClampToGround } from './utils.js';
+import { flyToEntity, forceDataSourceClampToGround, applyGroundStackingZIndex } from './utils.js';
 
 /** 高度属性候选键（米）。缺失/非法一律保持贴地，不拉伸。 */
 const HEIGHT_PROPERTY_KEYS = ['height_m', 'height', 'HEIGHT', 'Height', 'altitude', 'elevation'];
@@ -111,6 +111,9 @@ export async function loadGeoJSON({ file, getCesium, getViewer, message, loadedD
     await viewer.dataSources.add(dataSource);
     // 贴地兜底：加载期选项之外再强制实体级钳制（防文件语义绕过）
     forceDataSourceClampToGround(dataSource, Cesium);
+    // 多面图层叠放定序：GeoJSON 无 Folder 结构，按文档中等分位给递进 zIndex，
+    // 避免后写入的面覆盖先写入的面（GroundPrimitive 桶内先写入者胜出）
+    applyGroundStackingZIndex(dataSource);
     // 白模拔高（须在贴地兜底之后）：有高度属性的面按米拉伸，无高度保持贴地
     const extrudedCount = extrudePolygonsByHeight(dataSource, Cesium);
     // 面/线走 GroundPrimitive，点自动 heightReference=CLAMP；地形切换由 Cesium 自动跟随

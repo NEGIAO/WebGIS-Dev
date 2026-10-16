@@ -3,7 +3,7 @@
  * Shapefile 格式加载器
  */
 
-import { ensureGisParsers, getExtension, flyToEntity, forceDataSourceClampToGround } from './utils.js';
+import { ensureGisParsers, getExtension, flyToEntity, forceDataSourceClampToGround, applyGroundStackingZIndex } from './utils.js';
 
 /**
  * 加载 Shapefile 到 Cesium
@@ -61,6 +61,8 @@ export async function loadSHP({ file, sidecarFiles = [], getCesium, getViewer, m
     await viewer.dataSources.add(dataSource);
     // 贴地兜底：加载期选项之外再强制实体级钳制
     forceDataSourceClampToGround(dataSource, Cesium);
+    // 多面图层叠放定序：SHP 无 Folder 结构，按文档序等分位递进 zIndex
+    applyGroundStackingZIndex(dataSource);
     flyToEntity(viewer, Cesium, dataSource, 'shp');
 
     const record = { id, name: file.name, type: 'shp', entity: dataSource };

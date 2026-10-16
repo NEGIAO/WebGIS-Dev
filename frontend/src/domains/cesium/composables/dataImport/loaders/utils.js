@@ -190,3 +190,124 @@ export function forceDataSourceClampToGround(dataSource, Cesium) {
         }
     }
 }
+
+/**
+ * 解析 KML 文本中地面几何要素的「Folder run」叠放序号。
+ *
+ * 背景：一个 KML/KMZ 内常按 Folder 组织多个面数据图层（如 HENU.kmz：
+ * Folder line_Clip 线层 + Folder LandParcel 下并排的 建筑/体育/水体/绿地/居住区/学校
+ * 面层）。Cesium 贴地面（GroundPrimitive）等高几何的定序机制（本地 1.132 bundle 实证）：
+ * - GroundPrimitiveBatcher 把（材质, zIndex）相同的几何合并进**同一个** GroundPrimitive，
+ *   批内等高三角形 depth-test **先写入者胜出**；
+ * - OrderedGroundPrimitiveCollection 按 zIndex 分桶、桶间升序渲染，**zIndex 越大越靠上**。
+ * 所有地面几何 zIndex 默认相同（0）时，绘制顺序退化为实体集合顺序，导致「地块」大面
+ * 覆盖建筑等顶部图层。需要按文档 Folder 结构给地面实体分配递进 zIndex。
+ *
+ * 定序方向（V3.6.19，与 2D 统一；对标 QGIS 图例：文档在前的 Folder 在上）：
+ * 文档首 run 拿最高 zIndex，文档末 run 拿最低。线/面同体系编号（PolylineGraphics.zIndex
+ * 要求 clampToGround，调用方须先执行 forceDataSourceClampToGround）。
+ *
+ * 规则：按文档顺序遍历，统计含 <Polygon> 或 <LineString> 的 Placemark
+ *（MultiGeometry 内的也算；纯点 Placemark 不参与地面定序）；
+ * 记录每个地面要素的「最内层 Folder 名」，Folder 变化即开新 run（rank+1），
+ * 保证 rank 沿文档单调不减（兼容嵌套 Folder，避免按最外层 Folder 编号时
+ * 嵌套子文件夹全部同 rank 导致定序失效）。
+ *
+ * @param {string} kmlText - 归一化（去 kml: 前缀）后的 KML 文本
+ * @returns {number[]} 每个地面几何 Placemark 的 run 序号，与文档中地面要素顺序一一对应
+ */
+export function parseKmlPolygonStackingRanks(kmlText) {
+    if (!kmlText) return [];
+
+    const xml = new DOMParser().parseFromString(kmlText, 'text/xml');
+    if (xml.documentElement.tagName === 'parsererror') return [];
+
+    const ranks = [];
+    let currentFolder = null;
+    let currentRank = -1;
+
+    const visit = (node, folderStack) => {
+        if (node.tagName === 'Folder') {
+            // 无 name 的 Folder 用路径序号占位，保证不同 Folder 恒定产生不同 run
+            const nameNode = Array.from(node.children).find((child) => child.tagName === 'name');
+            const folderName = String(nameNode?.textContent || '').trim() || `__folder_${folderStack.length}__`;
+            const nextStack = folderStack.concat(folderName);
+            Array.from(node.children).forEach((child) => visit(child, nextStack));
+            return;
+        }
+
+        if (node.tagName === 'Placemark') {
+            const hasGroundGeometry =
+                node.getElementsByTagName('Polygon').length > 0 ||
+                node.getElementsByTagName('LineString').length > 0;
+            if (hasGroundGeometry) {
+                const innermost = folderStack.length > 0 ? folderStack[folderStack.length - 1] : null;
+                if (innermost !== currentFolder) {
+                    currentRank += 1;
+                    currentFolder = innermost;
+                }
+                ranks.push(currentRank);
+            }
+            return;
+        }
+
+        Array.from(node.children).forEach((child) => visit(child, folderStack));
+    };
+
+    Array.from(xml.documentElement.children).forEach((child) => visit(child, []));
+    return ranks;
+}
+
+/**
+ * 为 DataSource 中的地面实体分配递进 zIndex（V3.6.19：方向与 2D 统一，对标 QGIS 图例）。
+ *
+ * 策略 A（ranks 与地面实体数量对齐，如 KML 经 parseKmlPolygonStackingRanks 解析，
+ * 含线要素；线/面同体系，混合 Placemark 的 polygon/polyline 取同一 zIndex）：
+ *   zIndex = (buckets - 1) - floor((rank + 1) / (maxRank + 2) * buckets)
+ *   例 HENU：8 个 run（maxRank=7, span=9, buckets=64）→ 56/49/42/35/28/21/14/0，
+ *   文档首 Folder（道路线层）最高在顶，文档末 Folder（学校基底）最低垫底。
+ * 策略 B（回退，无 ranks 或数量不一致）：按面实体序号等分位
+ *   zIndex = floor(index / total * buckets)，保持文档顺序（先画垫底）——
+ *   扁平单层（GeoJSON/SHP 无 Folder 结构）在 QGIS/OL 均是先画垫底，故此处不反转。
+ *
+ * 仅当存在多于一个 run（策略 A）或多于一个面（策略 B）时才生效；
+ * 单一图层保持默认 zIndex，避免跨数据源引入无意义的定序副作用。
+ *
+ * @param {Cesium.CustomDataSource|Cesium.GeoJsonDataSource|Cesium.KmlDataSource} dataSource
+ * @param {number} [buckets=64] - zIndex 量化档位数（0~63，留余量给其它业务层）
+ * @param {number[]|null} [ranks=null] - parseKmlPolygonStackingRanks 的 run 序号数组
+ */
+export function applyGroundStackingZIndex(dataSource, buckets = 64, ranks = null) {
+    const groundEntities = (dataSource?.entities?.values || []).filter(
+        (entity) => entity.polygon || entity.polyline,
+    );
+    if (!groundEntities.length) return;
+
+    const clampZ = (value) => Math.min(buckets - 1, Math.max(0, Math.floor(value)));
+
+    const hasRanks = Array.isArray(ranks) && ranks.length === groundEntities.length;
+    if (hasRanks) {
+        const maxRank = Math.max(...ranks);
+        if (maxRank >= 1) {
+            const span = maxRank + 2;
+            groundEntities.forEach((entity, index) => {
+                // 文档在前 → zIndex 更高 → 渲染在上（与 2D renderOrder rank 语义对齐）
+                const z = buckets - 1 - clampZ(((ranks[index] + 1) / span) * buckets);
+                if (entity.polygon) entity.polygon.zIndex = z;
+                if (entity.polyline) entity.polyline.zIndex = z;
+            });
+            return;
+        }
+        // 全部同 run（单一地面图层），无需定序
+        return;
+    }
+
+    // 策略 B：按面实体序号等分位（保持文档顺序，先画垫底；扁平层不反转）
+    const polygons = groundEntities.filter((entity) => entity.polygon);
+    const total = polygons.length;
+    if (total > 1) {
+        polygons.forEach((entity, index) => {
+            entity.polygon.zIndex = clampZ((index / total) * buckets);
+        });
+    }
+}

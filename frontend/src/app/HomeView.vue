@@ -1417,8 +1417,18 @@ function handleRemoveLayer(layerId) {
         return;
     }
     if (handleDistrictLayerRemove(layerId)) return;
-    // plain id = OL 命名空间（理由同上）；先路由 OL 卸图层，再同步 store 元数据
-    dispatchLayerAction({ method: 'removeUserLayer', payload: { layerId }, engine: 'ol' });
+    // plain id = OL 命名空间（理由同上）；先路由 OL 卸图层，再同步 store 元数据。
+    // 必须以分发结果为准：分发失败（如引擎处理器未注册）时不得先删 store，
+    // 否则 TOC 条目消失而地图图层残留，造成“假删除”。
+    const dispatched = dispatchLayerAction({
+        method: 'removeUserLayer',
+        payload: { layerId },
+        engine: 'ol',
+    });
+    if (!dispatched) {
+        message?.warning?.(`图层移除未被地图引擎处理：${layerId}`);
+        return;
+    }
     // 直接更新 Pinia store，不依赖 async 事件链
     layerStore.removeLayerById(layerId);
 }

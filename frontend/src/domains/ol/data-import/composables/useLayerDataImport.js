@@ -1013,6 +1013,64 @@ export function useLayerDataImport({
     }
 
     /**
+     * KML 按 Folder 分组设定绘制序号（对标 QGIS/GDAL 行为）：
+     * QGIS 把每个 Folder 读成独立图层，文档在前的 Folder 图层在上；
+     * 我们把整包合并进一个 OL 图层，而 OL VectorSource 迭代是 RBush 空间序
+     *（getFeatures 文档注明 random order），数组顺序对渲染无效——
+     * 因此按“最内层 Folder”分组，文档末组序号 0（先画垫底），文档首组序号最大
+     *（后画压顶），序号经图层 renderOrder 生效（见 useCreateManagedVectorLayer）。
+     * 序号存为要素对象自有属性（不在 getProperties 内），不污染属性表与导出数据。
+     * 无 Folder 的普通 KML 或结构异常时返回 -1（不设定）。
+     */
+    function applyKmlDrawOrder(kmlText, features) {
+        if (!Array.isArray(features) || features.length < 2) return -1;
+        try {
+            const tokenRe = /<(\/?)(Folder|Placemark)[\s>/]/g;
+            const folderStack = [];
+            const owner = [];
+            let m;
+            while ((m = tokenRe.exec(kmlText))) {
+                const closing = m[1] === '/';
+                if (m[2] === 'Folder') {
+                    if (!closing) folderStack.push(m.index);
+                    else folderStack.pop();
+                } else if (!closing) {
+                    owner.push(folderStack.length ? folderStack[folderStack.length - 1] : -1);
+                }
+            }
+            if (owner.length !== features.length) return -1;
+            // 组按 Folder 起始位置倒序：文档末组 rank 0（先画垫底），文档首组 rank 最大
+            const groupOrder = [...new Set(owner)].sort((a, b) => b - a);
+            if (groupOrder.length < 2) return -1;
+            const byGroup = new Map();
+            owner.forEach((group, index) => {
+                if (!byGroup.has(group)) byGroup.set(group, []);
+                byGroup.get(group).push(features[index]);
+            });
+            const next = [];
+            groupOrder.forEach((group, rank) => {
+                for (const feature of byGroup.get(group)) {
+                    try {
+                        Object.defineProperty(feature, '_drawRank', {
+                            value: rank,
+                            writable: true,
+                            configurable: true,
+                        });
+                    } catch {
+                        /* ignore */
+                    }
+                    next.push(feature);
+                }
+            });
+            if (next.length !== features.length) return -1;
+            for (let i = 0; i < next.length; i++) features[i] = next[i];
+            return groupOrder.length;
+        } catch {
+            return -1;
+        }
+    }
+
+    /**
      * 对已解析的 features 应用 KML 样式（PolyStyle、LineStyle、IconStyle）
      * 并清除 extractStyles:false 产生的无效样式（空数组、undefined 等）
      * @param {Array} features - OL Feature 数组
@@ -1081,6 +1139,15 @@ export function useLayerDataImport({
         }
 
         applyKmlStylesAndCleanup(features, kmlTextForStyle, label);
+        // 对标 QGIS：文档在前的 Folder 在上层（组内保持文档顺序），
+        // 序号经图层 renderOrder 生效（数组顺序对 OL 渲染无效，见函数注释）
+        const folderGroups = applyKmlDrawOrder(kmlTextForStyle, features);
+        if (folderGroups > 0) {
+            console.warn(
+                `[数据导入] ${label}已按 Folder 分组设定绘制顺序（文档在前者在上），` +
+                    `${folderGroups} 组，共 ${features.length} 个要素`,
+            );
+        }
         return features;
     }
 
@@ -1198,6 +1265,9 @@ export function useLayerDataImport({
         const total = packets.length;
         let unsupportedProjectionDetected = false;
 
+        // 叠放顺序（对标 QGIS 图层列表）：先创建的图层 zIndex 更高（见 refreshUserLayerZIndex），
+        // 即先建=顶部；包内首个条目对应 QGIS 图层列表顶部。层内 Folder 压盖另由
+        // applyKmlDrawOrder 分组定序 + 图层 renderOrder 处理，此处保持包原序创建。
         reportImportProgress({
             phase: 'importing',
             total,

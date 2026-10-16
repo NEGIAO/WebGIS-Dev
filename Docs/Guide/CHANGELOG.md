@@ -6,6 +6,30 @@
 
 ## 版本记录
 
+### V3.6.19 (2026-10-16) — URL 底图参数延迟修复 + 矢量多面图层叠放定序（2D/3D）+ 移除假删除修复
+
+> 版本注：V3.6.18 已保留给瓦片下载分支（不在 main），main 线本次为 V3.6.19。
+
+> **一、分享链接 `l` 参数指定底图近 10s 才生效（启动链路修复）**
+> 现象：URL（如 `#/home?l=4&lng=…&lat=…&z=…`）指定底图后，页面先用默认底图渲染，近 10s 后才自动切换到指定底图。用户最初怀疑「相关 JS 逻辑未载入」——排除：JS 与参数解析均在 setup 阶段完成，非懒加载问题。
+> 根因：路由为 **hash 模式**（`createWebHashHistory`，参数位于 `#` 之后），而 `MapContainer.vue` onMounted 判断「URL 是否显式指定底图」用的是 `new URLSearchParams(window.location.search)`——hash 模式下 `location.search` **恒为空串**，`hasExplicitLayerParam` 恒为 false。于是 setup 阶段已按 URL 设好的 `selectedLayer`（正确的 l 对应底图）在 onMounted 被「用户偏好默认底图 / 管理员全局默认底图」**覆盖**，`initMap` 与 immediate watcher 应用的都是默认底图；URL 底图只能等 `waitForCriticalTileReady()`（关键瓦片就绪等待，默认底图慢/被限流时逼近 15s 兜底）结束后，才在 Phase 5 `applyDeferredUrlParams()` → `flyToView({ l })` 里被纠正——整体表现为近 10s 延迟。
+> 修复：显式底图参数检测改走统一读取器 `getCurrentQuerySnapshot()`（`@common/url-state/urlQueryReader`：hash query 优先、`window.location.search` 兜底），同时识别 `l` / `layer` / `layerId` 三个键。修复后 URL 显式指定 l 时跳过默认底图覆盖，`initMap` 内 immediate watcher（`createBasemapSelectionWatcher`，`immediate: true`）即在 `switchLayerById` 中同步完成切换，URL 底图在首帧前生效；`waitForCriticalTileReady` 随之等待正确底图的首屏瓦片。
+
+> **二、KMZ/KML 多面数据图层叠放顺序颠倒（贴地定序修复）**
+> 现象：一个 KMZ 内多个面图层（如 HENU.kmz：建筑/体育/水体/绿地/居住区/学校 7 个 Folder run + 线层）加载后叠放颠倒——后解析的「地块」大范围面覆盖建筑等顶部图层，而正确语义应为基底先画、顶部图层后画。
+> 机制（本地 Cesium 1.132 bundle 实证）：`GroundPrimitiveBatcher` 把（材质, zIndex）相同的几何合并进**同一个** `GroundPrimitive`，批内等高三角形 depth-test **先写入者胜出**；`OrderedGroundPrimitiveCollection` 按 zIndex 分桶、桶间升序渲染，**zIndex 越大越靠上**。所有面 zIndex 默认相同时绘制顺序退化为实体集合顺序，导致后写入的大面压住先写入的面。
+> 修复（`dataImport/loaders/utils.js` 新增两个函数，kml/geojson/shp 三个 loader 在 `forceDataSourceClampToGround` 之后调用）：
+> - `parseKmlPolygonStackingRanks(kmlText)`：DOMParser 文档序遍历，统计含 `<Polygon>` 或 `<LineString>` 的 Placemark（MultiGeometry 内亦可，纯点不参），按「最内层 Folder 名」划分 run——Folder 变化即开新 run，rank 沿文档单调不减（规避正则按 `</Folder>` 非贪婪匹配把嵌套结构误判为并列文件夹的问题）；
+> - `applyGroundStackingZIndex(dataSource, buckets=64, ranks)`：策略 A（ranks 与地面实体数对齐，线/面同体系）`zIndex = (buckets-1) - floor((rank+1)/(maxRank+2)*buckets)`，文档首 Folder 最高在顶；策略 B（无 ranks 回退）按面实体序号 `floor(index/total*buckets)` 文档升序（扁平层不反转）。单一 run/单面时不改写 zIndex，避免跨数据源定序副作用。
+> 验证（真实 `C:\Users\NEGIAO\Desktop\HENU.kmz`，doc.kml 3.1MB）：1016 个地面 Placemark（613 线 + 403 面）→ 8 个 run → zIndex 带 **56/49/42/35/28/21/14/7**，道路最顶、学校垫底，与 2D 一致。改动文件 ESLint 全绿。
+> **三、2D OL 链路同文件叠放颠倒（根因级修复）**
+> 现象：同一 HENU.kmz 在 2D 同样被大面覆盖；此前多轮数组重排（包倒序/面积降序/分组倒序）日志显示执行但视觉无变化。
+> 根因（OL 源码）：`VectorSource.getFeatures()` 文档注明 random order（RBush 空间序），Canvas 渲染仅当图层设 `renderOrder` 才排序——数组顺序到不了渲染器。
+> 修复：`applyKmlDrawOrder`（Folder 分组，文档末组序号 0，存要素自有属性 `_drawRank`，不污染属性表/导出）+ 建层时条件 `renderOrder`（仅有序号图层启用）。8 组自底向上 = 学校 → 居住区 → 绿地 → 水体 → 体育红 → 体育绿 → 建筑 → line_Clip，与 QGIS 图例语义一致（GDAL `findLayers` 文档序编号，索引小在上）。
+> **四、图层移除“假删除”**
+> `HomeView.handleRemoveLayer` 丢弃分发返回值、无条件删 store，导致分发失败时 TOC 条目消失而地图图层残留。改为以分发结果为准，失败则告警返回。
+> Code review 记录：2D/3D 定序曾方向相反（3D 初版文档在前者 zIndex 最小且道路线无 zIndex），V3.6.19 已统一为 QGIS 语义（策略 A 反转 + 线要素同体系），待 3D 实机验证，详见日志。
+
 ### V3.6.17 (2026-10-14) — 暂存区多批次归并：天地图矢量全量抓取 + 矢量瓦片 0 要素修复 + AP 拓扑修复 + 建筑抓取合规强化 + 裁剪多环化
 
 > **归并说明**：本条为暂存区多批次改动的**单一版本归并**（用户 P1 指令定版 V3.6.17）。原分列的 `V3.6.15` / `V3.6.18` / `V3.6.19` 条目与 2026-10-13 的 `V3.6.17` 条目已**全部并入本条**，内容无删减。

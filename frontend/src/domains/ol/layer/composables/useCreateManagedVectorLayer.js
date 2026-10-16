@@ -167,6 +167,25 @@ export function useCreateManagedVectorLayer({
         managedLayerState.originalFeatureStyles = originalFeatureStyles;
 
         // 5. 创建双层：几何层（DATA）+ 标注层（DATA_LABEL）——夹心：数据几何 < 瓦片标注 < 数据标注
+        // 绘制顺序：OL VectorSource 迭代是 RBush 空间序（getFeatures 注明 random order），
+        // 数组顺序对 Canvas 渲染无效；KML 导入会在要素上写 _drawRank（对象自有属性，
+        // 不进 getProperties），此处经 renderOrder 生效（序号小先画垫底）。无序号图层
+        // 保持 undefined，走默认 RBush 顺序（现状不变）。
+        const rankOf = (feature) => {
+            const rank = feature?._drawRank;
+            return typeof rank === 'number' && Number.isFinite(rank)
+                ? rank
+                : Number.MAX_SAFE_INTEGER;
+        };
+        const drawRankComparator =
+            features.some((feature) => Number.isFinite(feature?._drawRank))
+                ? (first, second) => rankOf(first) - rankOf(second)
+                : undefined;
+        if (drawRankComparator) {
+            console.warn(
+                `[图层创建] "${name}" 已启用绘制顺序（${features.length} 个要素，序号小先画）`,
+            );
+        }
         const useWebGL = features.length > WEBGL_RENDER_THRESHOLD;
         let layer;
         let labelLayer = null;
@@ -188,12 +207,14 @@ export function useCreateManagedVectorLayer({
                 // 几何层：还原备份的 KML 样式（去 Text）
                 style: geometryStyleBuilder(managedLayerState),
                 properties: { name },
+                ...(drawRankComparator ? { renderOrder: drawRankComparator } : null),
             });
             labelLayer = new VectorLayer({
                 source: sharedSource,
                 zIndex: Z_BAND.DATA_LABEL,
                 style: labelStyleBuilder(managedLayerState),
                 properties: { name: `${name} · 标注`, isLabelLayer: true },
+                ...(drawRankComparator ? { renderOrder: drawRankComparator } : null),
             });
         }
 

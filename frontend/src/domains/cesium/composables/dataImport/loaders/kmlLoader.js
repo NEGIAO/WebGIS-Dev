@@ -28,7 +28,13 @@ import {
     resolveProjectionOrDefault,
 } from '@common/data-import/crsAware.js';
 import { transform } from 'ol/proj';
-import { flyToEntity, forceDataSourceClampToGround, revokeBlobUrl } from './utils.js';
+import {
+    flyToEntity,
+    forceDataSourceClampToGround,
+    revokeBlobUrl,
+    applyGroundStackingZIndex,
+    parseKmlPolygonStackingRanks,
+} from './utils.js';
 
 
 const KML_MIME = 'application/vnd.google-earth.kml+xml';
@@ -209,6 +215,9 @@ export async function loadKML({ file, getCesium, getViewer, message, loadedDataS
     // 贴地双保险：加载期 clampToGround:true + 加载后实体级强制钳制
     // （防文件显式 altitudeMode=absolute/relativeToGround 绕过贴地）
     forceDataSourceClampToGround(dataSource, Cesium);
+    // 地面叠放定序（对标 QGIS 图例：文档在前的 Folder 在上）：线/面同体系递进 zIndex，
+    // 文档首 Folder 最高在顶、末 Folder 最低垫底，避免末尾大面覆盖顶部图层
+    applyGroundStackingZIndex(dataSource, 64, parseKmlPolygonStackingRanks(preparedText));
     flyToEntity(viewer, Cesium, dataSource, 'kml');
 
     const record = { id, name: file.name, type: 'kml', entity: dataSource };
@@ -254,6 +263,8 @@ export async function loadKMZ({ file, getCesium, getViewer, message, loadedDataS
         await viewer.dataSources.add(dataSource);
         // 贴地双保险：同 loadKML，加载后实体级强制钳制
         forceDataSourceClampToGround(dataSource, Cesium);
+        // 地面叠放定序：同 loadKML（文档在前者在上，线/面同体系）
+        applyGroundStackingZIndex(dataSource, 64, parseKmlPolygonStackingRanks(preparedText));
         flyToEntity(viewer, Cesium, dataSource, 'kmz');
 
         const record = {
