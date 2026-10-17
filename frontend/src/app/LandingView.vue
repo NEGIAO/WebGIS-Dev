@@ -13,7 +13,7 @@
                          遮罩 url 与资源同源，经内联 CSS 变量传入 -->
                     <div
                         class="brand-badge"
-                        :style="{ '--brand-logo': `url('${logoUrl}')` }"
+                        :style="brandBadgeStyle"
                         aria-hidden="true"
                     ></div>
                     <div class="brand-text">
@@ -140,8 +140,8 @@
                         {{ t('landing.heroSubtitleTail') }}
                     </p>
 
-                    <!-- 统计条：四枚圆形数据卡（原型取自南师大 .d-numDUl-1 的
-                         圆形托底 + 中间大数字 + 下方说明），错落排布。
+                    <!-- 统计条：四枚圆形数据卡 (原型取自南师大 .d-numDUl-1 的
+                         圆形托底 + 中间大数字 + 下方说明)，错落排布。
                          原先是一条白色长卡 + 竖分隔线，属纯方框语言。
                          位置：副标题正下方、按钮之前 —— "社会证明"先于
                          "行动号召"，首屏不会第一眼落在出口上。
@@ -503,16 +503,6 @@
 
         <!-- ============ 页脚 ============ -->
         <footer class="footer">
-            <!-- 无缝滚动装饰带（借鉴南师大 .cloud2）：低透明度横移，纯尾韵装饰 -->
-            <div
-                class="footer-deco"
-                aria-hidden="true"
-            ></div>
-            <!-- 双层云海视差：第二层反向、异速，营造纵深（纯 CSS 零 JS） -->
-            <div
-                class="footer-deco footer-deco--2"
-                aria-hidden="true"
-            ></div>
             <div class="footer-inner">
                 <p class="footer-copyright">
                     {{ t('landing.copyright') }}
@@ -621,7 +611,7 @@
                     <span class="mobile-menu__brand">
                         <span
                             class="brand-badge"
-                            :style="{ '--brand-logo': `url('${logoUrl}')` }"
+                            :style="brandBadgeStyle"
                             aria-hidden="true"
                         ></span>
                         <span class="mobile-menu__wordmark">NEGIAO's WebGIS</span>
@@ -767,28 +757,73 @@ function switchLanguage(nextLanguage) {
 
 const normalizedBase = ASSET_BASE_URL.endsWith('/') ? ASSET_BASE_URL : `${ASSET_BASE_URL}/`;
 
-// 静态资源 URL 统一解析为绝对地址（以 document.baseURI 为基准，兼容根域名 /
-// GitHub Pages 子路径部署；baseURI 不含 hash 路由的 #/ 片段，解析结果不受路由影响）。
-// 不能用裸相对路径：这些 URL 会进入 CSS 自定义属性（--brand-logo、v-bind 注入的
-// mask-image），浏览器对自定义属性内的相对 url() 按「使用 var() 的样式表」解析 ——
-// 即打包产物 /assets/index-*.css，'./' 会被拼成 /assets/images/... 直接 404
-// （线上实测：icon.webp 实际请求了 /assets/images/icon.webp）。
-const assetUrl = (path) => new URL(`${normalizedBase}${path}`, document.baseURI).href;
-
-// 品牌 logo（icon.webp），与 TopBar / favicon 同一资源
-const logoUrl = assetUrl('images/icon.webp');
+// 全部保持 ASSET_BASE_URL 拼接的相对路径（'./' 或 '/子路径/' 形态），
+// 兼容根域名 / GitHub Pages 子路径多处部署
+const logoUrl = `${normalizedBase}images/icon.webp`; // 品牌 logo（icon.webp），与 TopBar / favicon 同一资源
 // 产品预览图（public/images/preview.webp），仅主卡（feature1）右侧引用；与 logoUrl 同源派生
-const previewUrl = assetUrl('images/preview.webp');
+const previewUrl = `${normalizedBase}images/preview.webp`;
 // Hugging Face 官方 logo（public/images/hf-logo.svg，品牌资产彩色版）
-const hfLogoUrl = assetUrl('images/hf-logo.svg');
-// 轨道环纹样遮罩源（public/images/njnu-media/，桌面版 + 移动端 alpha 加强版）。
-// 由 <style> 内 v-bind() 注入 mask-image —— 注意 v-bind 是「原样替换」进自定义属性，
-// 值必须自带 url() 包裹：若只给裸路径，mask-image: var(--x) 的计算值非法、整条声明
-// 被浏览器丢弃，mask 失效会让轨道环退化成整块金色圆面（线上实测现象，见纹样层注释）。
-// 同理，样式里直接写 url('/images/...') 绝对路径时，GitHub Pages 子路径部署
-// （vite base './'）下不会被改写而 404，故必须走 assetUrl 运行时解析。
-const ringMaskUrl = `url('${assetUrl('images/njnu-media/d-bg2_1.png')}')`;
-const ringMaskMobileUrl = `url('${assetUrl('images/njnu-media/d-bg2_1-mobile.png')}')`;
+const hfLogoUrl = `${normalizedBase}images/hf-logo.svg`;
+// 轨道环纹样遮罩源（public/images/njnu-media/，桌面版 + 移动端 alpha 加强版）
+const ringMaskUrl = `${normalizedBase}images/njnu-media/d-bg2_1.png`;
+const ringMaskMobileUrl = `${normalizedBase}images/njnu-media/d-bg2_1-mobile.png`;
+
+// ⚠️ 相对 url() 的解析基准是「写下它的那份样式表」，不是组件本身：
+//   · 经 CSS 自定义属性传 URL（--brand-logo、<style> 内 v-bind 注入）时，var() 用在
+//     打包产物 /assets/index-*.css 里，'./' 会被拼成 /assets/images/... 直接 404
+//     （V3.6.20 线上实测：icon.webp 实际请求了 /assets/images/icon.webp）；
+//   · v-bind 注入的值是「原样替换」进自定义属性，裸路径不带 url() 时
+//     mask-image: var(--x) 计算值非法、整条声明被丢弃 —— 轨道环退化成整块金色圆面；
+//   · 而行内 style 属性与文档内嵌 <style> 里的相对 url() 按文档 base 解析，
+//     与 <img src> 行为一致，根域名 / 子路径部署都正确。
+// 因此 URL 不进自定义属性：品牌徽牌的 mask-image 走行内样式（brandBadgeStyle）；
+// 轨道环纹样在 ::before 伪元素上、挂不了行内样式，走运行时注入的文档级 <style>
+// （见 injectRingMaskStyle）。两条通道都不经自定义属性传 URL。
+const brandBadgeStyle = {
+    '-webkit-mask-image': `url('${logoUrl}')`,
+    'mask-image': `url('${logoUrl}')`,
+};
+
+const RING_MASK_STYLE_ID = 'landing-ring-mask-style';
+
+/**
+ * 注入轨道环纹样 mask 样式（桌面 + 移动端 alpha 加强版），幂等。
+ * 纯色填充（--brand-gold）与 mask-image 写在同一条规则里：mask 声明始终合法，
+ * PNG 404 时该层被当作全透明遮罩直接不可见 —— 不存在「掉回整块纯色圆面」的兜底。
+ */
+function injectRingMaskStyle() {
+    if (typeof document === 'undefined' || document.getElementById(RING_MASK_STYLE_ID)) return;
+    // 与 SFC 中 @supports 门槛等价：不支持 mask 的内核不注入，环上保持纯 CSS 细环
+    const supportsMask =
+        typeof CSS !== 'undefined' &&
+        typeof CSS.supports === 'function' &&
+        (CSS.supports('mask-image', 'url("x.png")') ||
+            CSS.supports('-webkit-mask-image', 'url("x.png")'));
+    if (!supportsMask) return;
+    const el = document.createElement('style');
+    el.id = RING_MASK_STYLE_ID;
+    // 类名翻倍抬优先级到 (0,3,1)，稳压 SFC scoped 规则 (0,2,1)；
+    // 断点与 SFC 移动端降级块一致（max-width: 768px）
+    el.textContent = `
+.hero-bg__rings .hero-bg__ring.hero-bg__ring::before {
+    background-color: var(--brand-gold);
+    -webkit-mask-image: url('${ringMaskUrl}');
+    mask-image: url('${ringMaskUrl}');
+}
+@media (max-width: 768px) {
+    .hero-bg__rings .hero-bg__ring.hero-bg__ring::before {
+        -webkit-mask-image: url('${ringMaskMobileUrl}');
+        mask-image: url('${ringMaskMobileUrl}');
+    }
+}`;
+    document.head.appendChild(el);
+}
+
+function removeRingMaskStyle() {
+    if (typeof document === 'undefined') return;
+    const el = document.getElementById(RING_MASK_STYLE_ID);
+    if (el) el.remove();
+}
 
 // 核心功能卡片：图标 + i18n key，避免 10 段近似模板重复
 const FEATURES = Object.freeze([
@@ -1387,6 +1422,7 @@ async function fetchViaWorker() {
 
 onMounted(() => {
     applyLocalCaches(); // 本地缓存秒开，首屏不等待任何网络
+    injectRingMaskStyle(); // 轨道环旋转纹样（PNG 遮罩，文档级 <style> 承载相对 url()）
     observeAnchors(); // 导航锚点 scroll spy（IntersectionObserver）
     observeStats(); // Hero 统计条数字滚动（进入视口触发）
     observeFeatures(); // 核心功能卡：三栏分左右对称入场
@@ -1408,6 +1444,7 @@ onBeforeUnmount(() => {
     disconnectFeatures(); // 取消核心功能入场观察器
     disconnectReveal(); // 取消统一入场观察器
     window.removeEventListener('keydown', onMenuKeydown);
+    removeRingMaskStyle(); // 卸载注入的轨道环纹样样式
     if (landingEl.value) landingEl.value.style.overflowY = '';
 });
 </script>
@@ -1543,15 +1580,22 @@ button:focus-visible {
    深墨三层叠色又把品牌绿搅成脏灰（用户评"白不白、黑不黑"）。
    方案A 彻底不做色块：CSS mask 取 logo 自身的 alpha 通道作遮罩，把纯白线稿
    "染"成品牌深绿，直接放在浅色玻璃导航上 —— 没有色块，就没有突兀源。
-   遮罩资源即 public/images/icon.webp（经内联 --brand-logo 传入，与 img 同源同缓存），
+   遮罩资源即 public/images/icon.webp（经行内 style 注入 mask-image，与 img 同源同缓存；
+   不能走 --brand-logo 自定义属性 —— 相对 url() 会按本外部样式表 /assets/*.css 的
+   目录解析成 /assets/images/... 而 404，线上实测），
    Safari 需 -webkit- 前缀，标准 mask 置后覆盖；绿/蓝主题随令牌联动。 */
 .brand-badge {
     width: 42px;
     height: 42px;
     flex-shrink: 0;
     background-color: var(--brand-primary-dark);
-    -webkit-mask: var(--brand-logo) center / contain no-repeat;
-    mask: var(--brand-logo) center / contain no-repeat;
+    /* mask-image 由行内样式 brandBadgeStyle 注入（见 script 注释），此处只配定位/重复/尺寸 */
+    -webkit-mask-position: center;
+    mask-position: center;
+    -webkit-mask-repeat: no-repeat;
+    mask-repeat: no-repeat;
+    -webkit-mask-size: contain;
+    mask-size: contain;
     /* hover 效果与 TopBar `.logo-link:hover .logo-icon` 同一套手法：
        轻微倾斜 -10° + 放大 1.1，0.3s —— 不做整圈旋转（试过 360°/Y 轴翻转，
        对一个小徽牌都太闹） */
@@ -2014,20 +2058,18 @@ button:focus-visible {
     border-radius: 50%;
 }
 
-/* 纹样层：PNG 作遮罩 + 品牌金染色。
-   必须包 @supports —— 不支持 mask 的内核里伪元素整个不生成，退化成
-   纯 CSS 细环；否则 background-color 会直接糊成一个实心金圆盖住首屏。
-   （反过来说，若 PNG 哪天 404，mask 失效同样会退化为整块色面，
-     所以各环 opacity 都压在 0.32~0.75，最坏情况也只是淡金色雾面。） */
+/* 纹样层：PNG 作遮罩 + 品牌金染色（两套旋转纹样 PNG 是本层唯一视觉来源）。
+   必须包 @supports —— 不支持 mask 的内核里伪元素整个不生成，退化为纯 CSS 细环。
+   纯色填充与 mask-image 一起写在运行时注入的文档级 <style> 里（见 script
+   injectRingMaskStyle）：mask 声明始终合法，PNG 取不到时该层被当成全透明遮罩，
+   直接不可见 —— 这里不再留任何 `background-color + 无 mask` 的纯色兜底，
+   杜绝「掉回一整块金色圆面」的丑态。 */
 @supports ((-webkit-mask-image: url('x.png')) or (mask-image: url('x.png'))) {
     .hero-bg__ring::before {
         content: '';
         position: absolute;
         inset: 0;
         border-radius: 50%;
-        background-color: var(--brand-gold);
-        -webkit-mask-image: v-bind(ringMaskUrl);
-        mask-image: v-bind(ringMaskUrl);
         -webkit-mask-repeat: no-repeat;
         mask-repeat: no-repeat;
         -webkit-mask-position: center;
@@ -2053,7 +2095,7 @@ button:focus-visible {
 /* outer 环上的空心公转点：与 mid 的实心金点形成"实心 / 空心"配对。
 
    载体不是一枚小圆，而是**铺满整环的透明层**，点用 radial-gradient 画在
-   12 点方向 —— 这样"点绕环公转"就退化成"整层绕自身圆心旋转"，旋转原点
+   12 点方向 —— 这样"点绕环公转"就退化成"整层绕自身圆心旋转", 旋转原点
    天然是环心。若把小圆用 top/left 摆到环上再旋转，transform-origin 必须
    精确落到环心，而环尺寸是 min(960px, 86vw) 随视口变、断点里还要改一次，
    那个原点会跟着漂；用整层就没这个问题。
@@ -2209,15 +2251,14 @@ button:focus-visible {
    · 天光去掉 repeating-conic 光芒层并停转 —— 46vw≈172px 时那道光芒
      已经落在亚像素上，只剩径向核有意义，conic 白栅格化一遍。 */
 @media (max-width: 768px) {
-    /* 换成加强版纹样（d-bg2_1-mobile.png：尺寸与 RGB 完全不动，只把 alpha
+    /* 纹样换加强版（d-bg2_1-mobile.png：尺寸与 RGB 不动，只把 alpha
        ×2 后截顶）。原因：mask 是按**设备像素**栅格化的，1060 的细花边缩到
        400px 时峰值从 0.502 掉到 0.220 —— 靠调 opacity 补不回来，因为遮罩
        本身已经被平均没了。加强后在同样位置峰值回到 0.44（1x）/ 0.77（2x），
-       才有"提透明度"的空间。 */
-    .hero-bg__ring::before {
-        -webkit-mask-image: v-bind(ringMaskMobileUrl);
-        mask-image: v-bind(ringMaskMobileUrl);
-    }
+       才有"提透明度"的空间。
+       mask-image 不在此声明：由 injectRingMaskStyle 注入的同断点
+       @media (max-width: 768px) 规则提供（相对 url() 必须由文档级样式表解析，
+       原因见桌面 @supports 块注释）。 */
 
     /* 三条边框同步加深：小屏上 1px 细线本来就吃亏，
        0.26/0.18/0.14 的绿在 #f9f9f9 上几乎读不出"这里有三个环" */
@@ -2325,7 +2366,7 @@ button:focus-visible {
    覆盖 —— 后者靠源顺序取胜，两个规则块一旦被挪动位置就会失效。
 
    注意 fill-mode 用 backwards 而非 both：both 会在动画结束后继续把
-   transform/opacity 钉在终值上，而动画声明在层叠中压过普通声明 ——
+   transform/opacity 钉在终值上，而动画声明 in 层叠中压过普通声明 ——
    这六个元素今后若加 :hover transform 会被 silently 覆盖。backwards
    只在 delay 期间应用首帧，结束后交还自然状态，观感完全一致。
 
@@ -2682,7 +2723,7 @@ button:focus-visible {
 /* ============ 移动端首屏：数据行与桌面同序，只是尺寸收小 ============
    视觉顺序（DOM 顺序，桌面端也一样）：
      eyebrow → title → subtitle → 数据行 → 按钮 → GitHub 认可
-   数据条站在按钮**之前** —— "社会证明"先于"行动号召"，首屏不会第一眼
+   数据行站在按钮**之前** —— "社会证明"先于"行动号召"，首屏不会第一眼
    落在出口上。桌面端已把 stats 挪到副标题正下方，这里不需要任何重排：
    容器保持普通块流，子项按文档顺序自上而下排，DOM 一行都不用改。
 
@@ -3798,42 +3839,32 @@ button:focus-visible {
 /* ============ 页脚 ============ */
 .footer {
     position: relative;
-    overflow: hidden;
+    /* 不能用 overflow:hidden —— 外链 hover 弹层（.footer-pop）向上弹出，
+       超出 footer 盒顶时会被整个裁掉 */
     background: var(--bg-primary);
-    border-top: 1px solid var(--border-light);
-    /* 顶部多留白，给无缝滚动装饰带让出高度，避免压到文案 */
-    padding: 2.6rem 2rem 1.5rem;
+    /* 调整上下内边距对称相等，实现垂直居中平衡 */
+    padding: 2rem 2rem;
 }
 
-/* 页脚无缝滚动装饰带（借鉴南师大 .cloud2：repeat-x 底图 + 30s linear infinite
-   横移）。用 repeating-linear-gradient 作平铺图案，animate background-position-x
-   恰好走一个周期（24px）即无缝循环；低透明度，纯做"页脚在流动"的尾韵 */
-.footer-deco {
+/* 顶部白色线性渐变：替代原来的 border-top 硬分隔线。
+   页脚与上一区块的交界由一条自上而下由白渐隐的渐变完成 —— 顶部实白，
+   随高度淡出到全透明，边界被"晕"开，不再有突兀的 1px 线条。
+   伪元素绝对定位于盒顶、铺满宽度；不设 z-index（默认 0）压过 footer 背景
+   但低于 .footer-inner（z-index:1），不会盖到文字；
+   pointer-events:none 不影响交互。 */
+.footer::before {
+    content: '';
     position: absolute;
     top: 0;
     left: 0;
     right: 0;
-    height: 30px;
-    pointer-events: none;
-    opacity: 0.55;
-    background-image: repeating-linear-gradient(
-        90deg,
-        rgba(var(--brand-primary-rgb), 0.2) 0 2px,
-        rgba(var(--brand-primary-rgb), 0) 2px 24px
+    height: 72px;
+    background: linear-gradient(
+        to bottom,
+        rgba(255, 255, 255, 1),
+        rgba(255, 255, 255, 0) 100%
     );
-    background-size: 24px 100%;
-}
-
-@media (prefers-reduced-motion: no-preference) {
-    .footer-deco {
-        animation: footer-scroll 30s linear infinite;
-    }
-}
-
-@keyframes footer-scroll {
-    to {
-        background-position-x: -24px;
-    }
+    pointer-events: none;
 }
 
 .footer-inner {
@@ -3878,30 +3909,6 @@ button:focus-visible {
     color: var(--border-light);
 }
 
-/* ============ 页脚第二层云海（P1#9 视差） ============ */
-.footer-deco--2 {
-    height: 22px;
-    opacity: 0.35;
-    background-image: repeating-linear-gradient(
-        90deg,
-        rgba(var(--brand-gold-rgb), 0.18) 0 1px,
-        rgba(var(--brand-gold-rgb), 0) 1px 16px
-    );
-    background-size: 16px 100%;
-}
-
-@media (prefers-reduced-motion: no-preference) {
-    .footer-deco--2 {
-        animation: footer-scroll-rev 22s linear infinite;
-    }
-}
-
-@keyframes footer-scroll-rev {
-    to {
-        background-position-x: 16px;
-    }
-}
-
 /* ============ 页脚外链 hover 弹层（P2#13，借鉴南师友链下拉） ============ */
 .footer-link-pop {
     position: relative;
@@ -3926,7 +3933,8 @@ button:focus-visible {
     visibility: hidden;
     pointer-events: none;
     transition: opacity 0.2s ease, transform 0.2s ease, visibility 0.2s;
-    z-index: 2;
+    /* 将 hover 悬浮提示框层级置顶 */
+    z-index: 999;
 }
 
 .footer-pop::after {
