@@ -198,9 +198,12 @@ export function useGisLoader() {
             const flattened = await flattenUploadInput(input);
             const supported = flattened.filter((item) => isSupportedExt(item.ext));
             const ignored = flattened.filter((item) => !isSupportedExt(item.ext));
+            // 包内附带资源（如 KMZ 里的 ArcGIS 弹窗 .xsl 模板/图标）非用户数据，静默跳过；
+            // 仅用户直接选择的不支持文件才告警，避免“成功导入却报错”的困惑
+            const ignoredTopLevel = ignored.filter((item) => !item.nested);
 
-            if (ignored.length) {
-                warnings.value.push(`已跳过 ${ignored.length} 个不支持的数据文件`);
+            if (ignoredTopLevel.length) {
+                warnings.value.push(`已跳过 ${ignoredTopLevel.length} 个不支持的数据文件`);
             }
 
             const shpGroups = groupShpDatasets(supported);

@@ -738,6 +738,12 @@ onUnmounted(() => {
         left: 0;
     }
 
+    /* .panel-content 基准 min-width: 300px 在窄屏抽屉内会撑出横向溢出，
+       触发 iOS Safari 整页缩小（F12 模拟不复现）。移动端清零。 */
+    .panel-content {
+        min-width: 0;
+    }
+
     /* 收起状态下的处理：将整个面板向下推 */
     .info-panel-shell.collapsed {
         transform: translateY(100%);

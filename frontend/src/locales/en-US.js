@@ -819,7 +819,10 @@ export default {
         timeoutMustBePositive: 'Timeout must be a number greater than 0',
         maxTokensMustBePositive: 'Max Tokens must be a number greater than 0',
         modelOrListRequired: 'Configure at least one fixed Model or available_models list',
+        loadAgentFailed: 'Failed to load Agent config: {error}',
         saveAgentSuccess: 'Agent LLM parameters saved; backend reads them at runtime, effective immediately',
+        saveAgentFailed: 'Failed to save Agent config: {error}',
+        streamOn: 'On',
         streamOff: 'Off',
         secondsUnit: '{n} s',
         // V3.5.13 download task TTL config

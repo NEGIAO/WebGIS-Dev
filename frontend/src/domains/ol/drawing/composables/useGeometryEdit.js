@@ -40,7 +40,8 @@ export function createGeometryEditFeature({
 
     /**
      * 解析托管图层记录持有的 OL Layer
-     * 兼容两种字段：常规托管图层的 layer 与行政区划托管记录的 _layer
+     * 约定字段为 layer（addManagedLayerRecord / DistrictManager 统一）；
+     * _layer 为历史遗留字段的兜底（V3.6.20 起区划记录已迁移至 layer）
      * @param {Object} layerItem
      * @returns {import('ol/layer/Layer').default|null}
      */

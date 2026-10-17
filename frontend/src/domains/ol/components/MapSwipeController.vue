@@ -658,8 +658,8 @@ onUnmounted(() => {
 /* ========== 控制按钮 ========== */
 .swipe-controls {
     position: absolute;
-    bottom: 20px;
-    left: 20px;
+    bottom: 60px;
+    left: 30px;
     display: flex;
     gap: 8px;
     z-index: calc(var(--z-modal) + 1);

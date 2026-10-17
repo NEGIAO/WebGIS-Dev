@@ -6,6 +6,103 @@
 
 ## 版本记录
 
+### V3.6.20 (2026-10-17) — 暂存区多批次归并：TOC 重命名链修复 + 区划图层字段修复 + 游客序号 guest_no + 落地页南师大风格重构 + 主卡预览图 + 属性弹窗/TopBar UI 重写 + 审查修复
+
+> 版本注：本版由同日多个会话的暂存批次归并而成（含原拟 V3.6.21 主卡预览图批次），统一记档为 V3.6.20。
+
+> **一、图层管理右键「重命名」失效，无法真正应用（逻辑链路修复）**
+> 现象：TOC 图层行右键「重命名」（或双击行名）输入新名称回车后，改名不生效/随后被还原；导出文件名、属性表标题等仍为旧名。
+> 链路排查（逐跳静态核验 + 真实 TOCPanel/store 探针）：入口菜单 `buildContextMenuItems`（contextMenu.js 无条件挂 RENAME）→ `TOCTreeItem.handleMenuCommand` 特判 rename 走行内编辑（不经 commandDispatcher）→ `commitRename` → `emitAction('rename-layer', {layerId, newName})` → `LayerPanel.handleTreeAction` 透传 → `TOCPanel.handleLayerTreeAction`（cesium/rsvc/context 分流器均不拦截 rename-layer，到达 193 行显式分支）→ `emit('rename-layer')` → `SidePanel` 透传 → `HomeView.handleRenameLayer`。事件链本身完好；探针（真实 TOCPanel + 真实 store）证明 store 侧改名与树/DOM 刷新均正常。
+> 根因：`handleRenameLayer` 只调 `layerStore.renameLayer()`——本仓唯一的「只改 store、不经过地图侧」的图层变更：
+>   ① 地图侧托管记录 `MapContainer.userDataLayers[].name` 不变，导出/属性表/属性弹窗等地图侧消费方仍读旧名；
+>   ② 任何其他图层操作（显隐/透明度/样式/排序/标注/坐标转换/要素编辑）都会触发 `emitUserLayersChange()` 广播 → `HomeView.handleUserLayersChange` 用旧名 layers 整体替换 → `TOCPanel watch(props.userLayers)` → `syncUserLayers` → store 被冲回旧名——即「重命名无法真正应用」。
+>   另：区划（district-boundary）节点名称存于 tocStore 元数据、不在 store.userLayers，旧实现静默无操作。
+> 修复（与可见性/透明度同构的单一事实源模式）：
+> - `MapContainer.vue` 新增 `renameUserLayer(layerId, newName)`：命中托管记录即改 `name`（含 `standardTocItem`/`metadata.standardTocItem` 的 name）并 `emitUserLayersChange()` 回流；挂入 `defineExpose` 与 `registerEngineHandlers('ol', …)` 处理器表（ActionRouter 可按引擎分发）；
+> - `HomeView.handleRenameLayer` 改走 `dispatchLayerAction({ method:'renameUserLayer', payload, engine:'ol' })`，地图未就绪/无托管记录（返回 false）时降级 `layerStore.renameLayer` 兜底；区划节点走 `tocStore.upsertLayerMeta({ id, name })`；
+> - cesium:* 三维节点由上游 `cesiumTocActions` 消费（`cesiumStore.rename`），本就正常，不在本链路。
+> 验证：改动两文件 ESLint 0 error、`vue/compiler-sfc` 编译通过（bindings 完整）；命名回流后 `resolveLayerRevision` 因 name 变化递增 revision，下游 attrStore 同步重建。
+> **二、图层属性弹窗 UI 重写（LayerPropertiesDialog.vue）**
+> 按项目设计令牌体系重写：140° 品牌渐变头部 + ::after 经纬网格纹理、36px 图标 chip、圆形关闭钮；hero 区图层名 + 几何/来源/格式徽章；三栏统计卡（要素数量/可见性状态点/透明度渐变进度条）；明细区两列 `lp-row`（ID/几何/CRS/中心经纬/范围 WSEN，等宽字体 + 虚线分隔 + 斑马纹）；空态兜底。z-index 由 `--z-toast` 改 `--z-modal`，新增 Esc 关闭与 480px 窄屏适配。props/emits 与全部数据绑定不变。
+
+> **三、顶部导航栏背景重设计（TopBar.vue）**
+> 原 `.top-bar` 为 `--brand-primary` 单色平涂，视觉单调。收敛版重设计（初版"四层叠加"经试错后简化定档）：
+> - 基底：160° `--brand-primary → --brand-primary-dark` 品牌渐变 + 左上柔光（radial 椭圆 `--brand-accent-light-rgb` 20%）；
+> - 经纬纹理：30px 细网格 + 150px 主网格双规格（::before，`z-index:-1` 绘制于背景之上、内容之下，不干预浮动菜单堆叠），96° 线性 mask 向右渐隐；
+> - 收边：`border-bottom` 白 14% + 双向内阴影（顶白高光 / 底黑压暗）+ 0 2px 10px 外投影；
+> - 导航按钮由扁平白 12% 改竖向微渐变玻璃面（顶部内高光 + 细描边 + 下投影，hover 提亮 + 上浮 1px），菜单展开态 `.is-open` 按压变实；`.account-btn` 品牌强调色玻璃、`.magic-btn` 琥珀微光，与普通按钮区分层级。全部色彩经 theme.css 令牌派生，绿/蓝主题自动联动；无动画、无布局变化（移动端媒体查询不受影响）。改动文件 ESLint 0 error、SFC 编译通过。
+
+> **四、行政区划图层被误判"不是矢量图层"（字段约定修复）**
+> 现象：加载行政区划图层后，右键「WGS-84 => GCJ-02 / GCJ-02 => WGS-84」坐标转换报「该图层不是矢量图层，无法进行坐标转换」；坐标导出同样报错。
+> 根因：地图侧托管记录的统一约定是 OL 图层实例存 `layer` 字段（`useManagedLayerRegistry.addManagedLayerRecord`；`isVectorManagedLayer`、坐标转换、导出、可见性、样式等消费方全部读 `.layer`），而 `DistrictManager.syncManagedLayerRecord` 历史版本误存为 `_layer` → `isVectorManagedLayer` 取空 → 判非矢量。`useGeometryEdit` 此前已为此打过 `layer || _layer` 兼容补丁，属同一字段漂移的第三处暴露点。
+> 修复：`DistrictManager.ts` 记录字段迁移 `_layer` → `layer`，并在重新同步（previousRecord 扩散）时清理历史 `_layer`；`useGeometryEdit` 注释同步更新（兜底保留）。区划记录 `metadata.crs='wgs84'`，转换方向判定与要素序列化链路本就完备，字段对齐后即通。
+> 一并修复：区划图层的坐标导出（CSV/TXT/GeoJSON/KML）、几何编辑、样式设置、「导入到 3D」（`exportUserLayerGeoJSON` 同読 `.layer`）均由此前的静默失败恢复可用。
+> 验证：改动文件 ESLint 0 error、esbuild 语法通过、全项目 `tsc --noEmit` 零错误。
+
+> **五、落地页首屏健壮性与布局修复（LandingView.vue）**
+> ① `.hero-section` 同时使用 `overflow: hidden`（裁光斑所需）与 `justify-content: center`：内容高于容器时（横屏手机/矮窗口/开 devtools）flex 居中把顶部溢出并被裁，标题不可见。改为 `.hero-inner` 的 `margin: auto` 安全居中（溢出时 margin 归零、从顶部排布）。
+> ② `min-height: calc(100dvh - 80px)` 为魔法数，实际导航栏高约 71px，首屏恒差 9px 不满。`.content` 改纵向 flex + `.hero-section { flex: 1 }`，精确填充剩余视口（保留原 min-height 作兜底）。
+> ③ features 10 卡在桌面 3 列下 3+3+3+1 末行孤卡左挂：`:last-child` 居中（≤1024px 重置，该处 2 列恰满 5 行）。
+> ④ 键盘可及性：新增落地页全局 `a/button:focus-visible` 轮廓（原仅语言切换器有）。
+> 验证：ESLint 0 error、SFC 编译通过（bindings 76、样式括号配平）。
+
+> **六、落地页导航栏充实：中部锚点导航 + GitHub Star 快捷入口（LandingView.vue）**
+> 现象：导航栏仅「品牌区（左）+ 操作区（右）」两段，中部大面积留白，观感空；首屏之下无页面内导航手段，长页只能靠滚轮。
+> 改造（中部由空转实）：
+> - 新增 `.nav-links` 锚点组（核心功能 / 技术栈 / 开源认可，`v-for` 驱动 `NAV_ANCHORS`），对应三 section 补 `id="features" / "tech" / "oss"`；
+> - `.brand` 与 `.nav-actions` 各设 `flex: 1`（actions 端 `justify-content: flex-end`），中部锚点组随之精确居中——`space-between` 在两侧实际宽度不等时会偏心；
+> - `.nav-actions` 前置 GitHub Star 胶囊（`.nav-github`：图标 + `formattedStars`），把落地页最醒目的社交证明从 OSS 区提到导航层；
+> - **hash 路由陷阱**：本项目为 `createWebHashHistory()`，原生 `href="#features"` 会被 router 解析为路径跳转，故页内定位一律 `<button>` + `scrollIntoView`，由 `.landing-container` 既有的 `scroll-behavior: smooth` 承接丝滑滚动；
+> - scroll spy：`IntersectionObserver`（root 为视口，rootMargin `-84px 0px -55% 0px` 带状区）驱动 `.nav-link.active`，与 CSS `scroll-margin-top: calc(var(--landing-navbar-h) + 12px)`、script `NAV_SCROLL_OFFSET = 84` 三处同源派生；`onBeforeUnmount` disconnect；
+> - 响应式：≤1024px 隐藏锚点组（平板放不下，区块仍可滚动到达）；≤480px Star 胶囊仅留图标（数字在 Hero/OSS 区另有展示位）；
+> - 可及性：`nav` 带 `aria-label`，active 项 `aria-current="true"`；i18n 补齐 navFeatures/navTech/navOss/navAria/navGithubAria 中英文 5 键。
+> - 滚动条定制：`.landing-container` 弃用浏览器默认滚动条，改品牌令牌驱动的双通道方案——Chromium/WebKit 走 `::-webkit-scrollbar*`（14px 槽 + `border:4px transparent`/`background-clip:content-box` 内缩 Pill，静默 16% → hover 40% → 悬停滑块 62% → 拖拽品牌深色四级提亮，隐藏轨道端箭头按钮）；Firefox 走标准 `scrollbar-width: thin` + `scrollbar-color` 兜底；reduced-motion 下停用 0.25s 提亮过渡。色彩全部派生自 theme.css 令牌（绿/蓝双主题联动），技法与 AttributeTable `.pro-scroll-area` 同源。
+>
+> **七、品牌徽牌承托底重设计（LandingView / RegisterView `.brand-badge`）**
+> 用户诉求：logo 为纯白复杂图形（实测 `icon.webp`：RGBA 512×409、四角全透明、65.8% 像素透明、不透明像素均值 RGB 255/255/255，即实心白线稿；十字形内部镂空，GIS 字样/地球弧线靠底色透出），原徽牌为单层 `#4caf50→#2e7d32` 平涂，白线稿对比度仅 2.8~5.1:1（WCAG 实测），细线溶进底色呈灰绿模糊团，观感"纯绿很突兀"。
+> **迭代过程（两次试错后定档）**：① 先改"深墨三层叠色"（155° 斜高光 12% + 黑压暗 55%~72% + 140° 品牌渐变），对比度虽升至 7.9~18.4:1，但被用户评为"白不白、黑不黑，还不如原来的"——根因是**纯白线稿放在任何中间调彩色块上都会发糊**，压暗只是把"糊"从亮端搬到暗端；② 据此放弃"色块"思路，改为**无底牌单色 logo**。
+> 定档（方案A · 无底牌单色 logo）：
+> - 彻底不做色块：CSS `mask` 取 logo 自身 alpha 通道作遮罩，`background-color: var(--brand-primary-dark)` 把纯白线稿"染"成品牌深绿，直接落在浅色玻璃导航上——无色块即无突兀源，绿/蓝主题随令牌联动；
+> - 遮罩 url 经内联 CSS 变量 `--brand-logo` 传入（与 `public/images/icon.webp` 同源同缓存），Safari 需 `-webkit-mask` 前缀、标准 `mask` 置后覆盖；
+> - 牌面即图形：LandingView 42×42 纯遮罩（无 padding/圆角/阴影）；该处 logo 本就 `alt=""`（装饰性），div 直接 `aria-hidden`；
+> - **RegisterView 按用户定夺改为「无底衬 + 白 logo 原色」**：该页头部本身即 140° 品牌绿渐变（`.form-header`），白 logo 原色直放即成立，故既不做 mask 染色也不加色块；同时去掉 padding，线稿可见尺寸 28×22 → 40×32（+43%），`alt="NEGIAO's WebGIS"` 语义保留在 img 上；
+> 顺带修复 RegisterView 真 bug：原 `.brand-badge` 背景写 `linear-gradient(140deg, var(--brand-primary-dark) 0%, var(--brand-primary-darker) 100%)`，而 **`--brand-primary-darker` 全仓（frontend/src、frontend/public、index.html）从未定义**——按 CSS 规范，`var()` 引用未定义自定义属性会使该声明 invalid at computed-value time 而**被整体丢弃**，徽牌实际无背景、白 logo 直贴亮绿 `.form-header`。现已不再引用该令牌，源码无残留。
+> 用户将继续试戴其余方向（B 白牌 + 深灰 logo / C 墨牌 + 白 logo / D 品牌色牌 + 白 logo），每项均为遮罩或滤镜级小改，按用户逐次定档后再补记。
+> 品牌区文字配色同步（LandingView 导航）：`.brand-title` 由 `--text-primary`(#333) 改 `--brand-primary-dark`，与单色徽牌形成一条品牌绿主线；`.brand-subtitle` 由 `--text-muted`(#999，12px 仅 2.8:1、不达 WCAG AA) 提档到 `--text-secondary`(#666 ≈ 5.7:1)，可读性达标仍居次要层级。RegisterView 品牌文字在绿头部上为白字，不受影响。
+> 徽牌 hover 微倾斜（LandingView + RegisterView 两处，对齐 TopBar 手法）：`.brand-badge:hover` 改为 `rotate(-10deg) scale(1.1)`，`transition: transform 0.3s`——与 `TopBar.vue` 的 `.logo-link:hover .logo-icon` 完全同一套。**迭代记录**：先后试过整圈 `rotate(360deg)` 与 `perspective(420px) rotateY(360deg)` Y 轴 3D 翻转，均被评"效果不好"（小徽牌上整圈旋转太闹），最终收敛到 TopBar 的轻微倾斜。`will-change: transform` 只在 hover 期间挂载；两处均有 `prefers-reduced-motion: reduce` 守卫（LandingView 并入既有块，RegisterView 就近新增块）。
+> 验证：两文件 ESLint 0 error、`vue/compiler-sfc` 编译通过（LandingView bindings 84 / 样式括号 181/181，RegisterView bindings 130 / 143/143）；PIL 实测 logo 通道与 alpha 分布；离线按 CSS 语义合成渲染确认染色后单色 logo 在绿/蓝双主题下均清晰可辨。
+
+> **八、游客展示序号 guest_no（后端 + 前端全链）**
+> 需求：游客身份此前展示为后端确定性派生的 `guest_<hex16>` 匿名串（对用户无意义的长哈希），改为库内真实序号。
+> 后端：`_get_or_create_guest_username_sync` 返回值由 `str` 改为 `{username, no}`（`no` = `guest_identity_records.id` 自增真序号，建表即有该列）；新增 `_get_guest_no_sync` 按 guest_uid 现查；`_public_user_payload` 恒带 `guest_no` 字段（仅 guest 角色取值，优先显式传入，否则按 session.guest_uid 兜底查库）；两处调用方（dependencies.py 临时会话、routes.py 登录分支）均已适配 dict 返回。**审查补修**：临时游客会话与 `_build_login_response`（新增可选入参）现把查得的 `guest_no` 注入会话对象（仅内存传递，sessions 表不加列），原先"优先显式传入"的快速路径是永不命中的死代码、游客 payload 每次都同步回查库。
+> 前端：`getUserDisplayName` 对未设昵称的游客展示 `guest_<序号>`——优先后端 `guest_no`，旧会话（本地存的登录态无该字段）按 guest_uid DJB2 哈希取 1..999 稳定兜底；识别两类匿名形态（「Guest」本地兜底会话 / `guest_<hex6+>` 后端派生）。
+> i18n 顺带补齐：admin 面板 `loadAgentFailed` / `saveAgentFailed` / `streamOn` 三键原先只有模板引用、无定义，toast/开关会原样渲染 key 名——中英文成对补上。
+> 验证：后端调用方全量 grep 无遗漏（含 `__init__.py` 再导出）；schema 自增列确认存在。
+
+> **九、落地页南师大风格重构（LandingView + SectionTitle + 字体）**
+> 14 条借鉴清单（方案见 `Docs/TODO/2026-10-17-landing-njnu-14-items-plan.md`）中的落地部分：
+> - 新增 `SectionTitle.vue` 节标题三件套（印章 + 衬线标题 + 罗盘水印），features/tech/oss 三节复用；
+> - Hero 统计条数字滚动（IO 触发 + rAF easeOutCubic，reduced-motion/无 IO 直接终值常显）、三环轨道纹样（`njnu-media/d-bg2_1.png` 作 mask 染品牌金，三环异径异速反向 + 差速公转点；移动端换 alpha 加强版 `d-bg2_1-mobile.png` 应对设备像素栅格化衰减）；
+> - 技术栈由一行徽章改三层架构卡（渲染/服务/交付，每层职责文案走 i18n 中英 14 键）；核心功能 10 卡改序号章 + 主次卡版式（主卡跨 2 列 2 行、第 10 卡跨整行）；
+> - 移动端全屏两级菜单（栏目→子项，子项为真实锚点；浅色纸面 + 品牌封边，滚动锁定 + Esc 关闭）；右侧轨道式 scrollspy 导航（与锚点组共用 activeAnchor）；
+> - 页脚双层云海光带；`heroSubtitle` 拆 Lead/Tail 双键（句号处 `<br>`，不引 v-html）；导航层 aria 文案补齐 5 键（汉堡钮按展开态切换 open/close 文案）；
+> - 自托管思源宋体子集（`noto-serif-sc-700.woff2`，16.7KB，122 字符定制子集覆盖落地页标题用字）——不走 Google Fonts CDN，国内稳定；入 `--font-serif` 栈（Times New Roman 之后、Songti/SimSun 之前），无系统宋体的 Android/Windows 保住宋体标题观感。
+> 验证：i18n 键 57 个逐一核对中英双块全存在；四个 Observer（stats/features/reveal/anchor）+ rAF + keydown 监听均在 onBeforeUnmount 清理。
+
+> **十、落地页主卡嵌入产品预览图（原拟 V3.6.21，归并入本版）**
+> `feature1` 主卡（2D/3D 双引擎）桌面跨 2 列 2 行，文本 `max-width:42ch` 后右侧大面积留白。主卡模板 `v-if="feature.hero"` 条件渲染 `<img>`（`preview.webp` 1995×1155/230K，`loading=lazy + decoding=async`），其它 9 卡 DOM 零变化；`previewUrl` 经 ASSET_BASE_URL 派生（子路径部署兼容）；定稿版不分栏——文案保持纵向流，裸图（无背景/边框/圆角/阴影）贴卡片右下角按原比放大，四周白色径向渐变柔化硬边，`margin-bottom` 留图位禁区防压字，卡片 `min-height` 兜底防溢出；装饰性配图不可选中/拖拽/不抢指针。
+> 详见维护日志 `Docs/LLM_record/26-10/2026-10-17/2026-10-17-landing-hero-card-preview.md`。
+
+> **十一、整版审查修复（本次 code review 发现）**
+> ① **字体绝对路径 404**：`@font-face` 引用 `/fonts/noto-serif-sc-700.woff2`（public + 绝对路径）——vite base 默认 `'./'`，GitHub Pages 子路径部署（/WebGIS/）下绝对路径不被打包器改写必 404，字体静默失效。改为 `src/assets/fonts/` + 相对路径 `./fonts/...`（经 Vite 打包随 base 改写），并删除 public 旧副本。
+> ② **轨道环 mask 同源问题**：样式内 `url('/images/njnu-media/d-bg2_1*.png')` 同样子路径 404，mask 失效会让三环退化成整块金色圆面盖住首屏。改为 script 经 ASSET_BASE_URL 派生 URL + `<style>` 内 `v-bind()` 注入。
+> ③ **自托管字体未入字体栈**：`@font-face` 声明了 Noto Serif SC 但无任何 font-family 栈引用它（死字体，宋体标题设计意图落空）。插入 `--font-serif` 栈。
+> ④ **触屏档缺失**：落地页本批新增的导航四件套（汉堡/Star/语言/登录）窄屏锁 34px，不达移动端基线 ≥40px。补 `@media (pointer: coarse)` 档：四件套同提 40px 保持基线对齐，全屏菜单子项 ≥44px，≤480px 方形图标钮同步放大；TopBar 因 6 钮窄屏放不下 40px 暂未跟进（记 TODO）。
+> ⑤ **ActionRouter 异步错误状态陈旧**：handler 返回 Promise 成功时不清 `lastDispatchError`，旧失败会误导后续诊断提示。改 `then/catch` 双分支清理。
+> ⑥ KMZ 包内附带资源（如 ArcGIS 弹窗 .xsl 模板）静默跳过不再计入"不支持文件"告警（`decompressor.ts` 增 `nested` 标记）；图新系列底图 preset 更名"星图"。
+> ⑦ 新增 `ui-panel-theme.css` 通用面板模板（提取自用户中心/LayerPropertiesDialog 的设计基因：白色面板 + 品牌渐变横幅 + 经纬网格），App.vue 全局引入，供后续面板统一观感。
+> ⑧ **审查复核与文档一致性**（第三场全量复核）：README「70+ 图源」与实际不符（`LAYER_SOURCE_DEFINITIONS` 109 条定义、实体图源约 90，落地页本批已改 80+），两处统一为 80+；全量复核未发现需新修代码的缺陷（后端 guest_no 链、KMZ nested 标记、LandingView 50 个 i18n 键、CSS 令牌定义、法律页装饰层均核验通过）；门禁全量重跑通过（结构树 496/496、配置登记 7 项、tsc 0 错误、ESLint 0 error、红线四条 CLEAN）。详见维护日志补录二。
+
 ### V3.6.19 (2026-10-16) — URL 底图参数延迟修复 + 矢量多面图层叠放定序（2D/3D）+ 移除假删除修复
 
 > 版本注：V3.6.18 已保留给瓦片下载分支（不在 main），main 线本次为 V3.6.19。

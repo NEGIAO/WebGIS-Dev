@@ -76,6 +76,7 @@ from .system_config import _get_admin_avatar_index_sync, _set_admin_avatar_index
 from .password import _verify_password
 from .user import (
     _create_user_sync,
+    _get_guest_no_sync,
     _get_or_create_guest_username_sync,
     _get_user_by_id_sync,
     _get_user_sync,
@@ -155,11 +156,19 @@ def _public_user_payload(
     display_name = str(user.get("display_name") or session.get("display_name") or username or "").strip()
     email = str(user.get("email") or session.get("email") or "").strip()
     email_verified = bool(int(user.get("email_verified") or 0)) if user else bool(session.get("email_verified"))
+    # 游客展示序号：guest_identity_records.id 自增真序号，前端展示 guest_<no>。
+    # 优先取调用方显式传入的值（如登录分支已在建会话前拿到），否则按 guest_uid 现查。
+    guest_no = 0
+    if resolved_role == ROLE_GUEST:
+        guest_no = int(user.get("guest_no") or session.get("guest_no") or 0)
+        if not guest_no:
+            guest_no = int(_get_guest_no_sync(str(session.get("guest_uid") or "")) or 0)
 
     return {
         "user_id": int(user.get("id") or session.get("user_id") or 0),
         "username": username,
         "display_name": display_name or username,
+        "guest_no": max(0, guest_no),
         "email": email,
         "email_verified": bool(email_verified),
         "requires_email_binding": bool(requires_email_binding),
@@ -185,6 +194,7 @@ async def _build_login_response(
     guest_uid: str = "",
     guest_device_id: str = "",
     requires_email_binding: bool = False,
+    guest_no: int = 0,
     message: str = "登录成功",
 ) -> Dict[str, Any]:
     request_ip = _extract_client_ip(request)
@@ -199,6 +209,10 @@ async def _build_login_response(
         guest_device_id,
         requires_email_binding,
     )
+    # guest_no 仅随会话对象内存传递（sessions 表无此列，不做迁移）：
+    # _public_user_payload 优先读它，游客分支不再回查 guest_identity_records
+    if guest_no:
+        session["guest_no"] = int(guest_no)
 
     await asyncio.to_thread(_record_login_sync, username)
     quota_subject = resolve_quota_subject(username, role, session.get("guest_uid"))
@@ -719,7 +733,8 @@ async def login_user(payload: LoginRequest, request: Request) -> Dict[str, Any]:
         guest_uid = _build_guest_uid(request_ip, request_user_agent, guest_device_id)
 
         # 获取或创建游客记录，获得实际的用户名（如 "user_1", "user_2" 等）
-        resolved_username = await asyncio.to_thread(_get_or_create_guest_username_sync, guest_uid)
+        guest_record = await asyncio.to_thread(_get_or_create_guest_username_sync, guest_uid)
+        resolved_username = str(guest_record.get("username") or "") if isinstance(guest_record, dict) else str(guest_record)
         return await _build_login_response(
             request=request,
             username=resolved_username,
@@ -727,6 +742,7 @@ async def login_user(payload: LoginRequest, request: Request) -> Dict[str, Any]:
             avatar_index=0,
             guest_uid=guest_uid,
             guest_device_id=guest_device_id,
+            guest_no=int(guest_record.get("no") or 0) if isinstance(guest_record, dict) else 0,
         )
 
     if normalized_credential == ADMIN_USERNAME:

@@ -61,6 +61,7 @@ themeStore.init();
 
 <style>
 @import './assets/theme.css';
+@import './assets/ui-panel-theme.css';
 @import './assets/toc-theme.css';
 @import './assets/cesium-tool-theme.css';
 

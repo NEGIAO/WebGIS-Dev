@@ -280,8 +280,14 @@ export class DistrictManager {
                   }));
 
         const existingIndex = this.userDataLayers.findIndex((item) => item?.id === layerId);
+        // 托管记录统一约定：OL 图层实例存 `layer` 字段
+        // （见 useManagedLayerRegistry.addManagedLayerRecord，isVectorManagedLayer /
+        //  坐标转换 / 导出 / 可见性等全部消费方均读 .layer）。
+        // 历史版本区划记录误存为 `_layer`，导致区划图层被判定"不是矢量图层"，
+        // 坐标转换（WGS-84 ⇄ GCJ-02）与坐标导出对区划不可用——此处迁移字段并清理旧值。
+        const previousRecord = existingIndex >= 0 ? this.userDataLayers[existingIndex] : null;
         const nextRecord = {
-            ...(existingIndex >= 0 ? this.userDataLayers[existingIndex] : {}),
+            ...previousRecord,
             id: layerId,
             name,
             type: 'geojson',
@@ -307,8 +313,12 @@ export class DistrictManager {
                 crs: 'wgs84',
                 sourceProjection: 'EPSG:4326',
             },
-            _layer,
+            layer: _layer,
         };
+        // 清理历史遗留的 _layer 字段（重新同步时经 previousRecord 扩散带回）
+        if ('_layer' in nextRecord) {
+            delete (nextRecord as Record<string, unknown>)._layer;
+        }
 
         if (existingIndex >= 0) {
             this.userDataLayers.splice(existingIndex, 1, nextRecord);

@@ -54,7 +54,10 @@ import {
     useLayerStore,
 } from '@/stores';
 import { showLoading, hideLoading } from '@common/ui/loading';
-import { dispatchLayerAction } from '@common/layer-tree/actions/unifiedActionRouter';
+import {
+    dispatchLayerAction,
+    lastDispatchError,
+} from '@common/layer-tree/actions/unifiedActionRouter';
 import { scheduleCesiumWarmup } from '@common/data-import/cesiumWarmup';
 import { apiLogVisit } from '@/api/backend';
 import { useLocale } from '@common/app/useLocale';
@@ -1378,7 +1381,28 @@ function handleChangeLayerOpacity({ layerId, opacity }) {
 
 
 function handleRenameLayer({ layerId, newName }) {
-    layerStore.renameLayer(layerId, newName);
+    const id = String(layerId || '').trim();
+    const name = String(newName || '').trim();
+    if (!id || !name) return;
+
+    // 区划边界节点：名称存于 tocStore 元数据（districtLayers 的派生源），无地图侧托管记录
+    if (isDistrictLayer(id)) {
+        tocStore.upsertLayerMeta({ id, name });
+        return;
+    }
+
+    // plain id = OL 命名空间（cesium:*/rsvc:* 节点已被上游分流器消费）。
+    // 与可见性/透明度同构：先路由地图侧改托管记录并经 user-layers-change 回流，
+    // 保证地图侧单一事实源——只改 store 会被下一次图层广播冲掉（重命名无法应用）。
+    // 地图引擎未就绪/无该托管记录时，降级只改 store（至少 TOC 显示即时生效）。
+    const dispatched = dispatchLayerAction({
+        method: 'renameUserLayer',
+        payload: { layerId: id, newName: name },
+        engine: 'ol',
+    });
+    if (!dispatched) {
+        layerStore.renameLayer(id, name);
+    }
 }
 
 function handleZoomLayer(layerId) {
@@ -1426,7 +1450,8 @@ function handleRemoveLayer(layerId) {
         engine: 'ol',
     });
     if (!dispatched) {
-        message?.warning?.(`图层移除未被地图引擎处理：${layerId}`);
+        const reason = lastDispatchError?.message || String(lastDispatchError || '未知原因');
+        message?.warning?.(`图层移除未被地图引擎处理：${layerId}（${reason}），请截图控制台 [ActionRouter] 日志`);
         return;
     }
     // 直接更新 Pinia store，不依赖 async 事件链

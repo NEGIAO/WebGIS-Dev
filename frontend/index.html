@@ -27,9 +27,10 @@
 
         <meta
             name="viewport"
-            content="width=device-width, initial-scale=1"
+            content="width=device-width, initial-scale=1, shrink-to-fit=no, viewport-fit=cover"
         />
-        <!-- 多设备自适应 -->
+        <!-- 多设备自适应：shrink-to-fit=no 禁止 iOS Safari 在横向溢出时整页缩小（F12 模拟不会复现该行为）；
+             viewport-fit=cover 适配刘海屏安全区 -->
 
         <!-- Font Awesome (BootCDN 加速国内访问)
              media="print" + onload 交换:CSS 异步加载不阻塞首屏渲染(图标可能晚到约百毫秒);

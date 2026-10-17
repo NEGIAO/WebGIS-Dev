@@ -1006,7 +1006,15 @@ export default {
         timeoutMustBePositive: '超时时间必须是大于 0 的数字',
         maxTokensMustBePositive: 'Max Tokens 必须是大于 0 的数字',
         modelOrListRequired: '请至少配置一个固定 Model 或 available_models 列表',
+        /* 这两条原先缺失：useAgentConfig 的 catch 里直接 t() 取值，
+           toast 会原样显示 key 名（"admin.loadAgentFailed"）。
+           与同块的 saveAgentSuccess 成对补齐 */
+        loadAgentFailed: '加载 Agent 配置失败: {error}',
         saveAgentSuccess: 'Agent LLM 参数已保存，后端运行时动态读取，即时生效',
+        saveAgentFailed: '保存 Agent 配置失败: {error}',
+        /* streamOn 原先缺失：模板 `stream ? t('admin.streamOn') : t('admin.streamOff')`
+           在"开启"分支会直接渲染出 key 名 —— 与 streamOff 成对补上 */
+        streamOn: '开启',
         streamOff: '关闭',
         secondsUnit: '{n} 秒',
         // V3.5.13 下载任务 TTL 配置

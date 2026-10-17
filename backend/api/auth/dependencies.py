@@ -56,7 +56,12 @@ async def _build_temporary_guest_session_async(request: Request) -> Dict[str, An
         or request.query_params.get("guest_device_id")
     )
     guest_uid = _build_guest_uid(request_ip, request_user_agent, guest_device_id)
-    username = await asyncio.to_thread(_get_or_create_guest_username_sync, guest_uid)
+    guest_record = await asyncio.to_thread(_get_or_create_guest_username_sync, guest_uid)
+    # _get_or_create_guest_username_sync 返回 {username, no}：no 为游客展示序号
+    # （guest_identity_records.id 自增）。随会话对象内存传递，
+    # _public_user_payload 优先读它，避免每次构造 payload 都回查库
+    username = str(guest_record.get("username") or "") if isinstance(guest_record, dict) else str(guest_record)
+    guest_no = int(guest_record.get("no") or 0) if isinstance(guest_record, dict) else 0
 
     now = _utc_now()
     expires_at = now + timedelta(hours=2)
@@ -68,6 +73,7 @@ async def _build_temporary_guest_session_async(request: Request) -> Dict[str, An
         "role": ROLE_GUEST,
         "guest_uid": guest_uid,
         "guest_device_id": guest_device_id,
+        "guest_no": max(0, guest_no),
         "ip": request_ip,
         "user_agent": request_user_agent,
         "created_at": _iso(now),

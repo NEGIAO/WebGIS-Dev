@@ -1,5 +1,14 @@
 <template>
     <div class="legal-container">
+        <!-- 页面装饰层：GIS 网格 + 角落光斑（与 LandingView hero-bg 同一视觉语言） -->
+        <div
+            class="legal-bg"
+            aria-hidden="true"
+        >
+            <div class="legal-bg__grid"></div>
+            <div class="legal-bg__blob legal-bg__blob--1"></div>
+            <div class="legal-bg__blob legal-bg__blob--2"></div>
+        </div>
         <div class="legal-card fade-in">
             <div class="legal-header">
                 <h1><i class="fas fa-file-contract"></i> 服务条款</h1>
@@ -141,7 +150,8 @@ onMounted(() => {
 
 <style scoped>
 .legal-container {
-    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    position: relative;
+    font-family: var(--font-base, 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif);
     line-height: 1.8;
     color: var(--text-primary);
     background-color: var(--bg-secondary);
@@ -151,12 +161,62 @@ onMounted(() => {
     min-height: 100dvh;
     width: 100%;
     box-sizing: border-box;
+    /* 裁掉装饰层溢出的光斑，避免出现无谓的滚动空间 */
+    overflow: hidden;
+}
+
+/* ─── 页面装饰层：GIS 网格 + 角落光斑 ─── */
+.legal-bg {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+}
+
+.legal-bg__grid {
+    position: absolute;
+    inset: 0;
+    background-image:
+        linear-gradient(rgba(var(--brand-primary-rgb), 0.06) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(var(--brand-primary-rgb), 0.06) 1px, transparent 1px);
+    background-size: 42px 42px;
+    -webkit-mask-image: radial-gradient(ellipse 90% 90% at 50% 0%, #000 20%, transparent 100%);
+    mask-image: radial-gradient(ellipse 90% 90% at 50% 0%, #000 20%, transparent 100%);
+}
+
+.legal-bg__blob {
+    position: absolute;
+    border-radius: 50%;
+    filter: blur(80px);
+    opacity: 0.32;
+}
+
+.legal-bg__blob--1 {
+    width: 400px;
+    height: 400px;
+    top: -160px;
+    left: -140px;
+    background: rgba(var(--brand-primary-rgb), 0.22);
+}
+
+.legal-bg__blob--2 {
+    width: 360px;
+    height: 360px;
+    bottom: -140px;
+    right: -120px;
+    background: rgba(var(--brand-accent-rgb, 87, 184, 97), 0.16);
 }
 
 .legal-card {
+    position: relative;
+    z-index: 1;
+    /* 框体规格对齐 LayerPropertiesDialog 模板（与注册卡同款）：
+       中性发丝描边 + ≈1px 白色外缘 + 干净投影 */
     background: var(--bg-primary);
-    border-radius: 12px;
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+    border: var(--panel-border, 1px solid rgba(0, 0, 0, 0.06));
+    border-radius: var(--panel-radius, 12px);
+    box-shadow:
+        0 0 0 1px #fff,
+        var(--panel-shadow, 0 8px 32px rgba(0, 0, 0, 0.15));
     width: 100%;
     max-width: 860px;
     overflow: hidden;
@@ -177,10 +237,34 @@ onMounted(() => {
 
 /* ─── Header ─── */
 .legal-header {
-    background: linear-gradient(135deg, var(--brand-primary), var(--brand-primary-dark));
+    position: relative;
+    z-index: 0;
+    /* 品牌渐变 + 左上柔光：与 TopBar / 面板头部同一视觉语言 */
+    background:
+        radial-gradient(ellipse 55% 280% at 0% -80%,
+            rgba(var(--brand-accent-light-rgb), 0.28) 0%, transparent 58%),
+        linear-gradient(160deg, var(--brand-primary) 0%, var(--brand-primary-dark) 100%);
     color: var(--text-on-brand);
     padding: 28px 32px;
     text-align: center;
+    /* 底部品牌亮线收边，衔接白色正文区 */
+    box-shadow: inset 0 -2px 0 rgba(var(--brand-accent-light-rgb), 0.35);
+}
+
+/* 经纬网格纹理：与用户中心 panel-header / 注册页头部同一 DNA
+   （单层 24px 白网格 + 自上而下放射渐隐） */
+.legal-header::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+    background-image:
+        linear-gradient(rgba(255, 255, 255, 0.07) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255, 255, 255, 0.07) 1px, transparent 1px);
+    background-size: 24px 24px;
+    -webkit-mask-image: radial-gradient(ellipse 95% 120% at 50% 0%, #000 30%, transparent 100%);
+    mask-image: radial-gradient(ellipse 95% 120% at 50% 0%, #000 30%, transparent 100%);
 }
 
 .legal-header h1 {
@@ -220,15 +304,21 @@ onMounted(() => {
 }
 
 .back-link a {
+    display: inline-flex;
+    align-items: center;
+    padding: 6px 12px;
+    border: 1px solid transparent;
+    border-radius: 999px;
     color: var(--brand-primary);
     text-decoration: none;
     font-size: 14px;
-    transition: color 0.2s;
+    transition: color 0.2s, background 0.2s, border-color 0.2s;
 }
 
 .back-link a:hover {
     color: var(--brand-primary-dark);
-    text-decoration: underline;
+    background: rgba(var(--brand-primary-rgb), 0.07);
+    border-color: rgba(var(--brand-primary-rgb), 0.25);
 }
 
 .back-link i {
@@ -247,6 +337,18 @@ onMounted(() => {
     margin: 0 0 12px;
     padding-bottom: 8px;
     border-bottom: 2px solid var(--brand-primary-lighter);
+}
+
+/* 条目标题前的品牌渐变小方块，分隔线之外的层级点缀 */
+.legal-section h2::before {
+    content: '';
+    display: inline-block;
+    width: 9px;
+    height: 9px;
+    margin-right: 9px;
+    border-radius: 3px;
+    background: linear-gradient(135deg, var(--brand-primary), var(--brand-primary-dark));
+    vertical-align: 1px;
 }
 
 .legal-section p {
@@ -299,7 +401,8 @@ onMounted(() => {
 .legal-footer {
     padding: 16px 32px;
     text-align: center;
-    background-color: var(--bg-secondary);
+    /* 与用户中心 panel-footer 同款：白底 + 细分隔线 */
+    background: var(--bg-primary);
     border-top: 1px solid var(--border-light);
 }
 

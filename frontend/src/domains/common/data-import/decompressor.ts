@@ -4,6 +4,8 @@ export type FlattenedResource = {
     path: string;
     ext: string;
     content: ArrayBuffer;
+    /** 来自压缩包内部解包（非用户直接选择的文件）；不支持时静默跳过，不计入告警 */
+    nested?: boolean;
 };
 
 function isArrayBufferLike(input: unknown): input is ArrayBuffer {
@@ -145,7 +147,7 @@ async function flattenArchive(
             continue;
         }
 
-        output.push({ path: innerPath, ext, content: entryBuffer });
+        output.push({ path: innerPath, ext, content: entryBuffer, nested: true });
     }
 
     return output;

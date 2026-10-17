@@ -20,9 +20,11 @@
                         :title="t('landing.backHome')"
                         :aria-label="t('landing.backHome')"
                     >
+                        <!-- 无底衬：注册页头部本身即品牌绿渐变，白 logo 原色直放即可，
+                             不再做 mask 染色、也不加任何色块底衬 -->
                         <div class="brand-badge">
                             <img
-                                :src="resolvePublicAssetPath('images/icon.webp')"
+                                :src="brandLogoUrl"
                                 alt="NEGIAO's WebGIS"
                                 loading="eager"
                             />
@@ -823,6 +825,8 @@ function resolvePublicAssetPath(relativePath) {
 
 // Hugging Face 官方 logo（public/images/hf-logo.svg，品牌资产彩色版）
 const hfLogoUrl = resolvePublicAssetPath('images/hf-logo.svg');
+// 品牌徽牌 mask 遮罩源（与 img 同源同缓存；见 .brand-badge 样式）
+const brandLogoUrl = resolvePublicAssetPath('images/icon.webp');
 
 function resolveRedirectTarget() {
     const redirect = String(route.query?.redirect || '/home').trim();
@@ -1616,12 +1620,6 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
-*,
-*::before,
-*::after {
-    box-sizing: border-box;
-}
-
 .register-container {
     position: relative;
     font-family: var(--font-base, 'PingFang SC', 'Microsoft YaHei', sans-serif);
@@ -1690,11 +1688,15 @@ onUnmounted(() => {
 .container {
     position: relative;
     z-index: 1;
-    background-color: var(--bg-primary);
-    border-radius: 16px;
+    /* 框体规格对齐 LayerPropertiesDialog 模板：
+       通主题令牌（--panel-radius / --panel-shadow），中性发丝描边；
+       box-shadow 首层为 ≈1px 白色外缘（发丝线之外、任何背景下可见） */
+    background: var(--bg-primary);
+    border: var(--panel-border, 1px solid rgba(0, 0, 0, 0.06));
+    border-radius: var(--panel-radius, 12px);
     box-shadow:
-        0 1px 2px rgba(20, 45, 25, 0.05),
-        0 24px 60px -16px rgba(20, 45, 25, 0.18);
+        0 0 0 1px #fff,
+        var(--panel-shadow, 0 8px 32px rgba(0, 0, 0, 0.15));
     width: 100%;
     max-width: 440px;
     /* 扣除容器上下 padding（与 .register-container 同式），保证居中时头尾不被裁切 */
@@ -1715,7 +1717,7 @@ onUnmounted(() => {
     flex-shrink: 0;
 }
 
-/* 经纬网格纹理，呼应 GIS 主题 */
+/* 经纬网格纹理，呼应 GIS 主题（与 LayerPropertiesDialog / 用户中心同 DNA：24px） */
 .form-header::before {
     content: '';
     position: absolute;
@@ -1723,9 +1725,9 @@ onUnmounted(() => {
     background-image:
         linear-gradient(rgba(255, 255, 255, 0.07) 1px, transparent 1px),
         linear-gradient(90deg, rgba(255, 255, 255, 0.07) 1px, transparent 1px);
-    background-size: 26px 26px;
-    -webkit-mask-image: radial-gradient(ellipse 95% 110% at 50% 0%, #000 30%, transparent 100%);
-    mask-image: radial-gradient(ellipse 95% 110% at 50% 0%, #000 30%, transparent 100%);
+    background-size: 24px 24px;
+    -webkit-mask-image: radial-gradient(ellipse 95% 120% at 50% 0%, #000 30%, transparent 100%);
+    mask-image: radial-gradient(ellipse 95% 120% at 50% 0%, #000 30%, transparent 100%);
     pointer-events: none;
 }
 
@@ -1827,25 +1829,46 @@ onUnmounted(() => {
     outline-offset: 1px;
 }
 
+/* 无底衬：注册页头部本身即品牌绿渐变（.form-header），白 logo 原色直放即可成立，
+   故既不加色块、也不做 mask 染色。同时去掉 padding：没有牌面就不需要内边距，
+   复杂线稿直接吃满 40px，可见尺寸 28×22 → 40×32（+43%）。
+   （历史 bug 备查：此处原写 var(--brand-primary-darker)，该令牌全仓未定义，
+   导致 background 声明 invalid at computed-value time 被整体丢弃、徽牌透明。） */
 .brand-badge {
     width: 40px;
     height: 40px;
     flex-shrink: 0;
-    border-radius: 12px;
-    /* 绿色头部上白色 logo 需要更深衬托：品牌绿深色渐变 */
-    background: linear-gradient(140deg, var(--brand-primary-dark) 0%, var(--brand-primary-darker) 100%);
-    padding: 6px;
-    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.12);
     display: flex;
     align-items: center;
     justify-content: center;
+    /* hover 效果与 TopBar `.logo-link:hover .logo-icon` 同一套手法：
+       轻微倾斜 -10° + 放大 1.1，0.3s —— 不做整圈旋转（试过 360°/Y 轴翻转，
+       对一个小徽牌都太闹） */
+    transition: transform 0.3s;
+}
+
+/* will-change 只在交互期间挂上，避免常驻图层的开销 */
+.brand-badge:hover {
+    transform: rotate(-10deg) scale(1.1);
+    will-change: transform;
+}
+
+/* 动效敏感用户：停用旋转，仅保留静态展示 */
+@media (prefers-reduced-motion: reduce) {
+    .brand-badge {
+        transition: none;
+    }
+
+    .brand-badge:hover {
+        transform: none;
+        will-change: auto;
+    }
 }
 
 .brand-badge img {
     width: 100%;
     height: 100%;
     object-fit: contain;
-    border-radius: 8px;
 }
 
 .brand-text {
@@ -2572,6 +2595,7 @@ input:disabled {
     .container {
         max-width: 100%;
         border-radius: 0;
+        border: none;
         max-height: 100dvh;
         min-height: 100dvh;
         box-shadow: none;

@@ -21,6 +21,7 @@
 10. **新增代码必须有注释**（功能 / 参数 / 返回 / 核心逻辑）
 11. **新增配置 key 顺序恒为**：登记 `deploy/.env.example` + `backend/config/catalog.py` → 再写读取代码 → 跑门禁
 12. **数据源注册前置**：任何场景数据加载必须入 TOC/数据源店（Cesium：`loadedDataSources` + `type` 契约；OL：layer-tree），并实现显隐/透明度/定位/移除等 adapter 能力；远程 URL 模型须存 `sourceUrl`。详见 Force_command §3
+13. **移动端基线**：viewport 常带 `shrink-to-fit=no, viewport-fit=cover`；全局禁 iOS 自动调字与横向溢出；触屏目标按 `pointer: coarse` 给 ≥40px（新增 icon 同步跟进）；F12 拉窄≠真机，必须真机或设备模式复验。详见 Force_command §3
 
 ### 分层边界
 

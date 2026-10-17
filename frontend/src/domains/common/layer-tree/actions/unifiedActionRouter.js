@@ -23,16 +23,28 @@ export function unregisterEngineHandlers(engine) {
 }
 
 /**
+ * 最近一次分发失败的原因（引擎未注册 / 处理器缺失 / 执行抛错），供调用方展示诊断。
+ * 成功分发后清零，避免旧错误误导。
+ */
+export let lastDispatchError = null;
+
+/**
  * 分发一个图层操作
  * @param {{method:string, payload?:object, engine?:string}} action
  * @returns {boolean} 是否被某引擎处理器消费
  */
 export function dispatchLayerAction(action) {
     const method = String(action?.method || '').trim();
-    if (!method) return false;
+    if (!method) {
+        lastDispatchError = new Error('空 method');
+        return false;
+    }
     const engine = String(action?.engine || 'ol').toLowerCase();
     const api = handlers.get(engine);
     if (!api || typeof api[method] !== 'function') {
+        lastDispatchError = new Error(
+            `引擎 [${engine}] 未注册或不支持 ${method}（可能容器未挂载/已卸载）`,
+        );
         console.warn(`[ActionRouter] ${engine} 引擎不支持 ${method}`);
         return false;
     }
@@ -41,13 +53,21 @@ export function dispatchLayerAction(action) {
         // handler 可能返回 Promise：同步 catch 捕不到 rejection，
         // 这里吞掉 rejection 并视为未处理，同时避免 unhandledrejection 逃逸
         if (result && typeof result.then === 'function') {
-            result.catch((error) => {
-                console.warn(`[ActionRouter] ${engine}.${method} 异步执行失败:`, error);
-            });
+            result.then(
+                () => {
+                    lastDispatchError = null;
+                },
+                (error) => {
+                    lastDispatchError = error;
+                    console.warn(`[ActionRouter] ${engine}.${method} 异步执行失败:`, error);
+                },
+            );
             return true;
         }
+        lastDispatchError = null;
         return result !== false;
     } catch (error) {
+        lastDispatchError = error;
         console.warn(`[ActionRouter] ${engine}.${method} 执行失败:`, error);
         return false;
     }

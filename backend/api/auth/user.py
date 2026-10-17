@@ -153,22 +153,25 @@ def _guest_username_from_uid(guest_uid: str) -> str:
     return compact or "guest_anon"
 
 
-def _get_or_create_guest_username_sync(guest_uid: str) -> str:
+def _get_or_create_guest_username_sync(guest_uid: str) -> Dict[str, Any]:
     """
-    获取或创建游客用户名。用户名由 guest_uid 确定性派生（非自增），
-    保证同一设备始终同一身份、不同设备永不撞名。
+    获取或创建游客记录，返回用户名与展示序号。
+
+    - username：由 guest_uid 确定性派生（同设备恒同、不同设备不撞名）；
+    - no：guest_identity_records.id 自增列，即该游客在库内的真序号，
+      登录 payload 以 guest_no 回传，前端展示为 guest_<no>。
     """
     resolved = _guest_username_from_uid(guest_uid)
     now_iso = _iso(_utc_now())
 
     with _db_connection() as conn:
         existing = conn.execute(
-            "SELECT username FROM guest_identity_records WHERE guest_uid = ?",
+            "SELECT id, username FROM guest_identity_records WHERE guest_uid = ?",
             (guest_uid,),
         ).fetchone()
         if existing:
-            stored = str(dict(existing).get("username") or "").strip()
-            return stored or resolved
+            row = dict(existing)
+            return {"username": str(row.get("username") or resolved), "no": int(row.get("id") or 0)}
 
         try:
             conn.execute(
@@ -191,10 +194,31 @@ def _get_or_create_guest_username_sync(guest_uid: str) -> str:
             pass
 
         row = conn.execute(
-            "SELECT username FROM guest_identity_records WHERE guest_uid = ?",
+            "SELECT id, username FROM guest_identity_records WHERE guest_uid = ?",
             (guest_uid,),
         ).fetchone()
-        return str(dict(row).get("username") or resolved) if row else resolved
+        if row:
+            data = dict(row)
+            return {"username": str(data.get("username") or resolved), "no": int(data.get("id") or 0)}
+        return {"username": resolved, "no": 0}
+
+
+def _get_guest_no_sync(guest_uid: str) -> int:
+    """
+    按 guest_uid 查游客展示序号（guest_identity_records.id 自增真序号）。
+    记录不存在返回 0，由调用方兜底（如按 username 再查或取 0）。
+    """
+    normalized = str(guest_uid or "").strip()
+    if not normalized:
+        return 0
+    with _db_connection() as conn:
+        row = conn.execute(
+            "SELECT id FROM guest_identity_records WHERE guest_uid = ?",
+            (normalized,),
+        ).fetchone()
+        if not row:
+            return 0
+        return int(dict(row).get("id") or 0)
 
 
 def _ensure_user_metric_row_sync(conn: sqlite3.Connection, username: str) -> None:

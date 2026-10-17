@@ -36,9 +36,9 @@ export const BASEMAP_PRESETS: BasemapPresetDefinition[] = [
         stack: ['vector_tianditu', 'label_tianditu'],
     },
 
-    // 图新系列
-    { id: 'imagery_tuxin_preset', label: '图新影像', stack: ['imagery_tuxin', 'label_tuxin'] },
-    { id: 'vector_tuxin_preset', label: '图新矢量', stack: ['vector_tuxin', 'label_tuxin'] },
+    // 星图系列
+    { id: 'imagery_tuxin_preset', label: '星图影像', stack: ['imagery_tuxin', 'label_tuxin'] },
+    { id: 'vector_tuxin_preset', label: '星图矢量', stack: ['vector_tuxin', 'label_tuxin'] },
 
     // 互联网商业地图
     { id: 'imagery_gac_preset', label: 'Google(gac)', stack: ['imagery_gac', 'label_tianditu'] },

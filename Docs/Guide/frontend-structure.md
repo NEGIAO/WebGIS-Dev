@@ -39,19 +39,24 @@ frontend/src/
 │       └── weather.js  # 高德天气业务封装（前端直连；与 backend/weather.js 后端代理同名不同义）
 ├── app/
 │   ├── HomeView.vue  # 首页（由 lazyHomeViewLoader 加载）
-│   ├── LandingView.vue  # 根路径宣传主页（全量 i18n + 语言切换，icon.webp 品牌 logo，自持滚动容器）
+│   ├── LandingView.vue  # 根路径宣传主页（南师大风格重构：SectionTitle 三件套 + 三环轨道纹样 + 数字滚动 + 三层技术栈卡 + 锚点导航/scrollspy + 移动端全屏菜单；自持滚动容器）
 │   ├── NotFoundView.vue  # 404 页面（notFound.* i18n）
 │   ├── OAuthCallbackView.vue  # Google/GitHub/Hugging Face OAuth 回调会话落地
 │   ├── PrivacyPolicy.vue  # 隐私政策
 │   ├── RegisterView.vue  # 注册/登录（邮箱 + Google/GitHub/Hugging Face OAuth，全量 i18n + 语言切换）
 │   ├── TermsOfService.vue  # 服务条款
+│   ├── components/
+│   │   └── SectionTitle.vue  # 通用节标题三件套（印章 + 衬线标题 + 罗盘水印；LandingView 各节复用）
 │   └── composables/
 │       └── useLazyModules.ts  # CesiumContainer / SidePanel 懒加载 + 重试逻辑
 ├── assets/
 │   ├── cesium-tool-theme.css
 │   ├── logo.svg
-│   ├── theme.css
+│   ├── theme.css  # 全局主题令牌（含自托管思源宋体 @font-face + box-sizing 重置 + 移动端基线）
 │   ├── toc-theme.css
+│   ├── ui-panel-theme.css  # 通用 UI 面板模板（白色面板 + 品牌渐变横幅 + 经纬网格，全局面板观感基准）
+│   ├── fonts/
+│   │   └── noto-serif-sc-700.woff2  # 思源宋体 700 子集（122 字符，落地页标题用字；相对路径经 Vite 打包）
 │   └── data/
 │       └── compass-metadata/
 │           ├── compass-data.ts  # 罗盘基础数据

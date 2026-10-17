@@ -42,7 +42,7 @@
 | :---: | :---: |
 | <a href="https://github.com/user-attachments/assets/c8cb6f16-04e0-4b9a-983f-22538e0bd65a"><img src="https://github.com/user-attachments/assets/c8cb6f16-04e0-4b9a-983f-22538e0bd65a" width="400" /></a> | <a href="https://github.com/user-attachments/assets/acbb5a56-bff7-44c3-848b-dbe178c52301"><img src="https://github.com/user-attachments/assets/acbb5a56-bff7-44c3-848b-dbe178c52301" width="400" /></a> |
 | **📐 二维数据管理** | **☁️ 三维漫游云景** |
-| <a href="https://github.com/user-attachments/assets/0852330e-c973-4a0b-8adc-4bd1cd85e0fa"><img src="https://github.com/user-attachments/assets/0852330e-c973-4a0b-8adc-4bd1cd85e0fa" width="400" /></a> | <a href="https://github.com/user-attachments/assets/7bedba67-d965-4640-ac32-f5d75630e434"><img src="https://github.com/user-attachments/assets/7bedba67-d965-4640-ac32-f5d75630e434" width="400" /></a> |
+| <a href="https://github.com/user-attachments/assets/da18b733-8979-4beb-9ac6-c07423b86ba2"><img src="https://github.com/user-attachments/assets/da18b733-8979-4beb-9ac6-c07423b86ba2" width="400" /></a> | <a href="https://github.com/user-attachments/assets/7bedba67-d965-4640-ac32-f5d75630e434"><img src="https://github.com/user-attachments/assets/7bedba67-d965-4640-ac32-f5d75630e434" width="400" /></a> |
 | **🤖 智能助手交互** | **🌊 动态淹没分析** |
 | <a href="https://github.com/user-attachments/assets/2dbbb794-ef3e-4d7a-b16b-4f381053fec3"><img src="https://github.com/user-attachments/assets/42e3a0e1-1cc5-444f-b9f8-b71caf8d9b0a" width="400" /></a> | <a href="https://github.com/user-attachments/assets/e26761db-8f91-4f05-90f2-106b28223ab5"><img src="https://github.com/user-attachments/assets/e26761db-8f91-4f05-90f2-106b28223ab5" width="400" /></a> |
 
@@ -84,7 +84,7 @@
 
 ## 🎯 项目简介
 
-**NEGIAO's WebGIS** 是一个功能完整、架构清晰的前后端分离 WebGIS 平台（当前版本 V3.6.19），前端托管于 GitHub Pages（正式域名 webgis.negiao.cn），后端以 Docker 部署在 Hugging Face Spaces，通过 RESTful API 通信，支持独立扩展。
+**NEGIAO's WebGIS** 是一个功能完整、架构清晰的前后端分离 WebGIS 平台（当前版本 V3.6.20），前端托管于 GitHub Pages（正式域名 webgis.negiao.cn），后端以 Docker 部署在 Hugging Face Spaces，通过 RESTful API 通信，支持独立扩展。
 
 > 📚 本 README 仅保留核心概览与导航。完整文档已模块化至 [`Docs/Guide/`](Docs/Guide/)，详见下方「文档导航」。
 >
@@ -97,7 +97,7 @@
 | 领域 | 说明 |
 |------|------|
 | 🗺️ 2D/3D 双引擎 | OpenLayers 2D + Cesium 3D 一键切换，视图状态双向同步，URL 分享还原 |
-| 🌐 丰富底图源 | 70+ 瓦片图源、熔断回退、GCJ-02 纠偏、自定义 XYZ 接入 |
+| 🌐 丰富底图源 | 80+ 瓦片图源、熔断回退、GCJ-02 纠偏、自定义 XYZ 接入 |
 | 📥 多格式数据导入 | GeoJSON / KML / SHP / GLB / CZML / 3D Tiles 拖拽加载，2D/3D 双管线 |
 | 🏢 建筑白模抓取 | 支持建筑1 / 建筑2 / 矢量瓦片 三类数据源：框选范围抓取建筑轮廓、楼高及相关属性（WGS-84 GeoJSON），自动入库 2D/3D 图层管理；支持分源级别与凭证配置，并提供跨瓦片同标识建筑融合能力 |
 | 📐 空间分析 | 缓冲区 / 叠加 / 泰森多边形 / 聚合 / 渔网等 8 算子（Shapely 后端精确计算） |
@@ -378,7 +378,7 @@ tiles.negiao.cc.cd"]
 | 功能 | 文档 | 一句话说明 |
 |------|------|-----------|
 | 2D/3D 双引擎 | [`ol-cesium-dual-engine.md`](Docs/Architecture/ol-cesium-dual-engine.md) | 一键切换、视图同步与 URL 分享还原 |
-| 丰富底图源 | [`basemap-source-system.md`](Docs/Architecture/basemap-source-system.md) | 70+ 图源、熔断回退、GCJ-02 纠偏 |
+| 丰富底图源 | [`basemap-source-system.md`](Docs/Architecture/basemap-source-system.md) | 80+ 图源、熔断回退、GCJ-02 纠偏 |
 | 多格式数据导入 | [`multi-format-data-import.md`](Docs/Architecture/multi-format-data-import.md) | 拖拽加载，2D/3D 双管线与 blob URL 方案 |
 | 空间分析 | [`spatial-analysis-backend.md`](Docs/Architecture/spatial-analysis-backend.md) | 单端点分发，Shapely 后端 8 算子 |
 | 路径规划 | [`route-planning.md`](Docs/Architecture/route-planning.md) | 驾车/公交双管线、搜索选点与路线渲染 |
@@ -408,10 +408,10 @@ tiles.negiao.cc.cd"]
 
 | 版本 | 日期 | 概要 |
 |------|------|------|
+| **V3.6.20** | 2026-10-17 | **多批次归并：TOC 重命名链修复 + 区划图层字段修复 + 游客序号 guest_no + 落地页南师大风格重构 + 图层属性弹窗/TopBar UI 重写 + 落地页主卡预览图**。① TOC 右键「重命名」只写 Pinia store、不改地图侧托管记录，被下一次 `user-layers-change` 广播冲回旧名（无法真正应用）：改为经 ActionRouter 路由 `MapContainer.renameUserLayer`，改托管记录 + 广播回流，与可见性/透明度同为单一事实源；区划节点走 tocStore 元数据；地图未就绪降级 store 兜底。② 行政区划托管记录 OL 图层字段 `_layer` → `layer`（对齐托管约定），修复坐标转换/导出/编辑/导入3D 被误判"不是矢量图层"。③ 后端游客登录回传 `guest_no`（guest_identity_records 自增真序号），前端未设昵称游客展示 `guest_<序号>`（旧会话按 uid 哈希兜底）。④ 落地页南师大风格全量重构：SectionTitle 三件套组件（印章+衬线标题+水印）、Hero 数字滚动 + 三环轨道纹样（mask 染金，URL 经 ASSET_BASE_URL 派生）、技术栈三层架构卡、中部锚点导航 + scroll spy、移动端全屏两级菜单、滚动条品牌定制、页脚云海光带；自托管思源宋体子集（16.7KB woff2）入 `--font-serif` 栈。⑤ 落地页主卡（2D/3D 双引擎）嵌入 `preview.webp` 产品预览图（lazy，桌面主卡右下按原比适配，窄屏整行）。⑥ 图层属性弹窗按项目设计令牌重写（品牌渐变头部 + 统计卡 + 明细行，--z-modal、Esc 关闭）。⑦ TopBar 背景收敛版重设计：左上柔光 + 160° 品牌渐变 + 30/150px 双规格经纬网格（向右渐隐），导航按钮玻璃质感。⑧ 品牌徽牌无底牌单色 logo（mask 染品牌深绿）+ 注册页白 logo 直放；顺带修复 RegisterView 引用全仓未定义 `--brand-primary-darker` 致背景声明被丢弃的真 bug。⑨ 审查修复：触屏档（pointer:coarse ≥40px 目标）、KMZ 包内附带资源静默跳过、ActionRouter 异步错误状态清理、ui-panel-theme.css 通用面板模板抽离。详见[完整更新日志](Docs/Guide/CHANGELOG.md) |
 | **V3.6.19** | 2026-10-16 | **URL 底图参数延迟修复 + 矢量多面图层叠放定序（2D/3D）+ 移除假删除修复**。① 分享链接 `l` 参数底图近 10s 才生效：hash 路由下 `location.search` 恒为空导致判断失效，改走 urlQueryReader 快照。② 3D 按 Folder run 递进 zIndex；③ 2D 根因级修复（RBush 乱序→`_drawRank`+`renderOrder`，与 QGIS 图例语义一致）；④ 移除以分发结果为准。⚠️ 2D/3D 定序方向相反待定夺。详见[完整更新日志](Docs/Guide/CHANGELOG.md) |
 | **V3.6.17** | 2026-10-14 | **暂存区多批次归并：天地图矢量全量抓取 + AP 拓扑修复 + 裁剪多环化 + 建筑抓取合规强化**。新建浏览器版 12 层矢量解码与分层拓扑（逐函数/逐规则对齐权威 mjs），修复「全层 0 要素」与「AP 跨瓦 union 全失败 → 自相交/叠片」；面裁剪由**单环 Sutherland–Hodgman** 改为**半平面多环裁剪**，修复 CE 7 个「环被瓦片边切开后沿边重复走」的自相交（CE 非法几何 10 → 3，残留 3 个为上游源数据缺陷）；天地图 tab 更名「矢量瓦片」并支持多选分层入库；建筑源匿名化为建筑1/建筑2 并新增合规勾选与首次弹窗确认。AP 专项回归 35/35、mjs selftest 11/11、12 层统计逐层一致、CE 与 mjs 权威 out=1311 完全一致。详见[完整更新日志](Docs/Guide/CHANGELOG.md) |
-| **V3.6.14** | 2026-10-13 | **天地图建筑权限与拓扑修复**：支持用户临时输入拥有矢量瓦片权限的 tk，识别 301010 权限错误；移植无第三方依赖的跨瓦片 Union，按 `elemid` 消除公共边界并保留失败回退。详见[完整更新日志](Docs/Guide/CHANGELOG.md) |
-更早版本（V3.6.4 及以前）请查阅 [完整更新日志 →](Docs/Guide/CHANGELOG.md)
+更早版本（V3.6.14 及以前）请查阅 [完整更新日志 →](Docs/Guide/CHANGELOG.md)
 
 ---
 
@@ -433,6 +433,6 @@ tiles.negiao.cc.cd"]
 |:------:|:--------:|:--------:|
 | [GitHub](https://github.com/NEGIAO/WebGIS-Dev) | [webgis.negiao.cn](https://webgis.negiao.cn)（正式域名，GitHub Pages 托管） | [Hugging Face](https://NEGIAO-WebGIS.hf.space) |
 
-<sub>V3.6.19 · 开发中 · 最后更新 2026-10-16</sub>
+<sub>V3.6.20 · 开发中 · 最后更新 2026-10-17</sub>
 
 </div>

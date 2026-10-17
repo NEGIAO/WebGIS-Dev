@@ -1,0 +1,401 @@
+/* ============================================================
+   ui-panel-theme.css —— 项目通用 UI 模板（提取自用户中心面板）
+
+   设计基因：白色面板（16px 圆角 + 品牌细描边 + 双层投影）、
+   顶部品牌渐变横幅（140deg 渐变 + 24px 经纬网格纹理）、
+   白色「相框环」外环、白底分隔线页脚、底部 3px 品牌色下划线 Tab。
+   颜色全部来自 theme.css 令牌，绿/蓝主题自动联动。
+
+   标准骨架（新增页面/模块直接复制此结构，样式自动命中）：
+
+   <div class="ui-panel">
+     <div class="ui-panel-header">
+       <div class="ui-profile-main">
+         <div class="ui-avatar"><img src="..." alt="" /></div>
+         <div class="ui-profile-info">
+           <h3 class="ui-name">标题/昵称</h3>
+           <span class="ui-email">副标题/邮箱</span>
+           <span class="ui-role"><i class="fas fa-id-badge"></i> 徽章文字</span>
+         </div>
+       </div>
+       <div class="ui-header-btns">
+         <button type="button" class="ui-icon-btn"><i class="fas fa-times"></i></button>
+       </div>
+     </div>
+
+     <div class="ui-strip">            <!-- 可选：速览条 -->
+       <span class="ui-chip"><i class="fas fa-star"></i> 指标</span>
+     </div>
+
+     <div class="ui-tabs">             <!-- 可选：导航 Tab -->
+       <button type="button" class="ui-tab active">概览</button>
+     </div>
+
+     <div class="ui-panel-body ui-scrollbar">   <!-- 唯一弹性滚动区 -->
+       <div class="ui-card">
+         <h4 class="ui-card-title">分组标题</h4>
+         <!-- 内容 -->
+       </div>
+     </div>
+
+     <div class="ui-panel-footer">     <!-- 可选：页脚（白底 + 细线） -->
+       <button type="button" class="ui-btn-danger"><i class="fas fa-right-from-bracket"></i> 退出</button>
+     </div>
+   </div>
+   ============================================================ */
+
+/* ── 面板框体：LayerPropertiesDialog 同款规格（已确认的通用模板）——
+   白色面板 + 中性发丝描边 + ≈1px 白色外缘 + 干净投影 ── */
+.ui-panel {
+    width: min(430px, 96vw);
+    max-height: 100%;
+    min-height: 0;
+    background: var(--bg-primary, #fff);
+    border: var(--panel-border, 1px solid rgba(0, 0, 0, 0.06));
+    border-radius: var(--panel-radius, 12px);
+    box-shadow:
+        0 0 0 1px #fff,
+        var(--panel-shadow, 0 8px 32px rgba(0, 0, 0, 0.15));
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    font-family: var(--font-base);
+}
+
+/* ── 头部：品牌渐变横幅 + 经纬网格纹理 ── */
+.ui-panel-header {
+    position: relative;
+    padding: 14px 18px;
+    background: linear-gradient(140deg, var(--brand-primary) 0%, var(--brand-primary-dark) 100%);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    overflow: hidden;
+    flex-shrink: 0;
+    color: #fff;
+}
+
+.ui-panel-header::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background-image:
+        linear-gradient(rgba(255, 255, 255, 0.07) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255, 255, 255, 0.07) 1px, transparent 1px);
+    background-size: 24px 24px;
+    -webkit-mask-image: radial-gradient(ellipse 95% 120% at 50% 0%, #000 30%, transparent 100%);
+    mask-image: radial-gradient(ellipse 95% 120% at 50% 0%, #000 30%, transparent 100%);
+    pointer-events: none;
+}
+
+.ui-panel-header > * {
+    position: relative;
+    z-index: 1;
+}
+
+/* ── 主信息区：头像 + 名称/副标题/徽章 ── */
+.ui-profile-main {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    flex: 1;
+    min-width: 0;
+}
+
+.ui-avatar {
+    width: 46px;
+    height: 46px;
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.16);
+    border: 2px solid rgba(255, 255, 255, 0.45);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.18);
+    flex-shrink: 0;
+    overflow: hidden;
+}
+
+.ui-avatar img {
+    width: 100%;
+    height: 100%;
+    border-radius: 10px; /* 外框 12px − 2px 边框 */
+    object-fit: cover;
+}
+
+.ui-profile-info {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    min-width: 0;
+}
+
+.ui-name {
+    margin: 0;
+    font-size: 15.5px;
+    font-weight: 700;
+    color: #fff;
+    line-height: 1.25;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.15);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.ui-email {
+    max-width: 230px;
+    font-size: 11.5px;
+    color: rgba(255, 255, 255, 0.82);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.ui-role {
+    align-self: flex-start;
+    margin-top: 2px;
+    font-size: 11px;
+    font-weight: 600;
+    color: #fff;
+    background: rgba(255, 255, 255, 0.16);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    border-radius: 999px;
+    padding: 1px 9px;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+}
+
+.ui-role i {
+    font-size: 10px;
+    opacity: 0.9;
+}
+
+/* ── 头部右侧按钮组：实底白钮 + 品牌色图标（保证对比度） ── */
+.ui-header-btns {
+    display: flex;
+    flex-direction: row;
+    gap: 6px;
+    flex-shrink: 0;
+}
+
+.ui-icon-btn {
+    background: rgba(255, 255, 255, 0.92);
+    border: 1px solid rgba(255, 255, 255, 0.6);
+    color: var(--brand-primary-dark);
+    width: 30px;
+    height: 30px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    font-size: 12px;
+    flex-shrink: 0;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.18);
+}
+
+.ui-icon-btn:hover:not(:disabled) {
+    background: #fff;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.22);
+}
+
+.ui-icon-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+.ui-icon-btn:active {
+    transform: scale(0.95);
+}
+
+/* ── 速览条：浅绿渐变底 + 白色胶囊指标 ── */
+.ui-strip {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    background: linear-gradient(180deg, rgba(var(--brand-primary-rgb), 0.07), rgba(var(--brand-primary-rgb), 0.03));
+    border-bottom: 1px solid var(--border-light);
+    flex-shrink: 0;
+}
+
+.ui-chip {
+    flex: 1;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-brand-dark);
+    background: #fff;
+    border: 1px solid rgba(var(--brand-primary-rgb), 0.18);
+    border-radius: 999px;
+    padding: 4px 8px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    min-width: 0;
+}
+
+.ui-chip i {
+    color: var(--brand-primary);
+    font-size: 10px;
+    flex-shrink: 0;
+}
+
+/* ── 导航 Tab：底部分隔线 + 3px 品牌色下划线 ── */
+.ui-tabs {
+    display: flex;
+    padding: 0 10px;
+    border-bottom: 1px solid var(--border-light);
+    background: #fff;
+    flex-shrink: 0;
+}
+
+.ui-tab {
+    flex: 1;
+    background: transparent;
+    border: none;
+    padding: 12px 0 11px;
+    font-size: 13px;
+    font-weight: 600;
+    font-family: inherit;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: color 0.2s ease, background 0.2s ease;
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+}
+
+.ui-tab i {
+    font-size: 12px;
+}
+
+.ui-tab:hover {
+    color: var(--brand-primary-dark);
+    background: rgba(var(--brand-primary-rgb), 0.05);
+}
+
+.ui-tab.active {
+    color: var(--brand-primary-dark);
+}
+
+.ui-tab.active i {
+    color: var(--brand-primary);
+}
+
+.ui-tab.active::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 22%;
+    width: 56%;
+    height: 3px;
+    border-radius: 3px 3px 0 0;
+    background: var(--brand-primary);
+}
+
+/* ── 内容区：面板内唯一弹性伸缩区（flex:1 + min-height:0） ── */
+.ui-panel-body {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    padding: 16px 18px;
+    background: var(--bg-secondary);
+    position: relative;
+}
+
+/* ── 品牌色细滚动条（面板/卡片任何滚动容器通用） ── */
+.ui-scrollbar::-webkit-scrollbar {
+    width: 6px;
+}
+
+.ui-scrollbar::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.ui-scrollbar::-webkit-scrollbar-thumb {
+    background-color: rgba(var(--brand-primary-rgb), 0.3);
+    border-radius: 5px;
+}
+
+.ui-scrollbar::-webkit-scrollbar-thumb:hover {
+    background-color: rgba(var(--brand-primary-rgb), 0.55);
+}
+
+/* ── 内容卡片：白色圆角块（body 内的信息分组） ── */
+.ui-card {
+    background: #fff;
+    border: 1px solid rgba(var(--brand-primary-rgb), 0.14);
+    border-radius: 12px;
+    padding: 14px 16px;
+    box-shadow: 0 1px 2px rgba(20, 45, 25, 0.04);
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.ui-card + .ui-card {
+    margin-top: 12px;
+}
+
+.ui-card-title {
+    margin: 0;
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--text-primary);
+    display: flex;
+    align-items: center;
+    gap: 7px;
+}
+
+.ui-card-title i {
+    color: var(--brand-primary);
+    font-size: 12px;
+}
+
+/* ── 页脚：白底 + 细分隔线（按钮永远可见） ── */
+.ui-panel-footer {
+    padding: 12px 18px;
+    border-top: 1px solid var(--border-light);
+    background: #fff;
+    flex-shrink: 0;
+}
+
+/* ── 危险操作按钮（退出/删除等全宽主操作） ── */
+.ui-btn-danger {
+    width: 100%;
+    height: 42px;
+    border-radius: 10px;
+    border: 1px solid rgba(var(--danger-rgb), 0.35);
+    background: rgba(var(--danger-rgb), 0.05);
+    color: var(--danger);
+    font-size: 14px;
+    font-weight: 600;
+    font-family: inherit;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    transition: all 0.2s ease;
+}
+
+.ui-btn-danger:hover:not(:disabled) {
+    background: rgba(var(--danger-rgb), 0.12);
+    border-color: var(--danger);
+    transform: translateY(-1px);
+}
+
+.ui-btn-danger:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}

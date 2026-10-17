@@ -9,6 +9,30 @@
  *   - [data-theme="blue"] = 蓝色主题
  */
 
+/* 全局盒模型重置：统一 border-box，避免各组件在 scoped 样式里重复声明
+   `*, *::before, *::after { box-sizing }`。原 LandingView / RegisterView 的
+   <style scoped> 内各有该重置，现已收敛到此处单一来源（见两文件对应删除）。 */
+*,
+*::before,
+*::after {
+    box-sizing: border-box;
+}
+
+/* 自托管衬线字体：思源宋体（Noto Serif SC）700，对应南师大"宋体标题"观感。
+   文件放 src/assets/fonts（经 Vite 打包、随 base 改写 URL），不走 Google Fonts CDN
+   —— 国内访问稳定、离线可缓存；font-display:swap 保证字体未就位时先用系统衬线。
+   仅引入用到的 700 一档（英雄标题 800 会就近取此档并合成加粗），控制体积。
+   注意：字体文件不放 public/ 用绝对路径引用——本项目 vite base 默认 './'，
+   GitHub Pages 子路径部署（/WebGIS/）下绝对路径 /fonts/... 不会被打包器改写，
+   会 404 静默降级为系统衬线（本批审查修复，原 public/fonts 副本已废弃）。 */
+@font-face {
+    font-family: 'Noto Serif SC';
+    font-style: normal;
+    font-weight: 700;
+    font-display: swap;
+    src: url('./fonts/noto-serif-sc-700.woff2') format('woff2');
+}
+
 :root {
     /* ===== 品牌主色 ===== */
     --brand-primary: #4caf50;
@@ -26,6 +50,19 @@
     --brand-accent-light: #5bcf89;
     --brand-accent-light-rgb: 91, 207, 137;
     --brand-accent-muted: #397d39;
+
+    /* ===== 品牌暖点缀色（"深色骨架 + 暖金呼吸"的来源） =====
+     * 借鉴高校门户的配色纪律：主色只做骨架，暖金只做呼吸点
+     * （标题衬线、分隔线、hover 描边）。两个主题共用同一支金：
+     * 金与绿、金与蓝都是经典配对，无需按主题分化。 */
+    --brand-gold: #c9a227;
+    --brand-gold-rgb: 201, 162, 39;
+    --brand-gold-light: #e3c565;
+    /* 深金：金色一旦落在浅色底上做正文/序号就会掉到 2.6:1 以下，
+       这一档是专为"浅底上的金色文字"准备的（对白约 4.9:1，过 WCAG AA）。
+       --brand-gold 只用于描边、圆环、小色块等非文字场合。 */
+    --brand-gold-dark: #8a6d12;
+    --brand-gold-dark-rgb: 138, 109, 18;
 
     /* ===== 渐变 ===== */
     --brand-gradient: linear-gradient(135deg, #5ec773 0%, #35a44f 100%);
@@ -74,12 +111,18 @@
     /* --font-base   : 全局默认无衬线，适配中英文混排 + 系统字体回退 */
     /* --font-zh     : 中文优先栈（思源黑体 → 苹方 → 微软雅黑 → 苹方 GB） */
     /* --font-en     : 英文优先栈（SF Pro → Segoe UI → Roboto → Helvetica） */
-    /* --font-serif  : 装饰衬线栈（Cinzel → Times New Roman → Songti），用于标题/Logo */
+    /* --font-serif  : 装饰衬线栈（Cinzel → Noto Serif SC → Songti），用于标题/Logo */
     /* --font-mono   : 等宽栈（SF Mono → JetBrains Mono → Consolas → Menlo） */
     --font-base: 'PingFang SC', 'Microsoft YaHei', 'Noto Sans CJK SC', 'Hiragino Sans GB', 'Helvetica Neue', Arial, sans-serif;
     --font-zh: 'PingFang SC', 'Microsoft YaHei', 'Noto Sans CJK SC', 'Hiragino Sans GB', sans-serif;
     --font-en: 'SF Pro Text', 'SF Pro Display', 'Segoe UI', 'Roboto', 'Helvetica Neue', Arial, sans-serif;
-    --font-serif: 'Cinzel', 'Cormorant Garamond', 'Times New Roman', 'Songti SC', 'SimSun', serif;
+    /* Noto Serif SC 为自托管思源宋体（见文件头 @font-face）：拉丁字形由 Cinzel 承担，
+       CJK 落到本字体——无 Songti SC 的系统（Android/Windows）也保住宋体标题观感 */
+    --font-serif: 'Cinzel', 'Cormorant Garamond', 'Times New Roman', 'Noto Serif SC', 'Songti SC', 'SimSun', serif;
+    /* --font-num    : 数字展示栈（Impact → DIN Alternate → Oswald → Bebas Neue）
+     *                 大字重压缩体，用于统计数字等"需要被看见"的数值；
+     *                 Impact 为 Windows 自带，缺失时逐级回退不塌版。 */
+    --font-num: 'Impact', 'DIN Alternate', 'Oswald', 'Bebas Neue', 'Haettenschweiler', 'Arial Narrow', var(--font-en);
     --font-mono: 'SF Mono', 'JetBrains Mono', 'Fira Code', 'Consolas', 'Menlo', monospace;
 
     /* ===== 阴影 ===== */
@@ -145,4 +188,34 @@
 
     --border-brand: #64b5f6;
     --border-brand-light: #bbdefb;
+
+    /* 暖金点缀：主题无关（见 :root 注释），在此显式声明以保证
+       [data-theme] 作用域内变量解析完整 */
+    --brand-gold: #c9a227;
+    --brand-gold-rgb: 201, 162, 39;
+    --brand-gold-light: #e3c565;
+    --brand-gold-dark: #8a6d12;
+    --brand-gold-dark-rgb: 138, 109, 18;
+}
+
+/* ===== 移动端基线（真机 Safari 与 F12 模拟差异的根治） =====
+ * 1. text-size-adjust：禁止 iOS Safari 自动放大小字号文本导致布局错位；
+ * 2. overflow-x：横向溢出是 iOS 整页缩小的导火索，clip 切断溢出链
+ *   （clip 不创建滚动容器，sticky 不受影响；老内核回退 hidden）。
+ */
+html {
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+}
+
+html,
+body {
+    overflow-x: hidden;
+}
+
+@supports (overflow: clip) {
+    html,
+    body {
+        overflow-x: clip;
+    }
 }

@@ -1,0 +1,575 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>首屏三环 · 南师纹样预览</title>
+<style>
+/* 参数全部集中在 :root —— 与 LandingView.vue 里的 mask-size / opacity 一一对应，
+   滑杆改完看面板底部 pre 区块的输出，直接回填即可。 */
+:root {
+    --brand-primary: #4caf50;
+    --brand-primary-rgb: 76, 175, 80;
+    --brand-accent-rgb: 87, 184, 97;
+    --brand-gold: #c9a227;
+    --brand-gold-rgb: 201, 162, 39;
+    --bg-secondary: #f9f9f9;
+
+    --s1: 124%; --o1: 0.85;   /* outer */
+    --s2: 96%;  --o2: 0.7;    /* mid   */
+    --s3: 90%;  --o3: 0.55;   /* inner */
+
+    /* 视口尺寸抽象：桌面直接用 vw/vh，手机框模式下由 .is-mobile 改写成 px，
+       这样 min(86vw, 70vh) 这类约束才能在框内真实复现（vw 不会跟着框变） */
+    --w: 100vw;
+    --h: 100dvh;
+    --r1: min(960px, calc(0.86 * var(--w)));
+    --r2: min(680px, calc(0.60 * var(--w)));
+    --r3: min(420px, calc(0.40 * var(--w)));
+}
+
+/* 手机框模式：与 LandingView 的 @media (max-width:768px) 一一对应 */
+.is-mobile {
+    --w: 375px;
+    --h: 812px;
+    --r1: min(calc(0.86 * var(--w)), calc(0.70 * var(--h)));
+    --r2: min(calc(0.60 * var(--w)), calc(0.489 * var(--h)));
+    --r3: min(calc(0.40 * var(--w)), calc(0.326 * var(--h)));
+}
+[data-theme='blue'] {
+    --brand-primary: #1976d2;
+    --brand-primary-rgb: 25, 118, 210;
+    --brand-accent-rgb: 33, 150, 243;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+    margin: 0;
+    height: 100%;
+    font-family: 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif;
+    color: #333;
+}
+
+body {
+    background-color: var(--bg-secondary);
+    background-image:
+        radial-gradient(ellipse 70% 55% at 10% -5%, rgba(var(--brand-primary-rgb), 0.08), transparent 60%),
+        radial-gradient(ellipse 55% 45% at 105% 105%, rgba(var(--brand-primary-rgb), 0.06), transparent 60%);
+}
+
+/* ===== 首屏舞台：与 .hero-section 同构（overflow:hidden 负责裁切） ===== */
+.stage {
+    position: relative;
+    height: 100dvh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    text-align: center;
+    padding: 4rem 2rem 0;
+}
+
+.hero-bg { position: absolute; inset: 0; pointer-events: none; }
+
+/* 42px 经纬网 + 径向遮罩 + 极慢漂移 */
+.hero-bg__grid {
+    position: absolute;
+    inset: 0;
+    background-image:
+        linear-gradient(rgba(var(--brand-primary-rgb), 0.06) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(var(--brand-primary-rgb), 0.06) 1px, transparent 1px);
+    background-size: 42px 42px;
+    -webkit-mask-image: radial-gradient(ellipse 80% 70% at 50% 30%, #000 20%, transparent 100%);
+    mask-image: radial-gradient(ellipse 80% 70% at 50% 30%, #000 20%, transparent 100%);
+    animation: hero-grid-drift 10s linear infinite;
+}
+@keyframes hero-grid-drift {
+    from { background-position: 0 0, 0 0; }
+    to { background-position: 42px 42px, 42px 42px; }
+}
+
+/* 右上角天光 */
+.hero-bg__sun {
+    position: absolute;
+    top: -14vw;
+    right: -12vw;
+    width: 46vw;
+    height: 46vw;
+    background:
+        radial-gradient(circle at 50% 50%, rgba(var(--brand-gold-rgb), 0.16), rgba(var(--brand-gold-rgb), 0) 58%),
+        repeating-conic-gradient(from 0deg at 50% 50%,
+            rgba(var(--brand-primary-rgb), 0.06) 0deg 5deg,
+            rgba(var(--brand-primary-rgb), 0) 5deg 11deg);
+    -webkit-mask-image: radial-gradient(circle at 50% 50%, #000 0%, transparent 64%);
+    mask-image: radial-gradient(circle at 50% 50%, #000 0%, transparent 64%);
+    opacity: 0.85;
+    animation: sun-spin 96s linear infinite;
+}
+@keyframes sun-spin { to { transform: rotate(360deg); } }
+
+.hero-bg__blob {
+    position: absolute;
+    border-radius: 50%;
+    filter: blur(80px);
+    opacity: 0.35;
+}
+.hero-bg__blob--1 {
+    width: 420px; height: 420px; top: -120px; left: -100px;
+    background: rgba(var(--brand-primary-rgb), 0.25);
+}
+.hero-bg__blob--2 {
+    width: 380px; height: 380px; bottom: -80px; right: -80px;
+    background: rgba(var(--brand-accent-rgb), 0.2);
+}
+
+/* ===== 三环 ===== */
+.hero-bg__rings {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    place-items: center;
+}
+
+.hero-bg__ring {
+    position: relative;
+    grid-area: 1 / 1;
+    border-radius: 50%;
+}
+
+/* 纹样层：PNG 当遮罩，露出 --brand-gold 的染色轮廓 */
+.hero-bg__ring::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
+    background-color: var(--brand-gold);
+    -webkit-mask-image: url('./d-bg2_1.png');
+    mask-image: url('./d-bg2_1.png');
+    -webkit-mask-repeat: no-repeat;
+    mask-repeat: no-repeat;
+    -webkit-mask-position: center;
+    mask-position: center;
+}
+
+.hero-bg__ring--outer {
+    width: var(--r1);
+    height: var(--r1);
+    border: 1px dashed rgba(var(--brand-primary-rgb), 0.26);
+    animation: ring-spin 130s linear infinite;
+}
+.hero-bg__ring--outer::before {
+    -webkit-mask-size: var(--s1) var(--s1);
+    mask-size: var(--s1) var(--s1);
+    opacity: var(--o1);
+}
+/* 公转点：载体是铺满整环的透明层，点用 radial-gradient 画在 12 点方向。
+   于是"点绕环公转"= "整层绕自身圆心旋转"，旋转原点天然是环心。
+   inset 取负值让点正压在环线上。 */
+.hero-bg__ring--outer::after {
+    content: '';
+    position: absolute;
+    inset: -7px;
+    border-radius: 50%;
+    background: radial-gradient(circle 7px at 50% 7px,
+        transparent 5.5px,
+        var(--brand-gold) 5.5px 7px,
+        transparent 7px);
+    animation: ring-spin 69s linear infinite;
+}
+
+.hero-bg__ring--mid {
+    width: var(--r2);
+    height: var(--r2);
+    border: 1px solid rgba(var(--brand-primary-rgb), 0.18);
+    animation: ring-spin-rev 70s linear infinite;
+}
+.hero-bg__ring--mid::before {
+    -webkit-mask-size: var(--s2) var(--s2);
+    mask-size: var(--s2) var(--s2);
+    opacity: var(--o2);
+}
+.hero-bg__ring--mid::after {
+    content: '';
+    position: absolute;
+    inset: -4px;
+    border-radius: 50%;
+    background: radial-gradient(circle 4px at 50% 4px,
+        var(--brand-gold) 4px,
+        transparent 4px);
+    /* 环 70s 逆时针 ⊕ 点 62s 逆时针 → 净 33s 逆时针 */
+    animation: ring-spin-rev 62s linear infinite;
+}
+
+.hero-bg__ring--inner {
+    width: var(--r3);
+    height: var(--r3);
+    border: 1px solid rgba(var(--brand-primary-rgb), 0.14);
+    animation: ring-spin 140s linear infinite;
+}
+.hero-bg__ring--inner::before {
+    -webkit-mask-size: var(--s3) var(--s3);
+    mask-size: var(--s3) var(--s3);
+    opacity: var(--o3);
+}
+
+@keyframes ring-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+@keyframes ring-spin-rev { from { transform: rotate(0deg); } to { transform: rotate(-360deg); } }
+
+/* ===== 手机框模式：复刻 LandingView 的移动端降级 ===== */
+/* 换 alpha 加强版纹样：1060 的细花边缩到 400 设备像素时峰值 0.502→0.220，
+   加强后回到 0.44（1x）/ 0.77（2x），透明度才有提升空间 */
+.is-mobile .hero-bg__ring::before {
+    -webkit-mask-image: url('./d-bg2_1-mobile.png');
+    mask-image: url('./d-bg2_1-mobile.png');
+}
+.is-mobile .hero-bg__ring--outer { border-color: rgba(var(--brand-primary-rgb), 0.45); }
+.is-mobile .hero-bg__ring--mid   { border-color: rgba(var(--brand-primary-rgb), 0.35); }
+.is-mobile .hero-bg__ring--inner { border-color: rgba(var(--brand-primary-rgb), 0.28); }
+
+/* 公转点跟着缩，否则 14px 在 322px 的环上占 4.3%（桌面只占 1.5%） */
+.is-mobile .hero-bg__ring--outer::after {
+    inset: -5.5px;
+    background: radial-gradient(circle 5.5px at 50% 5.5px,
+        transparent 4px,
+        var(--brand-gold) 4px 5.5px,
+        transparent 5.5px);
+}
+.is-mobile .hero-bg__ring--mid::after {
+    inset: -3px;
+    background: radial-gradient(circle 3px at 50% 3px,
+        var(--brand-gold) 3px,
+        transparent 3px);
+}
+
+.is-mobile .hero-bg__grid { animation: none; }
+.is-mobile .hero-bg__blob { filter: blur(48px); }
+.is-mobile .hero-bg__blob--1 { width: 300px; height: 300px; }
+.is-mobile .hero-bg__blob--2 { width: 260px; height: 260px; }
+.is-mobile .hero-bg__sun {
+    background: radial-gradient(circle at 50% 50%,
+        rgba(var(--brand-gold-rgb), 0.16), rgba(var(--brand-gold-rgb), 0) 58%);
+    opacity: 0.7;
+    animation: none;
+}
+
+/* 手机框本体 */
+.stage.is-mobile {
+    width: 375px;
+    height: 812px;
+    margin: 0 auto;
+    border-radius: 30px;
+    box-shadow: 0 24px 60px rgba(0, 0, 0, 0.18), 0 0 0 8px #1c1c1e;
+    padding: 3rem 1rem 0;
+}
+
+/* 真机上 .hero-section 只有 812 − 64(导航) = 748 高，超出部分会被
+   overflow:hidden 裁掉。框高仍按 812 画（--h 也要用 812 算 vh 约束），
+   所以补一条虚线标出真实可见边界，免得在框里看着"刚好放得下" */
+.stage.is-mobile::after {
+    content: '';
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: calc(100% - 64px);
+    border-top: 1px dashed rgba(214, 48, 49, 0.5);
+    pointer-events: none;
+}
+
+/* 尺寸全部对齐 LandingView 的 ≤768 断点，环心上移量才能共用同一个数 */
+.stage.is-mobile .hero-title { font-size: 1.8rem; }
+.stage.is-mobile .hero-sub { margin: 1rem auto 2.5rem; font-size: 0.95rem; }
+.stage.is-mobile .hero-btn { width: 100%; padding: 0.85rem 2rem; font-size: 1rem; }
+.stage.is-mobile .gh-pill { padding: 0.45rem 1rem; font-size: 0.85rem; }
+
+/* 首屏：数据条排在副标题正下方、按钮之前 —— 与 LandingView 同构。
+   DOM 顺序即视觉顺序，不靠 order 重排，容器保持普通块流 */
+.stage.is-mobile .hero-inner { padding-top: 3.5rem; }
+.stage.is-mobile .hero-stats { margin: 0 auto 1rem; gap: 0.5rem 5px; }
+.stage.is-mobile .hero-actions {
+    flex-direction: column;
+    width: 100%;
+    gap: 1rem;
+    margin: 3.5rem 0 1.25rem;
+}
+.stage.is-mobile .github-live { margin: 0 auto 2.5rem; }
+
+.stage.is-mobile .stat-item { flex: 0 0 auto; width: 66px; }
+.stage.is-mobile .stat-item:nth-child(even) { margin-top: 14px; }
+.stage.is-mobile .stat-face { width: 56px; height: 56px; font-size: 0.9rem; }
+.stage.is-mobile .stat-label { font-size: 0.65rem; }
+
+/* 环心对齐：offset = (首屏 padding-top 48 + inner padding-top 56 − 下方内容高 ≈396) / 2 ≈ −146
+   块流下「数据行下边距」与「按钮上边距」会合并取大值（40 vs 56 → 56），
+   不是相加；与组件里的值同源，框内尺寸都已按真实值改过 */
+.stage.is-mobile .hero-bg__rings { transform: translateY(-146px); }
+
+body.mobile-mode {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background-color: #d9d9dc;
+    background-image: none;
+}
+
+/* 文案占位：只为判断内环纹样会不会把标题压花 */
+.hero-inner {
+    position: relative;
+    z-index: 1;
+    width: 100%;
+    max-width: 1200px;
+    margin: auto;
+}
+.hero-eyebrow {
+    display: inline-block;
+    font-size: 0.8rem;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--brand-primary);
+    border: 1px solid rgba(var(--brand-primary-rgb), 0.3);
+    border-radius: 999px;
+    padding: 0.35rem 0.9rem;
+    background: rgba(var(--brand-primary-rgb), 0.06);
+}
+.hero-title {
+    margin: 1.1rem 0 0;
+    font-size: clamp(2rem, 5vw, 3.4rem);
+    font-weight: 700;
+    letter-spacing: 0.02em;
+}
+.hero-sub {
+    margin: 1rem auto 0;
+    max-width: 40rem;
+    font-size: 1rem;
+    line-height: 1.8;
+    color: #666;
+}
+.hero-actions { margin-top: 1.8rem; display: flex; gap: 0.8rem; justify-content: center; }
+.hero-btn {
+    border: 0;
+    border-radius: 999px;
+    padding: 0.7rem 1.6rem;
+    font-size: 0.95rem;
+    color: #fff;
+    background: linear-gradient(135deg, var(--brand-primary), #2e7d32);
+    cursor: pointer;
+}
+.hero-btn--ghost {
+    color: var(--brand-primary);
+    background: transparent;
+    border: 1px solid rgba(var(--brand-primary-rgb), 0.45);
+}
+
+/* 数据条：四枚圆形数据卡（与 LandingView 的 .hero-stats 同构） */
+.hero-stats {
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+    gap: 0.5rem 1.2rem;
+    flex-wrap: wrap;
+    margin: 1.8rem auto 0;
+}
+.stat-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.55rem;
+    width: 76px;
+}
+.stat-item:nth-child(even) { margin-top: 14px; }
+.stat-face {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 66px;
+    height: 66px;
+    border-radius: 50%;
+    background: #fff;
+    border: 1px solid rgba(var(--brand-primary-rgb), 0.16);
+    box-shadow: 0 4px 14px rgba(20, 45, 25, 0.07);
+    font-weight: 700;
+    font-size: 0.95rem;
+    color: var(--brand-primary);
+}
+.stat-label { font-size: 0.7rem; color: #888; }
+
+/* GitHub 认可条：只为让手机框下方高度与真页面一致（环心上移量依赖它） */
+.github-live {
+    display: flex;
+    justify-content: center;
+    gap: 0.6rem;
+    flex-wrap: wrap;
+    margin: 1rem auto 2.5rem;
+}
+.gh-pill {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.3rem 0.7rem;
+    border-radius: 999px;
+    border: 1px solid rgba(var(--brand-primary-rgb), 0.2);
+    background: rgba(var(--brand-primary-rgb), 0.06);
+    font-size: 0.72rem;
+    color: var(--brand-primary);
+}
+
+/* ===== 调参面板 ===== */
+.panel {
+    position: fixed;
+    left: 16px;
+    bottom: 16px;
+    z-index: 10;
+    width: 268px;
+    padding: 12px 14px;
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.9);
+    border: 1px solid rgba(0, 0, 0, 0.08);
+    box-shadow: 0 8px 28px rgba(0, 0, 0, 0.12);
+    font-size: 12px;
+    color: #444;
+    backdrop-filter: blur(8px);
+}
+.panel h4 { margin: 0 0 8px; font-size: 12px; letter-spacing: 0.06em; color: #888; font-weight: 600; }
+.panel label { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.panel label span:first-child { width: 52px; flex: none; }
+.panel input[type='range'] { flex: 1; min-width: 0; accent-color: var(--brand-gold); }
+.panel output { width: 44px; text-align: right; font-variant-numeric: tabular-nums; color: #999; }
+.panel pre {
+    margin: 8px 0 0;
+    padding: 8px;
+    border-radius: 8px;
+    background: #f4f4f4;
+    font-size: 11px;
+    line-height: 1.55;
+    color: #555;
+    white-space: pre-wrap;
+    word-break: break-all;
+}
+.panel button {
+    margin-top: 8px;
+    width: 100%;
+    border: 1px solid rgba(0, 0, 0, 0.12);
+    background: #fff;
+    border-radius: 8px;
+    padding: 6px;
+    font-size: 12px;
+    cursor: pointer;
+}
+.panel hr { border: 0; border-top: 1px solid rgba(0, 0, 0, 0.08); margin: 10px 0 8px; }
+</style>
+</head>
+<body>
+<div class="stage">
+    <div class="hero-bg">
+        <div class="hero-bg__grid"></div>
+        <div class="hero-bg__sun"></div>
+        <div class="hero-bg__rings">
+            <div class="hero-bg__ring hero-bg__ring--outer"></div>
+            <div class="hero-bg__ring hero-bg__ring--mid"></div>
+            <div class="hero-bg__ring hero-bg__ring--inner"></div>
+        </div>
+        <div class="hero-bg__blob hero-bg__blob--1"></div>
+        <div class="hero-bg__blob hero-bg__blob--2"></div>
+    </div>
+
+    <div class="hero-inner">
+        <span class="hero-eyebrow">WebGIS Dev</span>
+        <h1 class="hero-title">首屏三环 · 南师纹样</h1>
+        <p class="hero-sub">
+            纹样取自 njnu.edu.cn「媒体南师」的旋转花环（d-bg2_1.png）。<br>
+            原图 alpha 封顶 50%、颜色极淡，这里把它当遮罩、露出品牌金染色，
+            三环用不同 mask-size 取原图的不同圈层，避免像同一张图复制三份。
+        </p>
+        <!-- 数据条：副标题正下方、按钮之前（DOM 顺序即视觉顺序，与 LandingView 一致） -->
+        <div class="hero-stats">
+            <div class="stat-item"><span class="stat-face">12</span><span class="stat-label">图层</span></div>
+            <div class="stat-item"><span class="stat-face">38</span><span class="stat-label">底图</span></div>
+            <div class="stat-item"><span class="stat-face">96%</span><span class="stat-label">覆盖率</span></div>
+            <div class="stat-item"><span class="stat-face">2.4k</span><span class="stat-label">Star</span></div>
+        </div>
+        <div class="hero-actions">
+            <button class="hero-btn">开始探索</button>
+            <button class="hero-btn hero-btn--ghost">查看文档</button>
+        </div>
+        <div class="github-live">
+            <span class="gh-pill">★ 2.4k</span>
+            <span class="gh-pill">⑂ 318</span>
+        </div>
+    </div>
+</div>
+
+<div class="panel">
+    <h4>参数调节</h4>
+    <label><span>外环 size</span><input type="range" min="70" max="160" step="1" value="124" data-var="--s1" data-unit="%"><output>124%</output></label>
+    <label><span>外环 透明</span><input type="range" min="0" max="100" step="1" value="85" data-var="--o1" data-scale="0.01"><output>0.85</output></label>
+    <label><span>中环 size</span><input type="range" min="70" max="160" step="1" value="96" data-var="--s2" data-unit="%"><output>96%</output></label>
+    <label><span>中环 透明</span><input type="range" min="0" max="100" step="1" value="70" data-var="--o2" data-scale="0.01"><output>0.70</output></label>
+    <label><span>内环 size</span><input type="range" min="70" max="160" step="1" value="90" data-var="--s3" data-unit="%"><output>90%</output></label>
+    <label><span>内环 透明</span><input type="range" min="0" max="100" step="1" value="55" data-var="--o3" data-scale="0.01"><output>0.55</output></label>
+    <hr>
+    <button id="phone">切换视口：桌面 → 手机 375×812</button>
+    <button id="theme">切换主题：绿 → 蓝</button>
+    <button id="reset">恢复当前视口的推荐值</button>
+    <pre id="dump"></pre>
+</div>
+
+<script>
+const root = document.documentElement
+const inputs = [...document.querySelectorAll('.panel input[type=range]')]
+const dump = document.getElementById('dump')
+
+function render() {
+    const v = {}
+    inputs.forEach((el) => {
+        const scale = Number(el.dataset.scale || 1)
+        const unit = el.dataset.unit || ''
+        const raw = Number(el.value)
+        const value = (raw * scale).toFixed(scale === 1 ? 0 : 2) + unit
+        root.style.setProperty(el.dataset.var, value)
+        el.nextElementSibling.textContent = value
+        v[el.dataset.var] = value
+    })
+    dump.textContent =
+        `.hero-bg__ring--outer::before { mask-size: ${v['--s1']}; opacity: ${v['--o1']}; }\n` +
+        `.hero-bg__ring--mid::before   { mask-size: ${v['--s2']}; opacity: ${v['--o2']}; }\n` +
+        (mode === 'mobile'
+            ? '.hero-bg__ring--inner::before { display: none; }'
+            : `.hero-bg__ring--inner::before { mask-size: ${v['--s3']}; opacity: ${v['--o3']}; }`)
+}
+
+inputs.forEach((el) => el.addEventListener('input', render))
+
+/* 两套推荐值：桌面用 LandingView 里的现值，手机用移动端降级后的值 */
+const PRESET = {
+    desktop: [124, 85, 96, 70, 90, 55],
+    mobile: [124, 75, 96, 65, 90, 40],
+}
+const stage = document.querySelector('.stage')
+let mode = 'desktop'
+
+function applyPreset() {
+    const d = PRESET[mode]
+    inputs.forEach((el, i) => (el.value = d[i]))
+    render()
+}
+
+document.getElementById('phone').addEventListener('click', (e) => {
+    mode = mode === 'desktop' ? 'mobile' : 'desktop'
+    const on = mode === 'mobile'
+    stage.classList.toggle('is-mobile', on)
+    document.body.classList.toggle('mobile-mode', on)
+    /* 框高 812px，笔记本屏幕常常放不下 —— 整体等比缩放，
+       不影响内部 px 计算的真实性（--w/--h 仍是 375/812） */
+    stage.style.transform = on ? `scale(${Math.min(1, (window.innerHeight - 140) / 812)})` : ''
+    e.target.textContent = on ? '切换视口：手机 → 桌面' : '切换视口：桌面 → 手机 375×812'
+    applyPreset()
+})
+document.getElementById('theme').addEventListener('click', (e) => {
+    const blue = root.dataset.theme === 'blue'
+    if (blue) delete root.dataset.theme
+    else root.dataset.theme = 'blue'
+    e.target.textContent = blue ? '切换主题：绿 → 蓝' : '切换主题：蓝 → 绿'
+})
+document.getElementById('reset').addEventListener('click', applyPreset)
+applyPreset()
+</script>
+</body>
+</html>

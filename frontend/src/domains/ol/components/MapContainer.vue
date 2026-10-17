@@ -2006,6 +2006,39 @@ function exportUserLayerGeoJSON(payload = {}) {
     }
 }
 
+/**
+ * 用户图层重命名（TOC 右键「重命名」/ 双击行名的统一落地入口）
+ *
+ * [背景·缺陷根因] rename 曾经只写 Pinia store（layerStore.renameLayer），地图侧
+ * 托管记录（userDataLayers）的名字不同步，导致两个后果：
+ *   ① 任何其他图层操作（显隐/透明度/样式/排序/标注/坐标转换/要素编辑…）都会
+ *      触发 emitUserLayersChange 广播，把 store 里的新名字冲回旧值——重命名
+ *      "无法真正应用"；
+ *   ② 导出文件名 / 属性表标题 / 图层属性弹窗等地图侧消费方仍读旧名。
+ * [修复] 与 setUserLayerVisibility / setUserLayerOpacity 同构：先改托管记录，
+ * 再经 emitUserLayersChange 回流 HomeView → TOCPanel → store，保证地图侧为
+ * 单一事实源（HomeView 侧经 dispatchLayerAction({ method:'renameUserLayer' }) 路由）。
+ * @returns {boolean} 是否命中并改名（false 供调用方降级到 store 兜底）
+ */
+function renameUserLayer(layerId, newName) {
+    const id = String(layerId || '').trim();
+    const name = String(newName || '').trim();
+    if (!id || !name) return false;
+
+    const target = userDataLayers.find((item) => String(item?.id) === id);
+    if (!target) return false;
+    if (String(target.name || '') === name) return true;
+
+    target.name = name;
+    // standardTocItem 允许挂在记录或 metadata 上（normalizeEmittedStandardTocItem 两处都读）
+    const standardItem = target.standardTocItem || target.metadata?.standardTocItem;
+    if (standardItem && typeof standardItem === 'object') {
+        standardItem.name = name;
+    }
+    emitUserLayersChange();
+    return true;
+}
+
 // [隶属] 组件交互-对外能力暴露
 // [作用] 向父组件公开地图核心动作（导入、绘制、路线、图层管理等）。
 // [交互] HomeView 等父组件通过 ref 调用这些方法。
@@ -2064,6 +2097,7 @@ defineExpose({
     removeUserLayer,
     reorderUserLayers,
     soloUserLayer,
+    renameUserLayer,
     viewUserLayer,
     zoomToGraphics,
     focusDistrictByAdcode,
@@ -2094,6 +2128,7 @@ registerEngineHandlers('ol', {
     setUserLayerOpacity: ({ layerId, opacity }) =>
         setUserLayerOpacity(layerId, opacity),
     removeUserLayer: ({ layerId }) => removeUserLayer(layerId),
+    renameUserLayer: ({ layerId, newName }) => renameUserLayer(layerId, newName),
     zoomToUserLayer: ({ layerId }) => zoomToUserLayer(layerId),
     zoomToRemoteService: ({ serviceId }) =>
         olRemoteServiceAdapter?.zoomTo?.(serviceId) ?? false,

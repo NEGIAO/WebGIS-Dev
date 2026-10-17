@@ -160,12 +160,28 @@ export const coreMessages = {
         // 根路径宣传主页（LandingView）首屏必需键
         landing: {
             navLogin: '登录 / 注册',
+            navFeatures: '核心功能',
+            navTech: '技术栈',
+            navOss: '开源认可',
+            navAria: '页面导航',
+            navGithubAria: '在 GitHub 上查看仓库（{count} Stars）',
+            /* 导航层的三条 aria-label —— 之前只有模板在用、这里没定义，
+               读屏会直接念出 key 名（视觉上不可见所以一直没被发现）。
+               汉堡钮按展开状态切换 open/close 两套文案，与 aria-expanded 对齐 */
+            menuAria: '站点导航',
+            menuOpenAria: '打开导航菜单',
+            menuCloseAria: '关闭导航菜单',
+            orbitAria: '页面区块导航',
             backHome: '返回首页',
             heroEyebrow: '专业级 WebGIS 平台',
             heroExplore: '探索地理空间数据',
             heroAccent: '可视化与云端管理',
-            heroSubtitle:
-                '基于 Vue 3 + OpenLayers + Cesium 构建的前后端分离 WebGIS 平台，提供 2D/3D 双引擎地图、多格式数据导入、空间分析与三维特效等一站式地理信息服务。',
+            /* 副标题在第一个句号处硬换行（模板里插 <br />）。
+               拆成两个 key 而不是往文案里塞 <br>，是为了不引 v-html ——
+               与 .hero-title 的 heroExplore + heroAccent 同一套写法 */
+            heroSubtitleLead: '基于 Vue + OpenLayers + Cesium 构建前后端分离 WebGIS 平台。',
+            heroSubtitleTail:
+                '提供 2D / 3D 双引擎地图、多格式数据导入、空间分析与三维特效等一站式地理信息服务。',
             tryNow: '立即体验',
             githubSource: 'GitHub 源码',
             statDualEngine: '双引擎切换',
@@ -178,7 +194,7 @@ export const coreMessages = {
             feature1Title: '2D/3D 双引擎',
             feature1Desc: 'OpenLayers 2D 与 Cesium 3D 一键切换，视图状态双向同步，URL 分享一键还原。',
             feature2Title: '丰富底图源',
-            feature2Desc: '70+ 瓦片图源、熔断回退、GCJ-02 纠偏、自定义 XYZ 接入，满足多样地图需求。',
+            feature2Desc: '80+ 瓦片图源、熔断回退、GCJ-02 纠偏、自定义 XYZ 接入，满足多样地图需求。',
             feature3Title: '多格式数据导入',
             feature3Desc: 'GeoJSON / KML / SHP / GLB / CZML / 3D Tiles 拖拽加载，2D/3D 双管线处理。',
             feature4Title: '空间分析',
@@ -197,6 +213,26 @@ export const coreMessages = {
             feature10Desc: '支持建筑1/2/3三类数据源，框选范围抓取建筑轮廓与楼高，一键入库 2D/3D 图层管理；仅限已获授权场景使用。',
             techEyebrow: '关键技术',
             techTitle: '技术栈',
+            techDesc: '七项核心技术分三层协作：渲染画面、提供服务、交付上线。',
+            /* 三层架构卡：层名 / 一句话职责 / 该层产出。
+               tags 用 · 分隔的短语串，不再拆数组 —— 少一层结构，翻译也不易错位 */
+            techLayerRender: '地图渲染层',
+            techLayerRenderRole: '把空间数据变成可缩放、可点选的地图界面 —— 用户看到和操作的一切都在这一层。',
+            techLayerRenderTags: '2D/3D 双引擎 · 图层树 · 要素选取 · 空间量算',
+            techVue: '组件化拆分与路由状态管理，承载图层树、工具栏与各类操作面板',
+            techOpenLayers: '二维瓦片与矢量图层渲染、要素选取、地图交互事件分发',
+            techCesium: '三维地形与模型加载、相机漫游，与二维视图状态双向同步',
+            techLayerService: '空间服务层',
+            techLayerServiceRole: '承接前端每一次请求，把原始数据加工成标准地理服务再回传。',
+            techLayerServiceTags: 'REST 接口 · 鉴权 · 空间分析 · 历史影像 · Agent 对话',
+            techFastapi: 'REST 路由、参数校验与 OpenAPI 文档，统一前后端接口契约',
+            techHuggingFace: '后端容器托管于 Spaces，密钥走 Secrets，作为公网 API 入口',
+            techLayerShip: '构建交付层',
+            techLayerShipRole: '让上面两层可复现地跑起来，并交付到每一个访问者手里。',
+            techLayerShipTags: '单容器镜像 · 推送即发布 · 公网可访问',
+            techDocker: 'nginx 反代与 FastAPI 打进同一镜像，本地与线上同一份运行环境',
+            techGithubPages: '前端静态产物托管，推送即发布，正式域名 webgis.negiao.cn',
+            techStackCaption: '完整依赖清单',
             ossEyebrow: '开源认可',
             ossTitle: 'Star History — 社区的认可',
             ossOrigin: '本项目源于本科课程实践，后随着不断学习与优化，目前已迭代至 {version}。',
@@ -397,12 +433,25 @@ export const coreMessages = {
         // First-paint copy for the root landing page (LandingView)
         landing: {
             navLogin: 'Sign in / Register',
+            navFeatures: 'Features',
+            navTech: 'Tech Stack',
+            navOss: 'Open Source',
+            navAria: 'Page navigation',
+            navGithubAria: 'View repository on GitHub ({count} stars)',
+            /* Labels for the burger button, the full-screen menu dialog and
+               the orbit nav — previously used in the template but never defined */
+            menuAria: 'Site navigation',
+            menuOpenAria: 'Open navigation menu',
+            menuCloseAria: 'Close navigation menu',
+            orbitAria: 'Section navigation',
             backHome: 'Home',
             heroEyebrow: 'Professional WebGIS Platform',
             heroExplore: 'Explore Geospatial Data',
             heroAccent: 'Visualization & Cloud Management',
-            heroSubtitle:
-                'A full-stack WebGIS platform built with Vue 3 + OpenLayers + Cesium, delivering 2D/3D dual-engine maps, multi-format data import, spatial analysis and 3D effects — one-stop geospatial services.',
+            /* 与中文同构：句号处断开，模板插 <br /> */
+            heroSubtitleLead: 'A full-stack WebGIS platform built with Vue 3 + OpenLayers + Cesium.',
+            heroSubtitleTail:
+                'Delivering 2D/3D dual-engine maps, multi-format data import, spatial analysis and 3D effects — one-stop geospatial services.',
             tryNow: 'Try It Now',
             githubSource: 'GitHub Source',
             statDualEngine: 'Dual-engine switch',
@@ -415,7 +464,7 @@ export const coreMessages = {
             feature1Title: '2D/3D Dual Engine',
             feature1Desc: 'One-click switching between OpenLayers 2D and Cesium 3D, two-way view sync, and URL sharing to restore the view.',
             feature2Title: 'Rich Basemap Sources',
-            feature2Desc: '70+ tile sources, circuit-breaker fallback, GCJ-02 correction and custom XYZ endpoints.',
+            feature2Desc: '80+ tile sources, circuit-breaker fallback, GCJ-02 correction and custom XYZ endpoints.',
             feature3Title: 'Multi-format Import',
             feature3Desc: 'Drag-and-drop GeoJSON / KML / SHP / GLB / CZML / 3D Tiles, processed through dual 2D/3D pipelines.',
             feature4Title: 'Spatial Analysis',
@@ -434,6 +483,24 @@ export const coreMessages = {
             feature10Desc: 'Fetch building footprints and heights from three anonymous sources by extent, then add them to 2D/3D layers; authorized use only.',
             techEyebrow: 'Tech Stack',
             techTitle: 'Tech Stack',
+            techDesc: 'Seven core technologies in three cooperating layers: render the map, serve the data, ship it live.',
+            techLayerRender: 'Map Rendering',
+            techLayerRenderRole: 'Turns spatial data into a map you can zoom and click — everything the user sees and touches lives here.',
+            techLayerRenderTags: '2D/3D engines · layer tree · feature picking · measurement',
+            techVue: 'Component split, routing and state; hosts the layer tree, toolbars and panels',
+            techOpenLayers: '2D tile and vector rendering, feature picking, map event dispatch',
+            techCesium: '3D terrain and model loading, camera flights, two-way sync with the 2D view',
+            techLayerService: 'Geospatial Service',
+            techLayerServiceRole: 'Takes every request from the front end and turns raw data into standard geo services.',
+            techLayerServiceTags: 'REST API · auth · spatial analysis · historical imagery · agent chat',
+            techFastapi: 'REST routing, request validation and OpenAPI docs — one contract for both ends',
+            techHuggingFace: 'Backend container hosted on Spaces, secrets kept in Secrets, public API entry point',
+            techLayerShip: 'Build & Delivery',
+            techLayerShipRole: 'Makes the two layers above run reproducibly, and puts them in every visitor’s hands.',
+            techLayerShipTags: 'single-container image · push to publish · publicly reachable',
+            techDocker: 'nginx reverse proxy and FastAPI in one image — identical locally and in production',
+            techGithubPages: 'Static front-end hosting; push to publish; live at webgis.negiao.cn',
+            techStackCaption: 'Full dependency list',
             ossEyebrow: 'Open Source',
             ossTitle: 'Star History — Community Recognition',
             ossOrigin: 'Born as an undergraduate course project, continuously refined through learning — now at {version}.',

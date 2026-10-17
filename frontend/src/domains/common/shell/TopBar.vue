@@ -21,6 +21,7 @@
             >
                 <button
                     class="nav-btn"
+                    :class="{ 'is-open': showToolMenu }"
                     :title="t('topbar.menuTitle')"
                     @click="toggleToolMenu"
                 >
@@ -199,7 +200,7 @@
             </button>
 
             <button
-                class="nav-btn"
+                class="nav-btn account-btn"
                 :title="t('topbar.userCenterTitle')"
                 @click="handleToggleAccountCenter"
             >
@@ -218,6 +219,7 @@
             >
                 <button
                     class="nav-btn magic-btn"
+                    :class="{ 'is-open': showMagicMenu }"
                     :title="t('topbar.magicEffectsTitle')"
                     @click="toggleMagicMenu"
                 >
@@ -404,7 +406,7 @@ const QUICK_LOCATION_COORDS = Object.freeze([
     { key: 'hedu', labelKey: 'topbar.locations.hedu', lng: 114.30796, lat: 34.813566, z: 11.83, layer: 1 },
     { key: 'home', labelKey: 'topbar.locations.home', lng: 111.843768, lat: 32.723897, z: 14.67, layer: 1 },
     { key: '51Area', labelKey: 'topbar.locations.area51', lng: -115.808771, lat: 37.238119, z: 14.98, layer: 7 },
-    { key: 'China', labelKey: 'topbar.locations.china', lng: 116.397451, lat: 39.908722, z: 4.5, layer: 26 },
+    { key: 'China', labelKey: 'topbar.locations.china', lng: 116.397451, lat: 39.908722, z: 4.5, layer: 27 },
 ]);
 
 const quickLocations = computed(() =>
@@ -733,13 +735,44 @@ onBeforeUnmount(() => {
     align-items: center;
     justify-content: space-between;
     box-sizing: border-box;
-    background: var(--brand-primary);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
-    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-    box-shadow: var(--shadow-md);
-    z-index: var(--z-modal);
     position: relative;
+    z-index: var(--z-modal);
+
+    /* 收敛版：干净的品牌绿渐变基底 + 左上柔光，
+       层次感全部交给 GIS 网格承担，不再叠加花哨滤镜 */
+    background:
+        radial-gradient(ellipse 60% 300% at 0% -80%,
+            rgba(var(--brand-accent-light-rgb), 0.2) 0%, transparent 60%),
+        linear-gradient(160deg,
+            var(--brand-primary) 0%,
+            var(--brand-primary-dark) 100%);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.14);
+    box-shadow:
+        0 2px 10px rgba(0, 0, 0, 0.18),
+        inset 0 1px 0 rgba(255, 255, 255, 0.2),
+        inset 0 -1px 0 rgba(0, 0, 0, 0.15);
+}
+
+/* GIS 经纬网格（呼应 LandingView hero-bg__grid）：
+   细网格 30px，每 5 格一条更亮的主网格线，向右渐隐避免干扰导航控件。
+   z-index:-1 使其绘制在 .top-bar 背景之上、内容之下（CSS 绘制次序），
+   无需给子元素提升层级，浮动菜单的堆叠行为不受影响 */
+.top-bar::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+    background-image:
+        linear-gradient(rgba(255, 255, 255, 0.12) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255, 255, 255, 0.12) 1px, transparent 1px),
+        linear-gradient(rgba(255, 255, 255, 0.07) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255, 255, 255, 0.07) 1px, transparent 1px);
+    background-size: 150px 150px, 150px 150px, 30px 30px, 30px 30px;
+    mask-image: linear-gradient(96deg,
+        rgba(0, 0, 0, 0.95) 0%, rgba(0, 0, 0, 0.75) 50%, rgba(0, 0, 0, 0.5) 100%);
+    -webkit-mask-image: linear-gradient(96deg,
+        rgba(0, 0, 0, 0.95) 0%, rgba(0, 0, 0, 0.75) 50%, rgba(0, 0, 0, 0.5) 100%);
 }
 
 .branding {
@@ -789,60 +822,121 @@ onBeforeUnmount(() => {
     align-items: center;
     justify-content: center;
     color: inherit;
+    transition: transform 0.25s ease;
 }
 
 .btn-text {
     font-size: 16px;
-    font-family: 'Cinzel', 'Times New Roman', serif;
+    font-family:'Cinzel', 'Times New Roman', serif;
+    font-weight: 600;
+    letter-spacing: 0.3px;
 }
 
 .menu-host {
     position: relative;
 }
 
+/* 玻璃质感导航按钮：顶部内高光 + 细描边 + 下投影，与渐变网格 TopBar 同材质 */
 .nav-btn {
-    background: rgba(255, 255, 255, 0.12);
-    border: 1px solid rgba(255, 255, 255, 0.25);
-    color: rgba(255, 255, 255, 0.9);
-    padding: 8px 16px;
-    border-radius: 20px;
-    cursor: pointer;
-    font-size: 14px;
+    position: relative;
     display: flex;
     align-items: center;
-    gap: 6px;
-    transition: all 0.3s ease;
+    gap: 7px;
+    padding: 8px 16px;
+    border-radius: 18px;
+    cursor: pointer;
+    font-size: var(--fs-md);
+    color: rgba(255, 255, 255, 0.92);
+    background: linear-gradient(180deg,
+        rgba(255, 255, 255, 0.18) 0%,
+        rgba(255, 255, 255, 0.07) 100%);
+    border: 1px solid rgba(255, 255, 255, 0.22);
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.28),
+        0 2px 6px rgba(0, 0, 0, 0.18);
+    transition:
+        background 0.25s ease,
+        border-color 0.25s ease,
+        box-shadow 0.25s ease,
+        transform 0.18s ease,
+        color 0.25s ease;
     white-space: nowrap;
 }
 
 .nav-btn:hover {
-    background: rgba(255, 255, 255, 0.15);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.25);
-    color: #eee;
+    background: linear-gradient(180deg,
+        rgba(255, 255, 255, 0.3) 0%,
+        rgba(255, 255, 255, 0.14) 100%);
+    border-color: rgba(255, 255, 255, 0.45);
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.38),
+        0 6px 14px rgba(0, 0, 0, 0.22);
+    transform: translateY(-1px);
+    color: #fff;
+}
+
+.nav-btn:hover .btn-icon {
+    transform: scale(1.1);
 }
 
 .nav-btn:active {
-    transform: translateY(1px);
+    transform: translateY(0);
+    box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.24);
+}
+
+.nav-btn:focus-visible {
+    outline: 2px solid rgba(255, 255, 255, 0.85);
+    outline-offset: 2px;
+}
+
+/* 魔法特效：琥珀强调色，静态即带微光 */
+.magic-btn {
+    border-color: rgba(var(--warning-rgb), 0.35);
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.28),
+        0 2px 6px rgba(0, 0, 0, 0.18),
+        0 0 10px rgba(var(--warning-rgb), 0.14);
 }
 
 .magic-btn:hover {
-    background: linear-gradient(135deg, rgba(var(--warning-rgb), 0.2), rgba(var(--brand-accent-rgb), 0.2));
-    border-color: rgba(var(--warning-rgb), 0.4);
-    text-shadow: 0 0 8px rgba(var(--warning-rgb), 0.6);
+    background: linear-gradient(135deg,
+        rgba(var(--warning-rgb), 0.3),
+        rgba(var(--brand-accent-rgb), 0.2));
+    border-color: rgba(var(--warning-rgb), 0.6);
+    text-shadow: 0 0 10px rgba(var(--warning-rgb), 0.55);
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.32),
+        0 6px 14px rgba(0, 0, 0, 0.2),
+        0 0 14px rgba(var(--warning-rgb), 0.3);
 }
 
+/* 用户中心：品牌强调色玻璃，与普通按钮区分层级 */
 .account-btn {
-    background: rgba(var(--brand-accent-light-rgb), 0.2);
-    border-color: rgba(var(--brand-accent-light-rgb), 0.35);
+    background: linear-gradient(180deg,
+        rgba(var(--brand-accent-light-rgb), 0.32),
+        rgba(var(--brand-accent-light-rgb), 0.14));
+    border-color: rgba(var(--brand-accent-light-rgb), 0.45);
 }
 
 .account-btn:hover {
-    background: rgba(var(--brand-accent-light-rgb), 0.24);
-    border-color: rgba(var(--brand-accent-light-rgb), 0.55);
-    text-shadow: 0 0 8px rgba(var(--brand-accent-light-rgb), 0.45);
+    background: linear-gradient(180deg,
+        rgba(var(--brand-accent-light-rgb), 0.45),
+        rgba(var(--brand-accent-light-rgb), 0.22));
+    border-color: rgba(var(--brand-accent-light-rgb), 0.7);
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.35),
+        0 6px 14px color-mix(in srgb, var(--brand-accent) 35%, transparent);
+    color: #fff;
+}
+
+/* 菜单展开态：按钮按压变实，与下方浮层视觉承接 */
+.nav-btn.is-open,
+.nav-btn.is-open:hover {
+    background: rgba(255, 255, 255, 0.26);
+    border-color: rgba(255, 255, 255, 0.5);
+    box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.2);
+    transform: none;
+    color: #fff;
 }
 
 /* ===================================================== */
@@ -1047,9 +1141,11 @@ onBeforeUnmount(() => {
     }
 
     .nav-btn {
-        padding: 5px;
-        min-width: 20px;
+        width: 36px;
+        height: 36px;
+        padding: 0;
         justify-content: center;
+        border-radius: var(--radius-full);
     }
 
     .btn-text {

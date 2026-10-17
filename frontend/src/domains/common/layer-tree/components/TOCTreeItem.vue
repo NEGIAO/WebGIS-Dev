@@ -1011,4 +1011,39 @@ defineExpose({ closeContextMenu });
     padding: 0 4px;
     cursor: pointer;
 }
+
+/* 触屏设备（真机手机/平板）：手指目标至少 40px，且图标同步放大。
+ * 注：F12 只拉窄窗口测不出 iOS 问题，真机以触屏+窄视口双条件为准，
+ * 故用 pointer: coarse 而不用宽度断点。 */
+@media (pointer: coarse) {
+    .toc-row {
+        min-height: 44px;
+    }
+
+    .visibility-btn,
+    .tree-toggle {
+        width: 40px;
+        height: 40px;
+    }
+
+    .visibility-btn svg,
+    .tree-toggle svg,
+    .kind-icon svg {
+        width: 18px;
+        height: 18px;
+    }
+
+    .menu-item {
+        min-height: 44px;
+    }
+
+    .toc-context-menu {
+        max-width: calc(100vw - 32px);
+    }
+
+    /* 触屏无 hover，拖拽把手永不浮现，隐藏以省出横向空间 */
+    .drag-grip {
+        display: none;
+    }
+}
 </style>
