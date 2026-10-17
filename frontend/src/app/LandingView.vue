@@ -65,7 +65,15 @@
                         class="nav-github"
                         :aria-label="t('landing.navGithubAria', { count: formattedStars })"
                     >
-                        <i class="fab fa-github"></i>
+                        <svg
+                            class="icon-github"
+                            viewBox="0 0 16 16"
+                            aria-hidden="true"
+                        >
+                            <path
+                                d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"
+                            />
+                        </svg>
                         <span class="nav-github-count">{{ formattedStars }}</span>
                     </a>
                     <div
@@ -178,7 +186,15 @@
                             rel="noopener"
                             class="btn-outline"
                         >
-                            <i class="fab fa-github"></i>
+                            <svg
+                                class="icon-github"
+                                viewBox="0 0 16 16"
+                                aria-hidden="true"
+                            >
+                                <path
+                                    d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"
+                                />
+                            </svg>
                             {{ t('landing.githubSource') }}
                         </a>
                     </div>
@@ -488,7 +504,15 @@
                     <div class="cta-login-methods">
                         <span class="cta-methods-label">{{ t('landing.ctaMethods') }}</span>
                         <span class="cta-method"><svg class="cta-g-logo" viewBox="0 0 23.5 24" aria-hidden="true"><clipPath id="ctg-a"><path d="M12 10v4.5h6.47c-.5 2.7-3 4.74-6.47 4.74-3.9 0-7.1-3.3-7.1-7.25S8.1 4.75 12 4.75c1.8 0 3.35.6 4.6 1.8l3.4-3.4C18 1.2 15.24 0 12 0 5.4 0 0 5.4 0 12s5.4 12 12 12c7 0 11.5-4.9 11.5-11.7 0-.8-.1-1.54-.2-2.3z"/></clipPath><filter id="ctg-b"><feGaussianBlur stdDeviation="1"/></filter><g style="clip-path:url(#ctg-a)"><foreignObject style="filter:url(#ctg-b)" height="28" width="28" transform="translate(-2 -2)"><div xmlns="http://www.w3.org/1999/xhtml" style="height:100%;width:100%;background:conic-gradient(#FF4641,#FD5061 40deg,#FD5061 60deg,#3186FF 85deg,#3186FF 117deg,#00A5B7 142deg,#0EBC5F 167deg,#0EBC5F 200deg,#6CC500 226deg,#FC0 253deg,#FFD314 268deg,#FC0 292deg,#FF4641 327deg)"/></foreignObject><path fill="#3186FF" d="M11 8h16v8H11z"/></g></svg>Google</span>
-                        <span class="cta-method"><i class="fab fa-github"></i>GitHub</span>
+                        <span class="cta-method"><svg
+                        class="icon-github"
+                        viewBox="0 0 16 16"
+                        aria-hidden="true"
+                    >
+                        <path
+                            d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"
+                        />
+                    </svg>GitHub</span>
                         <span class="cta-method"><img
                             :src="hfLogoUrl"
                             class="cta-hf-logo"
@@ -525,7 +549,15 @@
                             target="_blank"
                             rel="noopener"
                         >
-                            <i class="fab fa-github"></i>
+                            <svg
+                                class="icon-github"
+                                viewBox="0 0 16 16"
+                                aria-hidden="true"
+                            >
+                                <path
+                                    d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"
+                                />
+                            </svg>
                             GitHub
                         </a>
                         <span
@@ -678,7 +710,17 @@
                                 <span
                                     class="mobile-menu__no"
                                     aria-hidden="true"
-                                ><i class="fab fa-github"></i></span>
+                                >
+                                    <svg
+                                        class="icon-github"
+                                        viewBox="0 0 16 16"
+                                        aria-hidden="true"
+                                    >
+                                        <path
+                                            d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"
+                                        />
+                                    </svg>
+                                </span>
                                 <span class="mobile-menu__label">GitHub</span>
                                 <ExternalLink
                                     class="mobile-menu__arrow"
@@ -764,9 +806,9 @@ const logoUrl = `${normalizedBase}images/icon.webp`; // 品牌 logo（icon.webp�
 const previewUrl = `${normalizedBase}images/preview.webp`;
 // Hugging Face 官方 logo（public/images/hf-logo.svg，品牌资产彩色版）
 const hfLogoUrl = `${normalizedBase}images/hf-logo.svg`;
-// 轨道环纹样遮罩源（public/images/njnu-media/，桌面版 + 移动端 alpha 加强版）
-const ringMaskUrl = `${normalizedBase}images/njnu-media/d-bg2_1.png`;
-const ringMaskMobileUrl = `${normalizedBase}images/njnu-media/d-bg2_1-mobile.png`;
+// 轨道环纹样图源（public/images/njnu-media/，桌面版 + 移动端 alpha 加强版）
+const ringPatternUrl = `${normalizedBase}images/njnu-media/d-bg2_1.png`;
+const ringPatternMobileUrl = `${normalizedBase}images/njnu-media/d-bg2_1-mobile.png`;
 
 // ⚠️ 相对 url() 的解析基准是「写下它的那份样式表」，不是组件本身：
 //   · 经 CSS 自定义属性传 URL（--brand-logo、<style> 内 v-bind 注入）时，var() 用在
@@ -778,50 +820,49 @@ const ringMaskMobileUrl = `${normalizedBase}images/njnu-media/d-bg2_1-mobile.png
 //     与 <img src> 行为一致，根域名 / 子路径部署都正确。
 // 因此 URL 不进自定义属性：品牌徽牌的 mask-image 走行内样式（brandBadgeStyle）；
 // 轨道环纹样在 ::before 伪元素上、挂不了行内样式，走运行时注入的文档级 <style>
-// （见 injectRingMaskStyle）。两条通道都不经自定义属性传 URL。
+// （见 injectRingPatternStyle）。两条通道都不经自定义属性传 URL。
 const brandBadgeStyle = {
     '-webkit-mask-image': `url('${logoUrl}')`,
     'mask-image': `url('${logoUrl}')`,
 };
 
-const RING_MASK_STYLE_ID = 'landing-ring-mask-style';
+const RING_PATTERN_STYLE_ID = 'landing-ring-pattern-style';
 
 /**
- * 注入轨道环纹样 mask 样式（桌面 + 移动端 alpha 加强版），幂等。
- * 纯色填充（--brand-gold）与 mask-image 写在同一条规则里：mask 声明始终合法，
- * PNG 404 时该层被当作全透明遮罩直接不可见 —— 不存在「掉回整块纯色圆面」的兜底。
+ * 注入轨道环纹样图源（桌面 + 移动端 alpha 加强版），幂等。
+ *
+ * 为什么纹样是「background-image 直接上图」而不是 mask-image：
+ *   iOS Safari 合成缺陷 —— 被遮罩（mask）的图层若处于持续 transform 旋转的
+ *   父元素内（.hero-bg__ring 跑 ring-spin 无限动画），遮罩层会整块栅格化成
+ *   黑色，旋转环在 iOS 上呈现为黑环（线上实测）。品牌徽牌不旋转所以不受影响。
+ *   改 background-image 后绕开 mask 合成路径，各平台渲染一致。
+ *   纹样 PNG 本身就是淡金图案（RGB≈231,176,111），直接上图与原来
+ *   "mask + 品牌金染色"观感一致；PNG 取不到时该层什么都不画，
+ *   不存在"掉回整块纯色圆面"的兜底。
  */
-function injectRingMaskStyle() {
-    if (typeof document === 'undefined' || document.getElementById(RING_MASK_STYLE_ID)) return;
-    // 与 SFC 中 @supports 门槛等价：不支持 mask 的内核不注入，环上保持纯 CSS 细环
-    const supportsMask =
-        typeof CSS !== 'undefined' &&
-        typeof CSS.supports === 'function' &&
-        (CSS.supports('mask-image', 'url("x.png")') ||
-            CSS.supports('-webkit-mask-image', 'url("x.png")'));
-    if (!supportsMask) return;
+function injectRingPatternStyle() {
+    if (typeof document === 'undefined' || document.getElementById(RING_PATTERN_STYLE_ID)) return;
     const el = document.createElement('style');
-    el.id = RING_MASK_STYLE_ID;
+    el.id = RING_PATTERN_STYLE_ID;
     // 类名翻倍抬优先级到 (0,3,1)，稳压 SFC scoped 规则 (0,2,1)；
     // 断点与 SFC 移动端降级块一致（max-width: 768px）
     el.textContent = `
 .hero-bg__rings .hero-bg__ring.hero-bg__ring::before {
-    background-color: var(--brand-gold);
-    -webkit-mask-image: url('${ringMaskUrl}');
-    mask-image: url('${ringMaskUrl}');
+    background-image: url('${ringPatternUrl}');
+    background-repeat: no-repeat;
+    background-position: center;
 }
 @media (max-width: 768px) {
     .hero-bg__rings .hero-bg__ring.hero-bg__ring::before {
-        -webkit-mask-image: url('${ringMaskMobileUrl}');
-        mask-image: url('${ringMaskMobileUrl}');
+        background-image: url('${ringPatternMobileUrl}');
     }
 }`;
     document.head.appendChild(el);
 }
 
-function removeRingMaskStyle() {
+function removeRingPatternStyle() {
     if (typeof document === 'undefined') return;
-    const el = document.getElementById(RING_MASK_STYLE_ID);
+    const el = document.getElementById(RING_PATTERN_STYLE_ID);
     if (el) el.remove();
 }
 
@@ -1422,7 +1463,7 @@ async function fetchViaWorker() {
 
 onMounted(() => {
     applyLocalCaches(); // 本地缓存秒开，首屏不等待任何网络
-    injectRingMaskStyle(); // 轨道环旋转纹样（PNG 遮罩，文档级 <style> 承载相对 url()）
+    injectRingPatternStyle(); // 轨道环旋转纹样（PNG 背景图，文档级 <style> 承载相对 url()）
     observeAnchors(); // 导航锚点 scroll spy（IntersectionObserver）
     observeStats(); // Hero 统计条数字滚动（进入视口触发）
     observeFeatures(); // 核心功能卡：三栏分左右对称入场
@@ -1444,7 +1485,7 @@ onBeforeUnmount(() => {
     disconnectFeatures(); // 取消核心功能入场观察器
     disconnectReveal(); // 取消统一入场观察器
     window.removeEventListener('keydown', onMenuKeydown);
-    removeRingMaskStyle(); // 卸载注入的轨道环纹样样式
+    removeRingPatternStyle(); // 卸载注入的轨道环纹样样式
     if (landingEl.value) landingEl.value.style.overflowY = '';
 });
 </script>
@@ -1463,6 +1504,9 @@ button:focus-visible {
 .landing-container {
     /* 导航真实定高，Hero 的 100dvh 偏移由此派生，避免魔数不同步 */
     --landing-navbar-h: 72px;
+    /* 旧版 iOS（<16.4）不识别 dvh，先给 vh 兜底再覆盖；
+       否则内部滚动容器高度失效，整页退化成无滚动 */
+    height: 100vh;
     height: 100dvh;
     overflow-y: auto;
     overflow-x: hidden;
@@ -1603,9 +1647,17 @@ button:focus-visible {
 }
 
 /* will-change 只在交互期间挂上，避免常驻图层的开销 */
-.brand-badge:hover {
+.brand-badge:active {
     transform: rotate(-10deg) scale(1.1);
-    will-change: transform;
+}
+
+/* 悬停高亮只授给真正支持悬停的设备：触屏上点一下徽牌，:hover 会粘住
+   （logo 一直保持倾斜放大态，像卡在了交互中），按压反馈交给 :active */
+@media (hover: hover) and (pointer: fine) {
+    .brand-badge:hover {
+        transform: rotate(-10deg) scale(1.1);
+        will-change: transform;
+    }
 }
 
 .brand-text {
@@ -1664,9 +1716,11 @@ button:focus-visible {
     transition: background 0.15s ease, color 0.15s ease, transform 0.18s ease;
 }
 
-.nav-link:hover {
-    background: rgba(var(--brand-primary-rgb), 0.08);
-    color: var(--brand-primary-dark);
+@media (hover: hover) and (pointer: fine) {
+    .nav-link:hover {
+        background: rgba(var(--brand-primary-rgb), 0.08);
+        color: var(--brand-primary-dark);
+    }
 }
 
 /* 激活态「长大」而非「变色」（借鉴门户 tab 选中项是长出来的）：
@@ -1719,6 +1773,20 @@ button:focus-visible {
     flex-shrink: 0;
 }
 
+/* 按压反馈：触屏上没有真 hover，且 :hover 点完会粘住，所以悬停高亮只授给
+   真正支持悬停的设备（见下方媒体查询），触屏用 :active 给出按下即应的反馈 */
+.nav-burger:active {
+    border-color: rgba(var(--brand-primary-rgb), 0.35);
+    background: rgba(var(--brand-primary-rgb), 0.08);
+}
+
+@media (hover: hover) and (pointer: fine) {
+    .nav-burger:hover {
+        border-color: rgba(var(--brand-primary-rgb), 0.35);
+        background: rgba(var(--brand-primary-rgb), 0.06);
+    }
+}
+
 .nav-burger span {
     display: block;
     height: 2px;
@@ -1758,14 +1826,32 @@ button:focus-visible {
     transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
 }
 
-.nav-github:hover {
+.nav-github:active {
     border-color: rgba(var(--brand-primary-rgb), 0.45);
     background: rgba(var(--brand-primary-rgb), 0.06);
     color: var(--brand-primary-dark);
 }
 
-.nav-github .fab {
-    font-size: 15px;
+/* 悬停高亮只授给真正支持悬停的设备：触屏上点开 Star 链接后 :hover 会粘住
+   （从新标签页返回时按钮仍保持高亮态），按压反馈交给 :active */
+@media (hover: hover) and (pointer: fine) {
+    .nav-github:hover {
+        border-color: rgba(var(--brand-primary-rgb), 0.45);
+        background: rgba(var(--brand-primary-rgb), 0.06);
+        color: var(--brand-primary-dark);
+    }
+}
+
+/* GitHub 品牌图标：内联 SVG（官方 mark，16×16 viewBox，currentColor 上色）。
+   原 <i class="fab fa-github"> 依赖 bootcdn 的 Font Awesome 全量 CSS，
+   国内移动网络下该 CDN 不可用时图标整片消失 —— 导航 Star、页脚、移动菜单
+   三处门面位置全部空掉。改内联 SVG 后与 Lucide 组件一样走本地 bundle，
+   任何网络环境都能渲染，且颜色随上下文 currentColor 自动继承 */
+.icon-github {
+    width: 15px;
+    height: 15px;
+    fill: currentColor;
+    flex-shrink: 0;
 }
 
 .nav-github-count {
@@ -1799,9 +1885,18 @@ button:focus-visible {
     transition: background 0.15s ease, color 0.15s ease;
 }
 
-.lang-btn:hover {
+.lang-btn:active {
     background: rgba(var(--brand-primary-rgb), 0.1);
     color: var(--brand-primary-dark);
+}
+
+/* 悬停高亮只授给真正支持悬停的设备：触屏上点完语言钮，:hover 会粘在刚点的
+   钮上，与 .active 的渐变态并存、看着像"两个都选中"；按压反馈交给 :active */
+@media (hover: hover) and (pointer: fine) {
+    .lang-btn:hover {
+        background: rgba(var(--brand-primary-rgb), 0.1);
+        color: var(--brand-primary-dark);
+    }
 }
 
 .lang-btn.active {
@@ -1840,10 +1935,20 @@ button:focus-visible {
     display: inline-block;
 }
 
-.btn-primary:hover {
-    filter: brightness(1.06);
-    transform: translateY(-1px);
-    box-shadow: 0 6px 16px rgba(var(--brand-primary-rgb), 0.38);
+.btn-primary:active {
+    filter: brightness(0.97);
+    transform: translateY(0);
+    box-shadow: 0 2px 8px rgba(var(--brand-primary-rgb), 0.3);
+}
+
+/* 悬停高亮只授给真正支持悬停的设备：触屏上点完登录钮 :hover 会粘住
+   （按钮一直保持上浮态），按压反馈交给 :active */
+@media (hover: hover) and (pointer: fine) {
+    .btn-primary:hover {
+        filter: brightness(1.06);
+        transform: translateY(-1px);
+        box-shadow: 0 6px 16px rgba(var(--brand-primary-rgb), 0.38);
+    }
 }
 
 /* ============ 内容区 ============ */
@@ -1879,6 +1984,7 @@ button:focus-visible {
     /* 精确占满首屏剩余空间（landing-container 为 100dvh 纵向 flex） */
     flex: 1;
     /* 兜底：flex 环境异常时仍接近满屏，偏移量与导航真实定高绑定 */
+    min-height: calc(100vh - var(--landing-navbar-h));
     min-height: calc(100dvh - var(--landing-navbar-h));
     display: flex;
     flex-direction: column;
@@ -2016,12 +2122,12 @@ button:focus-visible {
    原图只有两段结构，先测过再排版：
      · r≈0.78 藤蔓卷草花边，alpha 峰值 0.50，覆盖率仅 10~17%（断续的）
      · r≈0.99 细线圆，alpha 恒为 0.078，覆盖率 86%（一根近乎连续的发丝线）
-   原图是极淡的暖金（不透明像素均值 RGB 231,176,111）且 alpha 封顶 50%，
-   直接 background-image 铺在近白首屏上几乎看不见。故改用 **mask + 纯色**：
-   把 PNG 当遮罩，露出 --brand-gold 的染色轮廓 —— 花边形状完整保留，
-   颜色与主题色对齐，绿/蓝两套主题下都读得出来。
+   原图是极淡的暖金（不透明像素均值 RGB 231,176,111）且 alpha 封顶 50%。
+   纹样以 background-image 直接上图（不用 mask —— 旋转 + mask 在 iOS Safari
+   上会整块栅格化成黑色，详见下方 @supports 块注释）；PNG 自身即淡金色，
+   直接上图就是设计稿里的观感。
 
-   mask-size 决定"取原图的哪一圈"，这是三环不像复制品的关键（半径为实测值）：
+   background-size 决定"取原图的哪一圈"，这是三环不像复制品的关键（半径为实测值）：
      · outer 960px  → 124%：花边落在 r=451~476，贴着虚线边框内侧
      · mid   680px  →  96%：花边 r=248~260（发丝线 r=323 但淡到看不见）
      · inner 420px  →  90%：花边 r=143~190
@@ -2058,25 +2164,24 @@ button:focus-visible {
     border-radius: 50%;
 }
 
-/* 纹样层：PNG 作遮罩 + 品牌金染色（两套旋转纹样 PNG 是本层唯一视觉来源）。
-   必须包 @supports —— 不支持 mask 的内核里伪元素整个不生成，退化为纯 CSS 细环。
-   纯色填充与 mask-image 一起写在运行时注入的文档级 <style> 里（见 script
-   injectRingMaskStyle）：mask 声明始终合法，PNG 取不到时该层被当成全透明遮罩，
-   直接不可见 —— 这里不再留任何 `background-color + 无 mask` 的纯色兜底，
-   杜绝「掉回一整块金色圆面」的丑态。 */
-@supports ((-webkit-mask-image: url('x.png')) or (mask-image: url('x.png'))) {
+/* 纹样层：两套旋转纹样 PNG 以 background-image 直接上图（不用 mask）。
+   为什么不用 mask：iOS Safari 合成缺陷 —— 被遮罩图层若处于持续 transform
+   旋转的父元素内（.hero-bg__ring 跑 ring-spin 无限动画），遮罩层会整块
+   栅格化成黑色，旋转环在 iOS 上呈现为黑环。background-image 无此问题，
+   各平台渲染一致；PNG 取不到时该层什么都不画，不存在"纯色圆面"兜底。
+   图源 url() 由运行时注入的文档级 <style> 提供（见 script
+   injectRingPatternStyle）：相对路径按文档 base 解析，兼容根域名 /
+   子路径部署；本块只配定位/重复/尺寸。 */
+@supports (background-image: url('x.png')) {
     .hero-bg__ring::before {
         content: '';
         position: absolute;
         inset: 0;
         border-radius: 50%;
-        -webkit-mask-repeat: no-repeat;
-        mask-repeat: no-repeat;
-        -webkit-mask-position: center;
-        mask-position: center;
+        background-repeat: no-repeat;
+        background-position: center;
     }
 }
-
 .hero-bg__ring--outer {
     width: min(960px, 86vw);
     height: min(960px, 86vw);
@@ -2087,8 +2192,7 @@ button:focus-visible {
    589 裁出 border-box。alpha 峰值 0.557 × 0.85 = 有效 0.473，
    叠在 #f9f9f9 上最深 RGB(230,211,153)—— 一圈看得清又不抢标题的淡金 */
 .hero-bg__ring--outer::before {
-    -webkit-mask-size: 124% 124%;
-    mask-size: 124% 124%;
+    background-size: 124% 124%;
     opacity: 0.85;
 }
 
@@ -2125,8 +2229,7 @@ button:focus-visible {
    有效 0.228 → RGB(243,234,206)；发丝线 0.078 无论怎么提都只有 0.05，
    实测等于看不见，中环的圆仍由 border 提供，纹样只出花边那一段 */
 .hero-bg__ring--mid::before {
-    -webkit-mask-size: 96% 96%;
-    mask-size: 96% 96%;
+    background-size: 96% 96%;
     opacity: 0.7;
 }
 
@@ -2154,8 +2257,7 @@ button:focus-visible {
    这一档花边峰值被稀释到 0.208，0.55 乘下来 0.114 → RGB(249,244,230)，
    是有意压到"能看出有纹样、但读不出图案"的临界值 */
 .hero-bg__ring--inner::before {
-    -webkit-mask-size: 90% 90%;
-    mask-size: 90% 90%;
+    background-size: 90% 90%;
     opacity: 0.55;
 }
 
@@ -2256,7 +2358,7 @@ button:focus-visible {
        400px 时峰值从 0.502 掉到 0.220 —— 靠调 opacity 补不回来，因为遮罩
        本身已经被平均没了。加强后在同样位置峰值回到 0.44（1x）/ 0.77（2x），
        才有"提透明度"的空间。
-       mask-image 不在此声明：由 injectRingMaskStyle 注入的同断点
+       background-image 不在此声明：由 injectRingPatternStyle 注入的同断点
        @media (max-width: 768px) 规则提供（相对 url() 必须由文档级样式表解析，
        原因见桌面 @supports 块注释）。 */
 
@@ -3814,6 +3916,11 @@ button:focus-visible {
     white-space: nowrap;
 }
 
+.cta-method .icon-github {
+    width: 13px;
+    height: 13px;
+}
+
 .cta-method i,
 .cta-method svg {
     color: var(--brand-primary);
@@ -3890,6 +3997,12 @@ button:focus-visible {
     align-items: center;
     gap: 0.5rem;
     font-size: 0.85rem;
+}
+
+.footer-links .icon-github {
+    width: 13px;
+    height: 13px;
+    vertical-align: -1px;
 }
 
 .footer-links a {
@@ -4090,10 +4203,19 @@ button:focus-visible {
     transition: color 0.2s ease, border-color 0.2s ease, transform 0.2s ease;
 }
 
-.mobile-menu__close:hover {
+.mobile-menu__close:active {
     color: var(--brand-primary-dark);
     border-color: rgba(var(--brand-primary-rgb), 0.4);
-    transform: rotate(90deg);
+}
+
+/* 悬停高亮只授给真正支持悬停的设备：菜单覆层只在触屏出现，:hover 粘住会让
+   关闭钮一直保持旋转 90° 的高亮态；按压反馈交给 :active */
+@media (hover: hover) and (pointer: fine) {
+    .mobile-menu__close:hover {
+        color: var(--brand-primary-dark);
+        border-color: rgba(var(--brand-primary-rgb), 0.4);
+        transform: rotate(90deg);
+    }
 }
 
 /* 两级索引，结构照搬南师大 header-con 的 `.scroll > ul > li`：
@@ -4157,17 +4279,35 @@ button:focus-visible {
     transition: transform 0.2s ease, color 0.2s ease;
 }
 
-.mobile-menu__head:hover,
 .mobile-menu__head:focus-visible {
     color: var(--brand-primary-dark);
     border-bottom-color: rgba(var(--brand-primary-rgb), 0.45);
 }
 
+.mobile-menu__head:active {
+    color: var(--brand-primary-dark);
+}
+
+/* 悬停高亮只授给真正支持悬停的设备：触屏上点开/收起栏目后 :hover 会粘在
+   该行上（文字变色 + 箭头位移都留着，像始终处于悬停），按压反馈交给 :active */
+@media (hover: hover) and (pointer: fine) {
+    .mobile-menu__head:hover {
+        color: var(--brand-primary-dark);
+        border-bottom-color: rgba(var(--brand-primary-rgb), 0.45);
+    }
+}
+
 /* 箭头右移 3px 作为悬停反馈：左对齐布局里怎么动都不会撞歪任何轴线 */
-.mobile-menu__head:hover .mobile-menu__arrow,
 .mobile-menu__head:focus-visible .mobile-menu__arrow {
     color: var(--brand-primary-dark);
     transform: translateX(3px);
+}
+
+@media (hover: hover) and (pointer: fine) {
+    .mobile-menu__head:hover .mobile-menu__arrow {
+        color: var(--brand-primary-dark);
+        transform: translateX(3px);
+    }
 }
 
 /* 子项：单列紧凑排布（手机上单列比双列好扫读，13 条也刚好把一屏填满）。
@@ -4194,10 +4334,22 @@ button:focus-visible {
     transition: color 0.2s ease, transform 0.2s ease;
 }
 
-.mobile-menu__sub-link:hover,
 .mobile-menu__sub-link:focus-visible {
     color: var(--brand-primary-dark);
     transform: translateX(3px);
+}
+
+.mobile-menu__sub-link:active {
+    color: var(--brand-primary-dark);
+}
+
+/* 悬停高亮只授给真正支持悬停的设备：触屏上点子项跳转后 :hover 会粘住
+   （文字保持深色 + 右移 3px），按压反馈交给 :active */
+@media (hover: hover) and (pointer: fine) {
+    .mobile-menu__sub-link:hover {
+        color: var(--brand-primary-dark);
+        transform: translateX(3px);
+    }
 }
 
 /* 序号用深金：亮金 #c9a227 在白底只有 2.6:1，做文字不达标。
@@ -4242,9 +4394,18 @@ button:focus-visible {
     transition: transform 0.2s ease, box-shadow 0.2s ease;
 }
 
-.mobile-menu__cta:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 12px 26px rgba(var(--brand-primary-rgb), 0.34);
+.mobile-menu__cta:active {
+    transform: translateY(0);
+    box-shadow: 0 6px 14px rgba(var(--brand-primary-rgb), 0.28);
+}
+
+/* 悬停高亮只授给真正支持悬停的设备：触屏上点完 CTA :hover 会粘住
+   （按钮一直保持上浮态），按压反馈交给 :active */
+@media (hover: hover) and (pointer: fine) {
+    .mobile-menu__cta:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 12px 26px rgba(var(--brand-primary-rgb), 0.34);
+    }
 }
 
 /* 个人主页：紧跟在 CTA 下方，两者组成固定页脚 */
@@ -4261,8 +4422,14 @@ button:focus-visible {
     transition: color 0.2s ease;
 }
 
-.mobile-menu__contact:hover {
+.mobile-menu__contact:active {
     color: var(--brand-primary-dark);
+}
+
+@media (hover: hover) and (pointer: fine) {
+    .mobile-menu__contact:hover {
+        color: var(--brand-primary-dark);
+    }
 }
 
 /* 覆层滑入/滑出（translateY(-100%→0)） */
@@ -4315,6 +4482,21 @@ button:focus-visible {
     /* 平板起中部放不下锚点组：隐藏（区块仍可正常滚动到达） */
     .nav-links {
         display: none;
+    }
+
+    /* 右簇四件套（汉堡 / Star / 语言 / 登录）各自 flex-shrink:0，
+       在 375px 上合计已约 220px。原 .nav-actions 带 flex:1（可压缩），
+       与 .brand 对半分配后品牌标题只剩几十像素；320px 下右簇甚至整体
+       超出导航条，被 .landing-container 的 overflow-x:hidden 直接裁掉
+       登录钮 —— 这是移动端"导航没适配"的直接原因。
+       改为右簇不伸缩：剩余空间全归品牌区，标题以省略号收尾，
+       四个控件在任何窄屏下都完整可见 */
+    .nav-actions {
+        flex: 0 0 auto;
+    }
+
+    .brand {
+        flex: 1 1 auto;
     }
 
     /* 移动端汉堡显现，承接锚点导航；右侧轨道导航让位 */
@@ -4409,6 +4591,27 @@ button:focus-visible {
 
     .nav-actions {
         gap: 8px;
+    }
+
+    /* 窄屏导航控件整体降一档，给右簇让出空间：
+       徽牌 42→34（导航条本身也降到 64px，42 在里面偏挤）；
+       品牌名 1.25→1.05rem；Star 胶囊内边距收到与 ≤480 一致的 10px；
+       语言钮内边距从 6px 9px 收到 8px（触屏档的 40px 高度不变） */
+    .brand-badge {
+        width: 34px;
+        height: 34px;
+    }
+
+    .brand-title {
+        font-size: 1.05rem;
+    }
+
+    .nav-github {
+        padding: 0 10px;
+    }
+
+    .lang-btn {
+        padding: 0 8px;
     }
 
     /* 登录/注册：从"0.9rem + 0.6rem 内边距"的桌面尺寸收到与
@@ -4554,6 +4757,25 @@ button:focus-visible {
     }
 }
 
+/* ============ 超窄屏（≤380px：iPhone SE 一代 / 旧款安卓） ============
+   320~380px 上右簇四件套 + 徽牌已占去 2/3 宽度，品牌名再缩一档、
+   语言钮继续收紧，保证四件套完整可见 + 品牌名可读（ ellipsis 兜底） */
+@media (max-width: 380px) {
+    .brand-title {
+        font-size: 0.95rem;
+        letter-spacing: 0;
+    }
+
+    .lang-btn {
+        padding: 0 6px;
+        font-size: 9.5px;
+    }
+
+    .navbar-inner {
+        gap: 8px;
+    }
+}
+
 /* ============ 触屏档（pointer: coarse，移动端基线） ============
  * 可点击目标 ≥40px，判据用触屏能力而非宽度断点（F12 拉窄 ≠ 真机）。
  * 窄屏媒体查询里同排四件套（汉堡 / Star / 语言 / 登录）为对齐基线锁了
@@ -4574,14 +4796,16 @@ button:focus-visible {
         height: 40px;
     }
 
-    /* 语言切换器整组 40px，内部按钮随 inline-flex 默认 stretch 拉满 */
+    /* 语言切换器整组 40px，内部按钮随 inline-flex 默认 stretch 拉满。
+       内边距收到 8px：触屏档位于所有宽度断点之后，会覆盖 ≤768 的收紧值；
+       10px 时「中文 / EN」两组在 375px 上要多占约 12px，直接挤压品牌名 */
     .lang-toggle {
         height: 40px;
         padding: 3px;
     }
 
     .lang-btn {
-        padding: 0 10px;
+        padding: 0 8px;
     }
 
     /* 桌面宽度触屏设备（横屏平板 ≥1025px）才显示的锚点组 */
@@ -4624,6 +4848,79 @@ button:focus-visible {
 
     .nav-github {
         padding: 0 11px;
+    }
+
+    /* 触屏档的 lang-btn 内边距（0 8px）在源序上晚于 ≤380 块，
+       超窄触屏上会被覆盖回 8px —— 这里再收一档，与 ≤380 对齐 */
+    .lang-btn {
+        padding: 0 6px;
+        font-size: 9.5px;
+    }
+}
+
+/* ============ 窄屏页脚：四字中文链改 2 字断行 ============
+   原布局是一条硬挤的横排：四个四字中文链接 + 3 个"|"分隔符 + GitHub 胶囊，
+   375px 上远超一行宽，flex 子项默认 shrink=1 把每个四字链接压成
+   "3 字 + 折行"（如"隐私政/策"）。改法：
+   · 链接簇允许换行、子项不再被挤压（flex-shrink: 0）；
+   · 中文链盒宽收窄到 2em（0.85rem 字号恰为两个汉字宽），文字自然折成
+     2+2 两行居中 —— 即"两个字换行"；
+   · 分隔符继续显示，并在换行后的链接之间垂直居中；
+   · 链接前的装饰图标在 2em 盒里会挤没文字，一并隐藏（hover 弹层
+     .footer-pop 仍显示完整地址，信息不丢）；
+   · GitHub 是英文单词、没有两字断点，保持自然宽度单行。
+   本块必须置于 pointer:coarse 块之后：该块给 .footer-links a 设了
+   padding: 8px 4px，同特异度下源序在后者胜；此处显式改回 8px 0，
+   否则 2em 盒被横向 padding 吃掉 8px、每行只装得下一个字。 */
+@media (max-width: 768px) {
+    .footer-links {
+        flex-wrap: wrap;
+        justify-content: center;
+        align-items: flex-start;
+        column-gap: 1rem;
+        row-gap: 0.5rem;
+    }
+
+    /* 分隔符保留显示，并与两字换行链接垂直居中 */
+    .footer-links .divider {
+        align-self: center;
+        color: var(--text-muted);
+    }
+
+    /* 四字中文按 2 字断行：盒宽 2em = 两个汉字宽，文字折成 2+2 居中 */
+    .footer-links a {
+        display: block;
+        width: 2em;
+        padding: 8px 0;
+        text-align: center;
+        line-height: 1.5;
+        flex-shrink: 0;
+    }
+
+    /* 英文单词无两字断点，保持自然宽度单行 */
+    .footer-links a[href^="https://github.com"] {
+        width: auto;
+    }
+
+    /* 装饰图标在 2em 盒里会挤没文字，隐藏 */
+    .footer-links a > svg {
+        display: none;
+    }
+}
+
+/* 移动端当前语言只保留轻量选中态，避免桌面端渐变胶囊在窄屏导航中
+   过于抢眼；仍通过颜色和浅色底保持当前语言的可识别性。 */
+@media (max-width: 1024px) {
+    .lang-btn.active {
+        background: rgba(var(--brand-primary-rgb), 0.1);
+        color: var(--brand-primary-dark);
+        box-shadow: inset 0 0 0 1px rgba(var(--brand-primary-rgb), 0.2);
+    }
+
+    .nav-link.active {
+        background: rgba(var(--brand-primary-rgb), 0.1);
+        color: var(--brand-primary-dark);
+        transform: none;
     }
 }
 </style>
