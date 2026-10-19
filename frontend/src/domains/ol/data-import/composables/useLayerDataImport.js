@@ -33,6 +33,7 @@ import {
     isTiffType,
 } from '@common/data-import/rasterUtils';
 import { decodeTextContent } from '@common/data-import/archiveProcessor';
+import { withImportMask } from '@common/data-import/yieldUi';
 import {
     getNormalizedUploadType,
     getLayerNameFromEntry,
@@ -1468,19 +1469,41 @@ export function useLayerDataImport({
     async function addUserDataLayer({ content, type, name, resources, file = null }) {
         if (!mapInstance.value) return;
         try {
-            const isFolderImport = Array.isArray(resources) && resources.length > 0;
-            const normalizedType = isFolderImport
-                ? 'directory'
-                : getNormalizedUploadType(type, name);
-
-            // 从 resources 中提取 TIF File 对象，用于大文件 Worker 解码路径
-            let tifFile = file;
-            if (!tifFile && isFolderImport && resources.length === 1) {
-                const rName = resources[0]?.name || '';
-                if (/\.(tiff?|tif)$/i.test(rName)) {
-                    tifFile = resources[0];
+            // 遮罩握手：先让 GlobalLoading 真正上屏（showLoading + 双 rAF），
+            // 再进入重活；同步解析/解码阶段面板也能给出可见反馈，不再"卡死无任何提示"
+            await withImportMask('正在导入数据，请稍候…', () =>
+                importUploadInternal({ content, type, name, resources, file }));
+        } catch (e) {
+            if (isUnsupportedProjectedCrsError(e)) {
+                if (!e?.notified) {
+                    message.error(UNSUPPORTED_PROJECTED_CRS_MESSAGE, {
+                        closable: true,
+                        duration: 0,
+                    });
                 }
+                return;
             }
+            message.error('文件解析失败: ' + e.message, { closable: true, duration: 0 });
+        }
+    }
+
+    async function importUploadInternal({ content, type, name, resources, file = null }) {
+        const isFolderImport = Array.isArray(resources) && resources.length > 0;
+        const normalizedType = isFolderImport
+            ? 'directory'
+            : getNormalizedUploadType(type, name);
+
+        // 从 resources 中提取 TIF File 对象，用于大文件 Worker 解码路径
+        let tifFile = file;
+
+        if (!tifFile && isFolderImport && resources.length === 1) {
+            const rName = resources[0]?.name || '';
+            if (/\.(tiff?|tif)$/i.test(rName)) {
+                tifFile = resources[0];
+            }
+        }
+
+        try {
             reportImportProgress({
                 phase: 'validating',
                 message: `正在校验文件：${name || (isFolderImport ? '文件夹导入' : '未命名文件')}`,
@@ -1576,20 +1599,13 @@ export function useLayerDataImport({
             });
             message.success(`导入完成：${name || '上传图层'}`);
         } catch (e) {
+            // 用户提示统一由 withImportMask 外层的 addUserDataLayer 收口，
+            // 这里只负责面板进度条的错误反馈，并向上抛出便于识别不支持投影
             reportImportProgress({
                 phase: 'error',
                 message: `导入失败：${e.message}`,
             });
-            if (isUnsupportedProjectedCrsError(e)) {
-                if (!e?.notified) {
-                    message.error(UNSUPPORTED_PROJECTED_CRS_MESSAGE, {
-                        closable: true,
-                        duration: 0,
-                    });
-                }
-                return;
-            }
-            message.error('文件解析失败: ' + e.message, { closable: true, duration: 0 });
+            throw e;
         }
     }
 

@@ -89,6 +89,21 @@ defineProps({
     margin-left: 0;
 }
 
+/* 南师的环 hover 才缓旋（ani_turn 15s/30s）：印章平时静止，
+   光标落在节头上时虚线外圈以 60s 一圈极缓开转，
+   reduced-motion 环境保持静止 */
+@media (prefers-reduced-motion: no-preference) {
+    .section-head:hover::before {
+        animation: seal-turn 60s linear infinite;
+    }
+}
+
+@keyframes seal-turn {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
 /* 节标题水印底纹（借鉴南师大 .tit-bg 的浅色底纹）：
    以纯 CSS 画一枚极淡的"经纬 / 罗盘"徽记垫在标题之后，
    品牌色 6% 透明，绿/蓝主题随令牌联动；z-index:-1 落在内容之下、

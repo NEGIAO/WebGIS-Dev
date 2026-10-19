@@ -101,6 +101,8 @@
         :file-name="repositionTarget?.name || pendingGltfFile?.name || ''"
         :initial-coords="repositionTarget?.position || null"
         :mode="repositionTarget ? 'reposition' : 'import'"
+        :busy="gltfLoading"
+        :load-error="gltfLoadError"
         @confirm="handleGltfCoordConfirm"
         @cancel="handleGltfCoordCancel"
     />
@@ -1062,6 +1064,9 @@ defineExpose({
  */
 const pendingGltfFile = computed(() => dataImport.pendingGltfFile.value);
 const repositionTarget = computed(() => dataImport.repositionTarget?.value);
+/** GLTF 坐标弹窗的 busy / 失败信息（失败保留弹窗与输入，行内展示） */
+const gltfLoading = computed(() => !!dataImport.gltfLoading.value);
+const gltfLoadError = computed(() => dataImport.gltfLoadError.value || '');
 
 /** 拖拽悬浮状态（用于显示拖拽提示覆盖层） */
 const isDragOver = ref(false);

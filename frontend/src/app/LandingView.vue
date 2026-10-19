@@ -13,7 +13,7 @@
                          遮罩 url 与资源同源，经内联 CSS 变量传入 -->
                     <div
                         class="brand-badge"
-                        :style="{ '--brand-logo': `url('${logoUrl}')` }"
+                        :style="brandBadgeStyle"
                         aria-hidden="true"
                     ></div>
                     <div class="brand-text">
@@ -65,7 +65,15 @@
                         class="nav-github"
                         :aria-label="t('landing.navGithubAria', { count: formattedStars })"
                     >
-                        <i class="fab fa-github"></i>
+                        <svg
+                            class="icon-github"
+                            viewBox="0 0 16 16"
+                            aria-hidden="true"
+                        >
+                            <path
+                                :d="GITHUB_MARK_PATH"
+                            />
+                        </svg>
                         <span class="nav-github-count">{{ formattedStars }}</span>
                     </a>
                     <div
@@ -178,7 +186,15 @@
                             rel="noopener"
                             class="btn-outline"
                         >
-                            <i class="fab fa-github"></i>
+                            <svg
+                                class="icon-github"
+                                viewBox="0 0 16 16"
+                                aria-hidden="true"
+                            >
+                                <path
+                                    :d="GITHUB_MARK_PATH"
+                                />
+                            </svg>
                             {{ t('landing.githubSource') }}
                         </a>
                     </div>
@@ -279,7 +295,8 @@
                 </div>
             </section>
 
-            <!-- ============ 技术栈 ============ -->
+            <!-- ============ 技术栈 ============
+                 外层 section 承接定位；内容由 .tech-inner 收进 1200px 版心 -->
             <section
                 id="tech"
                 class="tech-section"
@@ -288,6 +305,7 @@
                     class="section-bg"
                     aria-hidden="true"
                 ></div>
+                <div class="tech-inner">
                 <SectionTitle
                     :eyebrow="t('landing.techEyebrow')"
                     :title="t('landing.techTitle')"
@@ -368,6 +386,7 @@
                         {{ tech.label }}
                     </span>
                 </div>
+                </div>
             </section>
 
             <!-- ============ 开源认可：实时 Stars/Forks + 每日更新的 Star History ============ -->
@@ -425,11 +444,25 @@
                                 :class="{ on: githubIsLive }"
                             ></span>
                             {{ githubIsLive ? t('landing.ossLive') : t('landing.ossCached') }}
+                            <!-- 两级日期徽章（借鉴南师大 .time .t1 日 + .t2 年月）：
+                                 大日数字 + 小字「年.月」，比一长串 "数据更新于 …"
+                                 更有"刻度"感；解析失败时不渲染，胶囊保持原样 -->
                             <span
-                                v-if="githubUpdatedText"
-                                class="oss-updated"
-                                >· {{ githubUpdatedText }}</span
+                                v-if="githubUpdatedParts"
+                                class="oss-date"
+                                :aria-label="t('landing.ossUpdatedAt', {
+                                    time: `${githubUpdatedParts.ym}.${githubUpdatedParts.day}`,
+                                })"
                             >
+                                <b
+                                    class="oss-date__day"
+                                    aria-hidden="true"
+                                >{{ githubUpdatedParts.day }}</b>
+                                <span
+                                    class="oss-date__ym"
+                                    aria-hidden="true"
+                                >{{ githubUpdatedParts.ym }}</span>
+                            </span>
                             <ExternalLink :size="14" />
                             {{ t('landing.ossViewRepo') }}
                         </a>
@@ -488,7 +521,15 @@
                     <div class="cta-login-methods">
                         <span class="cta-methods-label">{{ t('landing.ctaMethods') }}</span>
                         <span class="cta-method"><svg class="cta-g-logo" viewBox="0 0 23.5 24" aria-hidden="true"><clipPath id="ctg-a"><path d="M12 10v4.5h6.47c-.5 2.7-3 4.74-6.47 4.74-3.9 0-7.1-3.3-7.1-7.25S8.1 4.75 12 4.75c1.8 0 3.35.6 4.6 1.8l3.4-3.4C18 1.2 15.24 0 12 0 5.4 0 0 5.4 0 12s5.4 12 12 12c7 0 11.5-4.9 11.5-11.7 0-.8-.1-1.54-.2-2.3z"/></clipPath><filter id="ctg-b"><feGaussianBlur stdDeviation="1"/></filter><g style="clip-path:url(#ctg-a)"><foreignObject style="filter:url(#ctg-b)" height="28" width="28" transform="translate(-2 -2)"><div xmlns="http://www.w3.org/1999/xhtml" style="height:100%;width:100%;background:conic-gradient(#FF4641,#FD5061 40deg,#FD5061 60deg,#3186FF 85deg,#3186FF 117deg,#00A5B7 142deg,#0EBC5F 167deg,#0EBC5F 200deg,#6CC500 226deg,#FC0 253deg,#FFD314 268deg,#FC0 292deg,#FF4641 327deg)"/></foreignObject><path fill="#3186FF" d="M11 8h16v8H11z"/></g></svg>Google</span>
-                        <span class="cta-method"><i class="fab fa-github"></i>GitHub</span>
+                        <span class="cta-method"><svg
+                        class="icon-github"
+                        viewBox="0 0 16 16"
+                        aria-hidden="true"
+                    >
+                        <path
+                            :d="GITHUB_MARK_PATH"
+                        />
+                    </svg>GitHub</span>
                         <span class="cta-method"><img
                             :src="hfLogoUrl"
                             class="cta-hf-logo"
@@ -502,86 +543,102 @@
         </main>
 
         <!-- ============ 页脚 ============ -->
+        <!-- 三层结构（借鉴南师 .box-footer1）：
+             1. footer-quick  快捷入口圆钮 —— 几个真正的常去入口；
+             2. footer-rule   发丝分隔线（两端虚化渐变）；
+             3. footer-meta   法务行 —— 版权 + 隐私/服务条款 -->
         <footer class="footer">
-            <!-- 无缝滚动装饰带（借鉴南师大 .cloud2）：低透明度横移，纯尾韵装饰 -->
-            <div
-                class="footer-deco"
-                aria-hidden="true"
-            ></div>
-            <!-- 双层云海视差：第二层反向、异速，营造纵深（纯 CSS 零 JS） -->
-            <div
-                class="footer-deco footer-deco--2"
-                aria-hidden="true"
-            ></div>
             <div class="footer-inner">
-                <p class="footer-copyright">
-                    {{ t('landing.copyright') }}
-                </p>
-                <div class="footer-links">
-                    <router-link to="/privacy">{{ t('landing.privacy') }}</router-link>
-                    <span
-                        class="divider"
-                        aria-hidden="true"
-                    >|</span>
-                    <router-link to="/terms">{{ t('landing.terms') }}</router-link>
-                    <span
-                        class="divider"
-                        aria-hidden="true"
-                    >|</span>
-                    <!-- 外链 hover 上弹白卡（借鉴南师友链下拉）：小三角 + 仓库地址 -->
-                    <span class="footer-link-pop">
-                        <a
-                            href="https://github.com/NEGIAO/WebGIS-Dev"
-                            target="_blank"
-                            rel="noopener"
-                        >
-                            <i class="fab fa-github"></i>
-                            GitHub
-                        </a>
+                <ul class="footer-quick">
+                    <li>
+                        <span class="footer-link-pop">
+                            <a
+                                :href="GITHUB_PAGE_URL"
+                                target="_blank"
+                                rel="noopener"
+                                class="footer-entry"
+                                :aria-label="t('landing.githubSource')"
+                            >
+                                <svg
+                                    class="icon-github"
+                                    viewBox="0 0 16 16"
+                                    aria-hidden="true"
+                                >
+                                    <path
+                                        :d="GITHUB_MARK_PATH"
+                                    />
+                                </svg>
+                            </a>
+                            <span
+                                class="footer-pop"
+                                role="tooltip"
+                                >github.com/NEGIAO/WebGIS-Dev</span
+                            >
+                        </span>
+                    </li>
+                    <li>
+                        <span class="footer-link-pop">
+                            <a
+                                href="https://www.negiao.cn"
+                                target="_blank"
+                                rel="noopener"
+                                class="footer-entry"
+                                :aria-label="t('landing.homepage')"
+                            >
+                                <IdCard
+                                    :size="17"
+                                    aria-hidden="true"
+                                />
+                            </a>
+                            <span
+                                class="footer-pop"
+                                role="tooltip"
+                                >negiao.cn</span
+                            >
+                        </span>
+                    </li>
+                    <li>
+                        <span class="footer-link-pop">
+                            <a
+                                href="https://webgis.negiao.cn"
+                                target="_blank"
+                                rel="noopener"
+                                class="footer-entry"
+                                :aria-label="t('landing.officialSite')"
+                            >
+                                <Globe
+                                    :size="17"
+                                    aria-hidden="true"
+                                />
+                            </a>
+                            <span
+                                class="footer-pop"
+                                role="tooltip"
+                                >webgis.negiao.cn</span
+                            >
+                        </span>
+                    </li>
+                </ul>
+                <div
+                    class="footer-rule"
+                    aria-hidden="true"
+                ></div>
+                <div class="footer-meta">
+                    <p class="footer-copyright">
+                        {{ t('landing.copyright') }}
+                    </p>
+                    <div class="footer-links">
+                        <router-link to="/privacy">
+                            <span class="cjk-break">{{ cjkBreak(t('landing.privacy')) }}</span>
+                        </router-link>
                         <span
-                            class="footer-pop"
-                            role="tooltip"
-                            >github.com/NEGIAO/WebGIS-Dev</span
-                        >
-                    </span>
-                    <span
-                        class="divider"
-                        aria-hidden="true"
-                    >|</span>
-                    <span class="footer-link-pop">
-                        <a
-                            href="https://www.negiao.cn"
-                            target="_blank"
-                            rel="noopener"
-                        >
-                            <IdCard :size="16" />
-                            {{ t('landing.homepage') }}
-                        </a>
-                        <span
-                            class="footer-pop"
-                            role="tooltip"
-                            >negiao.cn</span
-                        >
-                    </span>
-                    <span
-                        class="divider"
-                        aria-hidden="true"
-                    >|</span>
-                    <span class="footer-link-pop">
-                        <a
-                            href="https://webgis.negiao.cn"
-                            target="_blank"
-                            rel="noopener"
-                        >
-                            <Globe :size="16" />
-                            {{ t('landing.officialSite') }}
-                        </a>
-                        <span
-                            class="footer-pop"
-                            role="tooltip"
-                            >webgis.negiao.cn</span
-                        >
-                    </span>
+                            class="divider"
+                            aria-hidden="true"
+                        >|</span>
+                        <router-link to="/terms">
+                            <span class="cjk-break">{{ cjkBreak(t('landing.terms')) }}</span>
+                        </router-link>
+                    </div>
                 </div>
             </div>
         </footer>
@@ -621,7 +678,7 @@
                     <span class="mobile-menu__brand">
                         <span
                             class="brand-badge"
-                            :style="{ '--brand-logo': `url('${logoUrl}')` }"
+                            :style="brandBadgeStyle"
                             aria-hidden="true"
                         ></span>
                         <span class="mobile-menu__wordmark">NEGIAO's WebGIS</span>
@@ -688,7 +745,17 @@
                                 <span
                                     class="mobile-menu__no"
                                     aria-hidden="true"
-                                ><i class="fab fa-github"></i></span>
+                                >
+                                    <svg
+                                        class="icon-github"
+                                        viewBox="0 0 16 16"
+                                        aria-hidden="true"
+                                    >
+                                        <path
+                                            :d="GITHUB_MARK_PATH"
+                                        />
+                                    </svg>
+                                </span>
                                 <span class="mobile-menu__label">GitHub</span>
                                 <ExternalLink
                                     class="mobile-menu__arrow"
@@ -767,28 +834,73 @@ function switchLanguage(nextLanguage) {
 
 const normalizedBase = ASSET_BASE_URL.endsWith('/') ? ASSET_BASE_URL : `${ASSET_BASE_URL}/`;
 
-// 静态资源 URL 统一解析为绝对地址（以 document.baseURI 为基准，兼容根域名 /
-// GitHub Pages 子路径部署；baseURI 不含 hash 路由的 #/ 片段，解析结果不受路由影响）。
-// 不能用裸相对路径：这些 URL 会进入 CSS 自定义属性（--brand-logo、v-bind 注入的
-// mask-image），浏览器对自定义属性内的相对 url() 按「使用 var() 的样式表」解析 ——
-// 即打包产物 /assets/index-*.css，'./' 会被拼成 /assets/images/... 直接 404
-// （线上实测：icon.webp 实际请求了 /assets/images/icon.webp）。
-const assetUrl = (path) => new URL(`${normalizedBase}${path}`, document.baseURI).href;
-
+// 全部保持 ASSET_BASE_URL 拼接的相对路径（'./' 或 '/子路径/' 形态），
+// 兼容根域名 / GitHub Pages 子路径多处部署
 // 品牌 logo（icon.webp），与 TopBar / favicon 同一资源
-const logoUrl = assetUrl('images/icon.webp');
+const logoUrl = `${normalizedBase}images/icon.webp`;
 // 产品预览图（public/images/preview.webp），仅主卡（feature1）右侧引用；与 logoUrl 同源派生
-const previewUrl = assetUrl('images/preview.webp');
+const previewUrl = `${normalizedBase}images/preview.webp`;
 // Hugging Face 官方 logo（public/images/hf-logo.svg，品牌资产彩色版）
-const hfLogoUrl = assetUrl('images/hf-logo.svg');
-// 轨道环纹样遮罩源（public/images/njnu-media/，桌面版 + 移动端 alpha 加强版）。
-// 由 <style> 内 v-bind() 注入 mask-image —— 注意 v-bind 是「原样替换」进自定义属性，
-// 值必须自带 url() 包裹：若只给裸路径，mask-image: var(--x) 的计算值非法、整条声明
-// 被浏览器丢弃，mask 失效会让轨道环退化成整块金色圆面（线上实测现象，见纹样层注释）。
-// 同理，样式里直接写 url('/images/...') 绝对路径时，GitHub Pages 子路径部署
-// （vite base './'）下不会被改写而 404，故必须走 assetUrl 运行时解析。
-const ringMaskUrl = `url('${assetUrl('images/njnu-media/d-bg2_1.png')}')`;
-const ringMaskMobileUrl = `url('${assetUrl('images/njnu-media/d-bg2_1-mobile.png')}')`;
+const hfLogoUrl = `${normalizedBase}images/hf-logo.svg`;
+// 轨道环纹样图源（public/images/njnu-media/，桌面版 + 移动端 alpha 加强版）
+const ringPatternUrl = `${normalizedBase}images/njnu-media/d-bg2_1.png`;
+const ringPatternMobileUrl = `${normalizedBase}images/njnu-media/d-bg2_1-mobile.png`;
+
+// 相对 url() 的解析基准是「写下它的那份样式表」，不是组件本身：
+//   · 经 CSS 自定义属性传 URL（--brand-logo、<style> 内 v-bind 注入）时，var() 用在
+//     打包产物 /assets/index-*.css 里，'./' 会被拼成 /assets/images/... 直接 404
+//     （V3.6.20 线上实测：icon.webp 实际请求了 /assets/images/icon.webp）；
+//   · v-bind 注入的值是「原样替换」进自定义属性，裸路径不带 url() 时
+//     mask-image: var(--x) 计算值非法、整条声明被丢弃 —— 轨道环退化成整块金色圆面；
+//   · 而行内 style 属性与文档内嵌 <style> 里的相对 url() 按文档 base 解析，
+//     与 <img src> 行为一致，根域名 / 子路径部署都正确。
+// 因此 URL 不进自定义属性：品牌徽牌的 mask-image 走行内样式（brandBadgeStyle）；
+// 轨道环纹样在 ::before 伪元素上、挂不了行内样式，走运行时注入的文档级 <style>
+// （见 injectRingPatternStyle）。两条通道都不经自定义属性传 URL。
+const brandBadgeStyle = {
+    '-webkit-mask-image': `url('${logoUrl}')`,
+    'mask-image': `url('${logoUrl}')`,
+};
+
+const RING_PATTERN_STYLE_ID = 'landing-ring-pattern-style';
+
+/**
+ * 注入轨道环纹样图源（桌面 + 移动端 alpha 加强版），幂等。
+ *
+ * 为什么纹样是「background-image 直接上图」而不是 mask-image：
+ *   iOS Safari 合成缺陷 —— 被遮罩（mask）的图层若处于持续 transform 旋转的
+ *   父元素内（.hero-bg__ring 跑 ring-spin 无限动画），遮罩层会整块栅格化成
+ *   黑色，旋转环在 iOS 上呈现为黑环（线上实测）。品牌徽牌不旋转所以不受影响。
+ *   改 background-image 后绕开 mask 合成路径，各平台渲染一致。
+ *   纹样 PNG 本身就是淡金图案（RGB≈231,176,111），直接上图与原来
+ *   "mask + 品牌金染色"观感一致；PNG 取不到时该层什么都不画，
+ *   不存在"掉回整块纯色圆面"的兜底。
+ */
+function injectRingPatternStyle() {
+    if (typeof document === 'undefined' || document.getElementById(RING_PATTERN_STYLE_ID)) return;
+    const el = document.createElement('style');
+    el.id = RING_PATTERN_STYLE_ID;
+    // 类名翻倍抬优先级到 (0,3,1)，稳压 SFC scoped 规则 (0,2,1)；
+    // 断点与 SFC 移动端降级块一致（max-width: 768px）
+    el.textContent = `
+.hero-bg__rings .hero-bg__ring.hero-bg__ring::before {
+    background-image: url('${ringPatternUrl}');
+    background-repeat: no-repeat;
+    background-position: center;
+}
+@media (max-width: 768px) {
+    .hero-bg__rings .hero-bg__ring.hero-bg__ring::before {
+        background-image: url('${ringPatternMobileUrl}');
+    }
+}`;
+    document.head.appendChild(el);
+}
+
+function removeRingPatternStyle() {
+    if (typeof document === 'undefined') return;
+    const el = document.getElementById(RING_PATTERN_STYLE_ID);
+    if (el) el.remove();
+}
 
 // 核心功能卡片：图标 + i18n key，避免 10 段近似模板重复
 const FEATURES = Object.freeze([
@@ -1028,6 +1140,13 @@ const GITHUB_API_URL = `https://api.github.com/repos/${GITHUB_REPO}`;
 const GITHUB_CACHE_KEY = 'webgis-github-stats-v1';
 const GITHUB_CACHE_TTL_MS = 10 * 60 * 1000;
 const GITHUB_PAGE_URL = `https://github.com/${GITHUB_REPO}`;
+// GitHub 官方 mark 路径（16×16 viewBox，currentColor 上色）。原 <i class="fab fa-github">
+// 依赖 bootcdn 的 Font Awesome 全量 CSS，国内移动网络下该 CDN 不可用时图标整片
+// 消失 —— 导航 Star、登录胶囊、页脚、移动菜单四处门面位置全部空掉。改内联 SVG 后
+// 与 Lucide 组件一样走本地 bundle，任何网络环境都能渲染。五处复用同一份 path，
+// 提成常量：官方 mark 换版时只改这里一处
+const GITHUB_MARK_PATH =
+    'M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z';
 const STAR_HISTORY_PAGE_URL =
     'https://www.star-history.com/?repos=NEGIAO%2FWebGIS-Dev&type=timeline&legend=top-left';
 // star-history 官方 sealed_token 图表：服务端每次访问时用仓库主人授权的
@@ -1061,6 +1180,48 @@ function formatCount(value) {
     }
 }
 
+// 窄屏判定：与 .footer-links 的 flex-wrap 断点（max-width: 768px）保持一致。
+// 初值同步读取（而非留 false 等挂载后补），保证首帧渲染就带正确断行，
+// 不出现"单行 → 挂载后折两行"的一帧跳动。
+const isNarrowViewport = ref(
+    typeof window.matchMedia === 'function' &&
+        window.matchMedia('(max-width: 768px)').matches
+);
+let viewportMediaQuery = null;
+
+function onViewportQueryChange(event) {
+    isNarrowViewport.value = event.matches;
+}
+
+/** 注册视口断点监听：跨断点时 ref 变化触发重渲染，断行自动增删 */
+function observeViewportQuery() {
+    if (typeof window.matchMedia !== 'function') return;
+    viewportMediaQuery = window.matchMedia('(max-width: 768px)');
+    isNarrowViewport.value = viewportMediaQuery.matches;
+    viewportMediaQuery.addEventListener('change', onViewportQueryChange);
+}
+
+function disconnectViewportQuery() {
+    if (viewportMediaQuery) {
+        viewportMediaQuery.removeEventListener('change', onViewportQueryChange);
+        viewportMediaQuery = null;
+    }
+}
+
+// 页脚中文短语按两字插入换行符（隐私政策 → 隐私\n政策）：
+// 窄屏下四字中文被 flex 子项挤压会折成"3+1"（如"隐私政/策"），改由文案自身
+// 在每两字后插 \n 断行（white-space: pre-line 渲染），断点不依赖盒宽测算，
+// 分隔符与图标全部原样保留。
+// 宽屏没有宽度压力：twoLine 为 false 时直接返回原文案 —— 文本里连 \n 都
+// 不出现，桌面端保持单行，pre-line 对无换行文本是纯 no-op，无 CSS 兜底成本。
+// 仅对纯 CJK 且 ≥3 字的文本生效；英文短语（Privacy Policy）含空格、
+// 按词自然折行，原样返回。纯插值渲染，不走 v-html（XSS 面归零）。
+function cjkBreak(text, twoLine = isNarrowViewport.value) {
+    if (!twoLine) return text;
+    if (typeof text !== 'string' || !/^[\u4e00-\u9fa5]{3,}$/.test(text)) return text;
+    return text.replace(/(.{2})(?=.)/g, '$1\n');
+}
+
 const formattedStars = computed(() => formatCount(githubStars.value));
 const formattedForks = computed(() => formatCount(githubForks.value));
 // 趋势图：配了 Worker 就走边缘代理（国内稳 + 边缘缓存），否则直连 star-history
@@ -1079,22 +1240,22 @@ function onChartError() {
         chartDead.value = true;
     }
 }
-const githubUpdatedText = computed(() => {
-    if (!githubUpdatedAt.value) return '';
-    let text = githubUpdatedAt.value;
+/** OSS 仓库最近推送时间 → 两级日期徽章数据（借鉴南师大 .time .t1 日+.t2 年月）。
+    day = 两位补零的「日」，ym = 「年.月」。解析失败 / 缓存里没有时间则返回 null，
+    模板退化为不渲染徽章（胶囊其余部分不受影响） */
+const githubUpdatedParts = computed(() => {
+    if (!githubUpdatedAt.value) return null;
     try {
         const date = new Date(githubUpdatedAt.value);
-        if (!Number.isNaN(date.getTime())) {
-            text = date.toLocaleDateString(language.value === 'zh-CN' ? 'zh-CN' : 'en-US', {
-                year: 'numeric',
-                month: 'short',
-                day: 'numeric',
-            });
-        }
+        if (Number.isNaN(date.getTime())) return null;
+        const pad = (value) => String(value).padStart(2, '0');
+        return {
+            day: pad(date.getDate()),
+            ym: `${date.getFullYear()}.${pad(date.getMonth() + 1)}`,
+        };
     } catch {
-        /* 保持原始字符串 */
+        return null;
     }
-    return t('landing.ossUpdatedAt', { time: text });
 });
 
 function readGithubCache() {
@@ -1206,7 +1367,7 @@ function observeReveal() {
         window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     if (prefersReduced || typeof IntersectionObserver !== 'function') return;
     const targets = document.querySelectorAll(
-        '.section-head, .tech-badges, .oss-support, .cta-card',
+        '.section-head, .tech-badges, .oss-support, .cta-card, .footer-quick, .footer-rule, .footer-meta',
     );
     if (!targets.length) return;
     // 先挂 .reveal-pending 隐藏初始态（onMounted 首帧绘制前完成），IO 再补 .reveal-in
@@ -1387,10 +1548,12 @@ async function fetchViaWorker() {
 
 onMounted(() => {
     applyLocalCaches(); // 本地缓存秒开，首屏不等待任何网络
+    injectRingPatternStyle(); // 轨道环旋转纹样（PNG 背景图，文档级 <style> 承载相对 url()）
     observeAnchors(); // 导航锚点 scroll spy（IntersectionObserver）
     observeStats(); // Hero 统计条数字滚动（进入视口触发）
     observeFeatures(); // 核心功能卡：三栏分左右对称入场
     observeReveal(); // 统一入场动效（节标题 / 技术栈 / CTA，once）
+    observeViewportQuery(); // 页脚两字断行的窄屏判定（跨断点自动重渲染）
     window.addEventListener('keydown', onMenuKeydown);
     void (async () => {
         if (await fetchViaWorker()) return; // Worker 命中则不再打扰 GitHub
@@ -1408,6 +1571,8 @@ onBeforeUnmount(() => {
     disconnectFeatures(); // 取消核心功能入场观察器
     disconnectReveal(); // 取消统一入场观察器
     window.removeEventListener('keydown', onMenuKeydown);
+    disconnectViewportQuery(); // 取消页脚断行的视口断点监听
+    removeRingPatternStyle(); // 卸载注入的轨道环纹样样式
     if (landingEl.value) landingEl.value.style.overflowY = '';
 });
 </script>
@@ -1426,6 +1591,9 @@ button:focus-visible {
 .landing-container {
     /* 导航真实定高，Hero 的 100dvh 偏移由此派生，避免魔数不同步 */
     --landing-navbar-h: 72px;
+    /* 旧版 iOS（<16.4）不识别 dvh，先给 vh 兜底再覆盖；
+       否则内部滚动容器高度失效，整页退化成无滚动 */
+    height: 100vh;
     height: 100dvh;
     overflow-y: auto;
     overflow-x: hidden;
@@ -1543,15 +1711,22 @@ button:focus-visible {
    深墨三层叠色又把品牌绿搅成脏灰（用户评"白不白、黑不黑"）。
    方案A 彻底不做色块：CSS mask 取 logo 自身的 alpha 通道作遮罩，把纯白线稿
    "染"成品牌深绿，直接放在浅色玻璃导航上 —— 没有色块，就没有突兀源。
-   遮罩资源即 public/images/icon.webp（经内联 --brand-logo 传入，与 img 同源同缓存），
+   遮罩资源即 public/images/icon.webp（经行内 style 注入 mask-image，与 img 同源同缓存；
+   不能走 --brand-logo 自定义属性 —— 相对 url() 会按本外部样式表 /assets/*.css 的
+   目录解析成 /assets/images/... 而 404，线上实测），
    Safari 需 -webkit- 前缀，标准 mask 置后覆盖；绿/蓝主题随令牌联动。 */
 .brand-badge {
     width: 42px;
     height: 42px;
     flex-shrink: 0;
     background-color: var(--brand-primary-dark);
-    -webkit-mask: var(--brand-logo) center / contain no-repeat;
-    mask: var(--brand-logo) center / contain no-repeat;
+    /* mask-image 由行内样式 brandBadgeStyle 注入（见 script 注释），此处只配定位/重复/尺寸 */
+    -webkit-mask-position: center;
+    mask-position: center;
+    -webkit-mask-repeat: no-repeat;
+    mask-repeat: no-repeat;
+    -webkit-mask-size: contain;
+    mask-size: contain;
     /* hover 效果与 TopBar `.logo-link:hover .logo-icon` 同一套手法：
        轻微倾斜 -10° + 放大 1.1，0.3s —— 不做整圈旋转（试过 360°/Y 轴翻转，
        对一个小徽牌都太闹） */
@@ -1559,9 +1734,17 @@ button:focus-visible {
 }
 
 /* will-change 只在交互期间挂上，避免常驻图层的开销 */
-.brand-badge:hover {
+.brand-badge:active {
     transform: rotate(-10deg) scale(1.1);
-    will-change: transform;
+}
+
+/* 悬停高亮只授给真正支持悬停的设备：触屏上点一下徽牌，:hover 会粘住
+   （logo 一直保持倾斜放大态，像卡在了交互中），按压反馈交给 :active */
+@media (hover: hover) and (pointer: fine) {
+    .brand-badge:hover {
+        transform: rotate(-10deg) scale(1.1);
+        will-change: transform;
+    }
 }
 
 .brand-text {
@@ -1620,9 +1803,11 @@ button:focus-visible {
     transition: background 0.15s ease, color 0.15s ease, transform 0.18s ease;
 }
 
-.nav-link:hover {
-    background: rgba(var(--brand-primary-rgb), 0.08);
-    color: var(--brand-primary-dark);
+@media (hover: hover) and (pointer: fine) {
+    .nav-link:hover {
+        background: rgba(var(--brand-primary-rgb), 0.08);
+        color: var(--brand-primary-dark);
+    }
 }
 
 /* 激活态「长大」而非「变色」（借鉴门户 tab 选中项是长出来的）：
@@ -1658,10 +1843,14 @@ button:focus-visible {
     gap: 12px;
 }
 
-/* 移动端汉堡（P2#10 触发钮）：桌面隐藏，≤1024px 由响应式块显示。
+/* 移动端汉堡（P2#10 触发钮）：移动优先——默认即显示，仅 >1024px 桌面隐藏。
+   （早先写法是顶层 display:none + ≤1024px 响应式块 inline-flex。那种写法下，
+   响应式块一旦失效（HMR 丢块 / 构建产物缺规则 / 级联被意外覆盖），窄屏上
+   burger 会直接消失且无从排查。反转后顶层没有任何规则能隐藏它，
+   只有明确的桌面断点可以——手机上必然可见。）
    激活时三条横线交叉成 ×，与全屏菜单覆层同步 */
 .nav-burger {
-    display: none;
+    display: inline-flex;
     flex-direction: column;
     justify-content: center;
     gap: 4px;
@@ -1673,6 +1862,27 @@ button:focus-visible {
     background: var(--bg-secondary);
     cursor: pointer;
     flex-shrink: 0;
+}
+
+/* 桌面端才隐藏：与下方 ≤1024 块的锚点组让位互补（1025 起不重叠、无缝隙） */
+@media (min-width: 1025px) {
+    .nav-burger {
+        display: none;
+    }
+}
+
+/* 按压反馈：触屏上没有真 hover，且 :hover 点完会粘住，所以悬停高亮只授给
+   真正支持悬停的设备（见下方媒体查询），触屏用 :active 给出按下即应的反馈 */
+.nav-burger:active {
+    border-color: rgba(var(--brand-primary-rgb), 0.35);
+    background: rgba(var(--brand-primary-rgb), 0.08);
+}
+
+@media (hover: hover) and (pointer: fine) {
+    .nav-burger:hover {
+        border-color: rgba(var(--brand-primary-rgb), 0.35);
+        background: rgba(var(--brand-primary-rgb), 0.06);
+    }
 }
 
 .nav-burger span {
@@ -1714,14 +1924,30 @@ button:focus-visible {
     transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
 }
 
-.nav-github:hover {
+.nav-github:active {
     border-color: rgba(var(--brand-primary-rgb), 0.45);
     background: rgba(var(--brand-primary-rgb), 0.06);
     color: var(--brand-primary-dark);
 }
 
-.nav-github .fab {
-    font-size: 15px;
+/* 悬停高亮只授给真正支持悬停的设备：触屏上点开 Star 链接后 :hover 会粘住
+   （从新标签页返回时按钮仍保持高亮态），按压反馈交给 :active */
+@media (hover: hover) and (pointer: fine) {
+    .nav-github:hover {
+        border-color: rgba(var(--brand-primary-rgb), 0.45);
+        background: rgba(var(--brand-primary-rgb), 0.06);
+        color: var(--brand-primary-dark);
+    }
+}
+
+/* GitHub 品牌图标：内联 SVG，官方 mark 见 script GITHUB_MARK_PATH
+   （本地 bundle，不依赖 Font Awesome CDN），颜色随上下文 currentColor 继承。
+   尺寸默认 15px，登录胶囊 / 页脚圆钮处按 13px / 17px 局部覆写 */
+.icon-github {
+    width: 15px;
+    height: 15px;
+    fill: currentColor;
+    flex-shrink: 0;
 }
 
 .nav-github-count {
@@ -1755,9 +1981,18 @@ button:focus-visible {
     transition: background 0.15s ease, color 0.15s ease;
 }
 
-.lang-btn:hover {
+.lang-btn:active {
     background: rgba(var(--brand-primary-rgb), 0.1);
     color: var(--brand-primary-dark);
+}
+
+/* 悬停高亮只授给真正支持悬停的设备：触屏上点完语言钮，:hover 会粘在刚点的
+   钮上，与 .active 的渐变态并存、看着像"两个都选中"；按压反馈交给 :active */
+@media (hover: hover) and (pointer: fine) {
+    .lang-btn:hover {
+        background: rgba(var(--brand-primary-rgb), 0.1);
+        color: var(--brand-primary-dark);
+    }
 }
 
 .lang-btn.active {
@@ -1796,10 +2031,20 @@ button:focus-visible {
     display: inline-block;
 }
 
-.btn-primary:hover {
-    filter: brightness(1.06);
-    transform: translateY(-1px);
-    box-shadow: 0 6px 16px rgba(var(--brand-primary-rgb), 0.38);
+.btn-primary:active {
+    filter: brightness(0.97);
+    transform: translateY(0);
+    box-shadow: 0 2px 8px rgba(var(--brand-primary-rgb), 0.3);
+}
+
+/* 悬停高亮只授给真正支持悬停的设备：触屏上点完登录钮 :hover 会粘住
+   （按钮一直保持上浮态），按压反馈交给 :active */
+@media (hover: hover) and (pointer: fine) {
+    .btn-primary:hover {
+        filter: brightness(1.06);
+        transform: translateY(-1px);
+        box-shadow: 0 6px 16px rgba(var(--brand-primary-rgb), 0.38);
+    }
 }
 
 /* ============ 内容区 ============ */
@@ -1835,6 +2080,7 @@ button:focus-visible {
     /* 精确占满首屏剩余空间（landing-container 为 100dvh 纵向 flex） */
     flex: 1;
     /* 兜底：flex 环境异常时仍接近满屏，偏移量与导航真实定高绑定 */
+    min-height: calc(100vh - var(--landing-navbar-h));
     min-height: calc(100dvh - var(--landing-navbar-h));
     display: flex;
     flex-direction: column;
@@ -1972,12 +2218,12 @@ button:focus-visible {
    原图只有两段结构，先测过再排版：
      · r≈0.78 藤蔓卷草花边，alpha 峰值 0.50，覆盖率仅 10~17%（断续的）
      · r≈0.99 细线圆，alpha 恒为 0.078，覆盖率 86%（一根近乎连续的发丝线）
-   原图是极淡的暖金（不透明像素均值 RGB 231,176,111）且 alpha 封顶 50%，
-   直接 background-image 铺在近白首屏上几乎看不见。故改用 **mask + 纯色**：
-   把 PNG 当遮罩，露出 --brand-gold 的染色轮廓 —— 花边形状完整保留，
-   颜色与主题色对齐，绿/蓝两套主题下都读得出来。
+   原图是极淡的暖金（不透明像素均值 RGB 231,176,111）且 alpha 封顶 50%。
+   纹样以 background-image 直接上图（不用 mask —— 旋转 + mask 在 iOS Safari
+   上会整块栅格化成黑色，详见下方纹样层块注释）；PNG 自身即淡金色，
+   直接上图就是设计稿里的观感。
 
-   mask-size 决定"取原图的哪一圈"，这是三环不像复制品的关键（半径为实测值）：
+   background-size 决定"取原图的哪一圈"，这是三环不像复制品的关键（半径为实测值）：
      · outer 960px  → 124%：花边落在 r=451~476，贴着虚线边框内侧
      · mid   680px  →  96%：花边 r=248~260（发丝线 r=323 但淡到看不见）
      · inner 420px  →  90%：花边 r=143~190
@@ -2014,25 +2260,21 @@ button:focus-visible {
     border-radius: 50%;
 }
 
-/* 纹样层：PNG 作遮罩 + 品牌金染色。
-   必须包 @supports —— 不支持 mask 的内核里伪元素整个不生成，退化成
-   纯 CSS 细环；否则 background-color 会直接糊成一个实心金圆盖住首屏。
-   （反过来说，若 PNG 哪天 404，mask 失效同样会退化为整块色面，
-     所以各环 opacity 都压在 0.32~0.75，最坏情况也只是淡金色雾面。） */
-@supports ((-webkit-mask-image: url('x.png')) or (mask-image: url('x.png'))) {
-    .hero-bg__ring::before {
-        content: '';
-        position: absolute;
-        inset: 0;
-        border-radius: 50%;
-        background-color: var(--brand-gold);
-        -webkit-mask-image: v-bind(ringMaskUrl);
-        mask-image: v-bind(ringMaskUrl);
-        -webkit-mask-repeat: no-repeat;
-        mask-repeat: no-repeat;
-        -webkit-mask-position: center;
-        mask-position: center;
-    }
+/* 纹样层：两套旋转纹样 PNG 以 background-image 直接上图（不用 mask）。
+   为什么不用 mask：iOS Safari 合成缺陷 —— 被遮罩图层若处于持续 transform
+   旋转的父元素内（.hero-bg__ring 跑 ring-spin 无限动画），遮罩层会整块
+   栅格化成黑色，旋转环在 iOS 上呈现为黑环。background-image 无此问题，
+   各平台渲染一致；PNG 取不到时该层什么都不画，不存在"纯色圆面"兜底。
+   图源 url() 由运行时注入的文档级 <style> 提供（见 script
+   injectRingPatternStyle）：相对路径按文档 base 解析，兼容根域名 /
+   子路径部署；本块只配定位/重复/尺寸。 */
+.hero-bg__ring::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
+    background-repeat: no-repeat;
+    background-position: center;
 }
 
 .hero-bg__ring--outer {
@@ -2045,8 +2287,7 @@ button:focus-visible {
    589 裁出 border-box。alpha 峰值 0.557 × 0.85 = 有效 0.473，
    叠在 #f9f9f9 上最深 RGB(230,211,153)—— 一圈看得清又不抢标题的淡金 */
 .hero-bg__ring--outer::before {
-    -webkit-mask-size: 124% 124%;
-    mask-size: 124% 124%;
+    background-size: 124% 124%;
     opacity: 0.85;
 }
 
@@ -2083,8 +2324,7 @@ button:focus-visible {
    有效 0.228 → RGB(243,234,206)；发丝线 0.078 无论怎么提都只有 0.05，
    实测等于看不见，中环的圆仍由 border 提供，纹样只出花边那一段 */
 .hero-bg__ring--mid::before {
-    -webkit-mask-size: 96% 96%;
-    mask-size: 96% 96%;
+    background-size: 96% 96%;
     opacity: 0.7;
 }
 
@@ -2112,8 +2352,7 @@ button:focus-visible {
    这一档花边峰值被稀释到 0.208，0.55 乘下来 0.114 → RGB(249,244,230)，
    是有意压到"能看出有纹样、但读不出图案"的临界值 */
 .hero-bg__ring--inner::before {
-    -webkit-mask-size: 90% 90%;
-    mask-size: 90% 90%;
+    background-size: 90% 90%;
     opacity: 0.55;
 }
 
@@ -2209,15 +2448,14 @@ button:focus-visible {
    · 天光去掉 repeating-conic 光芒层并停转 —— 46vw≈172px 时那道光芒
      已经落在亚像素上，只剩径向核有意义，conic 白栅格化一遍。 */
 @media (max-width: 768px) {
-    /* 换成加强版纹样（d-bg2_1-mobile.png：尺寸与 RGB 完全不动，只把 alpha
+    /* 纹样换加强版（d-bg2_1-mobile.png：尺寸与 RGB 不动，只把 alpha
        ×2 后截顶）。原因：mask 是按**设备像素**栅格化的，1060 的细花边缩到
        400px 时峰值从 0.502 掉到 0.220 —— 靠调 opacity 补不回来，因为遮罩
        本身已经被平均没了。加强后在同样位置峰值回到 0.44（1x）/ 0.77（2x），
-       才有"提透明度"的空间。 */
-    .hero-bg__ring::before {
-        -webkit-mask-image: v-bind(ringMaskMobileUrl);
-        mask-image: v-bind(ringMaskMobileUrl);
-    }
+       才有"提透明度"的空间。
+       background-image 不在此声明：由 injectRingPatternStyle 注入的同断点
+       @media (max-width: 768px) 规则提供（相对 url() 必须由文档级样式表解析，
+       原因见桌面纹样层块注释）。 */
 
     /* 三条边框同步加深：小屏上 1px 细线本来就吃亏，
        0.26/0.18/0.14 的绿在 #f9f9f9 上几乎读不出"这里有三个环" */
@@ -2326,7 +2564,7 @@ button:focus-visible {
 
    注意 fill-mode 用 backwards 而非 both：both 会在动画结束后继续把
    transform/opacity 钉在终值上，而动画声明在层叠中压过普通声明 ——
-   这六个元素今后若加 :hover transform 会被 silently 覆盖。backwards
+   这六个元素今后若加 :hover transform 会被静默覆盖。backwards
    只在 delay 期间应用首帧，结束后交还自然状态，观感完全一致。
 
    第 5/6 项（按钮、认可条）的延迟特意排在圆币之后（圆币 0.30/0.22 结束于
@@ -2658,8 +2896,8 @@ button:focus-visible {
 
 .stat-value {
     font-family: var(--font-num);
-    font-size: 1.7rem;
-    font-weight: 800;
+    font-size: 2rem;
+    font-weight: 500;
     font-variant-numeric: tabular-nums;
     letter-spacing: 0.5px;
     background: linear-gradient(135deg, var(--brand-primary), var(--brand-primary-dark));
@@ -2682,7 +2920,7 @@ button:focus-visible {
 /* ============ 移动端首屏：数据行与桌面同序，只是尺寸收小 ============
    视觉顺序（DOM 顺序，桌面端也一样）：
      eyebrow → title → subtitle → 数据行 → 按钮 → GitHub 认可
-   数据条站在按钮**之前** —— "社会证明"先于"行动号召"，首屏不会第一眼
+   数据行站在按钮**之前** —— "社会证明"先于"行动号召"，首屏不会第一眼
    落在出口上。桌面端已把 stats 挪到副标题正下方，这里不需要任何重排：
    容器保持普通块流，子项按文档顺序自上而下排，DOM 一行都不用改。
 
@@ -3011,6 +3249,25 @@ button:focus-visible {
         border: 0;
         border-radius: 0;
         box-shadow: none;
+        /* 南师大 .banner 图的 Ken Burns 手法：hover 时以超长 transition
+           缓推近（6s），移出时同速退回 —— 图"自己会呼吸"，不用无限循环 */
+        transition: transform 6s cubic-bezier(0.25, 0.1, 0.25, 1);
+    }
+
+    /* Ken Burns hover 推近：只放大 1.05，配容器 overflow:hidden 裁边；
+       reduced-motion 环境下取消推近与过渡，图保持静止 */
+    .feature-card--hero:hover .feature-hero-preview__img {
+        transform: scale(1.05);
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+        .feature-hero-preview__img {
+            transition: none;
+        }
+
+        .feature-card--hero:hover .feature-hero-preview__img {
+            transform: none;
+        }
     }
 
     /* 预览图四周白色渐变过渡：以图片中心为圆心画一道圆形径向渐变——
@@ -3064,7 +3321,15 @@ button:focus-visible {
     line-height: 1;
     letter-spacing: 0.06em;
     color: var(--brand-gold-dark);
-    /* 序号绝对定位在卡内，随卡片一起定位，无需独立过渡 */
+    /* 字号随 hover 伸缩过渡（锚点在 right/top，伸大时向内左侧生长，
+       不会顶出卡缘） */
+    transition: font-size 0.25s ease;
+}
+
+/* 南师列表 hover 时圆点编号 20→32px 的 Impact 伸缩：角标 hover 放大一档，
+   让"先看编号"的扫视顺序更有戏剧感 */
+.feature-card:hover .feature-no {
+    font-size: 1.25rem;
 }
 
 /* 序号左侧引出一段金线，把"编号"和卡片内容连起来，
@@ -3172,12 +3437,19 @@ button:focus-visible {
     color: var(--text-secondary);
 }
 
-/* ============ 技术栈 ============ */
+/* ============ 技术栈 ============
+   外层 section 通宽（承接 scroll-margin 与 scroll spy 定位），
+   内容由 .tech-inner 收进 1200px 版心；背景恢复整页浅色，不做深色带 */
 .tech-section {
     width: 100%;
+    margin: 0 auto;
+    padding: 4rem 0 0;
+}
+
+.tech-inner {
     max-width: 1200px;
     margin: 0 auto;
-    padding: 4rem 2rem 0;
+    padding: 0 2rem;
 }
 
 /* 三层卡片：01 渲染 / 02 服务 / 03 交付。
@@ -3219,6 +3491,34 @@ button:focus-visible {
     transition: opacity 0.25s ease;
 }
 
+/* hover 擦除（借鉴南师 ul-listnews/notice 的 width 0→100% 填充）：
+    卡上从左到右扫过一道品牌 7% + 金 7% 的低透水洗 —— 不用图片素材，
+    与"金只做呼吸点"的规则一致，扫过即回。锚 scaleX + origin left，
+    避免动 width 造成逐帧垃圾布局；卡片自带 overflow:hidden，
+    inset 0 + border-radius: inherit 的伪元素不会溢出卡圆角 */
+.tech-layer::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    background: linear-gradient(
+        100deg,
+        rgba(var(--brand-primary-rgb), 0.07),
+        rgba(var(--brand-gold-rgb), 0.07) 55%,
+        transparent 100%
+    );
+    transform: scaleX(0);
+    transform-origin: left center;
+    transition: transform 0.8s cubic-bezier(0.22, 0.61, 0.36, 1);
+    pointer-events: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .tech-layer::after {
+        transition: none;
+    }
+}
+
 .tech-layer:hover {
     border-color: rgba(var(--brand-primary-rgb), 0.3);
     transform: translateY(-4px);
@@ -3227,6 +3527,10 @@ button:focus-visible {
 
 .tech-layer:hover::before {
     opacity: 1;
+}
+
+.tech-layer:hover::after {
+    transform: scaleX(1);
 }
 
 .tech-layer__head {
@@ -3409,6 +3713,13 @@ button:focus-visible {
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
 }
 
+/* 南师 hover 换金色手法：徽标 hover 时图标转为深金，
+   成为绿底之外的第二处"金色呼吸点"（文字仍走深绿保证对比度） */
+.tech-badge:hover svg,
+.tech-badge:hover i {
+    color: var(--brand-gold-dark);
+}
+
 /* ============ 开源认可（Star History） ============ */
 .oss-section {
     width: 100%;
@@ -3441,9 +3752,50 @@ button:focus-visible {
     border-color: rgba(var(--brand-primary-rgb), 0.45);
 }
 
-.oss-updated {
-    font-weight: 400;
+/* 南师 .ani_right 的精神：外链图标 hover 向右轻推 2px，
+   暗示"链接会带你去别处"；reduced-motion 下不位移 */
+.oss-repo-link svg {
+    transition: transform 0.25s ease;
+}
+
+.oss-repo-link:hover svg {
+    transform: translateX(2px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .oss-repo-link svg {
+        transition: none;
+    }
+
+    .oss-repo-link:hover svg {
+        transform: none;
+    }
+}
+
+/* 两级日期徽章（借鉴南师大 .time .t1 日 + .t2 年月）：
+   大日数字用 Impact 体系 --font-num，下缀小字「年.月」；纵向两行
+   站在胶囊里靠 flex-column 收住行高。金色文字用深金 —— 亮金 #c9a227
+   对白底仅约 2.6:1，本文件别处已有结论，凡文字一律走 gold-dark */
+.oss-date {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    line-height: 1.05;
+    margin: 0 2px;
+}
+
+.oss-date__day {
+    font-family: var(--font-num);
+    font-size: 1.05rem;
+    font-weight: 500;
+    color: var(--brand-gold-dark);
+}
+
+.oss-date__ym {
+    font-size: 0.62rem;
+    letter-spacing: 0.5px;
     color: var(--text-muted);
+    font-variant-numeric: tabular-nums;
 }
 
 .oss-chart-link {
@@ -3773,6 +4125,11 @@ button:focus-visible {
     white-space: nowrap;
 }
 
+.cta-method .icon-github {
+    width: 13px;
+    height: 13px;
+}
+
 .cta-method i,
 .cta-method svg {
     color: var(--brand-primary);
@@ -3795,45 +4152,32 @@ button:focus-visible {
     height: 14px;
 }
 
-/* ============ 页脚 ============ */
+/* ============ 页脚 · 三层结构（借鉴南师 .box-footer1） ============
+   层次：1) footer-quick 快捷圆钮  2) footer-rule 发丝线  3) footer-meta 法务行。
+   背景恢复整页浅色；顶部过渡沿用原来的"白渐隐"晕边（不用硬 1px 线）。
+   仍不能用 overflow:hidden —— hover 弹层（.footer-pop）向上弹出 */
 .footer {
     position: relative;
-    overflow: hidden;
+    padding: 2.6rem 2rem 2rem;
     background: var(--bg-primary);
-    border-top: 1px solid var(--border-light);
-    /* 顶部多留白，给无缝滚动装饰带让出高度，避免压到文案 */
-    padding: 2.6rem 2rem 1.5rem;
 }
 
-/* 页脚无缝滚动装饰带（借鉴南师大 .cloud2：repeat-x 底图 + 30s linear infinite
-   横移）。用 repeating-linear-gradient 作平铺图案，animate background-position-x
-   恰好走一个周期（24px）即无缝循环；低透明度，纯做"页脚在流动"的尾韵 */
-.footer-deco {
+/* 顶部白色线性渐变：页脚与上一区块的交界由白→透明的渐变"晕"开，
+   伪元素绝对定位盒顶铺满宽度；不设 z-index 压过 footer 背景但低于
+   .footer-inner（z-index:1）；pointer-events:none 不影响交互 */
+.footer::before {
+    content: '';
     position: absolute;
     top: 0;
     left: 0;
     right: 0;
-    height: 30px;
-    pointer-events: none;
-    opacity: 0.55;
-    background-image: repeating-linear-gradient(
-        90deg,
-        rgba(var(--brand-primary-rgb), 0.2) 0 2px,
-        rgba(var(--brand-primary-rgb), 0) 2px 24px
+    height: 72px;
+    background: linear-gradient(
+        to bottom,
+        rgba(255, 255, 255, 1),
+        rgba(255, 255, 255, 0) 100%
     );
-    background-size: 24px 100%;
-}
-
-@media (prefers-reduced-motion: no-preference) {
-    .footer-deco {
-        animation: footer-scroll 30s linear infinite;
-    }
-}
-
-@keyframes footer-scroll {
-    to {
-        background-position-x: -24px;
-    }
+    pointer-events: none;
 }
 
 .footer-inner {
@@ -3841,6 +4185,91 @@ button:focus-visible {
     z-index: 1;
     max-width: 1200px;
     margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1.35rem;
+}
+
+/* 第一层 · 快捷入口圆钮（借鉴南师 ul.d-ftNavUl-1）：46px 发丝圆框，
+   品牌绿描边 + 深绿 icon；hover 金环点亮 + 抬升，与全页"金只做呼吸点"
+   的角色一致。弹层复用既有 .footer-link-pop/.footer-pop，域名小字
+   给足"这是哪儿"的信息 */
+.footer-quick {
+    display: flex;
+    align-items: center;
+    gap: 1.15rem;
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.footer-quick li {
+    display: flex;
+}
+
+.footer-entry {
+    width: 46px;
+    height: 46px;
+    border-radius: 50%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--brand-primary-dark);
+    border: 1px solid rgba(var(--brand-primary-rgb), 0.24);
+    background: rgba(255, 255, 255, 0.55);
+    transition:
+        border-color 0.2s ease,
+        background 0.2s ease,
+        color 0.2s ease,
+        transform 0.2s ease,
+        box-shadow 0.2s ease;
+}
+
+.footer-entry .icon-github {
+    width: 17px;
+    height: 17px;
+}
+
+.footer-entry:hover {
+    border-color: rgba(var(--brand-gold-rgb), 0.55);
+    background: rgba(255, 255, 255, 0.9);
+    color: var(--brand-gold-dark);
+    transform: translateY(-3px);
+    box-shadow: 0 8px 18px rgba(20, 45, 25, 0.1);
+}
+
+/* 第二层 · 发丝线：两端虚化的 1px 渐变，替代实心 border 的生硬。
+   中央缀一枚金点 —— 南师印章系统的"中心金点"在最小尺寸上的复用，
+   与 stat-face 内圈虚线、tech-layer 序号章形成同一套金点语汇 */
+.footer-rule {
+    position: relative;
+    align-self: stretch;
+    height: 1px;
+    background: linear-gradient(
+        90deg,
+        transparent,
+        var(--border-light),
+        transparent
+    );
+}
+
+.footer-rule::after {
+    content: '';
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 5px;
+    height: 5px;
+    transform: translate(-50%, -50%);
+    border-radius: 50%;
+    background: var(--brand-gold);
+    opacity: 0.75;
+}
+
+/* 第三层 · 法务行：版权 + 隐私/条款 */
+.footer-meta {
+    width: 100%;
     display: flex;
     justify-content: space-between;
     align-items: center;
@@ -3878,30 +4307,6 @@ button:focus-visible {
     color: var(--border-light);
 }
 
-/* ============ 页脚第二层云海（P1#9 视差） ============ */
-.footer-deco--2 {
-    height: 22px;
-    opacity: 0.35;
-    background-image: repeating-linear-gradient(
-        90deg,
-        rgba(var(--brand-gold-rgb), 0.18) 0 1px,
-        rgba(var(--brand-gold-rgb), 0) 1px 16px
-    );
-    background-size: 16px 100%;
-}
-
-@media (prefers-reduced-motion: no-preference) {
-    .footer-deco--2 {
-        animation: footer-scroll-rev 22s linear infinite;
-    }
-}
-
-@keyframes footer-scroll-rev {
-    to {
-        background-position-x: 16px;
-    }
-}
-
 /* ============ 页脚外链 hover 弹层（P2#13，借鉴南师友链下拉） ============ */
 .footer-link-pop {
     position: relative;
@@ -3926,7 +4331,8 @@ button:focus-visible {
     visibility: hidden;
     pointer-events: none;
     transition: opacity 0.2s ease, transform 0.2s ease, visibility 0.2s;
-    z-index: 2;
+    /* 将 hover 悬浮提示框层级置顶 */
+    z-index: 999;
 }
 
 .footer-pop::after {
@@ -4082,10 +4488,19 @@ button:focus-visible {
     transition: color 0.2s ease, border-color 0.2s ease, transform 0.2s ease;
 }
 
-.mobile-menu__close:hover {
+.mobile-menu__close:active {
     color: var(--brand-primary-dark);
     border-color: rgba(var(--brand-primary-rgb), 0.4);
-    transform: rotate(90deg);
+}
+
+/* 悬停高亮只授给真正支持悬停的设备：菜单覆层只在触屏出现，:hover 粘住会让
+   关闭钮一直保持旋转 90° 的高亮态；按压反馈交给 :active */
+@media (hover: hover) and (pointer: fine) {
+    .mobile-menu__close:hover {
+        color: var(--brand-primary-dark);
+        border-color: rgba(var(--brand-primary-rgb), 0.4);
+        transform: rotate(90deg);
+    }
 }
 
 /* 两级索引，结构照搬南师大 header-con 的 `.scroll > ul > li`：
@@ -4149,17 +4564,35 @@ button:focus-visible {
     transition: transform 0.2s ease, color 0.2s ease;
 }
 
-.mobile-menu__head:hover,
 .mobile-menu__head:focus-visible {
     color: var(--brand-primary-dark);
     border-bottom-color: rgba(var(--brand-primary-rgb), 0.45);
 }
 
+.mobile-menu__head:active {
+    color: var(--brand-primary-dark);
+}
+
+/* 悬停高亮只授给真正支持悬停的设备：触屏上点开/收起栏目后 :hover 会粘在
+   该行上（文字变色 + 箭头位移都留着，像始终处于悬停），按压反馈交给 :active */
+@media (hover: hover) and (pointer: fine) {
+    .mobile-menu__head:hover {
+        color: var(--brand-primary-dark);
+        border-bottom-color: rgba(var(--brand-primary-rgb), 0.45);
+    }
+}
+
 /* 箭头右移 3px 作为悬停反馈：左对齐布局里怎么动都不会撞歪任何轴线 */
-.mobile-menu__head:hover .mobile-menu__arrow,
 .mobile-menu__head:focus-visible .mobile-menu__arrow {
     color: var(--brand-primary-dark);
     transform: translateX(3px);
+}
+
+@media (hover: hover) and (pointer: fine) {
+    .mobile-menu__head:hover .mobile-menu__arrow {
+        color: var(--brand-primary-dark);
+        transform: translateX(3px);
+    }
 }
 
 /* 子项：单列紧凑排布（手机上单列比双列好扫读，13 条也刚好把一屏填满）。
@@ -4186,10 +4619,22 @@ button:focus-visible {
     transition: color 0.2s ease, transform 0.2s ease;
 }
 
-.mobile-menu__sub-link:hover,
 .mobile-menu__sub-link:focus-visible {
     color: var(--brand-primary-dark);
     transform: translateX(3px);
+}
+
+.mobile-menu__sub-link:active {
+    color: var(--brand-primary-dark);
+}
+
+/* 悬停高亮只授给真正支持悬停的设备：触屏上点子项跳转后 :hover 会粘住
+   （文字保持深色 + 右移 3px），按压反馈交给 :active */
+@media (hover: hover) and (pointer: fine) {
+    .mobile-menu__sub-link:hover {
+        color: var(--brand-primary-dark);
+        transform: translateX(3px);
+    }
 }
 
 /* 序号用深金：亮金 #c9a227 在白底只有 2.6:1，做文字不达标。
@@ -4234,9 +4679,18 @@ button:focus-visible {
     transition: transform 0.2s ease, box-shadow 0.2s ease;
 }
 
-.mobile-menu__cta:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 12px 26px rgba(var(--brand-primary-rgb), 0.34);
+.mobile-menu__cta:active {
+    transform: translateY(0);
+    box-shadow: 0 6px 14px rgba(var(--brand-primary-rgb), 0.28);
+}
+
+/* 悬停高亮只授给真正支持悬停的设备：触屏上点完 CTA :hover 会粘住
+   （按钮一直保持上浮态），按压反馈交给 :active */
+@media (hover: hover) and (pointer: fine) {
+    .mobile-menu__cta:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 12px 26px rgba(var(--brand-primary-rgb), 0.34);
+    }
 }
 
 /* 个人主页：紧跟在 CTA 下方，两者组成固定页脚 */
@@ -4253,8 +4707,14 @@ button:focus-visible {
     transition: color 0.2s ease;
 }
 
-.mobile-menu__contact:hover {
+.mobile-menu__contact:active {
     color: var(--brand-primary-dark);
+}
+
+@media (hover: hover) and (pointer: fine) {
+    .mobile-menu__contact:hover {
+        color: var(--brand-primary-dark);
+    }
 }
 
 /* 覆层滑入/滑出（translateY(-100%→0)） */
@@ -4309,11 +4769,23 @@ button:focus-visible {
         display: none;
     }
 
-    /* 移动端汉堡显现，承接锚点导航；右侧轨道导航让位 */
-    .nav-burger {
-        display: inline-flex;
+    /* 右簇四件套（汉堡 / Star / 语言 / 登录）各自 flex-shrink:0，
+       在 375px 上合计已约 220px。原 .nav-actions 带 flex:1（可压缩），
+       与 .brand 对半分配后品牌标题只剩几十像素；320px 下右簇甚至整体
+       超出导航条，被 .landing-container 的 overflow-x:hidden 直接裁掉
+       登录钮 —— 这是移动端"导航没适配"的直接原因。
+       改为右簇不伸缩：剩余空间全归品牌区，标题以省略号收尾，
+       四个控件在任何窄屏下都完整可见 */
+    .nav-actions {
+        flex: 0 0 auto;
     }
 
+    .brand {
+        flex: 1 1 auto;
+    }
+
+    /* 汉堡已是移动优先（默认显示，仅 >1024px 隐藏），此处无需再授 display；
+       右侧轨道导航让位 */
     .section-orbit {
         display: none;
     }
@@ -4403,6 +4875,27 @@ button:focus-visible {
         gap: 8px;
     }
 
+    /* 窄屏导航控件整体降一档，给右簇让出空间：
+       徽牌 42→34（导航条本身也降到 64px，42 在里面偏挤）；
+       品牌名 1.25→1.05rem；Star 胶囊内边距收到与 ≤480 一致的 10px；
+       语言钮内边距从 6px 9px 收到 8px（触屏档的 40px 高度不变） */
+    .brand-badge {
+        width: 34px;
+        height: 34px;
+    }
+
+    .brand-title {
+        font-size: 1.05rem;
+    }
+
+    .nav-github {
+        padding: 0 10px;
+    }
+
+    .lang-btn {
+        padding: 0 8px;
+    }
+
     /* 登录/注册：从"0.9rem + 0.6rem 内边距"的桌面尺寸收到与
        .nav-github / .nav-burger 同高的 34px 胶囊，字号降一档。
        高度锁 34px 是为了让右侧四个控件（汉堡 / Star / 语言 / 登录）
@@ -4469,8 +4962,13 @@ button:focus-visible {
         padding: 3rem 1rem 0;
     }
 
+    /* 深结构适配：横向 padding 移到 .tech-inner */
     .tech-section {
-        padding: 2.5rem 1rem 0;
+        padding: 2.5rem 0 0;
+    }
+
+    .tech-inner {
+        padding: 0 1rem;
     }
 
     /* 三栏在 736px 内容宽下每张只剩 ~230px，职责文案会被挤成窄条 ——
@@ -4501,9 +4999,12 @@ button:focus-visible {
     }
 
     .footer-inner {
-        flex-direction: column;
+        gap: 1.1rem;
+    }
+
+    .footer-meta {
+        justify-content: center;
         text-align: center;
-        gap: 0.75rem;
     }
 }
 
@@ -4546,6 +5047,25 @@ button:focus-visible {
     }
 }
 
+/* ============ 超窄屏（≤380px：iPhone SE 一代 / 旧款安卓） ============
+   320~380px 上右簇四件套 + 徽牌已占去 2/3 宽度，品牌名再缩一档、
+   语言钮继续收紧，保证四件套完整可见 + 品牌名可读（超出以省略号收尾） */
+@media (max-width: 380px) {
+    .brand-title {
+        font-size: 0.95rem;
+        letter-spacing: 0;
+    }
+
+    .lang-btn {
+        padding: 0 6px;
+        font-size: 9.5px;
+    }
+
+    .navbar-inner {
+        gap: 8px;
+    }
+}
+
 /* ============ 触屏档（pointer: coarse，移动端基线） ============
  * 可点击目标 ≥40px，判据用触屏能力而非宽度断点（F12 拉窄 ≠ 真机）。
  * 窄屏媒体查询里同排四件套（汉堡 / Star / 语言 / 登录）为对齐基线锁了
@@ -4566,14 +5086,16 @@ button:focus-visible {
         height: 40px;
     }
 
-    /* 语言切换器整组 40px，内部按钮随 inline-flex 默认 stretch 拉满 */
+    /* 语言切换器整组 40px，内部按钮随 inline-flex 默认 stretch 拉满。
+       内边距收到 8px：触屏档位于所有宽度断点之后，会覆盖 ≤768 的收紧值；
+       10px 时「中文 / EN」两组在 375px 上要多占约 12px，直接挤压品牌名 */
     .lang-toggle {
         height: 40px;
         padding: 3px;
     }
 
     .lang-btn {
-        padding: 0 10px;
+        padding: 0 8px;
     }
 
     /* 桌面宽度触屏设备（横屏平板 ≥1025px）才显示的锚点组 */
@@ -4616,6 +5138,67 @@ button:focus-visible {
 
     .nav-github {
         padding: 0 11px;
+    }
+
+    /* 触屏档的 lang-btn 内边距（0 8px）在源序上晚于 ≤380 块，
+       超窄触屏上会被覆盖回 8px —— 这里再收一档，与 ≤380 对齐 */
+    .lang-btn {
+        padding: 0 6px;
+        font-size: 9.5px;
+    }
+}
+
+/* ============ 窄屏页脚：四字中文链 2 字断行 ============
+   原布局是一条硬挤的横排：四个四字中文链接 + 3 个"|"分隔符 + GitHub 胶囊，
+   375px 上远超一行宽，flex 子项默认 shrink=1 把每个四字链接压成
+   "3 字 + 折行"（如"隐私政/策"）。
+   断行现在由文案自身完成：中文短语经 script cjkBreak 在每两字后插 \n，
+   以 .cjk-break{white-space:pre-line} 渲染为断行（隐私政策 → 隐私/政策），
+   断点不依赖盒宽测算；分隔符与图标全部原样保留，不做任何隐藏。本块只做三件事：
+   · 链接簇允许换行、子项不再被挤压（flex-shrink: 0）—— 原 bug 的根；
+   · 分隔符与两行链接块垂直居中（align-self: center）；
+   · 纵向点按面积（padding 8px，与 pointer:coarse 块保持一致）。
+   本块置于 pointer:coarse 块之后，同特异度下源序在后者胜。 */
+/* 文案内嵌换行符（cjkBreak 生成）→ 视觉断行；宽屏文案无 \n，此规则为纯 no-op，
+   故全局生效即可，无需包进媒体查询 */
+.cjk-break {
+    white-space: pre-line;
+}
+@media (max-width: 768px) {
+    .footer-links {
+        flex-wrap: wrap;
+        justify-content: center;
+        column-gap: 0.75rem;
+        row-gap: 0.4rem;
+    }
+
+    /* 分隔符保留显示，与两行链接块垂直居中 */
+    .footer-links .divider {
+        align-self: center;
+        color: var(--border-light);
+    }
+
+    /* 断行由文案内 \n（pre-line）完成；此处只保证不被挤压 + 点按面积 */
+    .footer-links a {
+        padding: 8px 4px;
+        line-height: 1.5;
+        flex-shrink: 0;
+    }
+}
+
+/* 移动端当前语言只保留轻量选中态，避免桌面端渐变胶囊在窄屏导航中
+   过于抢眼；仍通过颜色和浅色底保持当前语言的可识别性。 */
+@media (max-width: 1024px) {
+    .lang-btn.active {
+        background: rgba(var(--brand-primary-rgb), 0.1);
+        color: var(--brand-primary-dark);
+        box-shadow: inset 0 0 0 1px rgba(var(--brand-primary-rgb), 0.2);
+    }
+
+    .nav-link.active {
+        background: rgba(var(--brand-primary-rgb), 0.1);
+        color: var(--brand-primary-dark);
+        transform: none;
     }
 }
 </style>

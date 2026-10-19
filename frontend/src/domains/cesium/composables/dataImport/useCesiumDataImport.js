@@ -8,6 +8,7 @@
 
 import { ref, shallowRef, toRaw } from 'vue';
 import { getExtension, flyToEntity, revokeBlobUrl, detachEntityFromScene } from './loaders/utils.js';
+import { withImportMask } from '@common/data-import/yieldUi.js';
 import { loadGeoJSON } from './loaders/geojsonLoader.js';
 import { loadKML, loadKMZ } from './loaders/kmlLoader.js';
 import { loadSHP } from './loaders/shpLoader.js';
@@ -107,8 +108,13 @@ export function useCesiumDataImport({ getViewer, getCesium, message, heightSampl
     // GLTF UI 状态管理（坐标弹窗 + 位置调整）
     // ============================================================
 
+    // GLTF 坐标弹窗状态：busy=坐标提交后的加载中；error=上次提交的失败信息（保留在弹窗内展示）
+    const gltfLoading = ref(false);
+    const gltfLoadError = ref('');
+
     /**
      * 使用用户输入的坐标加载 GLTF/GLB 模型
+     * 失败时保留 pendingGltfFile 与用户输入：弹窗不关闭，可重试或显式取消
      * @param {{ lng: number, lat: number, height: number }} coords
      */
     async function loadGltfWithUserCoords(coords) {
@@ -117,6 +123,8 @@ export function useCesiumDataImport({ getViewer, getCesium, message, heightSampl
         if (!pendingGltfFile.value) throw new Error('没有等待确认的模型文件');
 
         const { blobUrl, name } = pendingGltfFile.value;
+        gltfLoading.value = true;
+        gltfLoadError.value = '';
 
         try {
             const model = await loadGltfWithCoords(Cesium, viewer, blobUrl, name, coords);
@@ -139,14 +147,17 @@ export function useCesiumDataImport({ getViewer, getCesium, message, heightSampl
             pendingGltfFile.value = null;
             return record;
         } catch (error) {
-            revokeBlobUrl(blobUrl);
-            pendingGltfFile.value = null;
+            // 仅记录失败原因，不动 pendingGltfFile：弹窗保持打开、坐标保留可重试
+            gltfLoadError.value = error?.message || String(error);
             throw error;
+        } finally {
+            gltfLoading.value = false;
         }
     }
 
     function cancelPendingGltf() {
         if (pendingGltfFile.value) {
+            gltfLoadError.value = '';
             revokeBlobUrl(pendingGltfFile.value.blobUrl);
             pendingGltfFile.value = null;
         }
@@ -169,6 +180,14 @@ export function useCesiumDataImport({ getViewer, getCesium, message, heightSampl
         const viewer = getViewer();
         if (!Cesium || !viewer) return;
 
+        gltfLoading.value = true;
+        gltfLoadError.value = '';
+
+        const oldEntity = toRaw(record.entity);
+        const oldHadModel = !!oldEntity?.model;
+        // 新模型是否已成功替换（替换成功后失败不再回滚旧实体，防双份挂载）
+        let swapped = false;
+
         try {
             // Entity 模型：从 viewer.entities 移除旧实体后按新坐标重建
             // 远程 GLB 无 blobUrl，用 sourceUrl；本地 File 用 blobUrl
@@ -177,8 +196,7 @@ export function useCesiumDataImport({ getViewer, getCesium, message, heightSampl
                 message.error('缺少模型地址，无法重定位');
                 return;
             }
-            const oldEntity = toRaw(record.entity);
-            if (oldEntity?.model) {
+            if (oldHadModel) {
                 viewer.entities.remove(oldEntity);
             } else {
                 viewer.scene.primitives.remove(oldEntity);
@@ -190,7 +208,7 @@ export function useCesiumDataImport({ getViewer, getCesium, message, heightSampl
                 record.name,
                 coords,
             );
-
+            swapped = true;
             record.entity = model;
             record.position = { ...coords };
 
@@ -203,10 +221,23 @@ export function useCesiumDataImport({ getViewer, getCesium, message, heightSampl
 
             message.success(`模型已移动到 (${coords.lng.toFixed(4)}, ${coords.lat.toFixed(4)}, ${coords.height.toFixed(1)}m)`);
             try { viewer.scene.requestRender?.(); } catch { /* ignore */ }
-        } catch (error) {
-            message.error(`位置调整失败: ${error.message || error}`);
-        } finally {
             repositionTarget.value = null;
+        } catch (error) {
+            // 失败时保留 repositionTarget：弹窗不自动关闭；若新模型尚未成功替换，
+            // 把已移除的旧实体/图元挂回场景，用户可修正坐标重试或显式取消
+            if (!swapped && oldEntity) {
+                try {
+                    if (oldHadModel) {
+                        viewer.entities.add(oldEntity);
+                    } else {
+                        viewer.scene.primitives.add(oldEntity);
+                    }
+                } catch { /* ignore */ }
+            }
+            gltfLoadError.value = error?.message || String(error);
+            message.error(`位置调整失败: ${error.message || error}（弹窗保留，可重试或取消）`);
+        } finally {
+            gltfLoading.value = false;
         }
     }
 
@@ -390,8 +421,14 @@ export function useCesiumDataImport({ getViewer, getCesium, message, heightSampl
                 case 'gltf': {
                     const result = await loadGLTF({ file, ...baseCtx, heightSampler });
                     if (result.needsCoordInput) {
+                        // 已有模型在等坐标确认：保留第一个（撤销第二个的无声丢失），
+                        // 新文件仅提示，不进入弹窗
                         if (pendingGltfFile.value) {
-                            revokeBlobUrl(pendingGltfFile.value.blobUrl);
+                            revokeBlobUrl(result.blobUrl);
+                            message.info(
+                                `已有模型 "${pendingGltfFile.value.name}" 等待坐标确认，"${result.file.name}" 暂未导入；确认或取消后再试`,
+                            );
+                            return { skipped: true, file: result.file };
                         }
                         pendingGltfFile.value = { file: result.file, blobUrl: result.blobUrl, name: result.file.name };
                         return result;
@@ -417,8 +454,14 @@ export function useCesiumDataImport({ getViewer, getCesium, message, heightSampl
 
     /**
      * 批量导入多文件：自动按 basename 分组，SHP 配套文件合并处理
+     * 外层统一挂 GlobalLoading 导入遮罩（showLoading + 双 rAF 握手后才开始重活，
+     * 大文件解析期间界面有明确反馈且不冻结）
      */
     async function loadDataFiles(files) {
+        return withImportMask('正在导入数据，请稍候…', () => importFilesInternal(files));
+    }
+
+    async function importFilesInternal(files) {
         const shpGroups = new Map();
         const standalone = [];
 
@@ -746,6 +789,9 @@ export function useCesiumDataImport({ getViewer, getCesium, message, heightSampl
         clearAllDataSources,
         flyToDataSource,
         pendingGltfFile,
+        /** GLTF 坐标弹窗状态：坐标提交加载中 / 上次提交失败信息 */
+        gltfLoading,
+        gltfLoadError,
         repositionTarget,
         loadGltfWithUserCoords,
         cancelPendingGltf,

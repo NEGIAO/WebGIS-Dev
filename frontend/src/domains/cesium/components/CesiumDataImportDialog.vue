@@ -1,9 +1,10 @@
 <template>
     <Teleport to="body">
+        <!-- 不做背景点击取消：数据录入弹窗，误点地图/通知栏会静默丢掉已填坐标；
+             显式取消途径 = 取消按钮 / Esc 键 -->
         <div
             v-if="visible"
             class="cesium-data-dialog-overlay"
-            @click.self="$emit('cancel')"
         >
             <div
                 class="cesium-data-dialog"
@@ -41,6 +42,7 @@
                                 :min="-180"
                                 :max="180"
                                 placeholder="例如: 104.1954"
+                                :disabled="busy"
                                 @input="validate"
                             />
                             <span
@@ -59,6 +61,7 @@
                                 :min="-90"
                                 :max="90"
                                 placeholder="例如: 35.8617"
+                                :disabled="busy"
                                 @input="validate"
                             />
                             <span
@@ -76,6 +79,7 @@
                                 step="any"
                                 min="0"
                                 placeholder="例如: 0"
+                                :disabled="busy"
                                 @input="validate"
                             />
                             <span
@@ -85,10 +89,22 @@
                         </label>
                     </div>
 
+                    <p
+                        v-if="loadError"
+                        class="dialog-load-error"
+                    >
+                        <TriangleAlert
+                            :size="13"
+                            stroke-width="2"
+                        />
+                        <span>{{ loadError }}（可修正坐标后重试，或取消后重新导入）</span>
+                    </p>
+
                     <div class="dialog-actions">
                         <button
                             class="dialog-btn cancel-btn"
                             type="button"
+                            :disabled="busy"
                             @click="$emit('cancel')"
                         >
                             取消
@@ -96,13 +112,13 @@
                         <button
                             class="dialog-btn confirm-btn"
                             type="submit"
-                            :disabled="!valid"
+                            :disabled="!valid || busy"
                         >
                             <Send
                                 :size="14"
                                 stroke-width="2"
                             />
-                            {{ mode === 'reposition' ? '确认调整' : '确认放置' }}
+                            {{ busy ? '加载中…' : (mode === 'reposition' ? '确认调整' : '确认放置') }}
                         </button>
                     </div>
                 </form>
@@ -112,8 +128,8 @@
 </template>
 
 <script setup>
-import { computed, ref, watch } from 'vue';
-import { Box, Send } from '@lucide/vue';
+import { computed, onBeforeUnmount, ref, watch } from 'vue';
+import { Box, Send, TriangleAlert } from '@lucide/vue';
 
 const props = defineProps({
     visible: {
@@ -131,6 +147,16 @@ const props = defineProps({
     mode: {
         type: String,
         default: 'import', // 'import' | 'reposition'
+    },
+    /** 坐标提交后的异步加载进行中（禁输入/按钮防重复提交） */
+    busy: {
+        type: Boolean,
+        default: false,
+    },
+    /** 上一次提交的加载失败信息（行内展示，输入保留可重试） */
+    loadError: {
+        type: String,
+        default: '',
     },
 });
 
@@ -196,10 +222,26 @@ function handleConfirm() {
     emit('confirm', { lng, lat, height });
 }
 
-// 弹窗打开/关闭时：打开时根据模式填充或清空表单
+/**
+ * Esc 键显式取消（替代旧的背景点击取消，防误触）；busy 加载中禁止取消，防孤儿加载
+ */
+function onGlobalKeydown(event) {
+    if (props.busy) return;
+    if (event.key === 'Escape') {
+        emit('cancel');
+    }
+}
+
+// 弹窗打开/关闭时：打开时根据模式填充或清空表单，并接管 Esc；关闭时清理监听
 watch(
     () => props.visible,
     (isVisible) => {
+        if (isVisible) {
+            window.addEventListener('keydown', onGlobalKeydown);
+        } else {
+            window.removeEventListener('keydown', onGlobalKeydown);
+        }
+
         if (!isVisible) {
             lngError.value = '';
             latError.value = '';
@@ -230,6 +272,10 @@ watch(
         }, 60);
     },
 );
+
+onBeforeUnmount(() => {
+    window.removeEventListener('keydown', onGlobalKeydown);
+});
 </script>
 
 <style scoped>
@@ -337,6 +383,25 @@ watch(
 .coord-error {
     color: #ff8f8f;
     font-size: 12px;
+}
+
+.dialog-load-error {
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
+    margin: -6px 0 14px;
+    padding: 8px 10px;
+    border-radius: 7px;
+    border: 1px solid rgba(255, 143, 143, 0.34);
+    background: rgba(255, 99, 99, 0.12);
+    color: #ffb4b4;
+    font-size: 12px;
+    line-height: 1.5;
+}
+
+.dialog-load-error svg {
+    flex-shrink: 0;
+    margin-top: 1px;
 }
 
 .dialog-actions {

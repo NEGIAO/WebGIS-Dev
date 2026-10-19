@@ -174,8 +174,11 @@ export async function loadGltfWithCoords(Cesium, viewer, blobUrl, name, coords) 
             scale: 1.0,
             show: true,
             color: Cesium.Color.WHITE,
-            // 大校园 GLB 在桌面/移动端都应有最小像素尺寸，避免过远时“消失”
-            minimumPixelSize: 64,
+            // 地理保真：不设 minimumPixelSize —— 小尺寸 GLB（如一棵树、一台设备）
+            // 远看本该不可见，放大后按真实投影尺寸逐渐显现才是正确的 LOD；
+            // 设了 minimumPixelSize 会在远处把它撑成 ≥64px 的"恒显假象"，
+            // 与真实占地面积极不匹配（国家尺度都能看见、缩放还不变化）。
+            // 需要屏幕恒定可见的标记类模型请走模型管理器参数显式开启
             heightReference,
         },
     });

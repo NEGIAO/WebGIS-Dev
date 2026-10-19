@@ -6,6 +6,25 @@
 
 ## 版本记录
 
+### V3.6.21 (2026-10-19) — Cesium 导入体验 bug 修复包 + GLB 地理保真 + 落地页环章缓旋 + 审查修复
+
+> 完整逐跳分析见 `Docs/LLM_record/26-10/2026-10-19/2026-10-19-import-dialog-bugfix-geofidelity.md`；以下为归档摘要。
+
+> **一、Cesium GLTF 坐标弹窗交互修复（CesiumDataImportDialog.vue / CesiumContainer.vue / useCesiumDataImport.js）**
+> 现象链（实测复现 + 逐跳核验）：① 弹窗仅靠遮罩 `@click.self` 取消——关闭顶部错误通知堆栈、误触地图极易把已填坐标静默丢掉；② 坐标提交后加载成功前弹窗即关闭：加载失败则"文件没了、弹窗也没了"，需重新拖拽导入；③ 多文件批量导入遇到第二个 GLB 时，第二个文件的 blob 撤销旧提示都没有，实质是"后到者无声废除先到者"；④ busy 状态无任何防线，可连点确认按钮重复提交。
+> 修复：去掉 `@click.self` 静默取消，改 Esc 键显式取消（visible watch 挂/卸 window keydown，`onBeforeUnmount` 清理）；新增 `busy` / `loadError` props——坐标提交后 `gltfLoading` 冻结输入与按钮（确认钮转"加载中…"），失败仅记录 `gltfLoadError`，弹窗保持打开、输入保留、行内 `.dialog-load-error` 展示可重试；多文件冲突改为撤销**新**文件 blob + `message.info` 提示先确认，返回 `{ skipped: true }` 标记（三个调用方均不消费返回值，无下游影响）；Esc 在 busy 中忽略防孤儿加载；警示行 emoji（⚠️）按图标规范换 `@lucide/vue` `TriangleAlert`。`CesiumContainer.vue` 同步接线 `:busy` / `:load-error`。
+> **二、重定位失败数据保全（useCesiumDataImport.confirmGltfReposition）**
+> 原 finally 无条件 `repositionTarget.value = null`：加载失败弹窗关闭、且旧实体已被移除的情况是一笔勾销。改为：失败保留 repositionTarget；入参前置校验、`swapped` 位跟踪"新模型是否已成功替换"——未替换则把旧实体（Entity 路径回挂 `viewer.entities.add`，图元路径回挂 `scene.primitives.add`，原来只做图元路径）原样挂回；替换成功后失败不回滚（防旧新双份挂载）。`cancelPendingGltf` 顺带清 `gltfLoadError`。
+> **三、双引擎导入入口统一 GlobalLoading 遮罩（新文件 yieldUi.js）**
+> 背景：导入管线大任务必须留在主线程（DOMParser / OL readFeatures / Cesium KmlDataSource.load），重活开跑时遮罩常未上屏，用户观感"卡死无任何提示"。`yieldUi.js` 提供 `nextPaint()`（双 rAF 让遮罩完成一次合成）、`yieldSlice()`（setTimeout(0) 协作让步）、`withImportMask(text, run)`（showLoading(timeoutMs=0) → 双 rAF → 重活 → finally hideLoading；遮罩 `pointer-events:none` 仅提示不锁交互）。Cesium 侧 `loadDataFiles`（拖拽 / 面板 / 3D Tiles ZIP 三入口，ops-handler 同步改路由）与 OL 侧 `addUserDataLayer`（拆出 `importUploadInternal`，进度条 error 反馈在内核、用户级 message 收口在外层：不支持投影的 `notified` 幂等 + 通用"文件解析失败"都保留）全链路覆盖。
+> **四、GLB 最小像素尺寸改地理保真（gltfLoader.js / useCesiumModelManager.js）**
+> `minimumPixelSize: 64` 恒显在"国家尺度都看得见、缩放不变"与人眼感知不符，且树/设备一类小模型远看本就应不可见。gltfLoader 取消默认 minimumPixelSize；模型管理器默认改 0（`options.minimumPixelSize > 0` 才下发），屏幕恒显标记类模型由调用方显式传参开启（planar-route `frustum.ts` ≥48 / 飞行控制器 32~200 等既有显式调用不受影响）。
+> **五、落地页环章 hover 缓旋（SectionTitle.vue）**
+> 印章式节头 hover 时虚线外环以 60s 一圈极缓开转（`seal-turn` keyframes，仅 `prefers-reduced-motion: no-preference` 生效），平时静止。
+> **六、审查修复（本轮 code review 发现即改）**
+> useLayerDataImport `importUploadInternal` try 块整体缩进回正；CesiumContainer 重复注释删除；ops 面板注释与实现对齐（loadDataFile → loadDataFiles 命中真实代码）。
+> 验证：改动文件 ESLint 0 error；`npm run build` 全量通过；`python Scripts/CheckStructureTree.py` / `CheckConfigRegistry.py` 通过（详见日志）。
+
 ### V3.6.20 (2026-10-17) — 暂存区多批次归并：TOC 重命名链修复 + 区划图层字段修复 + 游客序号 guest_no + 落地页南师大风格重构 + 主卡预览图 + 属性弹窗/TopBar UI 重写 + 审查修复
 
 > 版本注：本版由同日多个会话的暂存批次归并而成（含原拟 V3.6.21 主卡预览图批次），统一记档为 V3.6.20。

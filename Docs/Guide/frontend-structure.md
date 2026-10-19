@@ -398,6 +398,7 @@ frontend/src/
 │   │   │   ├── dataDispatcher.js  # 数据格式分发
 │   │   │   ├── decompressFile.js  # ZIP 解压
 │   │   │   ├── decompressor.ts  # 通用解压器
+│   │   │   ├── yieldUi.js  # 导入 UI 让步与遮罩握手（nextPaint 双 rAF / yieldSlice / withImportMask 统一 GlobalLoading 导入遮罩）
 │   │   │   ├── deferredGisAssets.js  # 延迟 GIS 资源
 │   │   │   ├── deferredGisWarmupLauncher.js  # GIS 预热启动
 │   │   │   ├── gisUploadPayload.ts  # GIS 载荷构建函数 SSOT（createUploadPayloadsFromFiles/Folder/Entries）

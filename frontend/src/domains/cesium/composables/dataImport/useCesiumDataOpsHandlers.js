@@ -120,7 +120,7 @@ export function createCesiumDataOpsHandlers({
 
     /**
      * 打开文件选择器选择 3D Tiles ZIP 包
-     * 选中后通过 loadDataFile 自动路由到 loadTilesetFromZip
+     * 选中后通过 loadDataFiles 自动路由到 loadTilesetFromZip
      * 注意：input 必须挂载到 DOM 中才能可靠触发 click 事件
      */
     function handleImportTilesetZip() {
@@ -142,7 +142,8 @@ export function createCesiumDataOpsHandlers({
             const file = e.target?.files?.[0];
             if (!file) return;
             try {
-                await dataImport.loadDataFile(file);
+                // 走 loadDataFiles：统一 GlobalLoading 遮罩与批量导入链路
+                await dataImport.loadDataFiles([file]);
             } catch {
                 // 内部已提示
             }

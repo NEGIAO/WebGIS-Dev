@@ -132,7 +132,8 @@ export function useCesiumModelManager({ getViewer, getCesium, message }) {
      * @param {number}  [options.pitch=0]             - 俯仰角（度）
      * @param {number}  [options.roll=0]              - 横滚角（度）
      * @param {number|Object} [options.scale=1]       - 缩放比例（标量；{x,y,z} 非均匀缩放已废弃，退化为等比）
-     * @param {number}  [options.minimumPixelSize=64] - 最小像素尺寸（LOD 控制）
+     * @param {number}  [options.minimumPixelSize=0]  - 最小像素尺寸（LOD 控制；默认 0 =
+     *                                        地理保真，不虚放。标记类恒显模型再显式传入）
      * @param {boolean} [options.autoPlayAnimation=true] - 加载完成后自动播放动画
      * @param {Object}  [options.metadata]            - 自定义元数据（可存储任意业务数据）
      * @returns {Promise<Object|null>} 模型元数据条目，失败返回 null
@@ -195,7 +196,12 @@ export function useCesiumModelManager({ getViewer, getCesium, message }) {
                 model: {
                     uri: options.url,
                     scale: entry.scale,
-                    minimumPixelSize: options.minimumPixelSize ?? 64,
+                    // 地理保真优先：默认不做"最小像素"虚放（见 gltfLoader 同名注释），
+                    // 小模型远看不可见、放大后按真实投影尺寸显现才是正确 LOD；
+                    // 标记类屏幕恒显模型由调用方显式传 minimumPixelSize 开启
+                    ...(options.minimumPixelSize > 0
+                        ? { minimumPixelSize: options.minimumPixelSize }
+                        : {}),
                     maximumScale: 20000,
                     show: true,
                     runAnimations: options.autoPlayAnimation !== false,
