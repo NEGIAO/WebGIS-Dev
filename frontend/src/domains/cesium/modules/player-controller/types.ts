@@ -106,6 +106,7 @@ export type PlayerControllerOptions = {
     enableSpringCamera?: boolean; // 是否启用弹簧相机,默认 false
     springCameraTime?: number; // 弹簧相机平滑时间(秒),默认 0.05
     timeScale?: number; // 时间缩放系数,默认 1
+    rebaseDistance?: number; // 自动重锚局部系的水平距离阈值(米),默认 10000;传 Infinity 关闭
     keyMap?: KeyMap; // 自定义键位
     isShowMobileControls?: boolean; // 移动端是否显示虚拟 UI,默认 true
     mobileControls?: MobileControlsOptions; // 移动端按钮显隐

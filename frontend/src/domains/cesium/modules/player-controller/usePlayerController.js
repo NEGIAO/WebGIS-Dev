@@ -233,9 +233,9 @@ export function usePlayerController({ getViewer, getCesium, message }) {
                         const newLon = posCarto.longitude;
                         const newLat = posCarto.latitude;
                         colliderCenter = { lon: newLon, lat: newLat };
-                        // 异步更新碰撞体，不阻塞渲染
-                        player.physics.clearStaticColliders();
-                        player.physics.addStaticColliders(viewer, {
+                        // 原子替换：先解析新地形，再替换旧碰撞体，
+                        // 避免 clear→add 的异步空窗期内没有碰撞体导致角色坠落
+                        player.physics.replaceStaticColliders(viewer, {
                             type: 'terrain',
                             rectangle: [
                                 newLon - TERRAIN_HALF,

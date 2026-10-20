@@ -220,31 +220,63 @@ export class PhysicsSystem {
         return this.frame.rapierToEcef(next.x, next.y, next.z, outEcef);
     }
 
-    // 仅静态碰撞体(地形/glTF 解析出的三角网)的调试线段 → ECEF。静态不动。
+    // 仅静态碰撞体(地形/glTF 解析出的三角网)的调试线段 → ECEF。
+    // 注意：collider 的顶点存于其自身局部空间，需叠加 collider 的平移/旋转（rebase 后不再为单位变换），
+    // 有父级时还要叠加父级变换，否则重锚后线框会错位。
     buildStaticDebugLinesEcef(): Float64Array {
-        const meshes: { v: Float32Array; i: Uint32Array }[] = [];
+        const meshes: { v: Float32Array; i: Uint32Array; rotation: Matrix3; translation: Cartesian3 }[] = [];
         let triCount = 0;
         for (const col of this.staticColliders) {
             // trimesh 顶点/索引在 shape 上
             const shape = col.shape as { vertices?: Float32Array; indices?: Uint32Array };
             const v = shape.vertices, i = shape.indices;
             if (!v || !i || v.length === 0 || i.length === 0) continue;
-            meshes.push({ v, i });
+            const q = col.rotation();
+            const t = col.translation();
+            let worldRotation = new Quaternion(q.x, q.y, q.z, q.w);
+            const worldTranslation = new Cartesian3(t.x, t.y, t.z);
+            const parent = col.parent();
+            if (parent) {
+                const parentQ = parent.rotation();
+                const parentT = parent.translation();
+                const parentRotation = new Quaternion(parentQ.x, parentQ.y, parentQ.z, parentQ.w);
+                Matrix3.multiplyByVector(
+                    Matrix3.fromQuaternion(parentRotation, new Matrix3()),
+                    worldTranslation,
+                    worldTranslation,
+                );
+                worldTranslation.x += parentT.x;
+                worldTranslation.y += parentT.y;
+                worldTranslation.z += parentT.z;
+                worldRotation = Quaternion.multiply(parentRotation, worldRotation, worldRotation);
+            }
+            meshes.push({
+                v,
+                i,
+                rotation: Matrix3.fromQuaternion(worldRotation, new Matrix3()),
+                translation: worldTranslation,
+            });
             triCount += i.length / 3;
         }
         const out = new Float64Array(triCount * 18); // 每三角 3 边 × 2 点 × 3 坐标
         const c = new Cartesian3();
+        const local = new Cartesian3();
+        const world = new Cartesian3();
         let o = 0;
-        const emit = (v: Float32Array, a: number) => {
-            this.frame.rapierToEcef(v[a], v[a + 1], v[a + 2], c);
+        const emit = (mesh: typeof meshes[number], a: number) => {
+            Cartesian3.fromElements(mesh.v[a], mesh.v[a + 1], mesh.v[a + 2], local);
+            Matrix3.multiplyByVector(mesh.rotation, local, world);
+            Cartesian3.add(world, mesh.translation, world);
+            this.frame.rapierToEcef(world.x, world.y, world.z, c);
             out[o++] = c.x; out[o++] = c.y; out[o++] = c.z;
         };
-        for (const { v, i } of meshes) {
+        for (const mesh of meshes) {
+            const { i } = mesh;
             for (let t = 0; t < i.length; t += 3) {
                 const a = i[t] * 3, b = i[t + 1] * 3, d = i[t + 2] * 3;
-                emit(v, a); emit(v, b); // 边 AB
-                emit(v, b); emit(v, d); // 边 BC
-                emit(v, d); emit(v, a); // 边 CA
+                emit(mesh, a); emit(mesh, b); // 边 AB
+                emit(mesh, b); emit(mesh, d); // 边 BC
+                emit(mesh, d); emit(mesh, a); // 边 CA
             }
         }
         return out;
@@ -352,8 +384,90 @@ export class PhysicsSystem {
         this.charBody.setNextKinematicTranslation(p);
     }
 
-    // 步进物理世界
-    step() {
+    /**
+     * 将 Rapier 局部坐标系重锚到新的 ECEF 原点，同时保持所有物体在 ECEF 空间中的位置不变。
+     *
+     * 用途：全球漫游时，角色长时间远离初始锚点会导致
+     * 1) Rapier 内部 f32 坐标绝对值变大，碰撞/站立出现抖动；
+     * 2) 固定锚点的局部 Up 与真实竖直方向逐渐偏离，重力方向失真。
+     * 定期以玩家当前位置重锚，可把上述误差重新压回零附近。
+     */
+    rebase(newAnchorEcef: Cartesian3) {
+        if (!this.world) return;
+        const oldEnuToEcef = Matrix4.clone(this.frame.enuToEcef, new Matrix4());
+        this.frame.setAnchor(newAnchorEcef);
+
+        const oldEnu = new Cartesian3();
+        const ecef = new Cartesian3();
+        const newEnu = new Cartesian3();
+        // 点：旧 Rapier → 旧 ENU → ECEF → 新 Rapier
+        const point = (value: { x: number; y: number; z: number }) => {
+            LocalFrame.rapierToEnu(value.x, value.y, value.z, oldEnu);
+            Matrix4.multiplyByPoint(oldEnuToEcef, oldEnu, ecef);
+            return this.frame.ecefToRapier(ecef);
+        };
+        // 向量：旧 Rapier → 旧 ENU → ECEF → 新 ENU → 新 Rapier（只旋转不平移）
+        const vector = (value: { x: number; y: number; z: number }) => {
+            LocalFrame.rapierToEnu(value.x, value.y, value.z, oldEnu);
+            Matrix4.multiplyByPointAsVector(oldEnuToEcef, oldEnu, ecef);
+            this.frame.ecefVectorToEnu(ecef, newEnu);
+            return LocalFrame.enuToRapier(newEnu.x, newEnu.y, newEnu.z);
+        };
+
+        // 基向量变换矩阵，用于旋转四元数
+        const bx = vector({ x: 1, y: 0, z: 0 });
+        const by = vector({ x: 0, y: 1, z: 0 });
+        const bz = vector({ x: 0, y: 0, z: 1 });
+        const deltaMatrix = Matrix3.fromColumnMajorArray([
+            bx.x, bx.y, bx.z,
+            by.x, by.y, by.z,
+            bz.x, bz.y, bz.z,
+        ], new Matrix3());
+        const deltaRotation = Quaternion.fromRotationMatrix(deltaMatrix, new Quaternion());
+        const rotate = (value: { x: number; y: number; z: number; w: number }) => {
+            const q = Quaternion.multiply(deltaRotation, value as Quaternion, new Quaternion());
+            return { x: q.x, y: q.y, z: q.z, w: q.w };
+        };
+
+        // 无父级的 collider（静态 trimesh）直接改自身变换；有父级的随刚体一起变换
+        this.world.forEachCollider((collider: RAPIER.Collider) => {
+            if (collider.parent()) return;
+            collider.setTranslation(point(collider.translation()));
+            collider.setRotation(rotate(collider.rotation()));
+        });
+
+        this.world.forEachRigidBody((body: RAPIER.RigidBody) => {
+            const currentPosition = point(body.translation());
+            const currentRotation = rotate(body.rotation());
+            let nextPosition: ReturnType<typeof point> | undefined;
+            let nextRotation: ReturnType<typeof rotate> | undefined;
+            if (body.isKinematic()) {
+                nextPosition = point(body.nextTranslation());
+                nextRotation = rotate(body.nextRotation());
+            }
+            const linearVelocity = body.isDynamic() ? vector(body.linvel()) : undefined;
+            const angularVelocity = body.isDynamic() ? vector(body.angvel()) : undefined;
+
+            body.setTranslation(currentPosition, true);
+            body.setRotation(currentRotation, true);
+            if (linearVelocity) body.setLinvel(linearVelocity, true);
+            if (angularVelocity) body.setAngvel(angularVelocity, true);
+            if (nextPosition) body.setNextKinematicTranslation(nextPosition);
+            if (nextRotation) body.setNextKinematicRotation(nextRotation);
+        });
+
+        // 角色胶囊沿局部 -Y 承受重力，rebase 后需保持竖直朝上（新锚点处局部 Y 已改变）
+        if (this.charBody) {
+            const identity = { x: 0, y: 0, z: 0, w: 1 };
+            this.charBody.setRotation(identity, true);
+            this.charBody.setNextKinematicRotation(identity);
+        }
+        this.onGround = false;
+    }
+
+    // 步进物理世界；传入 delta 时同步时间步长，使动态刚体在变帧率下保持一致
+    step(delta?: number) {
+        if (delta !== undefined && delta > 0) this.world.timestep = delta;
         this.world.step();
     }
 
@@ -452,6 +566,34 @@ export class PhysicsSystem {
             if (r.status === "rejected") { console.warn(`静态碰撞源[${i}]加载失败,已跳过:`, r.reason); continue; }
             const tri = r.value;
             if (!tri) continue;
+            this.staticColliders.push(this.world.createCollider(this.triColliderDesc(tri)));
+        }
+    }
+
+    /**
+     * 原子替换静态碰撞源：先把新碰撞体解析完成，再整体替换旧碰撞体。
+     * 避免 clear→add 的异步空窗期内场景没有碰撞体，导致角色坠落。
+     */
+    async replaceStaticColliders(viewer: any, sources: ColliderSource | ColliderSource[]) {
+        const list = Array.isArray(sources) ? sources : [sources];
+        const results = await Promise.allSettled(list.map((s) => this.resolveTriMesh(viewer, s)));
+        if (!this.world) return; // 异步解析期间物理世界已被销毁
+
+        // 先收集解析成功的三角网；若全部失败则保留旧碰撞体，
+        // 避免地形短暂采样失败时把角色脚下的支撑一并清掉。
+        const resolved: ResolvedTriMesh[] = [];
+        for (let i = 0; i < results.length; i++) {
+            const r = results[i];
+            if (r.status === "rejected") { console.warn(`静态碰撞源[${i}]加载失败,已跳过:`, r.reason); continue; }
+            if (r.value) resolved.push(r.value);
+        }
+        if (resolved.length === 0) {
+            console.warn("[PhysicsSystem] 静态碰撞源全部解析失败，保留旧碰撞体");
+            return;
+        }
+
+        this.clearStaticColliders();
+        for (const tri of resolved) {
             this.staticColliders.push(this.world.createCollider(this.triColliderDesc(tri)));
         }
     }
@@ -626,6 +768,8 @@ export class PhysicsSystem {
         this.charCollider = null;
         this.staticColliders = [];
         this.kinematicBodies.clear();
+        this.kinematicBySource.clear(); // 清除按来源对象的登记，避免残留引用
+        this.activeKinematicSource = null;
         this.physicsObjects = [];
     }
 }

@@ -38,7 +38,6 @@ export class playerController {
     private curPlayerSpeed = 0; // 当前实际速度
     playerAcceleration = 30; // XZ 加速响应速度
     playerDeceleration = 30; // XZ 减速响应速度
-    private decelBase = 300; // 减速基准速度
 
     // ==================== 玩家胶囊体 ====================
     private playerCapsuleRadius = 30; // 胶囊体半径
@@ -61,8 +60,15 @@ export class playerController {
 
     // ==================== 移动手感 ====================
     private airControl = 0.3; // 空中控制系数（0=无空控，1=与地面相同）
-    private landingDamping = 0.3; // 落地竖直速度衰减系数
+    private landingDamping = 0.3; // 落地缓冲系数：首帧只吸收部分贴地修正，形成软着陆
     private moveSmoothTime = 0.08; // 水平速度平滑时间（秒），越小越灵敏
+    private stepSmoothFactor = 12; // 贴地跟随平滑因子：坡度/台阶上渐进贴合，避免瞬移
+
+    // ==================== 局部系重锚 ====================
+    // 远离初始锚点后，Rapier 局部坐标会变大导致站立/碰撞抖动，局部 Up 与真实竖直也会偏离；
+    // 超过该水平距离即以玩家当前位置重锚。默认 10km，传 Infinity 关闭。
+    private physicsRebaseDistance = 10000;
+    private _rebaseScratch = new Cartesian3(); // 重锚判定用 scratch（避免每帧分配）
 
     // ==================== 运动状态 ====================
     // 速度在 ENU 局部系:E/N 为水平，U 为竖直
@@ -116,7 +122,6 @@ export class playerController {
         this.playerCapsuleRadiusRatio = m.capsuleRadiusRatio ?? this.playerCapsuleRadiusRatio;
         this.playerAcceleration = m.acceleration ?? this.playerAcceleration;
         this.playerDeceleration = m.deceleration ?? this.playerDeceleration;
-        this.decelBase = this.playerSpeed;
         this.yaw = m.rotateY ?? 0;
 
         // 应用相机参数
@@ -137,6 +142,7 @@ export class playerController {
         this.enableOverShoulderView = opts.enableOverShoulderView ?? this.enableOverShoulderView;
         this.isFirstPerson = opts.isFirstPerson ?? this.isFirstPerson;
         this.timeScale = opts.timeScale ?? this.timeScale;
+        this.physicsRebaseDistance = opts.rebaseDistance ?? this.physicsRebaseDistance;
         this.isShowMobileControls = (opts.isShowMobileControls ?? this.isShowMobileControls) && isMobileDevice();
 
         // 自定义键位
@@ -245,7 +251,8 @@ export class playerController {
                 settled = true;
                 offReady();
                 offErr();
-                reject();
+                // 携带 Error，避免上层 catch 读取 error.message 时二次抛错
+                reject(new Error(`玩家模型加载失败: ${this.playerModelConfig.url}`));
             });
         });
     }
@@ -268,9 +275,15 @@ export class playerController {
 
     // 玩家帧更新
     private updatePlayer(delta: number) {
+        // 远距离漫游：先重锚局部系，再提交上一帧的运动学目标，
+        // 使本帧的地面检测与移动解算都基于最新、且数值稳定的坐标。
+        this.maybeRebase();
+        this.physics.step(delta);
+
         // 计算移动方向
         const camYaw = this.getCameraYaw(); // 相机水平朝向（绕 Up）
         let dirE = 0, dirN = 0, dirU = 0;
+        let groundCorrectionU = 0; // 贴地修正位移：与竖直速度分离，避免速度尖峰导致的抖动
         const i = this.input;
         // 按键移动方向（相对相机朝向）
         if (i.fwd) { dirE += Math.sin(camYaw); dirN += Math.cos(camYaw); }
@@ -331,15 +344,23 @@ export class playerController {
                 this.setOnGround(false);
             } else if (this.velU <= 0) {
                 if (this.playerIsOnGround) {
-                    // 已在地面：吸附跟随地形（本帧把中心移到 groundY + snapH）
-                    this.velU = (snapH - dist) / delta;
+                    // 已在地面：把"贴地修正"作为独立位移处理，竖直速度归零。
+                    // 小落差（台阶/坡度）按 stepSmoothFactor 渐进贴合，避免瞬移；
+                    // 大落差（地形骤降）则一次修正到位，避免悬空滞后。
+                    const correction = snapH - dist;
+                    const smoothThreshold = this.capsuleInfo.height * 0.25;
+                    groundCorrectionU = Math.abs(correction) <= smoothThreshold
+                        ? correction * Math.min(1, this.stepSmoothFactor * delta)
+                        : correction;
+                    this.velU = 0;
                     this.setOnGround(true);
                 } else {
                     // 从空中落下：本帧速度能到落点才吸附，否则继续下落
                     const predicted = dist + this.velU * delta;
                     if (predicted <= snapH) {
-                        // 落地缓冲：衰减竖直速度，模拟"软着陆"
-                        this.velU = (snapH - dist) / delta * this.landingDamping;
+                        // 落地缓冲：首帧只吸收部分修正，后续帧继续收敛，形成软着陆
+                        groundCorrectionU = (snapH - dist) * this.landingDamping;
+                        this.velU = 0;
                         this.setOnGround(true);
                     } else {
                         this.velU += this.gravity * delta;
@@ -353,9 +374,12 @@ export class playerController {
             }
         }
 
-        // 碰撞移动
-        const desiredEnu = { e: this.velE * delta, n: this.velN * delta, u: this.velU * delta };
-        this.physics.step();
+        // 碰撞移动：贴地修正并入本帧位移，竖直速度本身保持干净
+        const desiredEnu = {
+            e: this.velE * delta,
+            n: this.velN * delta,
+            u: this.velU * delta + groundCorrectionU,
+        };
         this.physics.moveCharacter(desiredEnu, this.posEcef);
 
         // 同步已绑定视觉的动态物体位姿，未 attach 的跳过
@@ -404,6 +428,16 @@ export class playerController {
         if (this.displayCollider) { this.updateCapsuleDebug(); this.updateDynamicDebug(); }
     }
 
+    // 水平方向远离锚点超过阈值时，重锚 Rapier 局部系（位置在 ECEF 中保持不变）
+    private maybeRebase() {
+        if (!Number.isFinite(this.physicsRebaseDistance) || this.physicsRebaseDistance <= 0) return;
+        const local = this.frame.ecefToLocal(this.posEcef, this._rebaseScratch);
+        if (Math.hypot(local.x, local.y) >= this.physicsRebaseDistance) {
+            this.physics.rebase(this.posEcef);
+            // 重锚保持 ECEF 位置不变，落地状态仍然有效，故不重置，避免动画抖动
+        }
+    }
+
     // ==================== 内部辅助 ====================
     // 相机水平朝向（绕本地 Up 的 yaw）
     private getCameraYaw(): number {
@@ -413,20 +447,21 @@ export class playerController {
 
     // scratch 对象（避免每帧分配）
     private _enuScratch = new Matrix4();
-    private _enuInvScratch = new Matrix4();
-    private _localDirScratch = new Cartesian3();
     private _camDirResult = { e: 0, n: 0, u: 0 };
 
     // 相机朝向在本地 ENU 下的单位向量 {e,n,u}（含俯仰，供飞行沿视线方向用）
+    // ENU 基是正交单位阵，直接用其列向量与相机方向做点积即可，
+    // 无需构造 4x4 逆矩阵再相乘（省掉每帧一次 Matrix4.inverse）。
     private getCameraDirEnu(): { e: number; n: number; u: number } {
         const dir = this.viewer.camera.directionWC;
-        // 投影到本地 ENU 坐标系（复用 scratch 对象）
-        Transforms.eastNorthUpToFixedFrame(this.posEcef, undefined, this._enuScratch);
-        Matrix4.inverse(this._enuScratch, this._enuInvScratch);
-        const local = Matrix4.multiplyByPointAsVector(this._enuInvScratch, dir, this._localDirScratch);
-        const len = Math.hypot(local.x, local.y, local.z) || 1;
+        const m = Transforms.eastNorthUpToFixedFrame(this.posEcef, undefined, this._enuScratch);
+        // 列主序：列0=E(0..2)、列1=N(4..6)、列2=U(8..10)
         const r = this._camDirResult;
-        r.e = local.x / len; r.n = local.y / len; r.u = local.z / len;
+        r.e = dir.x * m[0] + dir.y * m[1] + dir.z * m[2];
+        r.n = dir.x * m[4] + dir.y * m[5] + dir.z * m[6];
+        r.u = dir.x * m[8] + dir.y * m[9] + dir.z * m[10];
+        const len = Math.hypot(r.e, r.n, r.u) || 1;
+        r.e /= len; r.n /= len; r.u /= len;
         return r;
     }
 
@@ -633,6 +668,13 @@ export class playerController {
         this.playerSpeed *= ratio;
         this.playerFlySpeed *= ratio;
         this.curPlayerSpeed *= ratio;
+        // 胶囊碰撞尺寸随模型尺度同步，否则换模型后碰撞体与视觉不一致
+        this.capsuleInfo.radius *= ratio;
+        this.capsuleInfo.height *= ratio;
+        this.physics.updateCharacterShape({
+            radius: this.capsuleInfo.radius,
+            halfHeight: Math.max(0.01, (this.capsuleInfo.height - 2 * this.capsuleInfo.radius) / 2),
+        });
         this.cam.epsilon *= ratio;
         this.cam.minDist *= ratio;
         this.cam.maxDist *= ratio;
@@ -734,6 +776,14 @@ export class playerController {
     // 设置朝向开关
     setEnableToward(v: boolean) { this.enableToward = v; }
 
+    // --- 局部系重锚 ---
+    // 手动把 Rapier 局部系重锚到指定 ECEF（默认当前玩家位置）
+    rebase(anchorEcef?: Cartesian3) { this.physics.rebase(anchorEcef ?? this.posEcef); }
+    // 设置自动重锚距离（米），Infinity 关闭
+    setRebaseDistance(d: number) { this.physicsRebaseDistance = d; }
+    // 获取自动重锚距离（米）
+    getRebaseDistance() { return this.physicsRebaseDistance; }
+
     // --- 相机参数 ---
     // 设置相机最近距
     setMinCamDistance(d: number) { this.cam.minDist = d * this.playerModelConfig.scale; }
@@ -743,14 +793,17 @@ export class playerController {
     setCamLookAtHeightRatio(r: number) { this.cam.lookAtHeightRatio = r; }
     // 设置鼠标模式
     setThirdMouseMode(mode: 0 | 1 | 2 | 3 | 4 | 5) { this.cam.mouseMode = mode; this.cam.setPointerLock(); }
-    // 设置缩放开关（同步 Cesium 相机控制器，使 enableZoom=false 时滚轮缩放也被禁用）
-    setEnableZoom(e: boolean) { this.cam.zoomEnabled = e; this.viewer.scene.screenSpaceCameraController.enableZoom = e; }
+    // 设置缩放开关：滚轮缩放由自定义 zoomByWheel 接管（cam.zoomEnabled 控制），
+    // Cesium 原生 dolly 必须始终保持关闭，否则会与自定义滚轮叠加成双重缩放。
+    setEnableZoom(e: boolean) { this.cam.zoomEnabled = e; this.viewer.scene.screenSpaceCameraController.enableZoom = false; }
 
     // --- 相机 ---
     // 切换视角模式
     changeView() { this.cam.changeView(); }
     // 设置第一人称
     setFirstPersonCamera(v = 0) { this.cam.setFirstPerson(v); }
+    // 运行时调整第一人称相机偏移（玩家朝向系 x=右 / y=前 / z=上，按 scale 缩放）
+    setFirstPersonCameraOffset(offset: [number, number, number]) { this.playerModelConfig.firstPersonCameraOffset = offset; }
     // 设置越肩视角
     setOverShoulderView(v: boolean) { this.enableOverShoulderView = v; this.cam.setOverShoulder(v); }
     // 屏幕中心检测
@@ -800,7 +853,8 @@ export class playerController {
         // 清理 debug 图元（静态碰撞体 + 动态物体线框）
         this.removeDebugPrimitives();
 
-        // 清除玩家对象
+        // 清除玩家对象与动画资源（reset 会移除 animationRemoved 监听并清空动作缓存）
+        this.animation.reset();
         if (this.model) { this.viewer.scene.primitives.remove(this.model); this.model = null; }
         this.clearDynamicObjects();
         this.physics.destroy();

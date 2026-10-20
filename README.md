@@ -84,7 +84,7 @@
 
 ## 🎯 项目简介
 
-**NEGIAO's WebGIS** 是一个功能完整、架构清晰的前后端分离 WebGIS 平台（当前版本 V3.6.21），前端托管于 GitHub Pages（正式域名 webgis.negiao.cn），后端以 Docker 部署在 Hugging Face Spaces，通过 RESTful API 通信，支持独立扩展。
+**NEGIAO's WebGIS** 是一个功能完整、架构清晰的前后端分离 WebGIS 平台（当前版本 V3.6.22），前端托管于 GitHub Pages（正式域名 webgis.negiao.cn），后端以 Docker 部署在 Hugging Face Spaces，通过 RESTful API 通信，支持独立扩展。
 
 > 📚 本 README 仅保留核心概览与导航。完整文档已模块化至 [`Docs/Guide/`](Docs/Guide/)，详见下方「文档导航」。
 >
@@ -408,9 +408,9 @@ tiles.negiao.cc.cd"]
 
 | 版本 | 日期 | 概要 |
 |------|------|------|
+| **V3.6.22** | 2026-10-20 | **Cesium 人物漫游对齐上游（cesium-player-controller 0.2.1）+ 审查加固**。① 新增 Rapier 局部系重锚 `rebase()`：远距离漫游超过阈值（默认 10km）以玩家位置重锚，保持所有刚体/碰撞体 ECEF 不变，消除 f32 精度抖动与局部 Up/重力方向偏离；② 静态碰撞线框改为叠加 collider（及父级）变换，重锚后不错位；③ 贴地修正从"注入竖直速度"改为独立位移 `groundCorrectionU`（小落差渐进、大落差一次到位），消除台阶/坡度上下弹跳，并把 `physics.step()` 移到帧首提交上一帧运动学目标；④ `step(delta)` 同步 `world.timestep`，动态刚体变帧率一致；⑤ 地形碰撞重建改为 `replaceStaticColliders` 原子替换，消除 clear→add 空窗期坠落，全部解析失败时保留旧碰撞体；⑥ 修复 `setEnableZoom(true)` 与自定义滚轮叠加成双重缩放；⑦ 热路径 `getCameraDirEnu` 改用 ENU 正交基点积，省去每帧一次 `Matrix4.inverse`；⑧ 清理死字段 `decelBase`、补 `destroy` 残留引用与动画监听释放、`switchPlayerModel` 胶囊随 scale 同步、`waitForModelReady` 带 Error、新增 `setFirstPersonCameraOffset`。审查：tsc 0 error / eslint 0；rebase 仿射往返误差 1.1e-9 m。详见[完整更新日志](Docs/Guide/CHANGELOG.md) |
 | **V3.6.21** | 2026-10-19 | **Cesium 导入体验 bug 修复包 + GLB 地理保真 + 落地页环章缓旋**。① CesiumDataImportDialog：失败行内展示可重试、背景不再点击取消（Esc/按钮显式取消）、busy 禁输入防重复提交；验收了自上次导入后从未出现的错误回显路径。② 数据导入失败保留：pendingGltfFile / repositionTarget 不再被静默清空，坐标弹窗不自动关闭；重定位失败按 swapped 位回挂旧实体（替换成功后不回滚，防双份挂载）；cancelPendingGltf 撤销时清错误信息。③ 多文件导入遇第二个 GLB 时不再静默丢弃早先等待坐标确认的那个，改为跳过并提示先确认或取消。④ 双引擎导入入口统一挂 GlobalLoading 遮罩（yieldUi.withImportMask：showLoading + 双 rAF 握手后再进重活），Cesium 拖拽/面板/3D Tiles ZIP、OL 上传/目录/zip/kmz 全链路覆盖。⑤ GLB 最小像素尺寸默认移除（原 64px 恒显改为地理保真 LOD，远小近现），模型管理器恢复显式参数可开恒显标记类模型；planar-route / 飞行控制器标记类显式传值不受影响。⑥ 落地页环章 hover 60s 极缓旋转，prefers-reduced-motion 静止。⑦ 审查修复：useLayerDataImport 缩进回正、CesiumContainer 重复注释、面板下拉注释与代码对齐（loadDataFiles）、弹窗警示 emoji 换 @lucide/vue TriangleAlert（图标规范）。详见[完整更新日志](Docs/Guide/CHANGELOG.md) |
 | **V3.6.20** | 2026-10-17 | **多批次归并：TOC 重命名链修复 + 区划图层字段修复 + 游客序号 guest_no + 落地页南师大风格重构 + 图层属性弹窗/TopBar UI 重写 + 落地页主卡预览图**。① TOC 右键「重命名」只写 Pinia store、不改地图侧托管记录，被下一次 `user-layers-change` 广播冲回旧名（无法真正应用）：改为经 ActionRouter 路由 `MapContainer.renameUserLayer`，改托管记录 + 广播回流，与可见性/透明度同为单一事实源；区划节点走 tocStore 元数据；地图未就绪降级 store 兜底。② 行政区划托管记录 OL 图层字段 `_layer` → `layer`（对齐托管约定），修复坐标转换/导出/编辑/导入3D 被误判"不是矢量图层"。③ 后端游客登录回传 `guest_no`（guest_identity_records 自增真序号），前端未设昵称游客展示 `guest_<序号>`（旧会话按 uid 哈希兜底）。④ 落地页南师大风格全量重构：SectionTitle 三件套组件（印章+衬线标题+水印）、Hero 数字滚动 + 三环轨道纹样（mask 染金，URL 经 ASSET_BASE_URL 派生）、技术栈三层架构卡、中部锚点导航 + scroll spy、移动端全屏两级菜单、滚动条品牌定制、页脚云海光带；自托管思源宋体子集（16.7KB woff2）入 `--font-serif` 栈。⑤ 落地页主卡（2D/3D 双引擎）嵌入 `preview.webp` 产品预览图（lazy，桌面主卡右下按原比适配，窄屏整行）。⑥ 图层属性弹窗按项目设计令牌重写（品牌渐变头部 + 统计卡 + 明细行，--z-modal、Esc 关闭）。⑦ TopBar 背景收敛版重设计：左上柔光 + 160° 品牌渐变 + 30/150px 双规格经纬网格（向右渐隐），导航按钮玻璃质感。⑧ 品牌徽牌无底牌单色 logo（mask 染品牌深绿）+ 注册页白 logo 直放；顺带修复 RegisterView 引用全仓未定义 `--brand-primary-darker` 致背景声明被丢弃的真 bug。⑨ 审查修复：触屏档（pointer:coarse ≥40px 目标）、KMZ 包内附带资源静默跳过、ActionRouter 异步错误状态清理、ui-panel-theme.css 通用面板模板抽离。详见[完整更新日志](Docs/Guide/CHANGELOG.md) |
-| **V3.6.19** | 2026-10-16 | **URL 底图参数延迟修复 + 矢量多面图层叠放定序（2D/3D）+ 移除假删除修复**。① 分享链接 `l` 参数底图近 10s 才生效：hash 路由下 `location.search` 恒为空导致判断失效，改走 urlQueryReader 快照。② 3D 按 Folder run 递进 zIndex；③ 2D 根因级修复（RBush 乱序→`_drawRank`+`renderOrder`，与 QGIS 图例语义一致）；④ 移除以分发结果为准。⚠️ 2D/3D 定序方向相反待定夺。详见[完整更新日志](Docs/Guide/CHANGELOG.md) |
 更早版本（V3.6.14 及以前）请查阅 [完整更新日志 →](Docs/Guide/CHANGELOG.md)
 
 ---
@@ -433,6 +433,6 @@ tiles.negiao.cc.cd"]
 |:------:|:--------:|:--------:|
 | [GitHub](https://github.com/NEGIAO/WebGIS-Dev) | [webgis.negiao.cn](https://webgis.negiao.cn)（正式域名，GitHub Pages 托管） | [Hugging Face](https://NEGIAO-WebGIS.hf.space) |
 
-<sub>V3.6.21 · 开发中 · 最后更新 2026-10-19</sub>
+<sub>V3.6.22 · 开发中 · 最后更新 2026-10-20</sub>
 
 </div>

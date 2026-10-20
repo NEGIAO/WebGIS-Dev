@@ -6,6 +6,22 @@
 
 ## 版本记录
 
+### V3.6.22 (2026-10-20) — Cesium 人物漫游对齐上游 0.2.1 + 审查加固
+
+> 完整逐跳分析见 `Docs/LLM_record/26-10/2026-10-20/2026-10-20-cesium-player-controller-upstream-opt.md`；以下为归档摘要。
+
+> **一、局部系重锚（rebase，核心）**
+> 本地 player-controller 迁移自 `hh-hang/cesium-player-controller`（Cesium 版，最新 0.2.1），此前长期未跟进。远距离漫游时 Rapier 局部坐标随锚点距离增大（f32 精度下降 → 站立/碰撞抖动），固定锚点的局部 Up 也会与真实竖直偏离（重力方向失真）。新增 `PhysicsSystem.rebase(newAnchorEcef)`：以玩家当前位置重锚，点/向量经「旧 Rapier → 旧 ENU → ECEF → 新 Rapier」变换，所有刚体（含 kinematic next 位姿、dynamic 线/角速度）与无父级静态 trimesh collider 均保持 ECEF 位置不变；角色胶囊重锚后复位为竖直朝上。`playerController` 新增 `physicsRebaseDistance`（默认 10000m，Infinity 关闭）+ `maybeRebase()` 每帧判定，并公开 `rebase()/setRebaseDistance()/getRebaseDistance()`；`types.ts` 增 `rebaseDistance?`。
+> **二、静态碰撞线框变换感知**
+> 原 `buildStaticDebugLinesEcef` 直接用原始顶点转 ECEF、忽略 collider 自身（及父级）平移/旋转，重锚后线框会错位。改为叠加世界变换后再转 ECEF。
+> **三、贴地修正与竖直速度解耦**
+> 原逻辑 `velU = (snapH - dist) / delta` 直接注入贴地速度，在台阶/坡度上产生速度尖峰 → 上下弹跳。改为独立位移 `groundCorrectionU`、`velU = 0`：小落差按 `stepSmoothFactor(12)` 渐进贴合，大落差一次到位；落地仍按 `landingDamping` 软着陆。`physics.step()` 移到帧首，先提交上一帧运动学目标再做地面检测。
+> **四、物理步长与地形重建**
+> `step(delta?)` 同步 `world.timestep`，动态刚体在变帧率下一致；新增 `replaceStaticColliders` 原子替换（先解析新地形再替换旧碰撞体），消除 `clear→add` 异步空窗期角色坠落；若新碰撞源全部解析失败则保留旧碰撞体。
+> **五、审查修复（本轮 code review 发现即改）**
+> `setEnableZoom(true)` 原会同时开启 Cesium 原生 dolly 与自定义滚轮 → 双重缩放，改为原生 dolly 始终关闭（与上游一致）；`getCameraDirEnu` 去掉每帧 `Matrix4.inverse`，改用 ENU 正交基列向量点积（数值验证误差 4.4e-16）；删除死字段 `decelBase`；`PhysicsSystem.destroy()` 补清 `kinematicBySource`/`activeKinematicSource`；`playerController.destroy()` 调 `animation.reset()`；`switchPlayerModel` 胶囊随 scale 同步并 `updateCharacterShape`；`waitForModelReady` reject 携带 Error；新增 `setFirstPersonCameraOffset`。
+> 验证：改动文件 tsc 0 error、eslint 0；rebase 仿射往返最大 ECEF 误差 1.1e-9 m（父级/已重锚两种用例）；`python Scripts/CheckStructureTree.py` / `CheckConfigRegistry.py` 通过（详见日志）。
+
 ### V3.6.21 (2026-10-19) — Cesium 导入体验 bug 修复包 + GLB 地理保真 + 落地页环章缓旋 + 审查修复
 
 > 完整逐跳分析见 `Docs/LLM_record/26-10/2026-10-19/2026-10-19-import-dialog-bugfix-geofidelity.md`；以下为归档摘要。
