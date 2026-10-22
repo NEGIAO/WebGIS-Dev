@@ -361,6 +361,15 @@ const newsPlatforms = computed(() =>
 const NEWS_DIRECT_URL = 'https://news.orz.ai/api/v1/dailynews/';
 const NEWS_API_TARGET = 'news.orz.ai/api/v1/dailynews/';
 const NEWS_REFRESH_INTERVAL = 10 * 60 * 1000; // 10 min
+/** 直连超时：正常 1.6s 内可返回，超时即视为不可达，交由代理分支胜出 */
+const NEWS_DIRECT_TIMEOUT = 2500;
+/** 代理超时：实测 0.6–2.4s；上游抖动时可到数秒，故给到 8s（tile-proxy 自身上限 20s） */
+const NEWS_PROXY_TIMEOUT = 8000;
+/** 列表最多展示条数（上游通常返回 20–60 条） */
+const NEWS_ITEM_LIMIT = 25;
+/** 上次成功结果缓存键：刷新失败时用于兜底展示，避免列表被抹空 */
+const NEWS_CACHE_KEY = 'webgis:news-cache:v1';
+const NEWS_CACHE_MAX_PLATFORMS = 24;
 
 // ========== 2. Props & Emits ==========
 const props = defineProps({
@@ -547,6 +556,12 @@ const newsItems = ref([]);
 const newsLoading = ref(false);
 const lastNewsUpdate = ref('');
 let newsTimer = null;
+/** 当前在途请求的取消句柄：切平台/卸载时中断旧请求 */
+let newsAbortController = null;
+/** 请求序号：递增后旧请求的响应自动失效，防止慢响应覆盖新平台数据 */
+let newsRequestSeq = 0;
+/** 上次成功获取的时间戳，用于回到前台时判断是否需要补刷 */
+let newsLastFetchedAt = 0;
 
 const currentPlatformLabel = computed(() => {
     const p = newsPlatforms.value.find((item) => item.key === currentPlatform.value);
@@ -554,52 +569,202 @@ const currentPlatformLabel = computed(() => {
 });
 
 // ========== 4. 新闻功能函数 ==========
-async function fetchNews(platform) {
-    newsLoading.value = true;
+/** 格式化为 HH:mm:ss（面板右上角「更新于」展示用） */
+function formatNewsClock(date) {
+    return [date.getHours(), date.getMinutes(), date.getSeconds()]
+        .map((value) => String(value).padStart(2, '0'))
+        .join(':');
+}
+
+/** 读取本地缓存（隐私模式或配额异常时静默失效） */
+function readNewsCache() {
     try {
-        // 先尝试直连，失败（网络错误或 HTTP 非 ok）则走后端代理
-        const url = `${NEWS_DIRECT_URL}?platform=${platform}`;
-        const proxyUrl = `${tileProxyUrl(NEWS_API_TARGET)}?platform=${platform}`;
-        const directController = new AbortController();
-        const directTimeoutId = setTimeout(() => directController.abort(), 8000);
-        let resp;
-        try {
-            resp = await fetch(url, { signal: directController.signal });
-            if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-        } catch {
-            // 直连失败（网络错误或 HTTP 非 ok），使用独立 controller 走代理
-            clearTimeout(directTimeoutId);
-            const proxyController = new AbortController();
-            const proxyTimeoutId = setTimeout(() => proxyController.abort(), 8000);
-            try {
-                resp = await fetch(proxyUrl, { signal: proxyController.signal });
-                if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-            } finally {
-                clearTimeout(proxyTimeoutId);
-            }
-        } finally {
-            clearTimeout(directTimeoutId);
+        const raw = localStorage.getItem(NEWS_CACHE_KEY);
+        if (!raw) return null;
+        const parsed = JSON.parse(raw);
+        return parsed?.platforms && typeof parsed.platforms === 'object' ? parsed.platforms : null;
+    } catch {
+        return null;
+    }
+}
+
+/** 写入成功结果；按最近使用时间淘汰超量平台，避免长期堆积占满存储 */
+function writeNewsCache(platform, items, updatedAt) {
+    try {
+        const platforms = readNewsCache() || {};
+        platforms[platform] = { items, updatedAt, ts: Date.now() };
+        const keys = Object.keys(platforms);
+        if (keys.length > NEWS_CACHE_MAX_PLATFORMS) {
+            keys.sort((a, b) => (platforms[a]?.ts || 0) - (platforms[b]?.ts || 0))
+                .slice(0, keys.length - NEWS_CACHE_MAX_PLATFORMS)
+                .forEach((key) => delete platforms[key]);
         }
-        const json = await resp.json();
-        if (json.status === '200' && Array.isArray(json.data)) {
-            newsItems.value = json.data.slice(0, 25);
-            const now = new Date();
-            lastNewsUpdate.value = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`;
-        } else {
-            newsItems.value = [];
-        }
-    } catch (_error) {
-        console.warn('新闻服务暂不可用，已跳过本次更新');
-        newsItems.value = [];
+        localStorage.setItem(NEWS_CACHE_KEY, JSON.stringify({ version: 1, platforms }));
+    } catch {
+        // 写缓存失败不影响主流程
+    }
+}
+
+/** 用缓存先渲染一帧，网络刷新完成后再覆盖；返回是否命中缓存 */
+function hydrateNewsFromCache(platform) {
+    const entry = readNewsCache()?.[platform];
+    if (!entry || !Array.isArray(entry.items) || !entry.items.length) return false;
+    newsItems.value = entry.items.slice(0, NEWS_ITEM_LIMIT);
+    lastNewsUpdate.value = entry.updatedAt || '';
+    // 以缓存写入时间作为「上次获取时间」，避免刚打开页面就重复补刷
+    newsLastFetchedAt = Number(entry.ts) || 0;
+    return true;
+}
+
+/**
+ * 发起一次新闻请求并返回解析后的 JSON。
+ * 超时由独立 AbortController 控制（父 signal 取消时同步中断）；响应按文本读取后再
+ * JSON.parse —— 网关或 Cloudflare 出错时返回的是纯文本 504 页，直接 resp.json()
+ * 抛出的 SyntaxError 无法与网络错误区分，日志会误导排查方向。
+ */
+async function requestNewsJson(url, timeoutMs, parentSignal) {
+    const controller = new AbortController();
+    const abortFromParent = () => controller.abort();
+    if (parentSignal) {
+        if (parentSignal.aborted) controller.abort();
+        else parentSignal.addEventListener('abort', abortFromParent, { once: true });
+    }
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+        const resp = await fetch(url, { signal: controller.signal, cache: 'no-store' });
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        return JSON.parse(await resp.text());
     } finally {
-        newsLoading.value = false;
+        clearTimeout(timeoutId);
+        parentSignal?.removeEventListener('abort', abortFromParent);
+    }
+}
+
+/**
+ * Promise.any 的最小兜底实现。
+ * Promise.any 属 ES2021 运行时 API，构建工具不会转译；少数内嵌 WebView 缺失时
+ * 会直接抛 TypeError，导致新闻永远空白。这里仅在缺失时降级为等价实现。
+ */
+function anyResolve(promises) {
+    if (typeof Promise.any === 'function') return Promise.any(promises);
+    return new Promise((resolve, reject) => {
+        let pending = promises.length;
+        const errors = [];
+        if (!pending) {
+            reject(new Error('no candidate'));
+            return;
+        }
+        promises.forEach((promise, index) => {
+            Promise.resolve(promise).then(resolve, (error) => {
+                errors[index] = error;
+                pending -= 1;
+                if (!pending) reject(new Error(errors.map((e) => e?.message || e).join(' | ')));
+            });
+        });
+    });
+}
+
+/**
+ * 双通道竞速：直连与 VPS 代理同时发起，谁先拿到「status=200 且 data 非空」谁胜出。
+ *
+ * 依据实测：国内网络直连 news.orz.ai 间歇性不可达（连续采样全部超时），
+ * 「直连优先」会让每次刷新白等一整个直连超时再回退；而代理正常时 0.6–2.4s 返回。
+ * 竞速在直连可用时仍拿到 ~1.6s 的低延迟，不可用时也不必付双份等待。
+ * 落败分支在 finally 中 abort，不留悬挂请求；10 分钟一次，对代理 180 req/min
+ * 的限流与上游压力均可忽略。
+ */
+async function fetchNewsFromChannels(platform, parentSignal) {
+    const query = `?platform=${encodeURIComponent(platform)}`;
+    const branches = [
+        { channel: 'direct', url: `${NEWS_DIRECT_URL}${query}`, timeoutMs: NEWS_DIRECT_TIMEOUT },
+        { channel: 'proxy', url: `${tileProxyUrl(NEWS_API_TARGET)}${query}`, timeoutMs: NEWS_PROXY_TIMEOUT },
+    ];
+    const controllers = branches.map(() => new AbortController());
+    const abortAll = () => controllers.forEach((controller) => controller.abort());
+    if (parentSignal) {
+        if (parentSignal.aborted) abortAll();
+        else parentSignal.addEventListener('abort', abortAll, { once: true });
+    }
+
+    const attempts = branches.map((branch, index) => {
+        const attempt = (async () => {
+            const json = await requestNewsJson(branch.url, branch.timeoutMs, controllers[index].signal);
+            const list = Array.isArray(json?.data) ? json.data : [];
+            if (String(json?.status ?? '') !== '200' || !list.length) {
+                throw new Error(`${branch.channel}: 上游无有效数据（status=${json?.status}）`);
+            }
+            return { channel: branch.channel, list };
+        })();
+        // 落败分支的拒绝由竞速聚合统一处理，这里再挂一次空 catch 避免未处理拒绝告警
+        attempt.catch(() => {});
+        return attempt;
+    });
+
+    try {
+        return await anyResolve(attempts);
+    } finally {
+        abortAll();
+        parentSignal?.removeEventListener('abort', abortAll);
+    }
+}
+
+/**
+ * 拉取指定平台新闻。
+ * @param {string} platform 平台键（见 NEWS_PLATFORM_KEYS）
+ * @param {{ silent?: boolean }} options silent=true 时不切换加载态（轮询/有缓存时用）
+ *
+ * 三类状态变化：
+ * - 成功：覆盖列表 + 记录时间 + 落缓存
+ * - 失败：保留上一次结果（不清空），只记一条告警
+ * - 被取代：请求序号失效或被 abort，直接丢弃，不写状态
+ */
+async function fetchNews(platform, { silent = false } = {}) {
+    const requestSeq = ++newsRequestSeq;
+    const isLatest = () => requestSeq === newsRequestSeq;
+
+    newsAbortController?.abort();
+    const controller = new AbortController();
+    newsAbortController = controller;
+
+    // 已有数据时的静默刷新不切加载态，避免每 10 分钟整块闪一次
+    if (!silent || !newsItems.value.length) newsLoading.value = true;
+
+    try {
+        const { list } = await fetchNewsFromChannels(platform, controller.signal);
+        if (!isLatest()) return; // 已被更新的请求取代，丢弃本条结果
+
+        newsItems.value = list.slice(0, NEWS_ITEM_LIMIT);
+        lastNewsUpdate.value = formatNewsClock(new Date());
+        newsLastFetchedAt = Date.now();
+        writeNewsCache(platform, newsItems.value, lastNewsUpdate.value);
+    } catch (error) {
+        // 主动取消（切平台/卸载/被新请求取代）不告警；真实失败保留旧数据
+        if (!controller.signal.aborted) {
+            console.warn(`[news] ${platform} 获取失败，保留上次结果：`, error?.message || error);
+        }
+    } finally {
+        if (isLatest()) newsLoading.value = false;
     }
 }
 
 function switchNewsPlatform(platform) {
-    if (currentPlatform.value === platform) return;
+    if (currentPlatform.value === platform) {
+        // 再次点击当前平台视为手动刷新（失败后可重试）
+        fetchNews(platform);
+        return;
+    }
     currentPlatform.value = platform;
-    fetchNews(platform);
+    newsItems.value = [];
+    // 有缓存则先出图，再静默刷新，切换平台不出现空白页
+    const hasCache = hydrateNewsFromCache(platform);
+    fetchNews(platform, { silent: hasCache });
+}
+
+/** 回到前台时：仅当距上次成功获取已超过刷新间隔才补刷，避免频繁切页产生多余请求 */
+function handleNewsVisibilityChange() {
+    if (document.hidden) return;
+    if (Date.now() - newsLastFetchedAt < NEWS_REFRESH_INTERVAL) return;
+    fetchNews(currentPlatform.value, { silent: newsItems.value.length > 0 });
 }
 
 /** 生命周期钩子 */
@@ -610,8 +775,15 @@ onMounted(() => {
             tiandituToken.value = nextTiandituTk;
         }
     });
-    fetchNews(currentPlatform.value);
-    newsTimer = setInterval(() => fetchNews(currentPlatform.value), NEWS_REFRESH_INTERVAL);
+
+    // 缓存优先：先渲染上次结果，避免首屏空白
+    const hasCache = hydrateNewsFromCache(currentPlatform.value);
+    fetchNews(currentPlatform.value, { silent: hasCache });
+    newsTimer = setInterval(() => {
+        if (document.hidden) return; // 后台标签页不占带宽与代理配额
+        fetchNews(currentPlatform.value, { silent: true });
+    }, NEWS_REFRESH_INTERVAL);
+    document.addEventListener('visibilitychange', handleNewsVisibilityChange);
 
     // 挂载时即安排工具箱资源预加载（10s 后异步执行）
     scheduleToolboxPreload();
@@ -619,6 +791,8 @@ onMounted(() => {
 
 onUnmounted(() => {
     if (newsTimer) clearInterval(newsTimer);
+    newsAbortController?.abort(); // 中断在途请求，防止卸载后写状态
+    document.removeEventListener('visibilitychange', handleNewsVisibilityChange);
     // 组件卸载时取消未执行的预加载定时器，防止内存泄漏
     if (toolboxPreloadTimer) {
         clearTimeout(toolboxPreloadTimer);
