@@ -6,6 +6,22 @@
 
 ## 版本记录
 
+### V3.6.23 (2026-10-22) — README 全量核对与事实修正（纯文档版）
+
+> 完整逐跳核对过程见 `Docs/LLM_record/26-10/2026-10-22/2026-10-22-readme-sync-review.md`；以下为归档摘要。
+
+> **背景**：README 数月未系统性核对，期间积累大量小功能与结构变更。本次逐节对照代码实测，修正所有与实际不符的表述。
+> **关键修复——版本号机器读取源恢复**：`frontend/vite.config.js` 构建时以正则 `/当前版本[^\d]*(\d+\.\d+\.\d+)/` 从 README「项目简介」行提取 `__APP_VERSION__`，而本轮大改后的 README 把该行「（当前版本 V3.6.22）」标识改丢了——不报错、静默回退 `V0.0.0`，前端版本展示会失真。已按 Force_command §5 恢复该行格式。
+> **事实修正清单**（每项均经代码实测）：
+> ① 底图源：「96 个图层定义」→ 实测 `LAYER_SOURCE_DEFINITIONS` 106 个唯一 id（90 个预设不变）；
+> ② 账号体系：补 Hugging Face OAuth（`auth/constants.py` `SUPPORTED_OAUTH_PROVIDERS = {google, github, huggingface}`，注册页三按钮齐备）；
+> ③ 侧栏标签页：修正为实际 8 个——`info` 默认页即新闻热榜（SidePanel.vue 模板实测），原列表把「信息」与「新闻热榜」并列为两个；
+> ④ 本地开发镜像：Docker Hub 实测存在 `V3.5`（2026-08-03）与 `latest`（2026-08-23）两个标签，原文只提 V3.5；
+> ⑤ 已知限制「单元测试尚未引入」更正：`backend/tests/` 已有 6 个 unittest 文件（Agent 上下文 / 配置加载 / 历史影像 / 实时统计 / SQLite 恢复 / Webhook），前端仍无；
+> ⑥ 规模速览：i18n 命名空间 27 → 30（zh-CN.js 顶层块实测），Docs 篇目 548 → 549（含本次新增日志）。
+> **复核确认无误的表述**：空间分析 8 算子（overlay 一文件承载交/并/差三集合运算，对外 8 算子 10 类型）、90 预设、前后端文件与行数（511/18.5万、70/2.15万）、15 组后端路由、22 个新闻平台（cls 上游 504）、9 类绘制工具、三维分析双实现、技术栈版本徽章、域名映射与代理分层说明。
+> 验证：门禁 `CheckStructureTree.py` / `CheckConfigRegistry.py` 通过；纯文档改动，未触碰任何代码。
+
 ### V3.6.22 (2026-10-20) — Cesium 人物漫游对齐上游 0.2.1 + 审查加固
 
 > 完整逐跳分析见 `Docs/LLM_record/26-10/2026-10-20/2026-10-20-cesium-player-controller-upstream-opt.md`；以下为归档摘要。

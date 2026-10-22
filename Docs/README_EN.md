@@ -9,10 +9,12 @@
 </p>
 
 <p align="center">
-  <a href="https://vuejs.org/"><img src="https://img.shields.io/badge/Vue-3.5+-4FC08D?logo=vuedotjs" alt="Vue" /></a>
-  <a href="https://fastapi.tiangolo.com/"><img src="https://img.shields.io/badge/FastAPI-0.100+-009688?logo=fastapi" alt="FastAPI" /></a>
+  <a href="https://vuejs.org/"><img src="https://img.shields.io/badge/Vue-3.5-4FC08D?logo=vuedotjs" alt="Vue" /></a>
+  <a href="https://vite.dev/"><img src="https://img.shields.io/badge/Vite-6.2-646CFF?logo=vite" alt="Vite" /></a>
   <a href="https://openlayers.org/"><img src="https://img.shields.io/badge/OpenLayers-10.5-FFD700?logo=openlayers" alt="OpenLayers" /></a>
-  <a href="https://cesium.com/"><img src="https://img.shields.io/badge/Cesium-1.132+-64B5F6?logo=cesium" alt="Cesium" /></a>
+  <a href="https://cesium.com/"><img src="https://img.shields.io/badge/Cesium-1.132-64B5F6?logo=cesium" alt="Cesium" /></a>
+  <a href="https://fastapi.tiangolo.com/"><img src="https://img.shields.io/badge/FastAPI-0.100+-009688?logo=fastapi" alt="FastAPI" /></a>
+  <a href="https://rapier.rs/"><img src="https://img.shields.io/badge/Rapier-0.14-FF6B35" alt="Rapier" /></a>
   <a href="https://pages.github.com/"><img src="https://img.shields.io/badge/Frontend-GitHub%20Pages-black?logo=github" alt="Frontend" /></a>
   <a href="https://www.docker.com/"><img src="https://img.shields.io/badge/Docker-24.x-2496ED?logo=docker" alt="Docker" /></a>
   <a href="https://huggingface.co/"><img src="https://img.shields.io/badge/Backend-Hugging%20Face-FFD21E?logo=huggingface" alt="Backend" /></a>
@@ -20,7 +22,7 @@
 </p>
 
 <p align="center">
-  🚀 <strong>Live Demo</strong>: <a href="https://negiao.github.io/WebGIS-Dev/">NEGIAO's WebGIS-Dev — Click to Explore</a>
+  🚀 <strong>Live Demo</strong>: <a href="https://webgis.negiao.cn">NEGIAO's WebGIS-Dev — Click to Explore</a>
 </p>
 
 <p align="center">
@@ -28,6 +30,8 @@
   <img src="https://img.shields.io/badge/dynamic/json?label=Total%20Clones&query=$.totalClones&url=https://raw.githubusercontent.com/NEGIAO/WebGIS-Dev/main/.github/traffic.json&color=green" alt="Total Clones" />
   <img src="https://img.shields.io/badge/dynamic/json?label=Unique%20Cloners&query=$.totalUniqueClones&url=https://raw.githubusercontent.com/NEGIAO/WebGIS-Dev/main/.github/traffic.json?cache=1&color=blue" alt="Unique Cloners" />
   <img src="https://img.shields.io/github/last-commit/negiao/webgis-dev" alt="Last Commit" />
+  <a href="https://github.com/NEGIAO/WebGIS-Dev/stargazers"><img src="https://img.shields.io/github/stars/NEGIAO/WebGIS-Dev?logo=github" alt="GitHub Stars" /></a>
+  <a href="https://github.com/NEGIAO/WebGIS-Dev/forks"><img src="https://img.shields.io/github/forks/NEGIAO/WebGIS-Dev?logo=github" alt="GitHub Forks" /></a>
 </p>
 
 ---
@@ -53,51 +57,147 @@
 - [🌟 Core Features Preview](#-core-features-preview)
 - [📑 Table of Contents](#-table-of-contents)
 - [🎯 Project Overview](#-project-overview)
-  - [Core Capabilities](#core-capabilities)
+  - [Scale at a Glance](#scale-at-a-glance)
+  - [Capabilities · Map Core](#capabilities--map-core)
+  - [Capabilities · 3D & Analysis](#capabilities--3d--analysis)
+  - [Capabilities · Data & Collaboration](#capabilities--data--collaboration)
+  - [Capabilities · Accounts & Operations](#capabilities--accounts--operations)
+- [🧰 Module Map](#-module-map)
+- [🛠️ Tech Stack](#️-tech-stack)
+- [⚠️ Building Data Scraping — Compliance Notice](#️-building-data-scraping--compliance-notice)
 - [🚀 Quick Start](#-quick-start)
   - [Prerequisites](#prerequisites)
   - [Configuration (Dual env File Architecture, Read This First)](#configuration-dual-env-file-architecture-read-this-first)
   - [One-Click Launch (Recommended)](#one-click-launch-recommended)
   - [Manual Launch (Advanced Users)](#manual-launch-advanced-users)
+  - [Local Development Image](#local-development-image)
 - [📁 Project Structure](#-project-structure)
 - [🏗️ System Architecture](#️-system-architecture)
   - [Layered Architecture Overview](#layered-architecture-overview)
+  - [Backend API Surface](#backend-api-surface)
   - [Domain Mapping](#domain-mapping)
 - [🧭 Documentation Navigation](#-documentation-navigation)
-  - [Development Docs](#development-docs)
-  - [Architecture Docs](#architecture-docs)
-    - [System-Level Architecture](#system-level-architecture)
-    - [Feature Architecture](#feature-architecture)
+- [🚧 Known Limitations & Current Status](#-known-limitations--current-status)
+- [Star History](#star-history)
 - [📜 Version History](#-version-history)
 - [📄 License](#-license)
-- [👤 Author \& Hosting](#-author--hosting)
+- [👤 Author & Hosting](#-author--hosting)
 
 ---
 
 ## 🎯 Project Overview
 
-**NEGIAO's WebGIS** is a full-featured, cleanly architected full-stack WebGIS platform (current version V3.5.22). The frontend is hosted on GitHub Pages, the backend is deployed via Docker on Hugging Face Spaces, and the two communicate through RESTful APIs with support for independent scaling.
+**NEGIAO's WebGIS** is a full-featured, cleanly architected full-stack WebGIS platform. The frontend is hosted on GitHub Pages (production domain `webgis.negiao.cn`), the backend runs in Docker on Hugging Face Spaces, and the two communicate through RESTful APIs with support for independent scaling.
 
-> 📚 This README retains only the core overview and navigation. Full documentation has been modularized into [`Docs/Guide/`](Docs/Guide/), see "Documentation Navigation" below.
+> 📚 This README keeps only the core overview and navigation. Full documentation is modularized under [`Docs/Guide/`](Guide/).
 >
-> 📐 Architecture docs are centralized in [`Docs/Architecture/`](Docs/Architecture/), using Mermaid flowcharts / sequence diagrams / state diagrams to describe module relationships, data flow, and file interactions of each subsystem — for technical handover and design review. Each architecture doc focuses on one functional domain, covering design decisions, implementation details, and upgrade directions.
+> 📐 Architecture docs live in [`Docs/Architecture/`](Architecture/), using Mermaid flowcharts / sequence diagrams / state diagrams to describe module relationships, data flow, and file interactions of each subsystem — for technical handover and design review.
 >
-> Want to understand the project quickly? Try [DeepWiki — Ask an LLM about this project](https://deepwiki.com/NEGIAO/WebGIS-Dev) [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/NEGIAO/WebGIS-Dev)
+> 🤖 Working on this repo with an AI agent? Read [`Docs/Force_command.md`](Force_command.md) first — the mandatory agent policy with red lines and quality gates.
+>
+> Want a quick orientation? Try [DeepWiki — ask an LLM about this project](https://deepwiki.com/NEGIAO/WebGIS-Dev) [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/NEGIAO/WebGIS-Dev)
 
-### Core Capabilities
+### Scale at a Glance
 
-| Domain | Description |
+| Dimension | Measured scale |
+|---|---|
+| Frontend | 511 source files / ~185k lines (`.vue` / `.js` / `.ts`), 70 Vue SFCs |
+| Backend | 70 Python files / ~21.5k lines, 15 REST router groups |
+| Docs | 548 Markdown files under `Docs/` (13 in `Guide/`, 21 in `Architecture/`, plus per-session records in `LLM_record/`) |
+| i18n | `zh-CN` / `en-US`, 2000+ lines each, 27 namespaces |
+| CI | 4 workflows (`deploy` / `pre-check` / `codeql` / `traffic-counter`); `deploy` contains 5 jobs |
+
+### Capabilities · Map Core
+
+| Area | Description |
 |------|------|
-| 🗺️ 2D/3D Dual Engine | OpenLayers 2D + Cesium 3D one-click switch, bidirectional view state sync, URL share & restore |
-| 🌐 Rich Basemap Sources | 20+ tile sources, circuit-breaker fallback, GCJ-02 rectification, custom XYZ integration |
-| 📥 Multi-Format Data Import | GeoJSON / KML / SHP / GLB / CZML / 3D Tiles drag-and-drop loading, 2D/3D dual pipeline |
-| 🏢 Building Fetch | Tencent/Amap dual source: bbox fetch of footprints + heights (WGS-84 GeoJSON), auto-import into 2D/3D layers; Tencent keyless (z16–18), Amap via admin `amap_key` (fixed z14, auto-clipped to bbox) |
-| 📐 Spatial Analysis | Buffer / Overlay / Voronoi / Cluster / Fishnet and 8 more operators (Shapely backend for precise computation) |
-| ✨ 3D Effects | Volumetric cloud ray marching, Bruneton atmosphere, BSM cloud shadows, wind field particles, flood simulation |
-| 🛣️ Route Planning | Tianditu driving/transit dual pipeline, search point selection & route rendering |
-| 🤖 AI Spatial Assistant | LLM integration with three access modes (Default / Personal Key / Backend Proxy) |
-| 🔐 Account System | Email sign-up & login, Google/GitHub one-click sign-up/login & binding, three-tier roles, session auth, dual AI quota management |
-| 🧰 Utility Tools | Measurement, coordinate picking, fengshui compass, swipe analysis, weather, theme switching, layer management |
+| 🗺️ 2D/3D dual engine | OpenLayers 10.5 + Cesium 1.132, one-click switch, bidirectional view sync, shareable URL state |
+| 🌐 Rich basemaps | **90 presets / 96 layer definitions**: Tianditu, Amap, Tencent, ESRI (incl. Wayback historical imagery), Sentinel-2 Cloudless, Ovi and more; circuit-breaker fallback, GCJ-02/BD-09 rectification, custom XYZ |
+| 🧭 Layer management (TOC) | Drag-and-drop ordering, inline rename, visibility/opacity/style, stacking order, coordinate conversion (WGS-84 ⇄ GCJ-02), per-layer export (CSV/TXT/GeoJSON/KML), 2D → 3D import |
+| 📊 Attribute table | View-extent filtering, field visibility, full-field search, CSV export, feature locate & delete |
+| ✏️ Drawing & measurement | 9 draw types (point / line / polygon / rectangle / ellipse / circle / arrow / wind arrow / military arrow), distance & area measurement, cross-layer vertex editing |
+| 🔍 Place search | Three providers: Tianditu / Amap / Nominatim, POI ID, paging, origin-destination picking |
+| 🗂️ Administrative divisions | Drill-down tree, boundary loading, shares coordinate conversion and export with the layer system |
+| 🎞️ Historical imagery | ESRI Wayback catalog (backend SQLite cache + frontend version browsing) |
+| 🌓 Swipe comparison | Any two basemaps, horizontal or vertical slider |
+
+### Capabilities · 3D & Analysis
+
+| Area | Description |
+|------|------|
+| 📥 Multi-format import | GeoJSON / JSON / KML / KMZ / SHP (zip or loose parts) / CZML / GLB / GLTF / 3D Tiles (zip) / GeoTIFF / CSV / GPX; dual 2D/3D pipelines, ZIP grouping, `.prj` projection detection, retryable inline errors |
+| 🏢 Building footprint scraping | Three sources: Building-1 (Tencent), Building-2 (Amap), Tianditu vector tiles; drag-select footprints with height, cross-tile identity merge, auto-registered into TOC |
+| 📐 Spatial analysis | **8 operations**: buffer, overlay, Voronoi, hotspot aggregation, fishnet (square/hexagon), convex hull, multi-ring buffer, simplify (exact computation with Shapely) |
+| 🔬 3D analysis | Height-limit analysis, viewshed analysis (`cesium/modules/analysis`) |
+| ✨ 3D effects | Volumetric cloud ray marching, Bruneton atmosphere, BSM cloud shadows, wind particles, fluid flood simulation, shallow-water overlay, post-processing (HBAO / tilt-shift / fog) |
+| 🛩️ Planar route planning | Survey-area drawing, boustrophedon / five-direction oblique capture, AGL terrain following, DJI KMZ import/export |
+| 🚶 Player roaming | Migrated from `hh-hang/cesium-player-controller` and kept in sync with upstream (0.2.1): Rapier physics, local-frame rebasing, ground snapping, first/third person |
+| 🛣️ Route planning | Tianditu driving / transit pipelines, place picking and route rendering |
+| 🎬 First-person flight | `route-fly`: first-person flight along a planned route with speed/view control |
+
+### Capabilities · Data & Collaboration
+
+| Area | Description |
+|------|------|
+| 🤖 AI assistant | LLM integration with **three access modes** (admin default key / personal key / backend proxy); function-calling tools (camera, zoom, basemap switch…) plus OL/Cesium command adapters for multi-step map operations |
+| 🧭 Fengshui compass | Compass overlay, site-seeking, bearing display |
+| 🌤️ Weather board | Live weather and charts via public sources behind a backend proxy |
+| 🗞️ News aggregation | Multi-platform trending lists, direct + proxy racing, silent refresh with local cache fallback |
+| 📢 Announcements | Admin-published notices, dismissible persistent bar |
+| 🎨 Theming | Design-token driven themes (green / blue …), dark/light and mobile adaptations |
+
+### Capabilities · Accounts & Operations
+
+| Area | Description |
+|------|------|
+| 🔐 Accounts | Email sign-up/sign-in, Google / GitHub OAuth with binding, **three roles** (`guest` / `registered` / `admin`), guest sequence `guest_no`, session auth, dual AI quotas |
+| 🛡️ Admin console | Runtime config (map tokens, basemaps, agent params, announcements), API key management, visit statistics, online-user debugging |
+| 📈 Stats & monitoring | Visit logs, UV/PV, real-time presence (heartbeat + offline), SSE log streaming, `/statistics/*` dashboards |
+| 🧰 Utilities | Screen effects (fluid smoke / gravity / dimension collapse / quantum wave / black hole / ring blast), distance & area, coordinate picking, view sharing, quick locations |
+
+---
+
+## 🧰 Module Map
+
+Modules by engine domain, for fast code navigation:
+
+**Cesium tool panel (`cesium/composables/toolModules/`)**
+
+`Scene navigation` · `Atmosphere·Lighting·Sky` · `Volumetric cloud` · `Wind field` · `Fluid flood` · `Shallow water` · `Player roaming` · `Planar route` · `Route flight` · `3D analysis (height limit / viewshed)`
+
+**OpenLayers tools (`ol/`)**
+
+`drawing` · `spatial-analysis` · `routing` · `search` · `basemap` · `tile-source` · `DistrictManager` · `url-state` · `startup`
+
+**Shared domain (`common/`)**
+
+`shell (SidePanel / TopBar / announcement / global loading)` · `layer-tree` · `data-import` · `chat (agent / tool registry / command bus)` · `compass` · `weather` · `user` · `command-bus` · `map-view` · `data-protocol` · `ui`
+
+**Side panel tabs**: `Info` / `Toolbox` / `Driving` / `Transit` / `Compass` / `Building scraping` / `Weather` / `News` / `AI assistant` — lazy-loaded on first use, kept mounted afterwards to preserve state.
+
+---
+
+## 🛠️ Tech Stack
+
+| Layer | Choice |
+|---|---|
+| Frontend | Vue 3.5 (Composition API) + Vite 6.2 + Pinia 2.3 + Vue Router 4.6 |
+| 2D map | OpenLayers 10.5 |
+| 3D map | Cesium 1.132 (`@cesium/engine`) + Three.js 0.185 (effect helpers) |
+| Physics | `@dimforge/rapier3d-compat` 0.14 (roaming rigid bodies and collision) |
+| Backend | FastAPI ≥0.100 (Python 3.12), Shapely ≥2.0, SQLite caching, SSE log streams |
+| Deployment | GitHub Pages / Cloudflare Pages / Posit Connect / Vercel (frontend); Hugging Face Docker (backend) |
+| Quality | ESLint, `vue/compiler-sfc` compile check, `tsc --noEmit`, structure-tree & config-registry self-checks, CodeQL |
+
+---
+
+## ⚠️ Building Data Scraping — Compliance Notice
+
+- Use the building-scraping capability only where you hold official authorization;
+- Bypassing permissions, circumventing access controls, cracking, or any other unauthorized technique is strictly prohibited;
+- Bulk collection, offline database creation, redistribution, or unauthorized commercial use is strictly prohibited;
+- You must comply with the data source's terms of service, local laws, and platform policies;
+- The project ships range/rate controls and a frontend compliance prompt, but the ultimate responsibility remains yours.
 
 ---
 
@@ -105,56 +205,60 @@
 
 ### Prerequisites
 
-| Dependency | Purpose |
-|------|------|
-| Node.js 16+ | Frontend build & dev server |
-| Docker Desktop | Containerized backend environment (**required**) |
-| LocalDev.bat | Windows one-click launch script (recommended) |
+| Dependency | Requirement | Notes |
+|------|------|------|
+| **Node.js** | **20 LTS or newer** (20.x / 22.x recommended) | Vite 6 needs Node 18+; this project is validated on 20 LTS. No `engines` field is declared |
+| npm | 10+ | Ships with Node 20 |
+| Docker Desktop | Only for full-stack local runs | Running the frontend alone (`npm run dev`) does **not** need Docker |
+| Python | 3.12 (pinned in the image as `python:3.12-slim`) | The backend runs via Docker only; bare `uvicorn` is unsupported |
+| LocalDev.bat | Windows one-click script | Detects the dependencies above |
 
 ### Configuration (Dual env File Architecture, Read This First)
 
-| File | git Status | Purpose | Read Timing | `APP_ENV` |
+| File | Git status | Purpose | Read at | `APP_ENV` |
 |------|----------|------|----------|-----------|
-| **`.env`** | **git tracked** | Deployment environment (production baseline) | `npm run build` + online deployment | `production` |
-| **`.env.local`** | **git tracked** | Local development (overrides `.env`) | `npm run dev` + local backend | `development` |
-| `.env.example` | git tracked | Full key catalog (no real values) | — | — |
+| **`deploy/.env`** | **tracked** | Deployment (production baseline) | `npm run build` + production deploy | `production` |
+| **`deploy/.env.local`** | **tracked** | Local development (overrides `.env`) | `npm run dev` + local backend | `development` |
+| `deploy/.env.example` | tracked | Full key catalog (no real values) | — | — |
 
-**Three-tier secret classification** (L1/L2/L3):
+**Three-tier secret layering** (L1 / L2 / L3):
 
-| Tier | Location | Purpose |
+| Tier | Where | What |
 |----|--------|--------|
-| **L1** | Root `.env` / `.env.local` (non-sensitive) | URLs, ports, frontend `VITE_*`, public endpoints / timeouts |
-| **L2** | Admin panel + Database | Map tokens, Agent/LLM keys & params, basemaps, announcements (frequently changed, hot-reloaded) |
-| **L3** | HuggingFace **Secrets** | Top secret: `SUPER_USER`, OAuth secrets, SMTP passwords, Supabase keys, monitoring tokens |
-
-Explanation & checklist: [Docs/Guide/configuration.md](Docs/Guide/configuration.md) · Execution plan: [configuration-architecture-plan.md](Docs/Guide/configuration-architecture-plan.md)
+| **L1** | `deploy/.env` / `.env.local` (non-sensitive) | URLs, ports, frontend `VITE_*`, public endpoints and timeouts |
+| **L2** | Admin console + database | Map tokens, Agent/LLM keys and params, basemaps, announcements (change often, effective at runtime) |
+| **L3** | Hugging Face **Secrets** | Strictly secret: `SUPER_USER`, OAuth secrets, SMTP password, Supabase keys, monitoring tokens |
 
 ```bash
-# Repository root: .env (deployment) and .env.local (local development) dual-file architecture
-# Both files are committed to git (L1 is non-sensitive)
-# Local development: Vite reads .env.local, backend reads .env.local (overrides production values with localhost)
-# Production build: Vite only reads .env (selectiveEnvPlugin picks one based on mode)
+# Repository root: .env (deployment) and .env.local (local development)
+# Both are committed (L1 holds no secrets)
+# Local dev: Vite reads .env.local, backend reads .env.local (production values overridden with localhost)
+# Production build: Vite reads only .env (selectiveEnvPlugin chooses by mode)
 ```
+
+> Proxy note: the backend runs on Hugging Face, whose policy **forbids mounting any `/proxy/*` or `/tiles/*` relay**. Tile proxying and third-party reverse proxying are served by a standalone VPS service (`vpn.negiao.cn`, repo `tile-proxy`); the frontend builds `${base}/proxy/<host>/<path>` from `VITE_TILE_PROXY_BASE_URL`.
 
 ### One-Click Launch (Recommended)
 
 ```bash
-# Windows: Double-click LocalDev.bat, the script automatically:
-# 1. Detect environment dependencies (Node.js / Docker / docker compose)
-# 2. Local dev environment: frontend Vite reads .env.local, backend load.py reads .env.local (overrides to localhost dev values)
-# 3. Smart Docker image status detection (first build / code hot-reload / Dockerfile change prompt)
-# 4. Start frontend dev server → http://localhost:5173
-# 5. Auto-open browser
+# Windows: double-click LocalDev.bat, which automatically:
+# 1. Detects dependencies (Node.js / Docker / docker compose)
+# 2. Local dev: frontend Vite reads .env.local, backend load.py reads .env.local (localhost overrides)
+# 3. Smart Docker image state detection (first build / hot reload / Dockerfile change prompt)
+# 4. Starts the frontend dev server → http://localhost:5173
+# 5. Opens the browser
 ```
 
-> `LocalDev.bat` is pure ASCII encoded, compatible with GBK/UTF-8 systems; Chinese color output is provided by `Write-Color.ps1` in the same directory.
+> `LocalDev.bat` is pure ASCII for GBK/UTF-8 compatibility; colored Chinese output comes from `Write-Color.ps1` in the same directory.
 
-**Access URLs**: Frontend http://localhost:5173 · Backend API docs http://localhost:7860/docs
+**Endpoints**: frontend http://localhost:5173 · backend API docs http://localhost:7860/docs
+
+> **Default local admin**: `admin` / `123456`. Only effective when `SUPER_USER` is unset and `APP_ENV` is `development` / `dev` / `local` / `test` (`load.py` → `get_admin_password()`). In production you must configure `SUPER_USER` via HF Secrets, otherwise admin login is disabled outright.
 
 ### Manual Launch (Advanced Users)
 
 <details>
-<summary><strong>Frontend Local Development</strong></summary>
+<summary><strong>Frontend dev server</strong></summary>
 
 ```bash
 cd frontend
@@ -166,62 +270,71 @@ npm run dev
 </details>
 
 <details>
-<summary><strong>Backend (Docker Compose)</strong></summary>
+<summary><strong>Full stack, single container (recommended)</strong></summary>
 
 ```bash
-# First run requires --build to build the image (large file, wait a few minutes)
-docker-compose up --build
+# nginx (static frontend + /api reverse proxy) + FastAPI in one container, port 7860
+docker compose -f deploy/docker-compose.yml up -d --build
 
 # Subsequent runs
-docker-compose up
+docker compose -f deploy/docker-compose.yml up -d
 # → http://localhost:7860/docs
 ```
 
-> The backend has been upgraded to Docker Compose containerized deployment; direct `uvicorn` execution is no longer supported.
+> Env files are centralized under `deploy/` (`.env` / `.env.local`); running `uvicorn` directly is no longer supported.
 
 </details>
 
 <details>
-<summary><strong>Production Deployment</strong></summary>
+<summary><strong>Dual-track production deployment</strong></summary>
 
 ```bash
-# Launch frontend and backend together
-docker-compose up
+# Static frontend track: handled by GitHub Actions (Pages / home repo / HF Static), nothing local
+# Full-stack track: on push to main, CI assembles {Dockerfile, deploy/, backend/, frontend/}
+#                   and pushes to the Hugging Face Space, which runs npm ci + vite build + uv sync
 
-# Or build backend image separately
-cd backend
-docker build -t webgis-backend .
+# Local equivalent: build the single-container image (nginx + FastAPI, port 7860)
+docker build -t negiao/webgis -f deploy/Dockerfile .
+docker run -p 7860:7860 negiao/webgis
 ```
 
 </details>
 
----
+### Local Development Image
+
+```bash
+docker pull negiao/webgis_dev:V3.5
+```
+
+> ⚠️ That image was built on **2026-08-03** for frontend **V3.5.10**, so it lags the current code (V3.6.22+). It shares its source with `deploy/docker-compose.yml` (built from `deploy/Dockerfile`); run `--build` locally if you need parity with the source.
 
 ## 📁 Project Structure
 
-Directory trees are maintained in [`Docs/Guide/`](Docs/Guide/) (atomic, not duplicated in README):
+Directory trees are maintained under [`Docs/Guide/`](Guide/):
 
-- [Project root directory overview + Docs tree](Docs/Guide/project-structure.md)
-- [Frontend complete file tree `frontend/src/`](Docs/Guide/frontend-structure.md)
-- [Backend complete file tree `backend/`](Docs/Guide/backend-structure.md)
+- [Root-level overview + Docs tree](Guide/project-structure.md)
+- [Full frontend tree `frontend/src/`](Guide/frontend-structure.md)
+- [Full backend tree `backend/`](Guide/backend-structure.md)
 
 ---
 
 ## 🏗️ System Architecture
 
-> Full architecture docs have been modularized into [`Docs/Architecture/`](Docs/Architecture/):
-> [System Architecture Overview](Docs/Architecture/system-architecture.md) · [CI/CD Pipeline](Docs/Architecture/cicd-pipeline.md) · [Deployment Relationships & Domain Mapping](Docs/Architecture/deployment-relationship.md)
+> Full architecture docs are modularized under [`Docs/Architecture/`](Architecture/):
+> [System overview](Architecture/system-architecture.md) · [CI/CD pipeline](Architecture/cicd-pipeline.md) · [Deployment & domain mapping](Architecture/deployment-relationship.md)
 
 ### Layered Architecture Overview
 
 ```mermaid
 flowchart TB
-    subgraph SRC["📦 Source Layer"]
+    subgraph SRC["📦 Source"]
         direction LR
         REPO_DEV["WebGIS-Dev
-Frontend + Backend Source"]
+frontend + backend"]
         REPO_HOME["NEGIAO.github.io
-Personal Homepage Repo"]
+homepage repo"]
+        REPO_PROXY["tile-proxy
+VPS proxy / tile service"]
     end
 
     subgraph CI["⚙️ CI / CD"]
@@ -229,12 +342,12 @@ Personal Homepage Repo"]
         JOB_BUILD["① Build
 npm run build → dist"]
         JOB_SYNC["② Sync
-dist → Homepage Repo WebGIS/ Dir"]
+dist → home repo WebGIS/"]
         JOB_DEPLOY["③ Deploy
-Multi-Platform Deploy"]
+multi-platform"]
     end
 
-    subgraph DPL["🚀 Deployment Platforms"]
+    subgraph DPL["🚀 Platforms"]
         direction LR
         P_GH["GitHub Pages"]
         P_HF["Hugging Face"]
@@ -245,16 +358,19 @@ Multi-Platform Deploy"]
 
     subgraph RT["🌐 Runtime"]
         direction LR
-        FE_HOME["Personal Homepage
-Multi-Domain"]
-        FE_WEBGIS["WebGIS Frontend
-Multi-Domain"]
-        BE["Docker Backend API"]
-        R2["Tile Storage
+        FE_HOME["Homepage
+multi-domain"]
+        FE_WEBGIS["WebGIS frontend
+multi-domain"]
+        BE["Docker backend API"]
+        PR["VPS reverse proxy
+vpn.negiao.cn"]
+        R2["Tile storage
 tiles.negiao.cc.cd"]
     end
 
     REPO_DEV --> JOB_BUILD
+    REPO_PROXY --> PR
     JOB_BUILD --> JOB_SYNC
     JOB_SYNC --> REPO_HOME
     JOB_BUILD --> JOB_DEPLOY
@@ -278,110 +394,169 @@ tiles.negiao.cc.cd"]
     P_HF --> BE
 
     FE_WEBGIS -->|"REST API"| BE
-    FE_WEBGIS -->|"Load Custom Tiles"| R2
+    FE_WEBGIS -->|"third-party proxy / tiles"| PR
+    FE_WEBGIS -->|"custom tiles"| R2
 ```
+
+### Backend API Surface
+
+15 router groups, all under `/api/*` (Hugging Face forbids `/proxy/*` and `/tiles/*`):
+
+| Module | Prefix | Contents |
+|---|---|---|
+| Auth | `/api/auth` | Email sign-up/sign-in, OAuth callback, session, guest login (`guest_no`), quotas |
+| Spatial analysis | `/api/v1/spatial` | Single endpoint dispatching the 8 operations |
+| Location | `/api/v1` | Reverse geocoding, IP geolocation |
+| AI chat | `/api/agent` | Sessions, messages, default model/key allocation |
+| AI admin | `/api/admin/agent` | Model and quota management |
+| External proxy | `/api/proxy` | Four whitelisted groups only: `amap/*`, `search/nominatim`, `geo/epsg`, `ipapi/country` |
+| Historical imagery | `/api/historical-imagery` | ESRI Wayback layer catalog |
+| Statistics | `/api/statistics/*`, `/api/log-visit` | Visit logs, dashboards, realtime stats, messages, users, visit events |
+| Realtime | `/api/statistics` | SSE stream, heartbeat, presence (ping / offline), tickets |
+| Announcements | `/api/announcement/*` | Current announcement, dismissal records |
+| Admin | `/api/admin` | Runtime config, download TTL, dashboards |
+| API management | `/api/admin`, `/api/admin/api-keys` | Third-party key pools and allocation |
+| Runtime config | `/api/runtime-config` | Public runtime config for the frontend (incl. `features` flags) |
+| Monitoring | `/api/monitor/*` | Health, log stream (SSE) |
+| Webhook | `/api` | HF Hub and similar callbacks |
 
 ### Domain Mapping
 
-**Personal Homepage:**
+**Homepage:**
 
-| Domain | Platform | CDN | China Access |
+| Domain | Platform | CDN | Reachable from CN |
 |------|------|-----|----------|
-| `negiao.github.io` | GitHub Pages default | ❌ | ⚠️ Unstable |
-| `negiao.cloud-ip.cc` | GitHub Pages + custom domain | ✅ Configurable | ✅ Accessible |
-| `negiao.cc.cd` | Cloudflare Pages | ✅ Cloudflare | ❌ Blocked |
-| `negiao.pages.dev` | Cloudflare Pages default | ✅ Cloudflare | ✅ Smooth |
-| `negiao-pages.share.connect.posit.cloud` | Posit Connect | ❌ | ✅ Accessible |
-| `negiao.vercel.app` | Vercel | ❌ | ❌ Inaccessible |
+| `negiao.github.io` | GitHub Pages default | ❌ | ⚠️ unstable |
+| `negiao.cloud-ip.cc` | GitHub Pages + custom domain | ✅ configurable | ✅ |
+| `negiao.cc.cd` | Cloudflare Pages | ✅ Cloudflare | ❌ blocked |
+| `negiao.pages.dev` | Cloudflare Pages default | ✅ Cloudflare | ✅ |
+| `negiao-pages.share.connect.posit.cloud` | Posit Connect | ❌ | ✅ |
+| `negiao.vercel.app` | Vercel | ❌ | ❌ |
 
-**WebGIS Frontend:**
+**WebGIS frontend:**
 
 | Domain | Platform | Source |
 |------|------|------|
-| `negiao.github.io/WebGIS-Dev` | GitHub Pages | WebGIS-Dev repo root path |
+| `webgis.negiao.cn` | **Primary (paid)** | CNAME → GitHub Pages |
+| `negiao.github.io/WebGIS-Dev` | GitHub Pages | WebGIS-Dev repo root |
 | `negiao.github.io/WebGIS` | GitHub Pages | Homepage repo subdirectory |
-| `negiao.cloud-ip.cc/WebGIS-Dev` | GitHub Pages + custom domain | Auto redirect |
-| `webgis.negiao.cc.cd` | Cloudflare Pages | Private domain mount |
-| `webgis-dev.pages.dev` | Cloudflare Pages default | Auto assigned |
-| `negiao-webgis.share.connect.posit.cloud` | Posit Connect | Homepage repo trigger |
-| `negiao-web.static.hf.space` | Hugging Face Static | Direct push |
+| `negiao.cloud-ip.cc/WebGIS-Dev` | GitHub Pages + custom domain | auto redirect |
+| `webgis.negiao.cc.cd` | Cloudflare Pages | private domain mount |
+| `webgis-dev.pages.dev` | Cloudflare Pages default | auto-assigned |
+| `negiao-webgis.share.connect.posit.cloud` | Posit Connect | triggered by homepage repo |
+| `negiao-web.static.hf.space` | Hugging Face Static | direct push |
 
-**Backend & Storage:**
+**Backend, proxy and storage:**
 
 | Component | Domain | Platform |
 |------|------|------|
 | Backend API | `negiao-webgis.hf.space` | Hugging Face Docker |
-| Tile Storage | `tiles.negiao.cc.cd` | Cloudflare R2 |
+| Reverse proxy / tile proxy | `vpn.negiao.cn` | VPS (standalone repo `tile-proxy`) |
+| Tile storage | `tiles.negiao.cc.cd` | Cloudflare R2 |
 
-> Full domain list, deployment source matrix, and platform capability comparison: [deployment-relationship.md](Docs/Architecture/deployment-relationship.md)
-
----
+> Full domain list, deployment source matrix, and platform capability comparison: [deployment-relationship.md](Architecture/deployment-relationship.md)
 
 ## 🧭 Documentation Navigation
 
-### Development Docs
+### Development Docs (`Docs/Guide/`)
 
-| Document | Content |
+| Document | Contents |
 |------|------|
-| [Project Structure Guide](Docs/Guide/project-structure.md) | Complete directory tree and module responsibility descriptions |
-| [Handover Document](Docs/Guide/handover.md) | Must-read for new developers: doc map, three architecture quick references, code coordinates, gatekeeping process & pitfall list |
-| [Development Conventions](Docs/Guide/dev-conventions.md) | Mandatory rules, layered boundaries, coordinate system conventions, pre-commit checks |
-| [Dev Guide & Contribution Guide](Docs/Guide/dev-guide.md) | Standard process for adding pages/API, frontend-backend communication, code style |
-| [Tech Stack & FAQ](Docs/Guide/faq.md) | Frontend & backend tech stack, reference resources, FAQ, TODO |
-| [Changelog](Docs/Guide/CHANGELOG.md) | Complete version history |
-| [Configuration Guide](Docs/Guide/configuration.md) | Three-tier configuration (root .env / Admin+DB / HF Secrets) |
-| [Configuration Architecture Plan](Docs/Guide/configuration-architecture-plan.md) | Phased roadmap for consolidating configuration |
-| [OAuth Deployment Guide](Docs/Guide/oauth-deployment.md) | Google/GitHub/Hugging Face login: console application, HF Secrets config, acceptance & troubleshooting workflow |
+| [Handover](Guide/handover.md) | Must-read for maintainers: doc map, architecture tours, code coordinates, gates and pitfalls |
+| [Dev conventions](Guide/dev-conventions.md) | Mandatory rules, layering boundaries, coordinate-system conventions, pre-commit checks |
+| [Dev & contribution guide](Guide/dev-guide.md) | Standard flows for new pages/APIs, frontend-backend communication, code style |
+| [Project structure](Guide/project-structure.md) | Full directory tree and module responsibilities |
+| [Frontend structure](Guide/frontend-structure.md) / [Backend structure](Guide/backend-structure.md) | File-level trees |
+| [Configuration](Guide/configuration.md) | Three-tier config (deploy .env / Admin+DB / HF Secrets) |
+| [Configuration architecture plan](Guide/configuration-architecture-plan.md) | Staged consolidation roadmap |
+| [OAuth deployment](Guide/oauth-deployment.md) | Google/GitHub login end to end |
+| [Tech stack & FAQ](Guide/faq.md) | Stacks, references, FAQ, TODO |
+| [ESRI Wayback layers](Guide/ESRI_Wayback_Layers_List.md) | Historical imagery version catalog |
+| [Compass type notes](Guide/compass-types-note.md) | Compass geometry and type definitions |
+| [CHANGELOG](Guide/CHANGELOG.md) | Full version history |
 
-### Architecture Docs
+### Architecture Docs (`Docs/Architecture/`)
 
-Architecture descriptions for eight core features are centralized in [`Docs/Architecture/`](Docs/Architecture/):
+**System-level**
 
-#### System-Level Architecture
-
-| Document | One-Line Description |
+| Document | One-liner |
 |------|-----------|
-| [System Architecture Overview](Docs/Architecture/system-architecture.md) | Five-layer architecture: Source → CI/CD → Deployment → Runtime → User |
-| [CI/CD Pipeline](Docs/Architecture/cicd-pipeline.md) | Five-job pipeline: Build → Sync → Multi-Deploy details |
-| [Deployment Relationships & Domain Mapping](Docs/Architecture/deployment-relationship.md) | Domain list, deployment source matrix, platform capability comparison |
+| [System architecture](Architecture/system-architecture.md) | Five layers: source → CI/CD → deployment → runtime → user |
+| [CI/CD pipeline](Architecture/cicd-pipeline.md) | Five-job pipeline: Build → Sync → Multi-Deploy |
+| [Deployment & domains](Architecture/deployment-relationship.md) | Domain list, deployment matrix, platform comparison |
+| [Three-tier configuration](Architecture/configuration-three-tier.md) | L1/L2/L3 end to end |
 
-#### Feature Architecture
+**Feature-level**
 
-| Feature | Document | One-Line Description |
-|------|------|-----------|
-| 2D/3D Dual Engine | [`ol-cesium-dual-engine.md`](Docs/Architecture/ol-cesium-dual-engine.md) | One-click switch, view sync & URL share/restore |
-| Rich Basemap Sources | [`basemap-source-system.md`](Docs/Architecture/basemap-source-system.md) | 20+ sources, circuit-breaker fallback, GCJ-02 rectification |
-| Multi-Format Data Import | [`multi-format-data-import.md`](Docs/Architecture/multi-format-data-import.md) | Drag-and-drop loading, 2D/3D dual pipeline & blob URL approach |
-| Spatial Analysis | [`spatial-analysis-backend.md`](Docs/Architecture/spatial-analysis-backend.md) | Single-endpoint dispatch, Shapely backend 8 operators |
-| Route Planning | [`route-planning.md`](Docs/Architecture/route-planning.md) | Driving/transit dual pipeline, search point selection & route rendering |
-| 3D Effects | [`cesium-3d-effects.md`](Docs/Architecture/cesium-3d-effects.md) | Volumetric clouds, wind field, shallow water overlay & post-processing |
-| Utility Tools | [`utility-tools.md`](Docs/Architecture/utility-tools.md) | Measurement, coordinate picking, compass, sharing, GeoTIFF download |
-| Account System | [`account-system-ai-quota.md`](Docs/Architecture/account-system-ai-quota.md) | Email login + Google/GitHub/Hugging Face OAuth, three-tier roles, dual AI quota |
-| Flood Simulation | [`cesium-fluid-flood-simulation.md`](Docs/Architecture/cesium-fluid-flood-simulation.md) | GPU fluid pipeline deep dive (3D effects companion) |
-| Three-Tier Configuration | [`configuration-three-tier.md`](Docs/Architecture/configuration-three-tier.md) | L1/L2/L3 panorama: source → unified entry → business/frontend consumption & gatekeeping |
-| Cesium Unified Layer Management | [`cesium-unified-layer-management.md`](Docs/Architecture/cesium-unified-layer-management.md) | Design review draft: two-step approach for unified 3D data TOC |
+| Feature | Document |
+|------|------|
+| 2D/3D dual engine | [`ol-cesium-dual-engine.md`](Architecture/ol-cesium-dual-engine.md) |
+| Basemap source system | [`basemap-source-system.md`](Architecture/basemap-source-system.md) |
+| Basemap single-source-of-truth refactor | [`2026-08-02-basemap-ssot-refactor.md`](Architecture/2026-08-02-basemap-ssot-refactor.md) |
+| Unified basemap selection | [`2026-08-20-unified-basemap-selection.md`](Architecture/2026-08-20-unified-basemap-selection.md) |
+| Multi-format data import | [`multi-format-data-import.md`](Architecture/multi-format-data-import.md) |
+| Spatial analysis backend | [`spatial-analysis-backend.md`](Architecture/spatial-analysis-backend.md) |
+| Route planning | [`route-planning.md`](Architecture/route-planning.md) |
+| 3D effects | [`cesium-3d-effects.md`](Architecture/cesium-3d-effects.md) |
+| Flood simulation | [`cesium-fluid-flood-simulation.md`](Architecture/cesium-fluid-flood-simulation.md) |
+| Planar route | [`cesium-planar-route.md`](Architecture/cesium-planar-route.md) |
+| Clamp-to-ground strategy | [`2026-08-22-clamp-to-ground-strategy.md`](Architecture/2026-08-22-clamp-to-ground-strategy.md) |
+| Cesium unified layer management | [`cesium-unified-layer-management.md`](Architecture/cesium-unified-layer-management.md) |
+| Utility tools | [`utility-tools.md`](Architecture/utility-tools.md) |
+| Accounts & AI quota | [`account-system-ai-quota.md`](Architecture/account-system-ai-quota.md) |
+| Runtime map-token pool | [`runtime-map-token-pool.md`](Architecture/runtime-map-token-pool.md) |
+| Building import plan | [`tencent-building-import-plan.md`](Architecture/tencent-building-import-plan.md) |
+| Tile rectification (historical; moved out) | [`tile-rectify-system.md`](Architecture/tile-rectify-system.md) |
+
+**Other**: `Docs/Force_command.md` (agent policy) · `Docs/TODO/` (20+ proposals) · `Docs/LLM_record/` (per-session records) · `Docs/Demo/` (standalone effect demos) · `Docs/Refactor.md`
 
 ---
 
+## 🚧 Known Limitations & Current Status
+
+Listed plainly so the README does not overpromise:
+
+| Item | Status | Notes |
+|---|---|---|
+| **Online basemap export (GeoTIFF)** | ⚠️ **frontend kept, backend removed** | `MapDownloader.vue` calls `/api/download/*`, removed in V3.6.5; HF returns 404. See `Docs/TODO/plan-download-*` |
+| **Tile rectification (BD-09/GCJ-02 resampling)** | ⚠️ **moved out of this repo** | Now a standalone service; `tile-rectify-system.md` is a historical design doc |
+| **News platform `cls`** | ⚠️ upstream returns 504 | That tab renders empty; the other 21 platforms work |
+| **Direct access to news / tiles from CN** | ⚠️ intermittently unreachable | The `vpn.negiao.cn` proxy is the de-facto main channel |
+| **`frontend/package.json` version** | ⚠️ unmaintained | Still `2.0.0`; the real version lives in README / CHANGELOG |
+| **Unit tests** | ❌ none yet | Gates are ESLint + SFC compile + `tsc --noEmit` + structure/config self-checks |
+| **`engines` field** | ❌ undeclared | Node version is convention (20 LTS) only |
+
+---
+
+## Star History
+
+<a href="https://www.star-history.com/?repos=NEGIAO%2FWebGIS-Dev&type=timeline&legend=top-left">
+ <picture>
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=NEGIAO/WebGIS-Dev&type=timeline&theme=dark&legend=top-left&sealed_token=B5ReoH7FL9EMbjs7rJJ3APlIoYZwGKo3g2gC_4_0LxIrQ--e5uhUrYXR7UEBcnb3CU48BAX9--IyzI-TxTszy8HrMJ3oVSVvfowMjrMOxY8n477EUd4_Ip6F8EMaHsKX6H5b1JjudmBoRUn3HxJ1R6zxt3lO1CKGidFnlqFb2W_TXYy_sTk3AS3rn8v8" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=NEGIAO/WebGIS-Dev&type=timeline&legend=top-left&sealed_token=B5ReoH7FL9EMbjs7rJJ3APlIoYZwGKo3g2gC_4_0LxIrQ--e5uhUrYXR7UEBcnb3CU48BAX9--IyzI-TxTszy8HrMJ3oVSVvfowMjrMOxY8n477EUd4_Ip6F8EMaHsKX6H5b1JjudmBoRUn3HxJ1R6zxt3lO1CKGidFnlqFb2W_TXYy_sTk3AS3rn8v8" />
+   <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=NEGIAO/WebGIS-Dev&type=timeline&legend=top-left&sealed_token=B5ReoH7FL9EMbjs7rJJ3APlIoYZwGKo3g2gC_4_0LxIrQ--e5uhUrYXR7UEBcnb3CU48BAX9--IyzI-TxTszy8HrMJ3oVSVvfowMjrMOxY8n477EUd4_Ip6F8EMaHsKX6H5b1JjudmBoRUn3HxJ1R6zxt3lO1CKGidFnlqFb2W_TXYy_sTk3AS3rn8v8" />
+ </picture>
+</a>
+
 ## 📜 Version History
 
-> Full history in [`CHANGELOG.md`](Docs/Guide/CHANGELOG.md), only recent summaries listed below.
+> Full history in [`CHANGELOG.md`](Guide/CHANGELOG.md); only recent releases are summarized here.
 
 | Version | Date | Summary |
 |------|------|------|
-| **V3.5.22** | 2026-08-17 | Consolidated version: **first-paint language follows the browser default** (`detectSystemLanguage` SSOT: zh environment → zh-CN, otherwise → en-US; empty/dirty language values unified, user preference & explicit switch still take priority) · **Back-home entries on Register & legal pages** (round home button + clickable brand area on `/register`, dual links on `/terms` `/privacy`) · **Hugging Face OAuth login** (full login/bind/unlink chain + emailVerified exception + official color logo) · **L3 status monitoring automated** (catalog-metadata driven, 9 groups auto-generated in startup log & admin panel) · **Trademark icon normalization** (Google official four-color G + HF official color logo). [Details](Docs/LLM_record/26-08/2026-08-16/2026-08-16-v3.5.22-consolidated.md) |
-| **V3.5.21** | 2026-08-16 | Consolidated version: admin panel data table enhancements (**pagination + cross-page search/sort + CSV export + search highlighting + row numbers/range bar**, rows API returns total) · Agent basemap capability unlocked (`switch_basemap` supports **XYZ URL or preset ID** + self-built public sources + **fully derived preset catalog** of 76 items) · new **CyclOSM cycling basemap** · Landing/Register **Lucide icon migration** & OneTap slow-load fix · `.env` OAuth Client ID tier adjustment (production values moved to HF Secrets). [Details](Docs/LLM_record/26-08/2026-08-16/2026-08-16-v3.5.21-consolidated.md) |
-| **V3.5.20** | 2026-08-15 | Landing page completed: zh/en switching, icon.webp brand logo, scroll fix (self-holding scroll container) · Register page Landing-style background (lat-lon grid + glow) · **Official domain integration**: webgis.negiao.cn full-chain landing (UI footer entry + README/config defaults synced). [Details 1](Docs/LLM_record/26-08/2026-08-15/2026-08-15-landing-i18n-scroll-background.md) · [Details 2](Docs/LLM_record/26-08/2026-08-15/2026-08-15-official-domain-webgis-negiao-cn.md) |
+| **V3.6.22** | 2026-10-20 | **Player roaming aligned with upstream 0.2.1 + hardening.** Rapier local-frame rebasing (`rebase()`, 10 km default) removes f32 precision jitter and gravity-direction drift; static collider debug lines now apply parent transforms; ground snapping moved to an independent `groundCorrectionU` displacement (no more stair bouncing); `step(delta)` syncs `world.timestep`; terrain colliders swapped atomically via `replaceStaticColliders`; double-zoom bug fixed; per-frame `Matrix4.inverse` removed from the hot path. Verified: tsc 0 errors, 1.1e-9 m rebase round-trip error. |
+| **V3.6.21** | 2026-10-19 | **Import UX bug-fix pack + GLB geo-fidelity.** Coordinate dialog cancels on Esc, inline retryable errors, busy state blocks double submits; failed reposition restores the previous entity via a `swapped` flag; multi-file GLB conflict revokes the new file; unified `GlobalLoading` mask across both engines; GLB drops `minimumPixelSize: 64` for geo-fidelity LOD. |
+| **V3.6.20** | 2026-10-17 | **Merged multi-batch release**: TOC rename routed through ActionRouter (no longer reverted by broadcasts); district layer field `_layer`→`layer` (fixes coordinate conversion / export / edit / 3D import); backend guest `guest_no`; landing page rebuilt in NJNU style (seal section headers, self-hosted serif subset); hero preview image; layer property dialog and TopBar rewritten on design tokens. |
 
-Earlier versions (V3.5.19 and before) — see [Full Changelog →](Docs/Guide/CHANGELOG.md)
+Earlier versions (V3.6.19 and before): [full CHANGELOG →](Guide/CHANGELOG.md). The current branch HEAD already contains unreleased commits after V3.6.22.
 
 ---
 
 ## 📄 License
 
-[MIT License](LICENSE) — Free to use, modify, and distribute.
+[MIT License](../LICENSE) — free to use, modify, and distribute.
 
-> **Attribution Request**: If you run or deploy this project or any derivative in any public environment (website, server, paper, exhibition, etc.), please inform the author via email yaonaigao@gmail.com or GitHub Issue with your use case.
+> **Notification**: if you run or deploy this project (or a derivative) in any public setting — a website, server, paper, exhibition, etc. — a short note to yaonaigao@gmail.com or a GitHub issue is appreciated.
 
 ---
 
@@ -389,12 +564,12 @@ Earlier versions (V3.5.19 and before) — see [Full Changelog →](Docs/Guide/CH
 
 <div align="center">
 
-**NEGIAO** — [GitHub](https://github.com/NEGIAO) · [DeepWiki Project Analysis](https://deepwiki.com/NEGIAO/WebGIS-Dev)
+**NEGIAO** — [GitHub](https://github.com/NEGIAO) · [Homepage](https://www.negiao.cn) · [DeepWiki analysis](https://deepwiki.com/NEGIAO/WebGIS-Dev)
 
-| Source Code | Frontend Deployment | Backend Deployment |
-|:------:|:--------:|:--------:|
-| [GitHub](https://github.com/NEGIAO/WebGIS-Dev) | [GitHub Pages](https://negiao.github.io/WebGIS-Dev/) | [Hugging Face](https://NEGIAO-WebGIS.hf.space) |
+| Source | Frontend | Backend |
+|:------:|:--------:|:-------:|
+| [GitHub](https://github.com/NEGIAO/WebGIS-Dev) | [webgis.negiao.cn](https://webgis.negiao.cn) (primary, GitHub Pages) | [Hugging Face](https://NEGIAO-WebGIS.hf.space) |
 
-<sub>V3.5.22 · In Development · Last Updated 2026-08-17</sub>
+<sub>V3.6.22 · in development · README synced 2026-10-22</sub>
 
 </div>
