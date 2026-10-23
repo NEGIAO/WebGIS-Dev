@@ -229,7 +229,7 @@
 | 层 | 放哪里 | 做什么 |
 |----|--------|--------|
 | **L1** | `deploy/.env` / `.env.local`（不涉密） | URL、端口、前端 `VITE_*`、公开服务端点/超时 |
-| **L2** | 管理员面板 + 数据库 | 地图 token、Agent/LLM Key 与参数、底图、公告（常变、动态生效） |
+| **L2** | 管理员面板 + 数据库 | 地图 token、Agent/LLM Key 与参数、底图、公告（常变、动态生效） | 
 | **L3** | Hugging Face **Secrets** | 绝密：`SUPER_USER`、OAuth secret、SMTP 密码、Supabase Key、监控令牌 |
 
 说明与检查清单：[Docs/Guide/configuration.md](Docs/Guide/configuration.md) · 全景：[configuration-three-tier.md](Docs/Architecture/configuration-three-tier.md)
