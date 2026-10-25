@@ -6,39 +6,67 @@
  */
 
 /**
+ * 唯一的加载入口。
+ *
+ * **必须是静态字面量 specifier**：Vite 在构建期与 dev 期都只能分析字符串字面量的
+ * 动态 import。历史实现在重试分支里拼过 `...vue?t=${Date.now()}`，属于「运行时变量
+ * specifier」，dev 下直接抛 `Unknown variable dynamic import`、构建产物里也指向不存在
+ * 的路径——即重试分支必然失败，反而把一次可恢复的瞬态失败升级为硬失败。
+ * 缓存击穿改用下面的退避等待，不再靠查询参数。
+ */
+function loadCesiumContainer() {
+    return import('@cesium-domain/components/CesiumContainer.vue');
+}
+
+/**
+ * 判断是否为「瞬态模块获取失败」——即重试有意义的那一类错误。
+ * 各浏览器的措辞不同，逐一覆盖；其他错误（语法错误、依赖缺失等）不重试。
+ * @param error 捕获到的异常
+ */
+function isTransientModuleFetchError(error: unknown): boolean {
+    const text = String((error as any)?.message || error || '');
+    return (
+        text.includes('Failed to fetch dynamically imported module') || // Chromium
+        text.includes('error loading dynamically imported module') || // Firefox
+        text.includes('Importing a module script failed') || // Safari
+        text.includes('NetworkError when attempting to fetch resource')
+    );
+}
+
+/** 退避等待（毫秒）：给 dev server 重启 / 网络抖动留出恢复窗口 */
+function wait(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
  * 动态导入 CesiumContainer，带重试机制处理 Vite 瞬态模块获取失败。
  *
- * 关键约束：Vite 构建时只能分析 string literal 形式的动态 import specifier。
- * 首次用纯静态字符串（Vite 可分析并正确分块）；重试时改用带 ?t= 时间戳的 specifier。
- * 重试 specifier 含运行时动态部分，Vite 无法预先分析，但浏览器在运行时
- * 会向 Vite dev server 发起请求，dev server 忽略查询参数后仍能找到对应 chunk。
+ * 重试始终复用同一个静态 specifier：失败的模块不会进入浏览器模块表缓存，
+ * 重新 import 会真实重发请求，无需（也无法）用查询参数破缓存。
+ *
+ * @param maxRetries 最大重试次数（不含首次尝试），默认 2
+ * @returns CesiumContainer 的模块命名空间
  */
 export async function importCesiumContainerWithRetry(maxRetries = 2) {
-    // 首次尝试：静态 specifier，Vite 可分析
-    try {
-        return await import('@cesium-domain/components/CesiumContainer.vue');
-    } catch (error) {
-        const text = String(error?.message || error || '');
-        const isTransientModuleFetchFail = text.includes('Failed to fetch dynamically imported module');
-        if (!isTransientModuleFetchFail) {
-            throw error;
-        }
-        console.warn('[CesiumContainer] 动态导入瞬态失败，开始重试...');
-    }
+    const attempts = Math.max(0, Number(maxRetries) || 0);
+    let lastError: unknown = null;
 
-    // 重试阶段：追加 ?t= 时间戳打破缓存
-    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    for (let attempt = 0; attempt <= attempts; attempt++) {
         try {
-            return await import(`@cesium-domain/components/CesiumContainer.vue?t=${Date.now()}`);
+            return await loadCesiumContainer();
         } catch (error) {
-            const text = String(error?.message || error || '');
-            const isTransientModuleFetchFail = text.includes('Failed to fetch dynamically imported module');
-            if (attempt >= maxRetries || !isTransientModuleFetchFail) {
+            lastError = error;
+            // 非瞬态错误立即上抛：重试也只会得到同样结果，徒增等待
+            if (attempt >= attempts || !isTransientModuleFetchError(error)) {
                 throw error;
             }
             console.warn(`[CesiumContainer] 动态导入瞬态失败，第 ${attempt + 1} 次重试...`);
+            await wait(150 * (attempt + 1));
         }
     }
+
+    // 理论不可达（循环内必 return 或 throw），保留以满足返回值完备性
+    throw lastError;
 }
 
 /**

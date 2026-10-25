@@ -2112,6 +2112,27 @@ defineExpose({
     runSpatialAnalysis,
     getMapExtent,
     getCurrentViewState,
+    /**
+     * OL 视图是否已「稳定」——可用于跨引擎换算的唯一判据。
+     *
+     * 两个条件缺一都会让换算拿到中间态：
+     * ① 启动期 URL 参数恢复已完成（否则实时视图仍是 INITIAL_VIEW 默认值 zoom 4）；
+     * ② 视图当前不在动画 / 交互中——`applyDeferredUrlParams` 用 500ms 动画飞向目标视图，
+     *    而 `markInitialRestoreApplied()` 在动画**开始时**就已置位，单看 ① 仍会取到半途
+     *    的 zoom（如 4→9 中途的 6.5），换算出的相机高度与目标差一个量级。
+     * @returns {boolean} true 表示此刻读取 getCurrentViewState() 可信
+     */
+    isStartupViewSettled: () => {
+        if (startupUrlRestoreGuard.hasPendingRestore()) return false;
+        // 地图实例尚未创建时「稳定」无从谈起：此刻 getCurrentViewState() 返回 null，
+        // 若误判为 settled，调用方会放弃 URL 兜底、退到默认相机高度，
+        // 正是「首次进入 3D 视野过远」的成因之一。
+        if (!mapInstance?.value) return false;
+        const view = mapInstance?.value?.getView?.();
+        if (typeof view?.getAnimating === 'function' && view.getAnimating()) return false;
+        if (typeof view?.getInteracting === 'function' && view.getInteracting()) return false;
+        return true;
+    },
     syncViewFromCesium,
     getMapSize,
     getOlView,

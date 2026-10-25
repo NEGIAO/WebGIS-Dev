@@ -6,6 +6,41 @@
 
 ## 版本记录
 
+### V3.6.25 (2026-10-25) — Cesium 懒加载重试修复 + OL↔Cesium 首次切换视野错乱修复 + 代码审查加固
+
+> **版本归并说明**：本批次在暂存区曾被逐次记为 `V3.6.25 / V3.6.26 / V3.6.27` 三个版本号，而 V3.6.24 已独立提交发布——即这些改动属于 V3.6.24 之后的同一批未提交工作。按 Force_command §5「同一批次不得拆成多个版本号」并经用户明确指示「整合为统一的 V3.6.25」，本次归并为**单一版本 V3.6.25**。过程记录原样保留在 `Docs/LLM_record/` 中，不回溯改写历史日志。
+>
+> 过程记录：
+> - `Docs/LLM_record/26-10/2026-10-25/2026-10-25-cesium-lazy-import-retry-fix.md`（懒加载重试分支修复 + dev 缓存过期诊断）
+> - `Docs/LLM_record/26-10/2026-10-25/2026-10-25-cesium-view-convert-on-first-open.md`（视图转换三处时序/语义缺陷）
+> - `Docs/LLM_record/26-10/2026-10-25/2026-10-25-v3.6.25-staged-consolidation.md`（本次归并 + 代码审查 + 加固）
+
+#### 一、Cesium 懒加载重试分支必然失败（`app/composables/useLazyModules.ts`）
+
+> **症状**：切 3D 时控制台报 `Unknown variable dynamic import: ../domains/cesium/components/CesiumContainer.vue?t=1792898003654`，且**只在首次加载已失败时出现**。
+> **根因**：重试用 `import(\`…CesiumContainer.vue?t=${Date.now()}\`)` 拼接**运行时变量 specifier**，Vite 的动态导入分析只接受字符串字面量——dev 期直接抛错，构建产物里该路径亦不存在，于是每次瞬态失败都被升级为**不可恢复的硬失败**。原注释「dev server 忽略查询参数后仍能找到 chunk」的前提不成立：问题不在查询参数，而在 specifier 无法静态分析。
+> **修复**：抽出唯一的 `loadCesiumContainer()`（静态字面量），重试循环 `attempt 0..maxRetries` 复用同一 specifier——失败的模块不进浏览器模块表，重新 import 会真实重发请求，「破缓存」本属伪需求；瞬态判据补齐 Firefox / Safari / 通用 `NetworkError` 措辞；新增 `150ms × n` 退避给 dev server 重启留恢复窗口；非瞬态错误立即上抛不浪费等待。
+> **诊断结论**：修复后仍复现的瞬态失败**不是代码缺陷**，而是 dev 环境状态——① 模块图过期（dev server 在 4 个文件 `.js→.ts` 重命名前已启动，缓存的旧路径 404）；② `.vite/deps` 预构建缓存早于 lockfile 变更，触发 full-reload 使进行中的动态 import 作废。恢复方式：清 `node_modules/.vite` 后 `npm run dev -- --force`。
+
+#### 二、OL→Cesium 首次切换视野错乱（`app/HomeView.vue`、`ol/components/MapContainer.vue`）
+
+> **背景**：用户反馈「OL 初始进入是全国范围，进入 Cesium 后视图缩放级别完全不对，且第一次打开时总是有问题」。先用真实代码实测换算公式（zoom 4 → 7,514 km、zoom 9 → 235 km、zoom 17 → 917 m）确认**公式无误**，问题全在**语义与时序**。两种方向相反的故障并存，触发条件同为「首次进入时 OL 尚未稳定」。
+> **故障一 · 过远**：换算输入取自未稳定的实时视图。`applyDeferredUrlParams` 在 Phase 5 才应用 URL 参数且用 500ms 动画，此前实时视图仍是 `INITIAL_VIEW.zoom = 4`；且 `markInitialRestoreApplied()` 在动画**开始时**即置位，「恢复已标记完成」≠「视图已到位」，动画中途读到的是插值 zoom。实测目标 zoom=9 时按默认 zoom=4 换算得 7,514,323 m（偏 **32 倍**）、目标 zoom=12 时偏 **256 倍**。修复：`MapContainer` 暴露 `isStartupViewSettled()`（启动恢复已处理 + 无动画/交互）；未稳定时改以 URL 自带的 OL 语义参数换算——URL 是本次导航的权威输入，不依赖任何初始化时序，因此无需「等初始化完成再切换」而阻塞 0.5~3 秒。
+> **故障二 · 过近**：`is3DMode` 在 `await ensureCesiumLoaded()` **之后**才置 true，而 OL 的同步开关是 `:url-sync-enabled="!is3DMode"`，于是整个冷加载窗口内 OL 仍在同步态；`syncUrlFromMap` 用 `buildQuery` 写出 `view=ol & z=<缩放级别>` 覆盖刚写入的米制 z，Cesium 起来后把 `z=4` 当作 4 米相机高度 → 贴地街区级。冷加载窗口最长，故「第一次打开必现」。修复：新增 `isEngineSwitching` 标志，切换窗口内冻结 OL 写回；用独立标志而非提前置 `is3DMode`，避免加载失败时残留 3D 态。
+> **故障三 · 回滚污染**：加载失败时只把 `view` 改回 `ol`、保留米制 `z`，写出「`view=ol` + `z=4417358.84`」混合态；下次 `validateViewZ` 按 OL 缩放级别（0~30）校验把该 z 判非法置 `null`，`getValidCoordinateParams` 随之回落硬编码 `z: 17`，视野整体失真。修复：切换前捕获 `getCurrentQuerySnapshot` 快照，失败时以快照无损还原（不依赖任何换算）。
+> **已知未闭环**：历史污染链接（`view=cesium&z=4.00&cv=…`）不会自动纠正（`cv` 存在时无法用启发式判定 z 语义），需手动缩放一次或删掉 URL 的 `z`；`z: 17` 硬编码兜底与 `MIN_CAMERA_HEIGHT = 1` 偏宽松两项已记 TODO。
+
+#### 三、本次归并的代码审查与加固（三处潜在缺陷）
+
+> ① **URL 语义误读**（`buildCesiumQueryPatchFromOl`）：新增的 URL 兜底把 `z` 无条件当作 OL 缩放级别。若 URL 本身已是 `view=cesium`（启动直达 3D、或对同一视图的重复请求），其 `z` 是**米制高度**——小值（如 `z=20`）会被换算成数百米并写入 `lastOlToCesiumTarget`，随后 Precision 校正环按错误目标把相机推离原位。修复：入口先判 `getCurrentMapView() === cesium`，直接透传 URL 米制 z 并清空校正目标。
+> ② **切换标志异常泄漏**（`setMapView`）：`isEngineSwitching` 原为手工置位/复位，而切换流程含多次 `await`（router.replace / 分块加载 / Precision 校正环），任一处抛异常都会让标志永久为 `true`，导致 OL 的 URL 写回长期失效。修复：拆为 `runMapViewSwitch`（纯流程）+ `setMapView`（`try/finally` 保证复位）。
+> ③ **地图实例未就绪被误判为「已稳定」**（`MapContainer.isStartupViewSettled`）：地图尚未创建时 `getView()` 为 `undefined`，原实现返回 `true`，调用方因此放弃 URL 兜底并退到默认相机高度——恰是「过远」故障的成因之一。修复：实例不存在时返回 `false`。
+
+#### 验证
+
+> `tsc --noEmit` **0 error**；`eslint`（HomeView / MapContainer / useLazyModules）**0 problems**（MapContainer:1716 `no-useless-assignment` 为既有问题，非本次引入，已记 TODO）；`vite build` **4401 modules** 通过；`CheckStructureTree.py` / `CheckConfigRegistry.py` 双门禁通过；§11.2 平台红线四条自查全绿。
+> **未做**：浏览器级运行时验证（项目无前端测试，本机 playwright 不可用），重试生效与视野换算属「静态推断 + 构建验证」，需用户实机复验。
+
 ### V3.6.24 (2026-10-25) — Cesium 绘制/测量完整化 + 贴地统一化 + 图层样式与 TOC 能力对齐 + TS 迁移
 
 > **版本归并说明**：本批次在暂存区曾被逐次记为 `V3.6.24 / V3.6.25 / V3.6.26 / V3.6.27 / V3.6.28` 五个版本号，而 HEAD 实际停留在 `V3.6.23`——即五份改动从未分开发版，属于同一批未提交工作。按 Force_command §5「一次 L2/L3 任务 +1 修订号、同日不合并」的反向要求（同一批次不得拆成多个版本号），并经用户明确指示「整合为一个统一的版本 V3.6.24」，本次归并为**单一版本 V3.6.24**。各阶段的过程记录仍按原样保留在 `Docs/LLM_record/` 中，不回溯改写历史日志。
@@ -523,7 +558,6 @@
 
 > **症状**：访问落地页 `/#/` 时 Network 立即出现约 6MB 的 `cesium/Cesium.js` 请求，`map-core-ready` 后的延迟预热策略完全失效。**根因**：`cesium-shim.js` 模块顶层以 IIFE 立即注入 Cesium CDN `<script>`（`import 即下载`），而 Rollup 把 shim 与入口启动链所需的 `publicRuntime` 配置（后端地址/超时/OAuth client id）以及 `@cesium-extends` 一并归入 `vendor-planar-route` chunk——入口为拿配置静态加载该 chunk 时，chunk 求值即执行注入副作用。**修复**：注入重构为显式幂等 `ensureCesiumLoaded()`（`window.Cesium` 已在直接 resolve；重复调用返回同一 `cesiumReady`），模块求值零副作用、对 chunk 归属免疫；`loadCesiumRuntime()`（切 3D 时显式触发+等待）与 `scheduleCesiumWarmup()`（预热）改为显式调用；预热延迟 10s → **6s**。涉及 `cesium-shim.js`、`domains/cesium/composables/core/cesiumRuntime.js`、`domains/common/data-import/cesiumWarmup.js`、`cesium.d.ts`、`app/HomeView.vue`（注释）。验证：构建后新产物中顶层注入调用已消失（`appendChild(r)}e(0)})();` → 函数内封装），入口 chunk 零 Cesium 请求路径；日志 `Docs/LLM_record/26-08/2026-08-29/2026-08-29-fix-landing-cesium-eager-load.md`。
 
-
 ### V3.5.35 (2026-08-29) — 暂存区多批次归并：体积云天际线白闪修复 + 云↔大气互斥 + 天空旁路封堵 + 工具面板下拉白底白字修复 + 全项目同类排查 + 散项修复
 
 > 本版本为暂存区多批次不规范提交（原临时编号 V3.5.35~36，含未记录散项）经整合 Code Review 后归并的**单一版本**。审查日志：`Docs/LLM_record/26-08/2026-08-29/2026-08-29-code-review-staged-v3535.md`；分项分析：`2026-08-29-fix-cloud-sky-flicker-mutex.md`、`2026-08-29-fix-ctp-select-dropdown-ui.md`、`2026-08-28-fix-atmosphere-autofade-dependency.md`。
@@ -832,7 +866,6 @@
 - **修复**：曝光按分支施加（直通=1.0）；新增 `compositeAerialDisplay` 统一「pow2.2 线性化→合成→mix(scale)→ACES+gamma」出口（scale=0 严格恒等）；分类参数与上游对齐收窄（0.0016 / -0.01），旧宽带防闪理由已因出口统一而消失。
 - 详见[维护日志](../LLM_record/26-08/2026-08-22/2026-08-22-aerial-perspective-white-veil.md)。
 
-
 ### V3.5.26 (2026-08-22) — 综合版本：Cesium 本地化自托管 + 贴地策略统一重构 + 首屏 Loading 过渡 + 暂存区审查收敛
 
 > 2026-08-22 的三轮暂存增量（原 V3.5.26 / V3.5.27 / V3.5.28）按用户指令合并收敛为单一版本 V3.5.26。下列小节以原版本号标注，供追溯。
@@ -870,7 +903,6 @@
 - **透明度滑杆对 Entity 模型失效**：`setRecordOpacity` 的 gltf 分支对 Entity 直接赋 `.color` 是无效属性——分型写入 `entity.model.color`（ModelGraphics）/ 原路径（历史 primitive）。
 - **Loading 双延迟机制叠加缺陷**：最短持续时间到期回调直接 `forceHideLoading` 会绕过 hideDelayMs——改为链式重入 `hideLoading()`。
 - **采样网关空命名空间防御**：`sampleTerrainBatch` 显式层级兜底前补 `!Cesium` 守卫。
-
 
 ### V3.5.25 (2026-08-20~21) — 综合版本：双引擎底图统一契约 + 实时在线零轮询重构 + 历史影像后端 + 审查修复
 
@@ -2352,7 +2384,6 @@ L3 任务（方案文档 [`Docs/TODO/loading-performance-optimization-plan.md`](
 - ⏭️ 待用户实机验证：登录页打开与登录跳转、2D/3D 地图、共享资源面板加载 KML/KMZ、断源模拟 Cesium 回退。`tsc --noEmit` 零新增报错、ESLint 零新增问题、双门禁通过（云端沙盒执行）。
 - ⏭️ 版本号顺延说明：实施期间并行会话占用 V3.4.53（后端安全批次），按规范「撞车后完成者顺延」取 V3.4.54。
 
-
 ### V3.4.53 (2026-07-26) — 后端 code review 安全与正确性 Bug 批次（14 项，L2）
 
 > 用户要求「后端代码 code review 一下，修复优化」，口径经确认为「明确 bug + 低风险优化」（中大型重构仅登记 TODO）。逐条读实际代码核实触发链后修复，无 schema 变更 / 无新增删除文件 / 无新增配置 key / 无依赖增删 → 两门禁与结构树不受影响。第一轮 S1–S11，第二轮（承「继续检查并优化」指令）追加 S12–S14。
@@ -2830,7 +2861,6 @@ L3 任务（方案文档 [`Docs/TODO/loading-performance-optimization-plan.md`](
 - 🔧 **Cesium 模块源码内嵌**：cesium-navigation-es6 + cesium-wind-layer 从 npm 依赖迁移为 `src/components/Cesium/` 下内嵌模块，WIn2d 封装层归入 cesium-wind-layer，导航控件高对比度主题 CSS 合并进主样式文件，移除 patch-package 黑盒依赖
 - 🆕 **2D 风场模块**：`Wind2D.js` 二维风场可视化独立模块
 
-
 ### V3.4.1 (2026-07-24) — 版本号自动同步：Vite define 从 README.md 注入
 
 - 🔧 **版本号单一事实来源**：根目录 `README.md` 成为版本号的唯一权威来源，`MapContainer.vue` 的 `APP_DISPLAY_VERSION` 不再硬编码
@@ -3198,7 +3228,6 @@ L3 任务（方案文档 [`Docs/TODO/loading-performance-optimization-plan.md`](
 2. **长期更稳定**：地图长时间运行不崩溃、不内存溢出
 3. **网络更兼容**：弱网环境下加载更快、提示更准确
 4. **维护更简单**：逻辑统一、代码健壮，减少线上问题
-
 
 ### V3.0.0 (2026-04-17)
 #### 🔹 前后端分离架构完整版

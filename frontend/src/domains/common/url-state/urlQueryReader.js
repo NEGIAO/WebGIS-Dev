@@ -29,13 +29,17 @@ export function readHashQueryValue(key) {
  * @returns {Record<string, string>} 合并后的参数快照
  */
 export function getCurrentQuerySnapshot(routeQuery = {}) {
-    const snapshot = {};
+    // 安全：先用 Map 收集再用 Object.fromEntries 落地。
+    // Map.set 与 Object.fromEntries 均不会触发 __proto__ setter，
+    // 可避免 URL 中构造 __proto__ / constructor / prototype 等键造成原型链污染
+    // （CodeQL js/remote-property-injection）。
+    const snapshot = new Map();
 
     // 第一层：route.query
     Object.keys(routeQuery).forEach((key) => {
         const raw = Array.isArray(routeQuery[key]) ? routeQuery[key][0] : routeQuery[key];
         if (raw !== undefined && raw !== null && raw !== '') {
-            snapshot[key] = String(raw);
+            snapshot.set(key, String(raw));
         }
     });
 
@@ -47,13 +51,13 @@ export function getCurrentQuerySnapshot(routeQuery = {}) {
             const params = new URLSearchParams(hash.slice(queryStart + 1));
             params.forEach((value, key) => {
                 if (value !== undefined && value !== null && value !== '') {
-                    snapshot[key] = String(value);
+                    snapshot.set(key, String(value));
                 }
             });
         }
     }
 
-    return snapshot;
+    return Object.fromEntries(snapshot);
 }
 
 /**

@@ -48,7 +48,7 @@ frontend/src/
 │   ├── components/
 │   │   └── SectionTitle.vue  # 通用节标题三件套（印章 + 衬线标题 + 罗盘水印；LandingView 各节复用）
 │   └── composables/
-│       └── useLazyModules.ts  # CesiumContainer / SidePanel 懒加载 + 重试逻辑
+│       └── useLazyModules.ts  # CesiumContainer / SidePanel 懒加载 + 重试逻辑（**重试必须复用同一静态字面量 specifier**：带 `?t=${Date.now()}` 的运行时变量 specifier 无法被 Vite 分析，dev 抛 Unknown variable dynamic import、prod 指向不存在路径；瞬态失败判据覆盖 Chromium/Firefox/Safari 三种措辞 + 150ms×n 退避）
 ├── assets/
 │   ├── cesium-tool-theme.css
 │   ├── logo.svg
@@ -594,7 +594,7 @@ frontend/src/
 │       │   ├── ControlsPanel.vue  # 侧栏 shell（新增 engine prop：3D 时绘制/测量子面板切换为 CesiumDrawMeasurePanel，2D 保持 OL DrawPanel/MeasurePanel；cesium-draw-action 动作上抛 HomeView）
 │       │   ├── DrawPanel.vue
 │       │   ├── LogMonitor.vue
-│       │   ├── MapContainer.vue  # OL 地图容器（底图/图层/绘制/测量/启动任务）
+│       │   ├── MapContainer.vue  # OL 地图容器（底图/图层/绘制/测量/启动任务）。**跨引擎契约**：`urlSyncEnabled` prop 控制是否随 moveend 写回 URL（引擎切换窗口内由父级置 false 冻结）；`isStartupViewSettled()` 暴露「启动恢复已完成且无动画/交互」判据，是 OL→Cesium 换算取实时视图的唯一前提（未稳定须改用 URL 语义参数，否则读到默认 zoom 4 或动画插值）
 │       │   ├── MapControlsBar.vue  # 地图控件栏（缩放/旋转/重置）
 │       │   ├── MapDownloader.vue  # 底图下载器（框选范围 + 任务提交）⚠️ /api/download/* 后端 V3.6.5 已删，HF 404；见 Docs/TODO/plan-download-feature-git-marker.md
 │       │   ├── MyDownloadTasks.vue  # 我的下载任务列表（查看/取消/下载）⚠️ 同上，接口暂不可用

@@ -13,7 +13,7 @@
  * - 取点链 scene.pickPosition → camera.pickEllipsoid（见 scenePicker.js）
  * - 测距 = EllipsoidGeodesic 表面距离（对齐 OL getLength 语义）；
  *   测面 = ENU 等距投影 shoelace；矩形 / 圆 / 方位角 / 重心走 utils/drawGeometry.ts
- * - 成品实体贴地策略与语义配色见 drawEntityFactory.js
+ * - 成品实体贴地策略与语义配色见 drawEntityFactory.ts
  * - 句柄表支撑 TOC 的显隐 / 透明度 / flyTo / 移除；测量标注按开关实时重算
  * - 元数据经 cesiumLayersStore.registerDrawing 建档（category='draw'），进「三维数据」分组
  */

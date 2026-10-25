@@ -21,7 +21,7 @@ import {
     olZoomToCesiumHeight,
 } from '@common/utils/viewScale';
 import { encodeCesiumPoseState } from '@common/url-state/crypto';
-import { readQueryValue as readQueryFromSnapshot } from '@common/url-state/urlQueryReader';
+import { readQueryValue as readQueryFromSnapshot, getCurrentQuerySnapshot } from '@common/url-state/urlQueryReader';
 import { useRoute } from 'vue-router';
 import { createBasemapUrlMappingFeature } from '@ol/url-state/useBasemapUrlMapping';
 import { URL_LAYER_OPTIONS } from '@ol/basemap/constants/basemapResolver';
@@ -125,6 +125,12 @@ const locationInfo = reactive({
 // UI 状态
 const selectedImage = ref('');
 const is3DMode = ref(getCurrentMapView() === MAP_VIEW_CESIUM);
+/**
+ * 引擎切换进行中（从发起切换到目标引擎就绪的整个窗口）。
+ * 期间必须冻结 OL 的 URL 写回：否则 OL 的 moveend 会用 `view=ol + z=<缩放级别>`
+ * 覆盖掉已换算好的米制 z，Cesium 起来后把 4~9 当作米 → 贴地街区级视角。
+ */
+const isEngineSwitching = ref(false);
 const isCesiumLoaded = ref(false);
 const isCesiumLoading = ref(false);
 let _cesiumLoadPromise = null;
@@ -1026,8 +1032,68 @@ function formatZParam(value) {
  */
 let lastOlToCesiumTarget = null; // { canonicalResolution, analyticHeight }（模块级，跨 await 传递）
 
+/**
+ * 从 URL 读取 OL 语义视图（`z` = 缩放级别，不是米）。
+ *
+ * 仅在 OL 视图未稳定（启动恢复未完成 / 动画中）时作为换算输入的兜底：
+ * 此刻实时视图不可信，而 URL 参数才是本次导航的目标视图。
+ *
+ * @param {number[]|null} [fallbackSize] 实时地图尺寸（URL 不携带视口信息）
+ * @returns {{lng:number, lat:number, zoom:number, resolution:null, size:any}|null} 无坐标时返回 null
+ */
+function readOlViewFromUrl(fallbackSize = null) {
+    const lng = parseFiniteNumber(readQueryValue('lng'));
+    const lat = parseFiniteNumber(readQueryValue('lat'));
+    if (lng === null || lat === null) return null;
+
+    const rawZoom = parseFiniteNumber(readQueryValue('z'));
+    return {
+        lng,
+        lat,
+        // 与 getValidCoordinateParams 的缺省保持一致：URL 无 z 时 OL 会飞到 17
+        zoom: rawZoom !== null ? rawZoom : 17,
+        // 刻意不传 resolution：单靠 zoom 推导，避免两路输入不自洽时互相污染
+        resolution: null,
+        size: Array.isArray(fallbackSize) ? fallbackSize : null,
+    };
+}
+
 function buildCesiumQueryPatchFromOl() {
-    const state = mapContainerRef.value?.getCurrentViewState?.();
+    const liveState = mapContainerRef.value?.getCurrentViewState?.();
+
+    /**
+     * 语义守卫：只有「从 OL 切到 Cesium」才存在 OL 语义 → 米制的换算。
+     *
+     * 若当前 URL 已是 `view=cesium`（启动直达 3D，或对同一视图的重复请求），URL 里的
+     * `z` 是相机高度（米），绝不能被下方的 readOlViewFromUrl 当成缩放级别：
+     * 小值（如 z=20 表示 20 米）会被换算成数百米并写入 lastOlToCesiumTarget，
+     * 随后 Precision 校正环按这个错误目标把相机推离原位置。
+     * 该分支直接透传 URL 的米制 z，并清空校正目标（本次不存在 OL→3D 尺度换算）。
+     */
+    if (getCurrentMapView() === MAP_VIEW_CESIUM) {
+        lastOlToCesiumTarget = null;
+        const urlHeight = parseFiniteNumber(readQueryValue('z'));
+        return {
+            z: formatZParam(urlHeight !== null && urlHeight > 0 ? urlHeight : 6000000),
+            layerId: '',
+            customUrl: '',
+        };
+    }
+
+    /**
+     * 时序守卫：只有 OL 视图「稳定」时，实时视图才可作为换算输入。
+     *
+     * 启动期 `applyDeferredUrlParams` 会用 500ms 动画飞向链接目标，且
+     * `markInitialRestoreApplied()` 在动画开始时即置位；此时读实时视图会拿到
+     * 默认值（INITIAL_VIEW.zoom = 4）或动画半途值，换算出的相机高度与目标差一个量级
+     * ——表现为「首次进入 3D 视野完全不对，之后再切换就正常」。
+     *
+     * 视图未稳定时改以 URL 自身携带的 OL 语义参数（lng/lat/z=缩放级别）换算：
+     * URL 是本次导航的权威输入，不依赖任何初始化时序。
+     */
+    const settled = mapContainerRef.value?.isStartupViewSettled?.() !== false;
+    const state = settled ? liveState : (readOlViewFromUrl(liveState?.size) || liveState);
+
     if (!state || !Number.isFinite(state.lng) || !Number.isFinite(state.lat)) {
         // 视图未就绪时也必须给出米制 z —— 否则 URL 会残留 OL 缩放级别，
         // 被 Cesium 当作相机高度复用后表现为极近视角
@@ -1184,17 +1250,31 @@ function buildOlQueryPatchFromCesium() {
 }
 
 /**
- * 切换地图引擎并同步 view URL 参数。
+ * 切换地图引擎并同步 view URL 参数（内部实现）。
+ *
+ * 调用方必须使用 `setMapView`——它负责 `isEngineSwitching` 的置位与复位，
+ * 本函数只关心切换本身的流程。
+ *
  * @param {'ol'|'cesium'} view - 目标地图视图
  * @param {Object} [options={}] - 切换选项
  * @param {boolean} [options.writeUrl=true] - 是否写回 URL
  * @returns {Promise<boolean>} 是否切换成功
  */
-async function setMapView(view, { writeUrl = true } = {}) {
+async function runMapViewSwitch(view, { writeUrl = true } = {}) {
     const normalizedView = view === MAP_VIEW_CESIUM ? MAP_VIEW_CESIUM : MAP_VIEW_OL;
     const queryPatch = normalizedView === MAP_VIEW_CESIUM
         ? buildCesiumQueryPatchFromOl()
         : buildOlQueryPatchFromCesium();
+
+    /**
+     * 切换前快照：Cesium 加载失败回滚时必须还原到切换前的**完整语义**。
+     *
+     * 只把 view 改回 ol 而保留米制 z，会写出「view=ol + z=4417358.84」这种混合态：
+     * 下一次 extractAndStorePendingParams 时 validateViewZ 按 OL 缩放级别校验（0~30）
+     * 会把该 z 判为非法并置 null，视图参数随之整体丢失（回滚后地图跳回默认视野，
+     * 再进 3D 也没有可换算的 z）。因此回滚一律用切换前快照覆盖。
+     */
+    const preSwitchQuery = getCurrentQuerySnapshot(route.query);
 
     // 视图切换必须先完成 URL 语义转换，再加载目标引擎：
     // - OL -> Cesium：先把 URL z 从 OL zoom 转为 Cesium camera height。
@@ -1209,8 +1289,8 @@ async function setMapView(view, { writeUrl = true } = {}) {
         isWeatherBoardMode.value = false;
         const loaded = await ensureCesiumLoaded();
         if (!loaded) {
-            // Cesium 加载失败，回滚 URL 为 OL 视图
-            if (writeUrl) await replaceMapView(MAP_VIEW_OL);
+            // Cesium 加载失败，回滚为切换前的 OL 视图（含 z 语义还原）
+            if (writeUrl) await replaceMapView(MAP_VIEW_OL, { queryPatch: preSwitchQuery });
             return false;
         }
         is3DMode.value = true;
@@ -1272,6 +1352,37 @@ async function setMapView(view, { writeUrl = true } = {}) {
         _cesiumLoadPromise = null;
     }
     return true;
+}
+
+/**
+ * 切换地图引擎（对外唯一入口）。
+ *
+ * 负责 `isEngineSwitching` 的完整生命周期：
+ *
+ * **为什么需要这个标志**：`is3DMode` 在 `await ensureCesiumLoaded()` **之后**才置 true，
+ * 因此整个 Cesium 分块加载窗口内 OL 仍处于同步态。此时 OL 只要触发一次 moveend
+ * （布局变化 / 启动期 500ms flyTo 动画收尾），`syncUrlFromMap` 就会用
+ * `view=ol + z=<缩放级别>` 覆盖掉刚写好的米制 z；等 Cesium 起来后
+ * `restoreCameraFromUrl` 把 `z=4` 当作 4 米相机高度 → 表现为「贴地街区级」。
+ * 冷加载（首次进入）窗口最长，故「第一次打开必现」。
+ *
+ * **为什么用独立标志而非复用 is3DMode**：切换失败时不能残留 3D 态。
+ *
+ * **为什么用 try/finally**：切换流程内含多次 await（router.replace / 分块加载 /
+ * Precision 校正环），任何一处抛异常都必须解除冻结，否则 OL 的 URL 写回会永久失效。
+ *
+ * @param {'ol'|'cesium'} view - 目标地图视图
+ * @param {Object} [options={}] - 切换选项
+ * @param {boolean} [options.writeUrl=true] - 是否写回 URL
+ * @returns {Promise<boolean>} 是否切换成功
+ */
+async function setMapView(view, options = {}) {
+    isEngineSwitching.value = true;
+    try {
+        return await runMapViewSwitch(view, options);
+    } finally {
+        isEngineSwitching.value = false;
+    }
 }
 
 /**
@@ -1941,7 +2052,7 @@ onMounted(async () => {
                         <MapContainer
                             v-show="!is3DMode && !isAccountPanelFullscreen"
                             ref="mapContainerRef"
-                            :url-sync-enabled="!is3DMode"
+                            :url-sync-enabled="!is3DMode && !isEngineSwitching"
                             @map-core-ready="handleMapCoreReady"
                             @map-core-failed="handleMapCoreFailed"
                             @location-change="handleLocationChange"

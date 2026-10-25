@@ -7,7 +7,7 @@
  * - 口径与 `useCesiumDrawMeasure` 既有实现保持一致：局部平面近似
  *   （111320 m/°lon × cos(lat)、110540 m/°lat），适用于测量工具的典型近地小范围。
  *
- * 调用方：`drawEntityFactory.js`（成品实体与标注锚点）、`useCesiumDrawMeasure.js`（载荷组装）。
+ * 调用方：`drawEntityFactory.ts`（成品实体与标注锚点）、`useCesiumDrawMeasure.js`（载荷组装）。
  */
 
 /** 经纬度点：[经度, 纬度]，单位度 */

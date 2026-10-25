@@ -3,7 +3,11 @@ import Message from '@common/shell/Message.vue';
 // 金句库(约 60KB 源码 / gzip 16KB)改为懒加载:不进入口 chunk,页面 load 后空闲期预取;
 // 数据未就绪时 pickSoupQuote 用 FALLBACK_SOUP 兜底(V3.4.54 加载性能优化)
 
-const MAX_VISIBLE = 3;
+/**
+ * 同时可见的消息条数上限（超出部分进入 queue，由岛底「还有 N 条提示」徽标提示）。
+ * 2026-10-25：由 3 下调为 2 —— 3 条同屏在 1080p 下会压住右侧工具栏与比例尺。
+ */
+const MAX_VISIBLE = 2;
 //默认持续时间，单位毫秒
 const DEFAULT_DURATION_MS = 3000;
 const DEFAULT_SOUP_DURATION_MS = 5200;

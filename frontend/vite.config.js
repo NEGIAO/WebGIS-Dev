@@ -226,14 +226,6 @@ export default defineConfig(({ command, mode }) => {
             exclude: ['cesium'],
         },
 
-        // 生产环境代码压缩配置
-        esbuild: isProductionLikeBuild
-            ? {
-                  drop: ['console', 'debugger'],
-                  legalComments: 'none',
-              }
-            : undefined,
-
         // Web Worker 配置：使用 ES 模块格式（支持 code-splitting）
         worker: {
             format: 'es',
@@ -242,8 +234,20 @@ export default defineConfig(({ command, mode }) => {
         // 构建配置
         build: {
             sourcemap: !isProductionLikeBuild,
-            minify: 'esbuild',
+            // Vite 8 起 rolldown/oxc 取代 esbuild：esbuild 压缩器已废弃且不再内置，
+            // 而 oxc 压缩器不支持 drop console/debugger。为保留原有的生产日志剥离行为，
+            // 改用 Vite 8 仍原生支持的 terser（terserOptions 见下方）。
+            minify: 'terser',
             chunkSizeWarningLimit: 300,
+            terserOptions: {
+                compress: {
+                    drop_console: true,
+                    drop_debugger: true,
+                },
+                format: {
+                    comments: false,
+                },
+            },
 
             // 模块预加载：只预加载首屏关键 chunk，避免浏览器提前下载懒加载模块
             // 过滤掉 geotiff/lerc/jszip/proj4/codec 等非首屏 chunk（节省 ~594 KB 首屏传输）

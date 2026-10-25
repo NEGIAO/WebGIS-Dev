@@ -263,3 +263,29 @@ Sprint 3（穿插）：P3-1 容器二轮（O1/O2 交替）→ P2-1 bundle 分析
   - [ ] (既有缺口·非本批引入) **`en-US.js` 相对 `zh-CN.js` 缺 204 个键**：含 `controls.style / styleEdit / applyStyle`（HEAD 中即缺失），英文界面回落中文。属 i18n 体系性问题（英文为 zh 的子集），需单独立项补齐而非零散补键
   - [ ] (设计限制) **全局测量开关覆盖单条标注开关**：`setMeasureOptions` 触发的全量重算会把 TOC 右键「关闭标注」的单条状态重置为全局值。注释已说明属预期，若产品要求持久化，需把单条状态并入 handle 并在 `refreshLabels` 中回放
   - [ ] (例外备案) **`Docs/Demo/DrawManager.js` 仍为 `.js`**：`draw_manager.html` 以 `<script src>` 直载、无构建链路，属 §2.11 明列例外。若要求全仓无 `.js` 逻辑文件，需为 Demo 引入编译产物或改为 `type="module"` + 构建步骤
+
+- [ ] **Cesium 懒加载后续**（2026-10-25 · V3.6.25 懒加载修复，按 Force_command §2.5 只记不改）：
+  - [ ] (需产品确认) **发版后旧 chunk 失效未覆盖**：生产部署新版本后，停留在旧页面的用户再切 3D 会因旧 chunk 已删除而失败（重试同一 specifier 也无济于事）。可解方案是捕获 `Failed to fetch dynamically imported module` 后提示并整页 `location.reload()`，代价是用户输入态丢失，需产品确认
+  - [ ] (可调参) **重试上限 2 次 / 退避 150ms×n**：针对 dev server 重启与网络抖动设定；若线上 CDN 抖动更久，调 `maxRetries` 与 `wait()` 基数即可
+  - [ ] (开发体验) **文件重命名后 dev server 模块图不失效**：本次 4 个 `.js → .ts` 重命名后，运行中的 Vite 仍持有旧路径，表现为 `Failed to fetch dynamically imported module`。建议加 `package.json` 脚本 `"dev:reset": "rimraf node_modules/.vite && vite --force"`（或 Windows 下 `cmd /c rmdir /s /q`），并在 `docs/Guide/dev-guide.md` 写明「重命名/移动源文件后必须重启 dev server」
+
+- [ ] **URL z 语义一致性**（2026-10-25 · V3.6.25 视图转换修复，按 Force_command §2.5 只记不改）：
+  - [ ] (需产品确认) **`getValidCoordinateParams()` 的 `z: 17` 兜底**：z 被 `validateViewZ` 判非法时硬编码回落 17（街道级），把「参数非法」静默表现为「跳到街道」。建议改为不注入 z、沿用当前视野；但会改变既有分享链接行为，需产品确认后再动
+  - [ ] (启发式待评估) **首屏 `writeUrl:false` 分支无语义校验**：`setMapView(getCurrentMapView(), { writeUrl:false })` 不做 z 换算，任何非本应用生成的 URL（手改 / 旧链接）只要 `view=cesium` 就会被按米制解读（`MIN_CAMERA_HEIGHT = 1` 放行 4~30 的缩放级别）。候选判据：`view=cesium && 无 cv && z<=30` → 视为缩放级别并 `olZoomToCesiumHeight` 换算。属启发式，需与 `cv` 写入策略一并评估
+  - [x] (已修复) **OL→Cesium 首切视野错乱** ✅ 2026-10-25 V3.6.25 销项：三处时序缺陷——① 换算输入取自未稳定的实时视图（Phase 5 之前是默认 zoom 4，动画中途是插值 zoom），改为 `isStartupViewSettled()` 判定 + URL 语义兜底；② Cesium 加载窗口内 OL 仍同步，用 `view=ol&z=<缩放级别>` 覆盖米制 z，改为 `isEngineSwitching` 冻结写回；③ 加载失败回滚只回滚 `view` 不回滚 `z`，改为快照无损还原。详见 `2026-10-25-cesium-view-convert-on-first-open.md`
+  - [ ] (需产品确认) **`MIN_CAMERA_HEIGHT = 1` 偏宽松**：允许把 4 米当作合法相机高度，导致历史污染链接（`view=cesium&z=4.00`）无法自动纠正。若把下限抬到 ~50 m，污染链接会自动回落默认视野；但真实需要 20 m 视角的场景会被重置，属行为变更，需产品确认
+  - [ ] (待清理) **历史污染 URL 需一次性恢复**：形如 `...&view=cesium&z=4.00&cv=...` 的链接修复后不会自愈（`cv` 存在，无法用启发式判定 z 语义）。恢复方式：进 3D 后手动缩放到正常视野让 moveEnd 重写 URL，或删除 `z` 参数重进
+
+- [ ] **暂存区代码审计**（2026-10-25 · V3.6.25 归并前置审查 · 基准 `a1c58fc3`，按模板 D 输出 P0–P3）：
+  - [x] (P1) **`isEngineSwitching` 异常路径未复位** ✅ 2026-10-25 V3.6.25 销项：原为手工置位/复位（仅加载失败与正常末尾两处），切换流程内多次 `await`（router.replace / 分块加载 / Precision 校正环）任一抛错即跳过复位 → `:url-sync-enabled` 恒 false → OL 拖动不再写 URL。已拆为 `runMapViewSwitch`（纯流程）+ `setMapView`（`try/finally` 保证复位）
+  - [x] (P2) **URL 语义误读（本次审查新增发现）** ✅ 2026-10-25 V3.6.25 销项：`buildCesiumQueryPatchFromOl` 的 URL 兜底把 `z` 无条件当作 OL 缩放级别；当 URL 本身是 `view=cesium`（启动直达 3D / 重复请求同一视图）时其 `z` 是米制高度，小值（如 `z=20`）会被换算成数百米并写入 `lastOlToCesiumTarget`，随后 Precision 校正环按错误目标把相机推离原位。已在函数入口加语义守卫：`view=cesium` 时直接透传米制 z 并清空校正目标
+  - [x] (P2) **地图实例未就绪被误判为「已稳定」** ✅ 2026-10-25 V3.6.25 销项：`MapContainer.isStartupViewSettled()` 在地图尚未创建时 `getView()` 为 `undefined`，原实现返回 `true`，调用方因此放弃 URL 兜底、退到默认相机高度（正是「过远」故障成因之一）。已补 `if (!mapInstance?.value) return false`
+  - [ ] (P3) **ESLint `no-useless-assignment`（本次审查新增发现）** —— `frontend/src/domains/ol/components/MapContainer.vue:1716` 的 `let reverseResult = null;` 初始值未被后续语句使用，`eslint` 报 1 error。判定为**既有问题**（本次改动位于 :2125，未触及该函数），疑为 ESLint 10 / `@eslint/js` 10 升级后新暴露。修复只需删掉 `= null` 初始值，但需先确认 catch 分支是否读取该变量（若无 catch 读取则安全）。按 §2.5 只记不改。预估 0.05 人日
+  - [ ] (P2) **默认缩放 17 两处硬编码** —— `HomeView.vue:1054` 与 `useUrlParamStore.getValidCoordinateParams` 各自写死 `17`，改一处易漏另一处。建议提取 `DEFAULT_OL_ZOOM` 到 `@common/url-state/urlConstants`。预估 0.1 人日
+  - [ ] (P2) **懒加载重试覆盖范围被高估** —— `useLazyModules.ts:64` 退避总时长仅 450ms（150+300），对「Vite 预构建 full-reload（秒级）」与「发版后旧 chunk 失效」两类真实场景无效，实际只覆盖毫秒级抖动。建议文档化适用范围，旧 chunk 场景另立 reload 兜底。预估 0.1 人日（文档）/ 0.5 人日（含 reload）
+  - [ ] (P2) **未稳定时改用 URL 坐标无留痕** —— `HomeView.vue:1075`；若用户已平移而 URL 尚在防抖窗口内，会用旧坐标覆盖当前视野，窗口窄但事后无法追溯。建议在 `__zdebug` 门控下打一条「本次换算取自 URL」记录。预估 0.1 人日
+  - [ ] (P2) **三处时序修复无自动化回归** —— `isStartupViewSettled` / `isEngineSwitching` / URL 兜底均仅靠手测；`buildCesiumQueryPatchFromOl` 依赖组件 ref 难以单测。建议抽出纯函数 `resolveOlViewForConversion({settled, liveState, urlView})` 并补 3 个用例。预估 0.5 人日
+  - [ ] (P3) **文档记录构建哈希易过时** —— `Docs/Guide/CHANGELOG.md:85` 写死 `CesiumContainer-DUzMUCuM.js`，下次构建即失效，建议改为「文件名含内容哈希」。预估 0.05 人日
+  - [ ] (P3) **浏览器错误文案匹配脆弱** —— `useLazyModules.ts` 的 `isTransientModuleFetchError` 依赖 4 条浏览器私有文案，改文案后退化为不重试（不影响正确性），建议注释标明降级语义。预估 0.05 人日
+  - [ ] (P3) **新增 expose 未进结构树描述** —— `MapContainer.vue:2125` 的 `isStartupViewSettled` 未体现在 `frontend-structure.md` 的 MapContainer 条目（该条目为一行概述、不含 expose 清单，不构成门禁漂移）。预估 0.05 人日
+  - [ ] (卫生) **提交前清理 stat 缓存** —— 审计期间 `--name-status` 曾把 `backend/api/auth/oauth.py`、`backend/config/load.py`、`frontend/package*.json`、`urlQueryReader.js` 列为 M 但 `--numstat` 为 0 行（仅 stat 差异）。建议提交前 `git add --refresh`，避免空改动混入
