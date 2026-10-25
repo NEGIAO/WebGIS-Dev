@@ -80,6 +80,8 @@
   - [后端 API 面](#后端-api-面)
   - [域名映射](#域名映射)
 - [🧭 文档导航](#-文档导航)
+  - [开发文档（`Docs/Guide/`）](#开发文档docsguide)
+  - [架构文档（`Docs/Architecture/`）](#架构文档docsarchitecture)
 - [🚧 已知限制与当前状态](#-已知限制与当前状态)
 - [Star History](#star-history)
 - [📜 版本演进](#-版本演进)
@@ -553,9 +555,9 @@ tiles.negiao.cc.cd"]
 
 | 版本 | 日期 | 概要 |
 |------|------|------|
+| **V3.6.27** | 2026-10-25 | **船舶网海图改走通用代理**。移除专用 `/tiles/ships66/{z}/{x}/{y}.png` 端点及其上游模板配置，前端预设改用 `tileProxyUrl('http://g3.ships66.com/maps/one/{z}/{x}/{y}.png')` → `/proxy/{上游URL}` 通用流式代理；同步删除 `backendTilesUrl()` helper、tile-proxy 专用路由与文档配置项、vpn 侧 systemd `Environment` 与 nginx `location /tiles/`。详见[完整更新日志](Docs/Guide/CHANGELOG.md) |
 | **V3.6.26** | 2026-10-25 | **3D Tiles 贴地三项修复 + 线上白屏修复**。① 修复地形采样全为 0（椭球占位）时中位偏移把瓦片集**整体下压、沉入地形以下**，并将图层动作在「记录缺失 / adapter 未注册 / 类型不支持」时由静默 no-op 改为显式告警；② 修复 **GLB 高程滑杆无效**——根因是 Cesium `ModelGraphics` 无 `height` 属性（1.146 构建实测），改为把高度写入 position.z 由 `heightReference` 解释；③ 大面积 / 大起伏贴地优化：估算由中位数改为**面积加权分位数（默认 p75）**，嵌入率 50%→25%，并新增残余高差画像与 TOC 右键**「贴合到当前视野」**区域化校正；④ 修复**线上白屏**——GitHub Pages 的 Jekyll 会丢弃 `_` 开头文件，`assets/_plugin-vue_export-helper-*.js` 因此 404；构建侧剥掉 chunk 名前导下划线 + 部署侧在仓库根目录补 `.nojekyll`。详见[完整更新日志](Docs/Guide/CHANGELOG.md) |
 | **V3.6.25** | 2026-10-25 | **Cesium 懒加载重试修复 + OL↔Cesium 首次切换视野错乱修复 + 代码审查加固**。修复懒加载重试使用运行时变量 specifier 导致 dev/prod 双挂（改静态 specifier + 多浏览器瞬态判据 + 退避）；修复首次进 3D 视野错乱的三处时序缺陷（换算输入未稳定 / OL 覆盖米制 z / 回滚只回滚一半）；按 L0 审计补齐静默失败告警与结构树登记。详见[完整更新日志](Docs/Guide/CHANGELOG.md) |
-| **V3.6.24** | 2026-10-25 | **Cesium 绘制/测量完整化 + 贴地统一化 + TOC 能力对齐 + TS 迁移**。绘制/测量扩至 9 种类型（矩形/圆/测高距/方位角等）并支持顶点编辑、属性表与多格式导出；贴地逻辑由 103 处直写收敛为「能力表 + 策略注册表 + 统一门面 + 时序权威」四层；样式页签纳入三维图层，TOC 右键能力对齐 OL；4 个逻辑模块迁移 TypeScript。详见[完整更新日志](Docs/Guide/CHANGELOG.md) |
 
 更早版本（V3.6.22 及以前）请查阅 [完整更新日志 →](Docs/Guide/CHANGELOG.md)。
 
@@ -579,6 +581,6 @@ tiles.negiao.cc.cd"]
 |:------:|:--------:|:--------:|
 | [GitHub](https://github.com/NEGIAO/WebGIS-Dev) | [webgis.negiao.cn](https://webgis.negiao.cn)（正式域名，GitHub Pages 托管） | [Hugging Face](https://NEGIAO-WebGIS.hf.space) |
 
-<sub>V3.6.26 · 开发中 · 最后更新 2026-10-25</sub>
+<sub>V3.6.27 · 开发中 · 最后更新 2026-10-25</sub>
 
 </div>

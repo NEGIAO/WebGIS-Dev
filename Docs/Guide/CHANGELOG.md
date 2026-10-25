@@ -6,6 +6,18 @@
 
 ## 版本记录
 
+### V3.6.27 (2026-10-25) — 船舶网海图改走通用代理（删除专用 ships66 端点）
+
+> 过程见 `Docs/LLM_record/26-10/2026-10-25/2026-10-25-ships66-proxy-removal.md`。
+
+> **动机**：`/tiles/ships66/{z}/{x}/{y}.png` 是为单一底图做的专用代理，收益极低、维护成本高（需要独立上游模板配置 + nginx location + systemd env，任一漏配即整条链路静默失效）。通用 `/proxy/{上游URL}` 已能原样代理该上游，无需专设端点。
+> **前端**：`basemapConfig.ts` 的 `ships66` 预设由 `backendTilesUrl('ships66/{z}/{x}/{y}.png')` 改为 `tileProxyUrl('http://g3.ships66.com/maps/one/{z}/{x}/{y}.png')`，即 `https://vpn.negiao.cn/proxy/http://g3.ships66.com/maps/one/{z}/{x}/{y}.png`。上游仅支持 http，故显式写 `http://`（代理侧按原样透传协议）。
+> **删除死代码**：`publicRuntime.ts` 的 `backendTilesUrl()`（仅 ships66 使用）一并移除，避免留下指向已下线端点的 helper。
+> **后端（tile-proxy 仓库 + vpn 部署副本）**：删除 `routes_passthrough.py` 的专用海图路由（69/70 行）与随之失效的 `get_str` 导入、`domains/tiles/__init__.py` 文档串；删除 `docs/configuration.md` 的 `SHIPS66_TILE_URL_TEMPLATE` 条目与 `.env.example` 示例。
+> **部署面（vpn.negiao.cn）**：移除 `ops/tile-proxy.service` 的 `Environment=SHIPS66_TILE_URL_TEMPLATE`、移除 `ops/nginx-vpn.negiao.cn` 的 `location /tiles/`（该 location 今日刚加，专用端点下线后即无用）。
+> **验证**：通用代理线上实测 3/3 → `200 image/png`（4469B，约 0.45s），源站直连与经本机 nginx 均 200；前端 `tsc` 0 error、`eslint` 0 problems、构建通过。
+> **注意**：`/tiles/ships66/...` 现在返回 404（端点已下线），前端需发布 V3.6.27 后才切到新路径。
+
 ### V3.6.26 (2026-10-25) — 3D Tiles 贴地三项修复（沉入地形 / GLB 高程 / 大面积优化）+ 图层动作可诊断性
 
 > 本版本**合并同日三项独立修复**（过程中曾分别记为 3.6.26 / 3.6.27 / 3.6.28，为避免同日多次递增，统一计入 V3.6.26）。

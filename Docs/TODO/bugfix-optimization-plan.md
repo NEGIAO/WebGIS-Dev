@@ -314,3 +314,7 @@ Sprint 3（穿插）：P3-1 容器二轮（O1/O2 交替）→ P2-1 bundle 分析
   - [ ] (待确认) **pages 仓库根目录 `.nojekyll` 是否真的落地**：workflow 已改为在根目录 `touch`，但若该仓库设了分支保护或被忽略规则拦截仍可能不生效。部署后应确认根目录出现该文件
   - [ ] (建议·控制台操作) **Cloudflare Rocket Loader 处于开启状态**：页面注入了 `/cdn-cgi/scripts/.../rocket-loader.min.js`，它改写 script 标签，与 ES Module / 动态 import 组合时易产生 `ERR_ABORTED` 类次生问题。建议对 `/WebGIS/*` 关闭 Rocket Loader
   - [ ] (可选) **产物命名约定**：现仅对 chunk 剥前导下划线，`assetFileNames`（css/图片）未处理。若后续出现 `_` 开头的静态资源，需同样处理
+
+- [x] **下线专用 ships66 海图代理** ✅ 2026-10-25 V3.6.27：前端预设改用 `tileProxyUrl('http://g3.ships66.com/maps/one/{z}/{x}/{y}.png')` → `/proxy/{上游URL}` 通用代理；删除 `backendTilesUrl()` helper、tile-proxy 专用路由与文档配置项、vpn 侧 systemd `Environment` 与 nginx `location /tiles/`。线上验证：旧端点 404、新路径 3/3 `200 image/png`、其他代理未受影响。详见 `2026-10-25-ships66-proxy-removal.md`
+  - [ ] (待发布) **前端 V3.6.27 需发布后才切到新路径**：后端端点已先下线，发布窗口内船舶网底图不可用（此前因 CF 缓存 404 本就不可用，无实质回归）
+  - [ ] (待推送) **tile-proxy 仓库本地已提交未推送**（commit `27183ad`）：该仓库为 vpn 部署副本的上游来源，不推送会导致下次同步把专用路由带回来
