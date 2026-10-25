@@ -48,6 +48,7 @@ export const TOC_MENU_COMMANDS = Object.freeze({
     REPOSITION: 'reposition',
     STRETCH_HEIGHT: 'stretch-height',
     FIT_TERRAIN: 'fit-terrain',
+    FIT_TERRAIN_IN_VIEW: 'fit-terrain-view',
     RESET_TERRAIN: 'reset-terrain',
 });
 

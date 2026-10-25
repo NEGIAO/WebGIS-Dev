@@ -247,7 +247,7 @@ Sprint 3（穿插）：P3-1 容器二轮（O1/O2 交替）→ P2-1 bundle 分析
   - [ ] (能力缺口) **导入矢量不可编辑**：需先「转为绘制成品」或建立写回源文件通道，属独立立项
   - [ ] (设计限制) **顶点编辑不覆盖测高距/方位角**：载荷含派生几何（三角形顶点、正北参考点），改顶点需重算整条派生链
   - [ ] (设计限制) **属性表只读**：3D 侧无属性写回通道，开放编辑会造成「改了但没保存」的静默丢失
-- [ ] **贴地统一化 P3 收尾**（2026-10-25 · V3.6.27 会话，方案 A 只做到 P2）：
+- [ ] **贴地统一化 P3 收尾**（2026-10-25 · V3.6.26 会话，方案 A 只做到 P2）：
   - [ ] **`forceDataSourceClampToGround` 仍 export**：现已只被 `vectorGroundStrategy` 调用，可内联进策略并删导出
   - [ ] **`terrainClampService` 仍 export `isTerrainEnabled`**：外部调用点已收敛到 `terrainReadiness`，可改为内部函数
   - [ ] **注册自检仍是 `console.warn`**：建议升级为开发期断言，并在结构树门禁里提示「能力表有、策略没有」的类型
@@ -289,3 +289,28 @@ Sprint 3（穿插）：P3-1 容器二轮（O1/O2 交替）→ P2-1 bundle 分析
   - [ ] (P3) **浏览器错误文案匹配脆弱** —— `useLazyModules.ts` 的 `isTransientModuleFetchError` 依赖 4 条浏览器私有文案，改文案后退化为不重试（不影响正确性），建议注释标明降级语义。预估 0.05 人日
   - [ ] (P3) **新增 expose 未进结构树描述** —— `MapContainer.vue:2125` 的 `isStartupViewSettled` 未体现在 `frontend-structure.md` 的 MapContainer 条目（该条目为一行概述、不含 expose 清单，不构成门禁漂移）。预估 0.05 人日
   - [ ] (卫生) **提交前清理 stat 缓存** —— 审计期间 `--name-status` 曾把 `backend/api/auth/oauth.py`、`backend/config/load.py`、`frontend/package*.json`、`urlQueryReader.js` 列为 M 但 `--numstat` 为 0 行（仅 stat 差异）。建议提交前 `git add --refresh`，避免空改动混入
+
+- [ ] **3D Tiles 贴地与 TOC 动作后续**（2026-10-25 · V3.6.26，按 Force_command §2.5 只记不改）：
+  - [ ] (待确证) **TOC 动作「无效」在静态链路中未找到断点**：已逐段核验 TOC → dispatcher → store → adapter → 场景，全部通过；判定很可能由「瓦片集沉入地形不可见」导致（对不可见对象改透明度无反馈）。若 V3.6.26 后仍复现，需用户回传控制台 `[cesiumLayers]` / `[CesiumContainer]` / `[贴地]` 前缀日志定位
+  - [ ] (算法改进) **混合批次中的 0 高程点未剔除**：`sampleTerrainBatch` 允许 ≥30% 有效采样，若批次中混有椭球占位（0），中位数仍可能被拉低。建议按点位有效性加权，或先剔除 0 值簇再求中位
+  - [ ] (需立项·L3) **贴地应推迟到地形瓦片真正加载完成**：当前判据只到「provider 不是 EllipsoidTerrainProvider」，无法感知「provider 已切换但瓦片未到」。根本解是事件驱动的 loader 生命周期改造（`tileLoadProgress` / `initialTilesLoaded`），属架构级改动
+  - [ ] (观测) **控制台噪音基线**：V3.6.26 为静默分支补了 `console.warn`，生产构建经 esbuild `drop: ['console']` 剥离，无线上影响；开发期若出现高频刷屏，说明对应分支被真实触发，应按日志修链路而非降级日志级别
+
+- [ ] **模型/图层属性写入正确性**（2026-10-25 · V3.6.26，按 Force_command §2.5 只记不改）：
+  - [ ] (已修复) **GLB 高程滑杆无效** ✅ V3.6.26 销项：根因为 `entity.model.height` 非 ModelGraphics schema 字段（1.146 构建实测无 `height`），改为写 position.z + heightReference 语义
+  - [ ] (待排查) **同类「写不存在的属性」隐患**：本次只复核了 `ModelGraphics`。建议对全部 `entity.<graphics>.<prop> =` 赋值做一次 schema 比对（尤其 tif / imagery / gltf 分支），确认每个属性都在对应 Graphics 类的属性集中
+  - [ ] (需产品确认) **GLB 是否允许下沉到地表以下**：能力表 `offsetRange.min = -20`，负 z 配 RELATIVE_TO_GROUND 会让模型沉入地下。若不应允许，把 min 调为 0 即可
+  - [ ] (观测) **高程滑杆范围未随数据自适应**：GLB 固定 −20~200，对超高模型（>200 m）不够用；3D Tiles 走 `record.heightRange`（±100）。建议统一为「按 boundingSphere 半径比例推导」
+
+- [ ] **3D Tiles 大面积 / 大起伏贴地优化**（2026-10-25 · V3.6.26 后，方案见 `Docs/Architecture/2026-10-25-tileset-large-area-terrain-fit-plan.md`，**待确认后再动代码**）：
+  - [x] (P0·已实施 V3.6.26) **目标函数由中位数改为分位数 + 面积加权** ✅ 默认 p75（嵌入率 50%→25%）、三路足迹面积权重、残余高差画像 `fitResidual` + 跨度 >50 m 主动 toast：模拟显示当前 p50 在 343 m 高差场景下嵌入率 50%、最大埋深 148 m；改 p75 可降到 25%。同时把残余高差写入 `record.terrainFitResidual` 并在 TOC 提示，把「单一平移无法完全贴合」显式告知而非静默接受。预估 0.5 人日
+  - [x] (P1·已实施 V3.6.26) **区域化贴合** ✅ TOC 右键「贴合到当前视野」：`terrain-fit-view` 动作 + `GroundCtx.region` + `fitToTerrainInView` adapter，按视野内采样估算，命中 <8 点退回整幅：只对当前视野 / 框选范围内的采样点求偏移，新增右键「贴合到当前视野」；采样跨度收敛后现有估算已足够。预估 1 人日
+  - [ ] (P2·需立项) **分区多 tileset 实例**：同 URL 加载 N 份 + `clippingPolygons` + 各自 modelMatrix，可近似消除局部失配；**关键未知项是瓦片内容是否重复驻留**（预计内存 N 倍），需先做内存实测再决定 N 与启用阈值。预估 3–5 人日
+  - [ ] (P3·长期) **离线切分数据**：3d-tiles-tools 按空间切分并各自配准，彻底解决「一个 transform 管全图」，但改变数据契约，需与数据生产流程一并设计
+  - [ ] (已排除) **零嵌入（offset = max(d_i)）与自定义着色器位移**：前者把误差全推给悬空（最大 343 m），后者需离线烘焙高度纹理且与白膜 CustomShader 抢同一槽位，风险过高
+
+- [ ] **部署加固**（2026-10-25 · V3.6.26，按 Force_command §2.5 只记不改）：
+  - [x] (已修复) **GitHub Pages Jekyll 丢弃 `_` 开头产物导致白屏** ✅ V3.6.26：构建侧 `chunkFileNames` 剥前导下划线 + `public/.nojekyll` + `deploy.yml` 根目录 `touch .nojekyll`
+  - [ ] (待确认) **pages 仓库根目录 `.nojekyll` 是否真的落地**：workflow 已改为在根目录 `touch`，但若该仓库设了分支保护或被忽略规则拦截仍可能不生效。部署后应确认根目录出现该文件
+  - [ ] (建议·控制台操作) **Cloudflare Rocket Loader 处于开启状态**：页面注入了 `/cdn-cgi/scripts/.../rocket-loader.min.js`，它改写 script 标签，与 ES Module / 动态 import 组合时易产生 `ERR_ABORTED` 类次生问题。建议对 `/WebGIS/*` 关闭 Rocket Loader
+  - [ ] (可选) **产物命名约定**：现仅对 chunk 剥前导下划线，`assetFileNames`（css/图片）未处理。若后续出现 `_` 开头的静态资源，需同样处理

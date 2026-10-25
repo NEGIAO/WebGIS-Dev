@@ -280,6 +280,20 @@ export default defineConfig(({ command, mode }) => {
             // Rollup 分包策略：按功能拆分，避免单个 chunk 过大
             rollupOptions: {
                 output: {
+                    /**
+                     * GitHub Pages 默认以 Jekyll 构建，而 Jekyll **会丢弃文件名以 `_` 开头的产物**
+                     * （`EntryFilter#special?` 对 `.` 与 `_` 前缀一律排除；只有仓库**根目录**的
+                     * `.nojekyll` 才能关闭该行为，子目录里的 `.nojekyll` 无效）。
+                     *
+                     * 典型受害者是 `@vitejs/plugin-vue` 为异步 SFC 生成的
+                     * `assets/_plugin-vue_export-helper-<hash>.js`：入口 chunk 会 import 它，
+                     * 但站点上返回 404 → 整个 SPA 白屏，且报错形如
+                     * `net::ERR_ABORTED 404 (Not Found)`。
+                     *
+                     * 这里统一剥掉 chunk 名的前导下划线，从构建侧根治，不再依赖部署端的 Jekyll 配置。
+                     */
+                    chunkFileNames: (chunkInfo) =>
+                        `assets/${String(chunkInfo.name || 'chunk').replace(/^_+/, '')}-[hash].js`,
                     manualChunks(id) {
                         if (id.includes('vite/preload-helper')) return 'vendor-runtime';
                         if (!id.includes('node_modules')) return undefined;

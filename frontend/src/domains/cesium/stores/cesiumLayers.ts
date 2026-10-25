@@ -86,6 +86,8 @@ export interface CesiumLayerAdapter {
     remove: (id: string) => void;
     /** 3D Tiles 高程调节（可选） */
     setBaseHeight?: (id: string, height: number) => void;
+    /** 贴合到当前视野（区域化贴合，仅 3D Tiles；可选） */
+    fitToTerrainInView?: (id: string) => Promise<any>;
     /** 3D Tiles 材质模式切换（可选） */
     setMaterialMode?: (id: string, mode: string) => void;
     /** GLTF 重定位（打开坐标弹窗，可选） */
@@ -208,10 +210,18 @@ export const useCesiumLayersStore = defineStore('cesiumLayers', () => {
     /** 切换/设置可见性（元数据 + 场景同步） */
     function setVisible(id: string, visible: boolean): void {
         const record = getRecord(id);
-        if (!record) return;
+        if (!record) {
+            // 静默 no-op 会让「TOC 点了没反应」无从排查（§2.8 禁止静默降级）
+            console.warn('[cesiumLayers] setVisible 找不到记录（id 未建档或已销档）', { id });
+            return;
+        }
         record.visible = !!visible;
         records.value = [...records.value];
-        adapter?.setVisible(id, !!visible);
+        if (!adapter) {
+            console.warn('[cesiumLayers] setVisible 仅更新元数据：adapter 未注册（场景未挂载）', { id });
+            return;
+        }
+        adapter.setVisible(id, !!visible);
     }
 
     /** 设置透明度 0~1（仅 supportsOpacity 类型生效） */
@@ -221,16 +231,19 @@ export const useCesiumLayersStore = defineStore('cesiumLayers', () => {
             console.warn('[cesiumLayers] setOpacity 找不到记录（id 未建档或已销档）', { id });
             return;
         }
-        if (!record.supportsOpacity) return;
+        if (!record.supportsOpacity) {
+            // 类型未登记在 OPACITY_SUPPORTED_TYPES 时滑杆应被隐藏；走到这里说明判据不一致
+            console.warn('[cesiumLayers] setOpacity 该类型不支持透明度', { id, type: record.type });
+            return;
+        }
         const clamped = Math.min(1, Math.max(0, Number(opacity) || 0));
         record.opacity = clamped;
         records.value = [...records.value];
-        if (adapter) {
-            adapter.setOpacity(id, clamped);
-        } else {
-            // 容器未挂载/已卸载：只更新元数据并显式暴露（防静默降级）
-            console.warn('[cesiumLayers] setOpacity 场景操作未生效：adapter 未注册', { id, clamped });
+        if (!adapter) {
+            console.warn('[cesiumLayers] setOpacity 仅更新元数据：adapter 未注册（场景未挂载）', { id });
+            return;
         }
+        adapter.setOpacity(id, clamped);
     }
 
     /** 重命名（纯元数据：显示名，卡片与 TOC 同步生效） */
@@ -298,8 +311,16 @@ export const useCesiumLayersStore = defineStore('cesiumLayers', () => {
     /** 3D Tiles 高程调节（回写 record 供 TOC 滑杆取值） */
     function setBaseHeight(id: string, height: number): void {
         const record = getRecord(id);
-        if (record) record.baseHeight = height;
-        adapter?.setBaseHeight?.(id, height);
+        if (!record) {
+            console.warn('[cesiumLayers] setBaseHeight 找不到记录（id 未建档或已销档）', { id, height });
+            return;
+        }
+        record.baseHeight = height;
+        if (!adapter?.setBaseHeight) {
+            console.warn('[cesiumLayers] setBaseHeight 仅更新元数据：adapter 未注册或缺该方法', { id });
+            return;
+        }
+        adapter.setBaseHeight(id, height);
     }
 
     /** 3D Tiles 材质模式切换（回写 record 供 TOC 下拉取值） */
@@ -412,6 +433,18 @@ export const useCesiumLayersStore = defineStore('cesiumLayers', () => {
         return adapter?.openAttributeTable?.(id) ?? false;
     }
 
+    /**
+     * 贴合到当前视野（区域化）：只按视野内的基底采样估算偏移。
+     * 大面积 / 大起伏数据下，单一刚性平移必然贴不齐，分区校正才是正解。
+     */
+    function fitToTerrainInView(id: string): Promise<any> | void {
+        if (!adapter?.fitToTerrainInView) {
+            console.warn('[cesiumLayers] fitToTerrainInView 场景操作未生效：adapter 未注册或缺该方法', { id });
+            return;
+        }
+        return adapter.fitToTerrainInView(id);
+    }
+
     /** 恢复数据自带原始高程（取消贴地） */
     function resetTerrainFit(id: string): { ok: boolean; reason?: string } {
         const record = getRecord(id);
@@ -451,6 +484,7 @@ export const useCesiumLayersStore = defineStore('cesiumLayers', () => {
         copyCoordinates,
         exportData,
         fitToTerrain,
+        fitToTerrainInView,
         resetTerrainFit,
         requestAttributeTable,
         editFeature,

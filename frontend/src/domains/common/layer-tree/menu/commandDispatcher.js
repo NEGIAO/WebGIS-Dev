@@ -245,6 +245,11 @@ export function dispatchContextMenuCommand({ key, node, selectedLayerIds = [] } 
         return events;
     }
 
+    if (commandKey === TOC_MENU_COMMANDS.FIT_TERRAIN_IN_VIEW) {
+        events.push({ type: 'terrain-fit-view', payload: { layerId: nodeId } });
+        return events;
+    }
+
     if (commandKey === TOC_MENU_COMMANDS.RESET_TERRAIN) {
         events.push({ type: 'terrain-reset', payload: { layerId: nodeId } });
         return events;

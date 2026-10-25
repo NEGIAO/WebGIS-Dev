@@ -628,7 +628,10 @@ const routeFeature = createCesiumRouteFeature({
     },
     setBaseHeight(id, height) {
         const record = findImportRecord(id);
-        if (!record) return;
+        if (!record) {
+            console.warn('[CesiumContainer] setBaseHeight 找不到句柄记录（loadedDataSources 中无此 id）', { id, height });
+            return;
+        }
         /**
          * 统一走门面：3D Tiles 由数据导入层记账基座海拔，glTF 走相对地形偏移，
          * 容器不再按类型 if/else（这正是「贴地逻辑散落」的根源）。
@@ -658,6 +661,42 @@ const routeFeature = createCesiumRouteFeature({
             message.warning(t('cesium.terrainFitFailed'));
         }
         getViewer()?.scene?.requestRender?.();
+        return result;
+    },
+    /**
+     * 贴合到当前视野（区域化贴合，3D Tiles）。
+     *
+     * 为什么需要：单一刚性平移的下界由基底-地形高差跨度决定，大面积且起伏大的数据
+     * 必然「一半埋、一半悬」。把估算范围收敛到当前视野内的采样点后，跨度显著变小，
+     * 用户关注的那一片才能真正贴合。
+     */
+    async fitToTerrainInView(id) {
+        const record = findImportRecord(id);
+        const Cesium = getCesium();
+        const viewer = getViewer();
+        if (!record || !Cesium || !viewer) return { ok: false, reason: 'no-handle' };
+
+        const rect = viewer.camera?.computeViewRectangle?.(viewer.scene.globe.ellipsoid);
+        if (!rect) {
+            // 相机俯视地面失败（贴地平视 / 看向太空）时无有效视野范围
+            message.warning(t('cesium.terrainFitUnsupported'));
+            return { ok: false, reason: 'no-region' };
+        }
+        const region = {
+            west: Cesium.Math.toDegrees(rect.west),
+            south: Cesium.Math.toDegrees(rect.south),
+            east: Cesium.Math.toDegrees(rect.east),
+            north: Cesium.Math.toDegrees(rect.north),
+        };
+        const result = await fitGroundPlacement({ record, viewer, Cesium, dataImport, region });
+        if (result.ok) {
+            message.success(t('cesium.terrainFitDone', { name: record.name }));
+        } else if (result.reason === 'terrain-off') {
+            message.warning(t('cesium.terrainFitNeedTerrain'));
+        } else {
+            message.warning(t('cesium.terrainFitFailed'));
+        }
+        viewer.scene?.requestRender?.();
         return result;
     },
     /** 恢复数据自带原始高程（取消贴地） */

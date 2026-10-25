@@ -133,6 +133,11 @@ jobs:
           cp -R ../dist-for-sync/. "$TARGET_DIR/"
 
           # 创建 .nojekyll 防止下划线文件丢失
+          # ⚠️ 必须是**仓库根目录**的 .nojekyll 才能关闭 Jekyll；子目录里的 .nojekyll 无效
+          # （Jekyll 的 EntryFilter 对 `.` 与 `_` 前缀一律排除，只认 root 的 .nojekyll）。
+          # 历史上只 touch 了 "$TARGET_DIR/.nojekyll"，导致 assets/_plugin-vue_export-helper-*.js
+          # 被 Jekyll 丢弃 → 线上 404、整站白屏。两处都保留：root 用于关闭 Jekyll，子目录留作兼容。
+          touch .nojekyll
           touch "$TARGET_DIR/.nojekyll"
 
           # --- 提交并推送 ---

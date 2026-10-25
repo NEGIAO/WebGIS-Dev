@@ -186,6 +186,9 @@ export function buildContextMenuItems({ node, capabilities = {}, selectionState 
         }
         if (capabilities.canFitTerrain)
             threeD.push({ key: TOC_MENU_COMMANDS.FIT_TERRAIN, label: '贴合地形' });
+        // 大面积/大起伏数据：只按当前视野内的基底采样估算，分区校正（单一平移贴不齐时的首选）
+        if (capabilities.canFitTerrainInView)
+            threeD.push({ key: TOC_MENU_COMMANDS.FIT_TERRAIN_IN_VIEW, label: '贴合到当前视野' });
         if (capabilities.canResetTerrain)
             threeD.push({ key: TOC_MENU_COMMANDS.RESET_TERRAIN, label: '恢复原始高程' });
         if (capabilities.canReposition)

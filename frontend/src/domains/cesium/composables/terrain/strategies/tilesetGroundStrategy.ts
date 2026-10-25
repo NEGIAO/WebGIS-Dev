@@ -28,6 +28,9 @@ export function createTilesetGroundStrategy(): GroundStrategy {
                 tileset,
                 viewer: ctx.viewer,
                 Cesium: ctx.Cesium,
+                // 区域化贴合：ctx.region 存在时只用视野内采样点估算
+                region: ctx.region ?? null,
+                fitQuantile: ctx.fitQuantile,
             });
             return ok ? groundOk() : groundFail(GROUND_REASON.SAMPLE_FAILED);
         },

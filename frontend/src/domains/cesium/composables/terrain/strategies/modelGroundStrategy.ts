@@ -20,9 +20,15 @@ export function createModelGroundStrategy(): GroundStrategy {
         types: ['gltf'],
 
         async fit(ctx: GroundCtx): Promise<GroundResult> {
-            const offset = Number(ctx.record?.modelHeightOffset) || 0;
-            const applied = setModelHeightOffset(ctx.Cesium, ctx.record, offset);
+            /**
+             * 偏移未知时传 null（= 恢复导入原始高度），**不能传 0**：
+             * 语义高度 50 m 的模型（如按真实海拔放置的设备）会被直接压到地面。
+             */
+            const current = Number(ctx.record?.modelHeightOffset);
+            const target = Number.isFinite(current) ? current : null;
+            const applied = setModelHeightOffset(ctx.Cesium, ctx.record, target);
             ctx.viewer?.scene?.requestRender?.();
+            const offset = Number(ctx.record?.modelHeightOffset) || 0;
             return applied ? groundOk({ offset }) : groundFail(GROUND_REASON.NO_HANDLE);
         },
 

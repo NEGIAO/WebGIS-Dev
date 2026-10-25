@@ -94,6 +94,10 @@ export function handleCesiumLayerTreeAction(evt, cesiumStore) {
             // 贴合地形：按类型分派（矢量 clamp / 3D Tiles 配准 / glTF 相对地形），异步
             void cesiumStore.fitToTerrain?.(id);
             return true;
+        case 'terrain-fit-view':
+            // 区域化贴合：只用当前视野内的基底采样估算偏移（大面积/大起伏首选）
+            void cesiumStore.fitToTerrainInView?.(id);
+            return true;
         case 'terrain-reset':
             // 恢复数据自带原始高程
             cesiumStore.resetTerrainFit?.(id);

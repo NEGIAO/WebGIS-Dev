@@ -158,6 +158,16 @@ const MAX_SANE_VERTICAL_SPAN = 10000;
 const MAX_AUTO_FIT_OFFSET = 5000;
 /** 参与地形配对的采样点上限（sampleTerrainMostDetailed 单批规模） */
 const MAX_PAIR_SAMPLES = 256;
+/**
+ * 贴地估算的默认分位数。
+ * 取 0.75 而非 0.5：单一刚性平移无法同时消除嵌入与悬空，而「被埋」比「略悬空」更刺眼。
+ * 10 km² / 400 m 高差实测：p50 → 嵌入率 50% / 最大埋深 148 m；p75 → 25% / 84 m。
+ */
+const DEFAULT_FIT_QUANTILE = 0.75;
+/** 区域化贴合的采样下限：低于该点数退回整幅估算，避免小框给出无统计依据的偏移 */
+const MIN_REGION_SAMPLES = 8;
+/** 残余高差告警阈值（米）：超过则认为「单一平移明显贴不齐」，主动告知用户 */
+const RESIDUAL_WARN_SPAN = 50;
 /** 瓦片树遍历节点数上限（防御超大内联树卡死主线程） */
 const MAX_TREE_VISITS = 20000;
 
@@ -200,11 +210,14 @@ function bvToBaseSample(bv, M, Cesium) {
     if (Array.isArray(bv.region) && bv.region.length >= 6) {
         const r = bv.region.map(Number);
         if (!r.slice(0, 5).every(Number.isFinite)) return null;
+        // weight = 水平足迹面积（弧度²×cos(lat)），供面积加权分位数使用
+        const area = Math.abs((r[2] - r[0]) * (r[3] - r[1])) * Math.cos((r[1] + r[3]) / 2);
         return {
             lonRad: (r[0] + r[2]) / 2,
             latRad: (r[1] + r[3]) / 2,
             baseH: r[4],
             tight: true,
+            weight: Number.isFinite(area) && area > 0 ? area : undefined,
         };
     }
 
@@ -230,7 +243,17 @@ function bvToBaseSample(bv, M, Cesium) {
             M, new Cesium.Cartesian3(b[0], b[1], b[2]), new Cesium.Cartesian3());
         const cc = Cesium.Cartographic.fromCartesian(centerWorld);
         if (!cc || !Number.isFinite(minH)) return null;
-        return { lonRad: cc.longitude, latRad: cc.latitude, baseH: minH, tight: true };
+        // 水平足迹面积 ≈ 4·|hX|·|hY|（忽略倾斜，仅作相对权重）
+        const hx = Math.hypot(b[3], b[4], b[5]);
+        const hy = Math.hypot(b[6], b[7], b[8]);
+        const area = 4 * hx * hy;
+        return {
+            lonRad: cc.longitude,
+            latRad: cc.latitude,
+            baseH: minH,
+            tight: true,
+            weight: Number.isFinite(area) && area > 0 ? area : undefined,
+        };
     }
 
     if (Array.isArray(bv.sphere) && bv.sphere.length >= 4) {
@@ -240,7 +263,15 @@ function bvToBaseSample(bv, M, Cesium) {
             M, new Cesium.Cartesian3(s[0], s[1], s[2]), new Cesium.Cartesian3());
         const cc = Cesium.Cartographic.fromCartesian(centerWorld);
         if (!cc) return null;
-        return { lonRad: cc.longitude, latRad: cc.latitude, baseH: cc.height - s[3], tight: false };
+        // 球兜底仅作相对权重：水平投影面积 ≈ πr²
+        const area = Math.PI * s[3] * s[3];
+        return {
+            lonRad: cc.longitude,
+            latRad: cc.latitude,
+            baseH: cc.height - s[3],
+            tight: false,
+            weight: Number.isFinite(area) && area > 0 ? area : undefined,
+        };
     }
 
     return null;
@@ -369,41 +400,148 @@ async function collectTilesetBaseSamples({ tileset, Cesium, rootJson, rootJsonUr
  */
 
 /**
- * 核心估计：叶子基底 × 地形逐点配对，返回中位数偏移 + MAD（离散度）+ 地形值域
- * @returns {Promise<{offset:number, mad:number, count:number, terrainElevation:Object}|null>}
+ * 核心估计：叶子基底 × 地形逐点配对，返回分位数偏移 + MAD（离散度）+ 残余高差。
+ *
+ * **为什么不再是中位数**：单一刚性平移无法同时满足「不嵌入」与「不悬空」，
+ * 二者下界由 d = terrain − baseH 的跨度决定。中位数最小化的是平均绝对误差，
+ * 会把误差均分两侧 → 一半基底埋在坡里（10 km²/400 m 高差场景实测嵌入率 50%、
+ * 最大埋深 148 m）。人眼对「被埋」远比对「略悬空」敏感，故默认取 **p75**：
+ * 嵌入率降到 25%，代价是谷地出现可见悬空。可按需调 `fitQuantile`。
+ *
+ * @param {Array} samples 基底采样 [{ lonRad, latRad, baseH, weight? }]
+ * @param {object} viewer
+ * @param {object} Cesium
+ * @param {object} [options]
+ * @param {number} [options.quantile] 分位数（0~1），默认 DEFAULT_FIT_QUANTILE
+ * @param {{west:number,south:number,east:number,north:number}|null} [options.region]
+ *        目标区域（**度**）；给定时只用落在框内的采样点估算（区域化贴合）
+ * @returns {Promise<{offset:number, mad:number, count:number, terrainElevation:Object,
+ *   residual:Object, quantile:number, regionApplied:boolean}|null>}
  */
-async function estimateTerrainOffset(samples, viewer, Cesium) {
-    const cartos = samples.map((s) => new Cesium.Cartographic(s.lonRad, s.latRad, 0));
+async function estimateTerrainOffset(samples, viewer, Cesium, options = {}) {
+    const quantile = Number.isFinite(Number(options?.quantile))
+        ? Math.min(1, Math.max(0, Number(options.quantile)))
+        : DEFAULT_FIT_QUANTILE;
+    const region = options?.region || null;
+
+    // ── 区域过滤（区域化贴合）：只保留落在目标框内的基底采样 ──
+    let usable = samples;
+    let regionApplied = false;
+    if (region && Cesium?.Math) {
+        const w = Cesium.Math.toRadians(Number(region.west));
+        const e = Cesium.Math.toRadians(Number(region.east));
+        const s = Cesium.Math.toRadians(Number(region.south));
+        const n = Cesium.Math.toRadians(Number(region.north));
+        if ([w, e, s, n].every(Number.isFinite)) {
+            const inRegion = samples.filter(
+                (it) => it.lonRad >= w && it.lonRad <= e && it.latRad >= s && it.latRad <= n,
+            );
+            // 命中过少（框太小 / 数据不在框内）→ 退回全量，避免给出无统计依据的偏移
+            if (inRegion.length >= MIN_REGION_SAMPLES) {
+                usable = inRegion;
+                regionApplied = true;
+            } else {
+                console.warn('[贴地] 目标区域内基底采样不足（', inRegion.length,
+                    '点 <', MIN_REGION_SAMPLES, '），退回整幅估算');
+            }
+        }
+    }
+
+    const cartos = usable.map((s) => new Cesium.Cartographic(s.lonRad, s.latRad, 0));
     const results = await sampleTerrainBatch(viewer, Cesium, cartos);
     if (!results) return null;
 
-    const diffs = [];
+    /** 配对结果：d = 地形高 − 基底高；w = 该叶子的水平足迹面积（缺省等权） */
+    const pairs = [];
     const terrainHs = [];
     for (let i = 0; i < results.length; i++) {
         const t = Number(results[i]?.height);
         if (!Number.isFinite(t)) continue;
         terrainHs.push(t);
-        diffs.push(t - samples[i].baseH);
+        pairs.push({
+            d: t - usable[i].baseH,
+            w: Math.max(1e-6, Number(usable[i].weight) || 1),
+        });
     }
-    if (!diffs.length) return null;
+    if (!pairs.length) return null;
 
-    diffs.sort((a, b) => a - b);
+    /**
+     * 「整批地形高程全为 0」防御：地形瓦片尚未就绪时，部分 provider（含自定义
+     * GeoTerrainProvider / 刚切换地形的窗口期）会以椭球 0 占位返回。若此时数据基底
+     * 明显不在地表 0（如倾斜摄影底部 50 m），据此配对得到的 offset ≈ −50 m 会把整栋
+     * 模型下压到真实地表以下——即用户看到的「导入后沉到地形下面」。
+     * 判据：全部采样 ≈ 0 且基底显著非 0 → 视为采样不可用，保持原始位置。
+     */
+    const allTerrainZero = terrainHs.every((h) => Math.abs(h) < 1e-6);
+    const baseSignificantlyNonZero = usable.some(
+        (s) => Number.isFinite(s?.baseH) && Math.abs(s.baseH) > 1,
+    );
+    if (allTerrainZero && baseSignificantlyNonZero) {
+        console.warn(
+            '[贴地] 地形采样全为 0（疑似地形瓦片未就绪），跳过自动贴地以保持数据原始位置；',
+            '可在地形加载完成后用「贴合地形」或高程滑杆手动校正',
+        );
+        return null;
+    }
+
+    pairs.sort((a, b) => a.d - b.d);
     terrainHs.sort((a, b) => a - b);
 
-    const offset = sortedPercentile(diffs, 0.5);
-    const absDev = diffs.map((d) => Math.abs(d - offset)).sort((a, b) => a - b);
+    // 面积加权分位数：让大块叶子（真实占地面积大）主导，避免高密度小瓦片拉偏结果
+    const offset = weightedQuantile(pairs, quantile);
+    const absDev = pairs.map((it) => Math.abs(it.d - offset)).sort((a, b) => a - b);
     const mad = sortedPercentile(absDev, 0.5);
+
+    // 残余高差画像：把「单一平移贴不齐」的事实量化出来，供 UI 显式告知用户
+    const dMin = pairs[0].d;
+    const dMax = pairs[pairs.length - 1].d;
+    const embedded = pairs.filter((it) => it.d - offset > 0);
+    const residual = {
+        min: dMin,
+        max: dMax,
+        span: dMax - dMin,
+        quantile,
+        /** 估算嵌入率（基底低于地形的采样占比） */
+        embedRate: embedded.length / pairs.length,
+        /** 估算最大埋深（米） */
+        maxEmbed: embedded.length ? embedded[embedded.length - 1].d - offset : 0,
+        /** 估算最大悬空（米） */
+        maxFloat: Math.max(0, offset - dMin),
+        regionApplied,
+    };
 
     return {
         offset,
         mad,
-        count: diffs.length,
+        count: pairs.length,
+        quantile,
+        residual,
+        regionApplied,
         terrainElevation: {
             min: terrainHs[0],
             max: terrainHs[terrainHs.length - 1],
             centerHeight: sortedPercentile(terrainHs, 0.5),
         },
     };
+}
+
+/**
+ * 面积加权分位数（pairs 需已按 d 升序）。
+ * @param {Array<{d:number,w:number}>} pairs 配对结果
+ * @param {number} p 分位（0~1）
+ * @returns {number} 该分位对应的 d 值
+ */
+function weightedQuantile(pairs, p) {
+    if (!pairs.length) return NaN;
+    const total = pairs.reduce((acc, it) => acc + it.w, 0);
+    if (!(total > 0)) return pairs[Math.floor((pairs.length - 1) * p)]?.d ?? NaN;
+    const target = total * p;
+    let acc = 0;
+    for (const it of pairs) {
+        acc += it.w;
+        if (acc >= target) return it.d;
+    }
+    return pairs[pairs.length - 1].d;
 }
 
 /**
@@ -454,7 +592,10 @@ function buildVerticalTranslation(Cesium, modelCenter, offsetMeters) {
  * @returns {Promise<{terrainElevation:Object|null, tilesetGeo:Object, currentBaseHeight:number,
  *   baseSamples:Array}>} baseSamples 存入 record 后供地形切换时 refitTilesetToTerrain 复用
  */
-export async function fitTilesetToTerrain({ tileset, viewer, Cesium, rootJson = null, rootJsonUrl = null, message = null }) {
+export async function fitTilesetToTerrain({
+    tileset, viewer, Cesium, rootJson = null, rootJsonUrl = null, message = null,
+    region = null, fitQuantile = DEFAULT_FIT_QUANTILE,
+}) {
     const carto = Cesium.Cartographic.fromCartesian(tileset.boundingSphere.center);
     const lng = Cesium.Math.toDegrees(carto.longitude);
     const lat = Cesium.Math.toDegrees(carto.latitude);
@@ -479,12 +620,10 @@ export async function fitTilesetToTerrain({ tileset, viewer, Cesium, rootJson = 
     // ---- 2. 逐点配对 + 中位数配准 ----
     let appliedOffset = 0;
     let terrainElevation = null;
+    /** 残余高差画像（单一平移的固有限制），随记录保存供 UI 提示 */
+    let fitResidual = null;
 
     if (!hasRealTerrain) {
-        // 无真实地形时不做任何平移：数据自带海拔即它应该在的位置，椭球 0 ≠ 数据真实海拔，
-        // 强制拉到 0 会让模型偏离真实位置，并污染 modelMatrix 导致后续滑杆坐标系漂移。
-        // 用户切换真实地形时由 refitTilesetToTerrain 自动重贴到正确地表。
-        console.warn('[贴地] 无真实地形，保持数据原始位置（底部海拔', bottomH.toFixed(1), 'm）');
         // 无真实地形时不做任何平移：数据自带海拔即它应该在的位置，椭球 0 ≠ 数据真实海拔，
         // 强制拉到 0 会让模型偏离真实位置，并污染 modelMatrix 导致后续滑杆坐标系漂移。
         // 用户切换真实地形时由 refitTilesetToTerrain 自动重贴到正确地表。
@@ -493,21 +632,31 @@ export async function fitTilesetToTerrain({ tileset, viewer, Cesium, rootJson = 
         console.warn('[贴地] 无可用基底采样，跳过自动贴地，可用高程滑杆手动调整');
         message?.warning?.('无法解析数据基底高度，已按原始位置放置，可用卡片高程滑杆微调');
     } else {
-        const est = await estimateTerrainOffset(samples, viewer, Cesium);
+        const est = await estimateTerrainOffset(samples, viewer, Cesium, { region, quantile: fitQuantile });
         if (!est) {
             console.warn('[贴地] 地形采样不可用，保持数据原始位置');
             message?.warning?.('地形高程采样失败，已按数据原始高度放置，可用卡片高程滑杆微调');
         } else {
             terrainElevation = est.terrainElevation;
-            if (est.mad > 25) {
-                console.warn('[贴地] 基底与地形形态差异较大（MAD=', est.mad.toFixed(1),
-                    'm），单一垂直平移取中位最优贴合，局部仍可能悬空/嵌入');
+            fitResidual = est.residual;
+            if (est.residual?.span > RESIDUAL_WARN_SPAN) {
+                // 单一刚性平移的固有局限：把残余高差显式告知，避免用户误以为是"没贴好"
+                console.warn('[贴地] 区域高差', est.residual.span.toFixed(0),
+                    'm，分位 p', (est.quantile * 100).toFixed(0),
+                    '→ 估算嵌入率', (est.residual.embedRate * 100).toFixed(0),
+                    '%，最大埋深', est.residual.maxEmbed.toFixed(0),
+                    'm，最大悬空', est.residual.maxFloat.toFixed(0), 'm');
+                message?.warning?.(
+                    `区域高差约 ${est.residual.span.toFixed(0)} m，单一平移无法完全贴合：`
+                    + `约 ${(est.residual.embedRate * 100).toFixed(0)}% 区域最大埋深 ${est.residual.maxEmbed.toFixed(0)} m。`
+                    + '可用「贴合到当前视野」分区校正，或用高程滑杆微调',
+                );
             }
             if (Math.abs(est.offset) > MAX_AUTO_FIT_OFFSET) {
                 console.warn('[贴地] 修正量', est.offset.toFixed(0), 'm 超出上限，疑似坐标系错误，跳过自动贴地');
                 message?.warning?.('数据与地形高差异常，已按原始位置放置，请检查数据坐标系');
             } else {
-                // 积极贴地：即便偏差小（<= 原先死区），也尝试施加中位数偏移，使模型更贴合地形
+                // 积极贴地：即便偏差小（<= 原先死区），也尝试施加分位数偏移，使模型更贴合地形
                 appliedOffset = est.offset;
                 tileset.modelMatrix = buildVerticalTranslation(
                     Cesium, tileset.boundingSphere.center, appliedOffset,
@@ -532,6 +681,8 @@ export async function fitTilesetToTerrain({ tileset, viewer, Cesium, rootJson = 
         tilesetGeo: { lng, lat, bottomH, initialBaseHeight: currentBaseHeight },
         currentBaseHeight,
         baseSamples: samples,
+        /** 残余高差 { min, max, span, quantile, embedRate, maxEmbed, maxFloat, regionApplied } */
+        fitResidual,
     };
 }
 
@@ -553,7 +704,9 @@ export async function fitTilesetToTerrain({ tileset, viewer, Cesium, rootJson = 
  * @param {Cesium} p.Cesium
  * @returns {Promise<boolean>} 是否施加了新的贴地平移
  */
-export async function refitTilesetToTerrain({ record, tileset, viewer, Cesium }) {
+export async function refitTilesetToTerrain({
+    record, tileset, viewer, Cesium, region = null, fitQuantile = DEFAULT_FIT_QUANTILE,
+}) {
     const samples = record?.terrainFitSamples;
     const geo = record?.tilesetGeo;
     if (!Array.isArray(samples) || !samples.length || !geo || !tileset) {
@@ -564,11 +717,13 @@ export async function refitTilesetToTerrain({ record, tileset, viewer, Cesium })
     const hasRealTerrain = !!viewer.terrainProvider
         && viewer.terrainProvider.constructor !== Cesium.EllipsoidTerrainProvider;
 
-    let offset = 0;
-    let terrainElevation = null;
+    // 两个值都只在「有真实地形」分支内被赋值与使用；椭球分支提前 return，
+    // 故不设初值（避免 no-useless-assignment）
+    let offset;
+    let terrainElevation;
 
     if (hasRealTerrain) {
-        const est = await estimateTerrainOffset(samples, viewer, Cesium);
+        const est = await estimateTerrainOffset(samples, viewer, Cesium, { region, quantile: fitQuantile });
         if (!est) {
             console.warn('[贴地] 重贴地: 新地形采样失败，保持当前位置');
             return false;
@@ -577,13 +732,14 @@ export async function refitTilesetToTerrain({ record, tileset, viewer, Cesium })
             console.warn('[贴地] 重贴地: 修正量', est.offset.toFixed(0), 'm 超出上限，疑似坐标系错误，跳过');
             return false;
         }
-        // 积极贴地：直接采用中位数偏移（如果需要保留死区逻辑，可将 TERRAIN_FIT_DEADBAND 恢复为 >0）
-        offset = est.offset;
-        // 积极贴地：直接采用中位数偏移（如果需要保留死区逻辑，可将 TERRAIN_FIT_DEADBAND 恢复为 >0）
+        // 积极贴地：直接采用分位数偏移（如需保留死区逻辑，可将 TERRAIN_FIT_DEADBAND 恢复为 >0）
         offset = est.offset;
         terrainElevation = est.terrainElevation;
-        console.warn('[贴地] 地形切换重贴:', est.count, '点配对, 中位差', est.offset.toFixed(1),
-            'm (MAD=', est.mad.toFixed(1), 'm) → 施加', offset.toFixed(1), 'm');
+        record.fitResidual = est.residual;
+        console.warn('[贴地] 地形切换重贴:', est.count, '点配对, p', (est.quantile * 100).toFixed(0),
+            '分位差', est.offset.toFixed(1), 'm (MAD=', est.mad.toFixed(1),
+            'm, 区域高差', Number(est.residual?.span || 0).toFixed(0),
+            'm) → 施加', offset.toFixed(1), 'm');
     } else {
         // 切回椭球地形：保持数据原始位置，不做破坏性移动。
         // 椭球 0 ≠ 数据真实海拔，强制归零会污染 modelMatrix 导致后续滑杆坐标系漂移。
@@ -800,7 +956,7 @@ export async function loadTilesetFromFileMap({ fileMap, sourceName, getCesium, g
     console.warn('[3DTiles][import] Cesium3DTileset.fromUrl 完成，boundingSphere:', tileset.boundingSphere);
 
     // Step 5.5: 初始贴地（叶子基底采样 × 地形逐点配对 + 死区判定）
-    const { terrainElevation, tilesetGeo, currentBaseHeight, baseSamples } = await fitTilesetToTerrain({
+    const { terrainElevation, tilesetGeo, currentBaseHeight, baseSamples, fitResidual } = await fitTilesetToTerrain({
         tileset, viewer, Cesium, rootJson, rootJsonUrl: tilesetUrl, message,
     });
 
@@ -819,6 +975,7 @@ export async function loadTilesetFromFileMap({ fileMap, sourceName, getCesium, g
         terrainElevation,
         tilesetGeo,
         currentBaseHeight,
+        fitResidual,
         terrainFitSamples: baseSamples,
         materialMode: 'baimo',
     };
@@ -852,7 +1009,7 @@ export async function loadTilesetJSON({ file, getCesium, getViewer, message, loa
 
         // 初始贴地（file:// 路径无已解析 JSON：优先 fetch 根 JSON 收集叶子基底采样，
         // fetch 被浏览器策略拦截时退化为运行时瓦片树遍历）
-        const { terrainElevation, tilesetGeo, currentBaseHeight, baseSamples } = await fitTilesetToTerrain({
+        const { terrainElevation, tilesetGeo, currentBaseHeight, baseSamples, fitResidual } = await fitTilesetToTerrain({
             tileset, viewer, Cesium, rootJsonUrl: tilesetUrl, message,
         });
 
@@ -870,6 +1027,7 @@ export async function loadTilesetJSON({ file, getCesium, getViewer, message, loa
             terrainElevation,
             tilesetGeo,
             currentBaseHeight,
+            fitResidual,
             terrainFitSamples: baseSamples,
             materialMode: 'baimo',
         };
@@ -1094,7 +1252,7 @@ export async function loadSampleTileset({ getCesium, getViewer, message, loadedD
     applyTilesetMaterial(tileset, 'baimo', Cesium);
 
     // 初始贴地（样例路径：fetch 根 JSON 收集叶子基底采样，失败退化运行时瓦片树）
-    const { terrainElevation, tilesetGeo, currentBaseHeight, baseSamples } = await fitTilesetToTerrain({
+    const { terrainElevation, tilesetGeo, currentBaseHeight, baseSamples, fitResidual } = await fitTilesetToTerrain({
         tileset, viewer, Cesium, rootJsonUrl: './tileset/city/tileset.json', message,
     });
 
@@ -1107,6 +1265,7 @@ export async function loadSampleTileset({ getCesium, getViewer, message, loadedD
         terrainElevation,
         tilesetGeo,
         currentBaseHeight,
+        fitResidual,
         terrainFitSamples: baseSamples,
         materialMode: 'baimo',
     };
@@ -1144,7 +1303,7 @@ export async function loadSampleBaimoTileset({ getCesium, getViewer, message, lo
     applyTilesetMaterial(tileset, 'baimo', Cesium);
 
     // 初始贴地（样例路径：fetch 根 JSON 收集叶子基底采样，失败退化运行时瓦片树）
-    const { terrainElevation, tilesetGeo, currentBaseHeight, baseSamples } = await fitTilesetToTerrain({
+    const { terrainElevation, tilesetGeo, currentBaseHeight, baseSamples, fitResidual } = await fitTilesetToTerrain({
         tileset, viewer, Cesium, rootJsonUrl: './tileset/baimo/tileset.json', message,
     });
 
@@ -1157,6 +1316,7 @@ export async function loadSampleBaimoTileset({ getCesium, getViewer, message, lo
         terrainElevation,
         tilesetGeo,
         currentBaseHeight,
+        fitResidual,
         terrainFitSamples: baseSamples,
         materialMode: 'baimo',
     };
@@ -1191,7 +1351,7 @@ export async function loadSampleIonTileset({ getCesium, getViewer, message, load
     viewer.scene.primitives.add(tileset);
 
     // 贴地 + 注册数据源
-    const { terrainElevation, tilesetGeo, currentBaseHeight, baseSamples } = await fitTilesetToTerrain({
+    const { terrainElevation, tilesetGeo, currentBaseHeight, baseSamples, fitResidual } = await fitTilesetToTerrain({
         tileset, viewer, Cesium, message,
     });
 
@@ -1204,6 +1364,7 @@ export async function loadSampleIonTileset({ getCesium, getViewer, message, load
         terrainElevation,
         tilesetGeo,
         currentBaseHeight,
+        fitResidual,
         terrainFitSamples: baseSamples,
         materialMode: 'none',
     };
@@ -1240,7 +1401,7 @@ export async function loadSampleI3sTileset({ getCesium, getViewer, message, load
     viewer.scene.primitives.add(tileset);
 
     // 贴地 + 注册数据源
-    const { terrainElevation, tilesetGeo, currentBaseHeight, baseSamples } = await fitTilesetToTerrain({
+    const { terrainElevation, tilesetGeo, currentBaseHeight, baseSamples, fitResidual } = await fitTilesetToTerrain({
         tileset, viewer, Cesium, message,
     });
 
@@ -1253,6 +1414,7 @@ export async function loadSampleI3sTileset({ getCesium, getViewer, message, load
         terrainElevation,
         tilesetGeo,
         currentBaseHeight,
+        fitResidual,
         terrainFitSamples: baseSamples,
         materialMode: 'none',
     };
@@ -1287,7 +1449,7 @@ export async function loadSampleDiscreteLODTileset({ getCesium, getViewer, messa
     viewer.scene.primitives.add(tileset);
 
     // 贴地 + 注册数据源
-    const { terrainElevation, tilesetGeo, currentBaseHeight, baseSamples } = await fitTilesetToTerrain({
+    const { terrainElevation, tilesetGeo, currentBaseHeight, baseSamples, fitResidual } = await fitTilesetToTerrain({
         tileset, viewer, Cesium, message,
     });
 
@@ -1300,6 +1462,7 @@ export async function loadSampleDiscreteLODTileset({ getCesium, getViewer, messa
         terrainElevation,
         tilesetGeo,
         currentBaseHeight,
+        fitResidual,
         terrainFitSamples: baseSamples,
         materialMode: 'none',
     };

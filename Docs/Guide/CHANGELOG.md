@@ -6,6 +6,65 @@
 
 ## 版本记录
 
+### V3.6.26 (2026-10-25) — 3D Tiles 贴地三项修复（沉入地形 / GLB 高程 / 大面积优化）+ 图层动作可诊断性
+
+> 本版本**合并同日三项独立修复**（过程中曾分别记为 3.6.26 / 3.6.27 / 3.6.28，为避免同日多次递增，统一计入 V3.6.26）。
+> 过程记录：
+> - `Docs/LLM_record/26-10/2026-10-25/2026-10-25-tileset-sink-and-toc-actions.md`（3D Tiles 沉入地形 + 图层动作可诊断性）
+> - `Docs/LLM_record/26-10/2026-10-25/2026-10-25-gltf-height-offset-fix.md`（GLB 高程滑杆修复）
+> - `Docs/LLM_record/26-10/2026-10-25/2026-10-25-tileset-large-area-fit.md`（大面积 / 大起伏贴地优化 P0 + P1）
+
+#### ① 3D Tiles 沉到地形以下修复 + 图层动作可诊断性
+
+> 过程见 `Docs/LLM_record/26-10/2026-10-25/2026-10-25-tileset-sink-and-toc-actions.md`。
+> **现象**：三维数据（3D Tiles）导入后，① 瓦片集沉到地形以下；② TOC 里透明度、高程滑杆等 action 拉动后场景无任何变化。
+> **根因分析（贴地）**：`estimateTerrainOffset` 把 `sampleTerrainBatch` 的返回**无条件**当作真实地形。地形瓦片尚未就绪的窗口期（刚切换地形、自定义 provider 首帧、`mostDetailed` 回落到椭球占位），整批采样会返回 0 高程；此时若数据基底明显不在地表 0（倾斜摄影常见底部 50 m+），中位偏移 `est.offset = 0 − baseH` 为负，`buildVerticalTranslation` 就把整栋模型**下压**到真实地表以下。这解释了「导入后沉到地形下面」。
+> **修复**：`estimateTerrainOffset` 增加防御判据——**全部采样 ≈ 0 且基底显著非 0（>1 m）→ 视为采样不可用**，`return null`，调用方据此保持数据原始位置并给出可操作提示（地形就绪后用「贴合地形」或高程滑杆手动校正），而不是施加一个破坏性的负向平移。
+> **关于「action 无效」**：逐段核验了 TOC → `useTreeActionDispatcher` → `handleCesiumLayerTreeAction`（`cesium:` 前缀剥离正确）→ `cesiumLayers` store（`3dtiles` 在 `OPACITY_SUPPORTED_TYPES` 内、记录由 `syncFromImport` 建档）→ 容器 adapter（setup 期注册、`findImportRecord` 命中）→ `setRecordOpacity` / `setTilesetHeight`，**静态链路完整、无断点**。据此判断「action 无效」很可能是**瓦片集沉在地形下不可见**造成的感知问题（对不可见对象改透明度自然看不到反馈）；若修复后仍复现，则为运行时状态问题，见下条。
+> **可诊断性加固（§2.8 禁止静默降级）**：`cesiumLayers.setVisible / setOpacity / setBaseHeight` 与容器 `setBaseHeight` 原本在「记录缺失 / adapter 未注册 / 类型不支持透明度」时静默 `return`，现全部改为 `console.warn` 并带上 id 与类型。这样一旦链路在运行期断开，控制台会直接指出断点（`找不到记录` / `adapter 未注册` / `该类型不支持透明度` / `找不到句柄记录`），无需盲猜。
+> **顺带清理**：`fitTilesetToTerrain` 与 `refitTilesetToTerrain` 各有一处**重复的 `console.warn` 块**与**重复赋值**（`offset` / `terrainElevation` 连续赋值两次），为历史编辑残留，已合并；`refitTilesetToTerrain` 的 `let offset = 0 / let terrainElevation = null` 初值属死赋值（椭球分支提前 return），已改为无初值声明，消除该文件 2 个 ESLint `no-useless-assignment` error。
+> **验证**：`tsc --noEmit` 0 error；`eslint`（cesiumLayers / tilesetLoader / CesiumContainer）0 problems；`vite build` 4401 modules 通过。**贴地效果与 TOC 交互需真机复验**，Agent 侧无法构造地形未就绪窗口。
+
+#### ② GLB 高程滑杆修复（`ModelGraphics` 无 `height` 属性）
+
+> 过程见 `Docs/LLM_record/26-10/2026-10-25/2026-10-25-gltf-height-offset-fix.md`。
+> **现象**：TOC 中拖动 GLB 图层的高程滑杆，模型无任何位移。
+> **根因（实测证据）**：Cesium `ModelGraphics` **没有 `height` 属性**。在本仓库实际使用的 Cesium 1.146 构建（`public/cesium/Cesium.js`）中解析该类体，属性集只有 `heightReference` / `heightReferenceSubscription`，**不存在 `height` / `heightSubscription`**。历史实现 `setModelHeightOffset` 写的是：
+> ```js
+> entity.model.heightReference = RELATIVE_TO_GROUND;
+> entity.model.height = offset;   // ← 非 schema 字段，Cesium 从不读取
+> ```
+> 于是只有 `heightReference` 生效（把模型从 CLAMP 切成 RELATIVE_TO_GROUND），而 `height` 被静默丢弃 → 滑杆拖动零位移。
+> **补充背景**：重构前该滑杆走 `handleDataSetHeight → dataImport.setTilesetHeight`，而 `setTilesetHeight` 内部 `if (record.type !== '3dtiles') return`，**GLB 从一开始就没有可用的高程通道**。V3.6.24 的贴地统一化补了 `modelGroundStrategy`，但落到同一个无效属性上。
+> **修复**：高度改写进 **position 的 z 分量**，由 `heightReference` 解释语义——`RELATIVE_TO_GROUND` 时 z = 离地高度（随地形起伏跟随，可整体抬升），`CLAMP_TO_GROUND` 时 z 被忽略（模型原点贴地）。保留负值以兑现能力表 `offsetRange: {min:-20,max:200}` 的下沉区间。
+> **配套修正**：
+> ① 首次调用**自愈式**记录 `record.modelBaseHeight`（取当前 position 高度），作为 `reset` 的恢复基准——避免把语义高度 50 m 的模型重置到 0，且无需改 3 条加载路径；
+> ② `loadGLTF` / `loadGltfFromUrl` 建档时写入 `modelHeightOffset` 与 `modelBaseHeight`，使 TOC 滑杆初值等于导入语义高度（此前恒为 0，首次拖动会跳变）；
+> ③ `modelGroundStrategy.fit` 在偏移未知时改传 `null`（= 恢复原始高度）而非 `0`——原实现会在导入期把语义高度 50 m 的模型直接压到地面。
+> **验证**：`tsc --noEmit` 0 error；`eslint`（gltfLoader / modelGroundStrategy）0 problems；`vite build` 通过；全仓已无 `model.height =` 写入残留。**模型位移效果需真机复验**。
+
+#### ③ 大面积 / 大起伏贴地优化（P0 + P1）
+
+> 方案见 `Docs/Architecture/2026-10-25-tileset-large-area-terrain-fit-plan.md`；过程见 `Docs/LLM_record/26-10/2026-10-25/2026-10-25-tileset-large-area-fit.md`。
+> **问题**：大面积（城市级）且地形起伏大的区域，3D Tiles 贴地后局部悬空、局部埋入。
+> **根因**：不是算法写错，而是**目标函数选错**。当前取 `d = 地形 − 基底` 的**中位数**作为整块刚性平移量。单一平移在数学上无法同时满足「不嵌入」与「不悬空」——二者下界由 `d` 的跨度决定；中位数最小化平均绝对误差，把误差均分两侧，于是**一半基底埋在坡里**。模拟（10 km²、高差约 400 m、256 采样点，`d` 跨度 343 m）：p50 → 嵌入率 **50%**、最大埋深 **147.8 m**；p75 → 25% / 83.7 m；p90 → 10.2% / 64.8 m；`max`（零嵌入）→ 0% 但最大悬空 343 m（观感更差）。
+> **P0 目标函数修正**：`estimateTerrainOffset` 改为**面积加权分位数**，默认 **p75**（人眼对「被埋」远比对「略悬空」敏感）；`bvToBaseSample` 为 region / box / sphere 三路采样补充**水平足迹面积**权重，避免高密度小瓦片拉偏分位；新增**残余高差画像** `fitResidual`（跨度 / 嵌入率 / 最大埋深 / 最大悬空 / 是否区域化），跨度 > 50 m 时主动 toast 告知「单一平移无法完全贴合，可用『贴合到当前视野』分区校正」——把算法固有局限显式告知，而不是让用户误以为「没贴好」。残余画像随记录持久化（导入期 7 处 + record 字段）。
+> **P1 区域化贴合（新能力）**：TOC 右键新增 **「贴合到当前视野」**。`estimateTerrainOffset` 支持 `region` 过滤，只对视野内的基底采样求偏移（命中 < 8 点则退回整幅并告警）；链路为 `contextMenu → commandDispatcher('terrain-fit-view') → cesiumTocActions → cesiumLayers.fitToTerrainInView → adapter → camera.computeViewRectangle → GroundCtx.region → tilesetGroundStrategy → refitTilesetToTerrain`。仅对 `3dtiles` 开放（`actions.fitTerrainInView`）。
+> **为什么 P1 是关键**：用户对大面积数据的真实诉求通常是「当前关注的那一片贴合」。采样范围收敛后 `d` 跨度从 343 m 降到该区实际高差（通常 < 50 m），现有估算已足够；且不改渲染架构、复用现成滑杆，风险最低。
+> **验证**：`tsc --noEmit` 0 error；`eslint`（10 个改动文件）0 problems；`vite build` 4401 modules 通过。**贴地效果与右键入口需真机复验**。
+> **未做**：P2（分区多 tileset 实例）与 P3（离线切分）保留在方案文档，P2 需先实测「N 份实例是否重复驻留瓦片」再决定。
+
+#### ④ 线上白屏修复：Jekyll 丢弃 `_` 开头的 chunk
+
+> 过程见 `Docs/LLM_record/26-10/2026-10-25/2026-10-25-gh-pages-underscore-chunk-404.md`。
+> **现象**：`https://www.negiao.cn/WebGIS/index.html` 打开白屏，`assets/_plugin-vue_export-helper-DgLP3hnZ.js` 返回 `404 (Not Found)`。
+> **定位（线上实测）**：同一次构建的 `index-*.js` / `vendor-vue-*.js` / `rolldown-runtime-*.js` 全部 200，**唯独文件名以 `_` 开头的那一个 404**——排除版本错配与上传不全。
+> **根因**：站点由 GitHub Pages 托管，默认以 **Jekyll** 构建，而 Jekyll 的 `EntryFilter` 会排除所有 `.` / `_` 开头的文件。唯一能关闭该行为的是**仓库根目录**的 `.nojekyll`，而 `deploy.yml` 写的是 `touch "$TARGET_DIR/.nojekyll"`（子目录无效）。`@vitejs/plugin-vue` 为异步 SFC 生成的 helper 正好以 `_` 开头，被静默丢弃。
+> **为何现在才炸**：该 helper 是否单独成 chunk 取决于 Rollup 的共享判定，近期新增懒加载组件后才首次拆出。
+> **与路由无关**：路由为 `createWebHashHistory`，`base` 为 `./`，子目录部署本就正确；白屏是入口 chunk 依赖 404 的表象。
+> **修复**：① 构建侧 `chunkFileNames` 剥掉 chunk 名前导下划线（实测 `_plugin-vue_export-helper-DgLP3hnZ.js` → `plugin-vue_export-helper-DgLP3hnZ.js`，内容哈希不变），从产物层面根治、跨托管平台通用；② 新增 `frontend/public/.nojekyll` 随构建输出；③ `deploy.yml` 在 pages 仓库**根目录**补 `touch .nojekyll`（保留子目录那份作兼容）。
+> **验证**：产物 `assets/` 已无 `_` 开头文件；`index.html` 与入口 chunk 内的全部引用逐一比对存在性，缺失 0；workflow YAML 语法通过。
+
 ### V3.6.25 (2026-10-25) — Cesium 懒加载重试修复 + OL↔Cesium 首次切换视野错乱修复 + 代码审查加固
 
 > **版本归并说明**：本批次在暂存区曾被逐次记为 `V3.6.25 / V3.6.26 / V3.6.27` 三个版本号，而 V3.6.24 已独立提交发布——即这些改动属于 V3.6.24 之后的同一批未提交工作。按 Force_command §5「同一批次不得拆成多个版本号」并经用户明确指示「整合为统一的 V3.6.25」，本次归并为**单一版本 V3.6.25**。过程记录原样保留在 `Docs/LLM_record/` 中，不回溯改写历史日志。
@@ -35,6 +94,16 @@
 > ① **URL 语义误读**（`buildCesiumQueryPatchFromOl`）：新增的 URL 兜底把 `z` 无条件当作 OL 缩放级别。若 URL 本身已是 `view=cesium`（启动直达 3D、或对同一视图的重复请求），其 `z` 是**米制高度**——小值（如 `z=20`）会被换算成数百米并写入 `lastOlToCesiumTarget`，随后 Precision 校正环按错误目标把相机推离原位。修复：入口先判 `getCurrentMapView() === cesium`，直接透传 URL 米制 z 并清空校正目标。
 > ② **切换标志异常泄漏**（`setMapView`）：`isEngineSwitching` 原为手工置位/复位，而切换流程含多次 `await`（router.replace / 分块加载 / Precision 校正环），任一处抛异常都会让标志永久为 `true`，导致 OL 的 URL 写回长期失效。修复：拆为 `runMapViewSwitch`（纯流程）+ `setMapView`（`try/finally` 保证复位）。
 > ③ **地图实例未就绪被误判为「已稳定」**（`MapContainer.isStartupViewSettled`）：地图尚未创建时 `getView()` 为 `undefined`，原实现返回 `true`，调用方因此放弃 URL 兜底并退到默认相机高度——恰是「过远」故障的成因之一。修复：实例不存在时返回 `false`。
+
+#### 四、依赖与 CI 配置（并入本版本的依赖治理）
+
+> **新增 `.github/dependabot.yml`**：此前仓库无此文件，仅靠 GitHub 的 security updates 被动触发，版本更新与安全更新混在一起，且 uv 生态因 `requires-python` 配置错误长期解析失败（见本版本归属的 Pillow 修复）。
+> **并入 6 个 Dependabot PR**：#36 后端组（fastapi 0.159.1 / pandas 3.0.6 / python-multipart 0.0.32 等 9 项）、#37 前端组（cesium 1.146 / ol 10.11 / three 0.186 / vue 3.5.44 等 19 项）、#38 `rollup-plugin-visualizer` 7.1.1、#39 `@eslint/js` 10.0.1、#40 pinia 4.1.0、#41 vue-router 5.4.0。
+> **连带升级构建链**：`vue-router@5` 的 peer 要求 `vite ^7.3 || ^8`，故 vite 6.4.5 → **8.3.5**（打包器由 rollup 切换为 **rolldown**）、`@vitejs/plugin-vue` 6.0.10、`vite-plugin-vue-devtools` 8.2.1。
+> **适配 Vite 8 的压缩器**：`minify: 'esbuild'` 在 Vite 8 已失效（esbuild 不再内置），而 oxc 压缩器不支持 `drop`（实测产物残留 35 处 `console.log`）——改用 Vite 8 仍原生支持的 **terser**，配 `terserOptions.compress.drop_console/drop_debugger`，并移除顶层已失效的 `esbuild:` 选项；新增 devDependency `terser ^5.51.2`。
+> **修复 peer 冲突**：`@loaders.gl/draco` 未随 core/gltf 升级，`4.4.3` 要求 `core ~4.4.0`，已对齐至 `^4.5.4`。
+> **更新策略调整（降噪）**：Dependabot 的 **security updates 不受 schedule 约束**——收录新 advisory 即开 PR，表现为「每天冒几个 PR」。故策略改为 **只跟 major**：`ignore` 掉所有依赖的 `semver-minor` / `semver-patch`，`open-pull-requests-limit` 降至 3，并移除原 minor/patch 归组。
+> ⚠️ **代价**：`ignore` 对 version-updates 与 security-updates 同时生效，minor/patch 级安全补丁不再自动出 PR，需定期人工复查 `security/dependabot`；若需恢复，删掉两处 `ignore` 块即可。同时 0.x 包（katex 0.19、lil-gui 0.21、@dimforge/rapier3d-compat 0.21 等）的 minor 更新也会被一并抑制。
 
 #### 验证
 

@@ -56,6 +56,9 @@ export async function loadGLTF({ file, getCesium, getViewer, message, loadedData
             entity: model,
             blobUrl,
             position: { ...coords },
+            // 高程滑杆的初值与 reset 基准：导入时的语义高度（0 = 贴地）
+            modelHeightOffset: Math.max(0, Number(coords?.height) || 0),
+            modelBaseHeight: Math.max(0, Number(coords?.height) || 0),
         };
         loadedDataSources.value = [...loadedDataSources.value, record];
 
@@ -116,6 +119,9 @@ export async function loadGltfFromUrl({ url, name, getCesium, getViewer, message
         blobUrl: null,
         sourceUrl: trimmed,
         position: { ...coords },
+        // 高程滑杆的初值与 reset 基准：导入时的语义高度（0 = 贴地）
+        modelHeightOffset: Math.max(0, Number(coords?.height) || 0),
+        modelBaseHeight: Math.max(0, Number(coords?.height) || 0),
         visible: true,
         opacity: 1,
     };
@@ -337,20 +343,53 @@ export async function getAutoPlaceCoords(viewer, Cesium) {
  * @param {number|null} meters 相对地形的高度偏移；传 null 表示复位为 CLAMP_TO_GROUND
  * @returns {boolean} 是否受理（句柄非 Entity/ModelGraphics 时 false）
  */
+/**
+ * 设置 glTF / GLB 的离地高度（米）。
+ *
+ * **关键事实**：Cesium `ModelGraphics` 没有 `height` 属性——1.146 构建中该类仅有
+ * `heightReference` / `heightReferenceSubscription`，不存在 `height` / `heightSubscription`
+ * （可在 `public/cesium/Cesium.js` 中核对）。历史实现写 `entity.model.height = offset`
+ * 属于**静默无效赋值**：对象上凭空多出一个非 schema 字段，Cesium 从不读取它，
+ * 于是「GLB 高程滑杆拖动无任何反应」。
+ *
+ * 正确做法：把高度写进 **position 的 z 分量**，由 `heightReference` 解释其语义：
+ * - `RELATIVE_TO_GROUND` → z 视为「离地高度」，随地形起伏跟随（滑杆可整体抬升）；
+ * - `CLAMP_TO_GROUND` → z 被忽略，模型原点贴地（导入时语义高度为 0 的原始状态）。
+ *
+ * @param {object} Cesium Cesium 命名空间
+ * @param {object} record 导入记录（就地写 modelHeightOffset / modelBaseHeight）
+ * @param {number|null} meters 目标离地高度（米）；null = 恢复导入时的原始高度
+ * @returns {boolean} 是否生效（句柄缺失 / 位置不可解析时 false）
+ */
 export function setModelHeightOffset(Cesium, record, meters) {
     const entity = record?.entity;
     if (!Cesium || !entity || !entity.model || !entity.position) return false;
 
-    if (meters === null || meters === undefined) {
-        entity.model.heightReference = Cesium.HeightReference.CLAMP_TO_GROUND;
-        entity.model.height = 0;
-        record.modelHeightOffset = 0;
-        return true;
-    }
+    const time = Cesium.JulianDate?.now?.() ?? new Cesium.JulianDate();
+    const current = entity.position.getValue?.(time) || entity.position;
+    const carto = current ? Cesium.Cartographic.fromCartesian(current) : null;
+    if (!carto) return false;
 
-    const offset = Number(meters) || 0;
-    entity.model.heightReference = Cesium.HeightReference.RELATIVE_TO_GROUND;
-    entity.model.height = offset;
-    record.modelHeightOffset = offset;
+    // 首次调用时把「导入时的原始高度」记为基准（自愈式：无需改 3 条加载路径）。
+    // 后续 reset 恢复到此值，避免把语义高度 50 m 的模型重置到 0。
+    if (!Number.isFinite(Number(record.modelBaseHeight))) {
+        record.modelBaseHeight = Math.max(0, Number(carto.height) || 0);
+    }
+    const base = Number(record.modelBaseHeight) || 0;
+
+    const reset = meters === null || meters === undefined;
+    // 保留负值：能力表 offsetRange 允许 −20（让模型微微下沉坐进地面），
+    // 负 z 配 RELATIVE_TO_GROUND 由 Cesium 正常解释为「地表以下」。
+    const raw = Number(meters);
+    const target = reset ? base : (Number.isFinite(raw) ? raw : 0);
+
+    // target=0 且非 reset：用 RELATIVE_TO_GROUND + z=0，等价贴地但保留「可再抬升」语义；
+    // reset 且原始高度为 0：回到 CLAMP_TO_GROUND，与导入时完全一致。
+    entity.model.heightReference = (target > 0 || !reset)
+        ? Cesium.HeightReference.RELATIVE_TO_GROUND
+        : Cesium.HeightReference.CLAMP_TO_GROUND;
+
+    entity.position = Cesium.Cartesian3.fromRadians(carto.longitude, carto.latitude, target);
+    record.modelHeightOffset = target;
     return true;
 }

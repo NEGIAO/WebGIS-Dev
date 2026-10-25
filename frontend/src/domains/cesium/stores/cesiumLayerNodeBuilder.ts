@@ -129,6 +129,8 @@ function toCesiumLayerNode(record: CesiumLayerRecord): any {
             setMaterial: is3DTiles,
             // 地形贴合：由能力表声明（矢量 clamp / 3D Tiles 配准 / glTF 相对地形）
             fitTerrain: supportsFit,
+            // 区域化贴合仅对 3D Tiles 有意义（按视野内基底采样估算，缓解大面积/大起伏失配）
+            fitTerrainInView: supportsFit && record.type === '3dtiles',
             resetTerrain: supportsReset,
             // GLTF 独有：重定位
             reposition: isGltf,

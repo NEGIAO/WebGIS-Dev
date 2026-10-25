@@ -1,9 +1,18 @@
 version: 2
 
-# Dependabot 版本更新策略
-# 背景：此前仓库未配置本文件，仅靠 GitHub 的 security updates 被动触发，
-# 导致版本更新与安全更新混在一起，且 uv 生态因 requires-python 配置错误长期失败。
-# 本配置将 minor/patch 归组以减少 PR 噪音，major 仍单独出 PR 以便人工评估。
+# ────────────────────────────────────────────────────────────────
+# Dependabot 更新策略：只跟大版本（major）
+# ────────────────────────────────────────────────────────────────
+# 背景：本仓库由 Agent 高频产出功能提交，依赖的 minor / patch 更新噪音过大。
+# 关键点：**安全更新（security updates）不受 schedule 约束**——GitHub 收录新
+# advisory 后立刻开 PR，表现为「每天冒出几个 PR」，与 schedule 的 weekly 无关。
+# 策略：忽略所有依赖的 minor / patch，只保留 major 更新，按周检查。
+#
+# ⚠️ 取舍（务必知悉）：Dependabot 的 ignore 对 version-updates 与
+# security-updates **同时生效**，因此 minor / patch 级别的安全补丁不再自动出 PR。
+# 需要定期人工复查：https://github.com/NEGIAO/WebGIS-Dev/security/dependabot
+# 若日后想恢复安全补丁，删掉下面两处 ignore 块即可。
+# ────────────────────────────────────────────────────────────────
 
 updates:
   # ---------- 前端：npm ----------
@@ -14,24 +23,19 @@ updates:
       day: "monday"
       time: "09:00"
       timezone: "Asia/Shanghai"
-    open-pull-requests-limit: 5
+    # 只跟 major，PR 极少，限额调低
+    open-pull-requests-limit: 3
     labels:
       - "dependencies"
       - "javascript"
     commit-message:
       prefix: "chore(deps)"
-    groups:
-      # minor + patch 合并为一个 PR
-      frontend-minor-patch:
-        applies-to: version-updates
+    ignore:
+      # 仅保留 major：minor / patch 一律不出 PR
+      - dependency-name: "*"
         update-types:
-          - "minor"
-          - "patch"
-      # 安全更新也归组，避免告警爆发时刷屏
-      frontend-security:
-        applies-to: security-updates
-        patterns:
-          - "*"
+          - "version-update:semver-minor"
+          - "version-update:semver-patch"
 
   # ---------- 后端：uv ----------
   - package-ecosystem: "uv"
@@ -41,28 +45,14 @@ updates:
       day: "monday"
       time: "09:30"
       timezone: "Asia/Shanghai"
-    open-pull-requests-limit: 5
+    open-pull-requests-limit: 3
     labels:
       - "dependencies"
       - "python:uv"
     commit-message:
       prefix: "chore(deps)"
-    groups:
-      backend-minor-patch:
-        applies-to: version-updates
-        update-types:
-          - "minor"
-          - "patch"
-      backend-security:
-        applies-to: security-updates
-        patterns:
-          - "*"
     ignore:
-      # 生产镜像固定 python:3.12-slim（deploy/Dockerfile），
-      # 涉及 Python 版本下限变化的 major 升级需人工评估后再放开。
-      - dependency-name: "pandas"
+      - dependency-name: "*"
         update-types:
-          - "version-update:semver-major"
-      - dependency-name: "numpy"
-        update-types:
-          - "version-update:semver-major"
+          - "version-update:semver-minor"
+          - "version-update:semver-patch"

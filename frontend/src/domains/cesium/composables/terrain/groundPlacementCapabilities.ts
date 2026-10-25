@@ -61,6 +61,13 @@ export interface GroundCtx {
     Cesium: any;
     /** 3D Tiles 高程滑杆需要数据导入层的 setTilesetHeight 记账 */
     dataImport?: any;
+    /**
+     * 目标区域（度）。给定时只用落在框内的基底采样估算偏移（区域化贴合），
+     * 用于大面积/大起伏数据的分区校正；缺省 = 整幅估算。
+     */
+    region?: { west: number; south: number; east: number; north: number } | null;
+    /** 估算分位数覆盖（0~1），缺省用 loader 内的 DEFAULT_FIT_QUANTILE */
+    fitQuantile?: number;
 }
 
 /** 统一结果 */
