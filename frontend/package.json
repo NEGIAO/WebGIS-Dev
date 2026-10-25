@@ -43,7 +43,7 @@
         "shpjs": "^6.2.0",
         "three": "^0.185.0",
         "vue": "^3.5.43",
-        "vue-router": "^4.6.3"
+        "vue-router": "^5.4.0"
     },
     "dependencies-dev-additions": {},
     "extra_dependencies": {
