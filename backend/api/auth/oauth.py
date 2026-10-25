@@ -292,7 +292,8 @@ async def verify_google_id_token(id_token: str) -> OAuthProfile:
 
     verify_url = get_str("GOOGLE_OAUTH_TOKENINFO_URL", "https://oauth2.googleapis.com/tokeninfo")
     async with httpx.AsyncClient(timeout=_oauth_http_timeout()) as client:
-        response = await client.get(f"{verify_url}?id_token={id_token}")
+        # 安全：id_token 通过 params 传递而非字符串拼接，避免 token 中的 & / # 注入额外查询参数
+        response = await client.get(verify_url, params={"id_token": id_token})
     if response.status_code >= 400:
         logger.warning("Google ID token verification failed: status=%s", response.status_code)
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Google ID Token 验证失败")
@@ -302,7 +303,12 @@ async def verify_google_id_token(id_token: str) -> OAuthProfile:
     # 校验 audience 必须匹配当前 client_id
     aud = str(data.get("aud") or "").strip()
     if aud != client_id:
-        logger.warning("Google ID token audience mismatch: expected=%s got=%s", client_id, aud)
+        # 安全：不打印 client_id / aud 明文，仅记录长度用于排查配置错配
+        logger.warning(
+            "Google ID token audience mismatch: expected_len=%d got_len=%d",
+            len(client_id),
+            len(aud),
+        )
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Google ID Token audience 不匹配")
 
     # 校验 token 未过期

@@ -320,7 +320,7 @@ class BackendSettings:
         if self.super_user:
             return self.super_user
         if self.is_development:
-            logger.warning("SUPER_USER 未配置，当前为开发环境，使用 admin/%s 本地兜底。", DEV_DEFAULT_ADMIN_PASSWORD)
+            logger.warning("SUPER_USER 未配置，当前为开发环境，使用 admin 默认口令本地兜底（口令值不落日志）。")
             return DEV_DEFAULT_ADMIN_PASSWORD
         logger.error(
             "SUPER_USER 未配置（HF Secrets / L3），非开发环境管理员登录已禁用。"
