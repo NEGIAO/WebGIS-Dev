@@ -288,3 +288,115 @@ function createScaledColorProperty(Cesium, original, alpha) {
 	wrapper[SCALED_FROM_KEY] = source;
 	return wrapper;
 }
+
+/**
+ * 对矢量 DataSource 应用样式补丁（TOC 右键「样式设置」/ 样式页签定向修改）。
+ *
+ * 与透明度缩放的分工：本函数写入**绝对颜色**，透明度滑杆仍按快照做 alpha 缩放。
+ * 换色后主动丢弃该数据源的透明度快照，使下次拖滑杆按新基色重新取基准，
+ * 否则会出现「改完颜色一拖透明度又跳回旧色」的错觉。
+ *
+ * 只处理纯色材质：虚线 / 箭头 / 贴图等特效材质保持原样（改色会丢语义）。
+ *
+ * @param {object} Cesium Cesium 命名空间
+ * @param {object} dataSource Cesium.DataSource
+ * @param {{fillColor?:string, strokeColor?:string, fillOpacity?:number, strokeWidth?:number}} patch
+ * @param {Function} [onApplied] 应用后回调（补 requestRender）
+ * @returns {boolean} 是否有实体被改动（false = 该数据源无可着色图元）
+ */
+export function applyVectorDataSourceStyle(Cesium, dataSource, patch = {}, onApplied) {
+    const entities = dataSource?.entities?.values;
+    if (!Cesium || !Array.isArray(entities) || !entities.length) return false;
+
+    const toColor = (css, alpha) => {
+        if (!css) return null;
+        try {
+            const color = Cesium.Color.fromCssColorString(String(css));
+            return Number.isFinite(alpha) ? color.withAlpha(alpha) : color;
+        } catch {
+            return null;
+        }
+    };
+
+    const fillAlpha = Number.isFinite(Number(patch.fillOpacity))
+        ? Math.min(1, Math.max(0, Number(patch.fillOpacity)))
+        : undefined;
+    const fill = toColor(patch.fillColor, fillAlpha);
+    const stroke = toColor(patch.strokeColor);
+    const width = Number.isFinite(Number(patch.strokeWidth)) ? Number(patch.strokeWidth) : null;
+
+    let touched = 0;
+    for (const entity of entities) {
+        try {
+            if (entity.polygon) {
+                if (fill) {
+                    entity.polygon.material = new Cesium.ColorMaterialProperty(fill);
+                    touched += 1;
+                }
+                if (stroke) {
+                    entity.polygon.outlineColor = stroke;
+                    touched += 1;
+                }
+                if (width !== null) {
+                    entity.polygon.outlineWidth = width;
+                    touched += 1;
+                }
+            }
+            if (entity.polyline) {
+                const lineColor = stroke || fill;
+                // 仅替换纯色材质；虚线 / 箭头 / 贴图材质保留原语义。
+                // 纯色有两种形态：ColorMaterialProperty（Property 包装）与裸 Color
+                // （GeoJsonDataSource / KML 载入后常见），只认前者会漏改后者的线色。
+                const material = entity.polyline.material;
+                const isPlainColor =
+                    !material ||
+                    (Cesium.ColorMaterialProperty && material instanceof Cesium.ColorMaterialProperty) ||
+                    (Cesium.Color && material instanceof Cesium.Color);
+                if (lineColor && isPlainColor) {
+                    entity.polyline.material = new Cesium.ColorMaterialProperty(lineColor);
+                    touched += 1;
+                }
+                if (width !== null) {
+                    entity.polyline.width = width;
+                    touched += 1;
+                }
+            }
+            if (entity.point && fill) {
+                entity.point.color = fill;
+                touched += 1;
+            }
+            if (entity.label && fill) {
+                entity.label.fillColor = fill;
+                touched += 1;
+            }
+        } catch {
+            /* 单个实体着色失败不影响其余实体 */
+        }
+    }
+
+    if (touched) vectorColorSnapshots.delete(dataSource);
+    onApplied?.();
+    return touched > 0;
+}
+
+/**
+ * 切换矢量 DataSource 的标注显隐（TOC 右键「开启 / 关闭标注」）。
+ * @param {object} dataSource Cesium.DataSource
+ * @param {boolean} visible
+ * @returns {boolean} 是否存在可切换的 label（false = 该数据源没有标注）
+ */
+export function setVectorLabelVisible(dataSource, visible) {
+    const entities = dataSource?.entities?.values;
+    if (!Array.isArray(entities)) return false;
+    let touched = 0;
+    for (const entity of entities) {
+        if (!entity.label) continue;
+        try {
+            entity.label.show = !!visible;
+            touched += 1;
+        } catch {
+            /* ignore */
+        }
+    }
+    return touched > 0;
+}

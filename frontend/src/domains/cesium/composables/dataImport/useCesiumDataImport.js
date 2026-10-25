@@ -6,8 +6,16 @@
  * 各格式的具体加载逻辑已拆分至 loaders/ 目录下。
  */
 
-import { ref, shallowRef, toRaw } from 'vue';
+import { ref, shallowRef, toRaw, watch } from 'vue';
 import { getExtension, flyToEntity, revokeBlobUrl, detachEntityFromScene } from './loaders/utils.js';
+import {
+    applyOnImport,
+    reapplyAllOnTerrainChange,
+} from '../terrain/groundPlacementService';
+import {
+    clearPendingGroundFits,
+    dropPendingGroundFit,
+} from '../terrain/terrainReadiness';
 import { withImportMask } from '@common/data-import/yieldUi.js';
 import { loadGeoJSON } from './loaders/geojsonLoader.js';
 import { loadKML, loadKMZ } from './loaders/kmlLoader.js';
@@ -15,7 +23,7 @@ import { loadSHP } from './loaders/shpLoader.js';
 import { loadGLTF, loadGltfWithCoords, loadGltfFromUrl } from './loaders/gltfLoader.js';
 import { loadCZML } from './loaders/czmlLoader.js';
 import { loadGeoTIFF } from './loaders/geotiffLoader.js';
-import { loadTilesetJSON, loadTilesetFromZip, importTilesetFromDirectory, TILESET_JSON_INDICATOR, MATERIAL_MODES, applyTilesetMaterial, loadSampleTileset, loadSampleBaimoTileset, loadSampleIonTileset, loadSampleI3sTileset, loadSampleDiscreteLODTileset, refitTilesetToTerrain } from './loaders/tilesetLoader.js';
+import { loadTilesetJSON, loadTilesetFromZip, importTilesetFromDirectory, TILESET_JSON_INDICATOR, MATERIAL_MODES, applyTilesetMaterial, loadSampleTileset, loadSampleBaimoTileset, loadSampleIonTileset, loadSampleI3sTileset, loadSampleDiscreteLODTileset } from './loaders/tilesetLoader.js';
 
 /** 最大高程网格尺寸（超过此尺寸自动降采样） */
 const MAX_MESH_SIZE = 200;
@@ -84,25 +92,61 @@ export function useCesiumDataImport({ getViewer, getCesium, message, heightSampl
             const v = getViewer();
             if (!Cesium || !v) return;
 
-            // 仅 3D Tiles：用导入时留存的基底采样重新配准
-            let refitted = 0;
-            const tilesets = loadedDataSources.value.filter((r) => r.type === '3dtiles');
-            for (const record of tilesets) {
-                const ok = await refitTilesetToTerrain({
-                    record, tileset: toRaw(record.entity), viewer: v, Cesium,
-                });
-                // 期间用户又切了一次地形：本轮作废，让最新一轮接管
-                if (epoch !== refitEpoch) return;
-                if (ok) refitted++;
-            }
+            /**
+             * 统一门面接管「地形切换后的重贴」：
+             * 3D Tiles 重配准、矢量补 clamp、glTF 相对地形，全在策略里分派，
+             * 调用方不再按类型写分支（这正是过去「只重贴 3D Tiles、矢量漏掉」的根因）。
+             */
+            const summary = await reapplyAllOnTerrainChange({
+                records: loadedDataSources.value,
+                viewer: v,
+                Cesium,
+            });
+            // 期间用户又切了一次地形：本轮作废，让最新一轮接管
+            if (epoch !== refitEpoch) return;
+            // 队列里的待补做请求已被本轮覆盖（记录都在 loadedDataSources 内），直接清空
+            clearPendingGroundFits();
 
-            if (refitted) {
+            if (summary.fitted > 0) {
                 loadedDataSources.value = [...loadedDataSources.value];
-                message?.info?.(`地形已切换，${refitted} 个 3D Tiles 已重新贴地`);
+                message?.info?.(`地形已切换，${summary.fitted} 个图层已重新贴合地形`);
+            }
+            if (summary.failed > 0) {
+                message?.warning?.(`${summary.failed} 个图层贴合地形失败，可在图层目录右键「贴合地形」重试`);
             }
         });
         terrainWatcherInstalled = true;
     }
+
+    /**
+     * 导入即贴地：**唯一入口**。
+     * 监听 loadedDataSources 的新增记录，交给门面按类型分派；
+     * 地形未就绪时门面会自动入队，等地形就绪后由 terrainProviderChanged 统一补做。
+     */
+    const groundAppliedIds = new Set();
+    watch(
+        loadedDataSources,
+        (list) => {
+            const Cesium = getCesium();
+            const viewer = getViewer();
+            if (!Cesium || !viewer) return;
+
+            const alive = new Set();
+            for (const record of list || []) {
+                alive.add(record.id);
+                if (groundAppliedIds.has(record.id)) continue;
+                groundAppliedIds.add(record.id);
+                void applyOnImport({ record, viewer, Cesium });
+            }
+            // 记录被移除：清理去重表与待补做队列，避免持有已销毁句柄
+            [...groundAppliedIds].forEach((id) => {
+                if (alive.has(id)) return;
+                groundAppliedIds.delete(id);
+                dropPendingGroundFit(id);
+            });
+        },
+        { flush: 'post' },
+    );
 
     // ============================================================
     // GLTF UI 状态管理（坐标弹窗 + 位置调整）
@@ -130,7 +174,16 @@ export function useCesiumDataImport({ getViewer, getCesium, message, heightSampl
             const model = await loadGltfWithCoords(Cesium, viewer, blobUrl, name, coords);
             const id = `gltf_${++nextId.current}`;
 
-            const record = { id, name, type: 'gltf', entity: model, blobUrl };
+            // modelHeightOffset 保存用户输入的语义高度：贴地策略据此保持
+            // 「相对地形的高度」，避免 applyOnImport 把语义高度抹成 0
+            const record = {
+                id,
+                name,
+                type: 'gltf',
+                entity: model,
+                blobUrl,
+                modelHeightOffset: Number(coords?.height) || 0,
+            };
             loadedDataSources.value = [...loadedDataSources.value, record];
 
             message.success(

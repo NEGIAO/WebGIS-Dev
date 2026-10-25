@@ -3,7 +3,8 @@
  * Shapefile 格式加载器
  */
 
-import { ensureGisParsers, getExtension, flyToEntity, forceDataSourceClampToGround, applyGroundStackingZIndex } from './utils.js';
+import { ensureGisParsers, getExtension, flyToEntity, applyGroundStackingZIndex } from './utils.js';
+import { VECTOR_GROUND_LOAD_OPTIONS } from '../../terrain/groundPlacementCapabilities';
 
 /**
  * 加载 Shapefile 到 Cesium
@@ -48,7 +49,8 @@ export async function loadSHP({ file, sidecarFiles = [], getCesium, getViewer, m
     };
 
     const dataSource = await Cesium.GeoJsonDataSource.load(payload, {
-        clampToGround: true,
+        // 贴地决策归策略（groundPlacementCapabilities），loader 只消费
+        ...VECTOR_GROUND_LOAD_OPTIONS,
         stroke: Cesium.Color.fromCssColorString('#ffcc00'),
         fill: Cesium.Color.fromCssColorString('#ffcc00').withAlpha(0.25),
         markerColor: Cesium.Color.fromCssColorString('#ffcc00'),
@@ -60,7 +62,7 @@ export async function loadSHP({ file, sidecarFiles = [], getCesium, getViewer, m
 
     await viewer.dataSources.add(dataSource);
     // 贴地兜底：加载期选项之外再强制实体级钳制
-    forceDataSourceClampToGround(dataSource, Cesium);
+    // 贴地由 groundPlacementService.applyOnImport → vector 策略统一承担，loader 不再各自兜底
     // 多面图层叠放定序：SHP 无 Folder 结构，按文档序等分位递进 zIndex
     applyGroundStackingZIndex(dataSource);
     flyToEntity(viewer, Cesium, dataSource, 'shp');

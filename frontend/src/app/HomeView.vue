@@ -631,6 +631,55 @@ function handleControlsDrawEditAction(action) {
     }
 }
 
+/**
+ * 3D 绘制 / 测量面板动作（完成 / 取消 / 撤销 / 清除 / 定位）。
+ * 面板只 emit 意图，引擎能力一律经本函数裁决后转发给 CesiumContainer（§2.1 引擎裁决单点）。
+ * @param {'finish'|'cancel'|'undo'|'clear'|'flyTo'} action
+ */
+function handleCesiumDrawAction(action) {
+    if (!is3DMode.value) return;
+    const container = cesiumContainerRef.value;
+
+    switch (action) {
+        case 'finish': {
+            // 结果码 → 明确文案：避免「点了完成没反应」（规范 §2-8 禁止静默降级）
+            const code = container?.finishCesiumDraw?.();
+            if (code === 'need-more-points') {
+                message.warning(t('cesium.drawMeasure.toast.needMorePoints'));
+            } else if (code === 'need-second-click') {
+                message.warning(t('cesium.drawMeasure.toast.needSecondClick'));
+            } else if (code === 'failed') {
+                message.warning(t('cesium.drawMeasure.toast.failed'));
+            } else if (code === 'not-drawing') {
+                message.info(t('cesium.drawMeasure.toast.notDrawing'));
+            }
+            break;
+        }
+
+        case 'cancel':
+            container?.cancelCesiumDraw?.();
+            break;
+
+        case 'undo':
+            container?.activateCesiumInteraction?.('UndoLastDrawing');
+            break;
+
+        case 'clear':
+            container?.activateCesiumInteraction?.('Clear');
+            message.success(t('cesium.drawMeasure.toast.cleared'));
+            break;
+
+        case 'flyTo': {
+            const moved = container?.flyToCesiumDrawing?.();
+            if (!moved) message.info(t('cesium.drawMeasure.toast.noShape'));
+            break;
+        }
+
+        default:
+            break;
+    }
+}
+
 function handleControlsShowAnalysis() {
     message.info(t('home.analysisEntryReady'));
 }
@@ -1009,6 +1058,8 @@ function buildCesiumQueryPatchFromOl() {
     if (globalThis.localStorage?.getItem('__zdebug') === '1') {
         const __cesiumCanvas = cesiumContainerRef.value?.getViewer?.()?.scene?.canvas;
         const __fovy = cesiumContainerRef.value?.getViewer?.()?.camera?.frustum?.fovy;
+        // 诊断输出：仅在 localStorage.__zdebug=1 时触发，属刻意保留的排查开关，故豁免 no-console
+        // eslint-disable-next-line no-console
         console.info('[zdebug][FWD OL→3D]', {
             olZoom: state.zoom,
             olResolution: state.resolution,
@@ -1072,6 +1123,8 @@ function syncOlFromCesiumPayload(payload = {}) {
 
         if (globalThis.localStorage?.getItem('__zdebug') === '1') {
             const __cesiumCanvas = cesiumContainerRef.value?.getViewer?.()?.scene?.canvas;
+            // 诊断输出：同上，受 localStorage.__zdebug=1 门控
+            // eslint-disable-next-line no-console
             console.info('[zdebug][REV 3D→OL]', {
                 camHeight: camera.height,
                 camPitchDeg: camera.pitch,
@@ -1176,6 +1229,9 @@ async function setMapView(view, { writeUrl = true } = {}) {
                 const curH = cesiumContainerRef.value?.getCameraHeight?.();
                 const correctedH = Number(curH) * (targetG / measured);
                 cesiumContainerRef.value?.setCameraHeightKeepOrientation?.(correctedH);
+                // 尺度校正误差报告：§44 误差分析的唯一数据源，刻意常驻（非调试开关门控），
+                // 故按仓库既有做法（cesiumRuntime.js / useCesiumNavigation.js 同例）豁免 no-console
+                // eslint-disable-next-line no-console
                 console.info('[ViewScale][Report]', JSON.stringify({
                     source: 'ol', target: 'cesium',
                     sourceZoom: readQueryValue("z"),
@@ -1486,6 +1542,18 @@ function handleUpdateDrawStyle(styleConfig) {
 
 function handleUpdateLayerStyle(payload) {
     mapContainerRef.value?.setUserLayerStyle(payload);
+}
+
+/**
+ * 三维图层样式修改（侧栏样式页签「应用样式」/ TOC 右键「样式设置」）。
+ * 目标 id 为不含 `cesium:` 前缀的元数据店 id；引擎能力经容器统一裁决。
+ * @param {{id: string, styleConfig: object}} payload
+ */
+function handleUpdateCesiumLayerStyle(payload) {
+    const id = String(payload?.id || '').trim();
+    if (!id) return;
+    const applied = cesiumContainerRef.value?.updateCesiumLayerStyle?.(id, payload?.styleConfig || {});
+    if (applied === false) message.warning(t('cesium.styleNotApplicable'));
 }
 
 function handleHighlightAttributeFeature(payload) {
@@ -1831,12 +1899,14 @@ onMounted(async () => {
                 <ControlsPanel
                     :user-layers="userLayers"
                     :custom-basemap-url="sharedCustomBasemapUrl"
+                    :engine="is3DMode ? 'cesium' : 'ol'"
                     @open-tab="handleControlsOpenTab"
                     @toggle-tab="handleControlsToggleTab"
                     @open-toolbox-tab="handleControlsToggleToolboxTab"
                     @map-interaction="handleControlsMapInteraction"
                     @draw-style-change="handleControlsDrawStyleChange"
                     @draw-edit-action="handleControlsDrawEditAction"
+                    @cesium-draw-action="handleCesiumDrawAction"
                     @show-analysis="handleControlsShowAnalysis"
                     @district-select="handleControlsDistrictSelect"
                     @enable-basemap-swipe="handleEnableBasemapSwipe"
@@ -2036,6 +2106,7 @@ onMounted(async () => {
                     @apply-style-template="handleApplyStyleTemplate"
                     @update-draw-style="handleUpdateDrawStyle"
                     @update-layer-style="handleUpdateLayerStyle"
+                    @update-cesium-layer-style="handleUpdateCesiumLayerStyle"
                     @highlight-attribute-feature="handleHighlightAttributeFeature"
                     @zoom-attribute-feature="handleZoomAttributeFeature"
                     @layer-selected="handleLayerSelected"

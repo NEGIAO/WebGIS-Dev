@@ -3,7 +3,8 @@
  * GeoJSON/JSON 格式加载器
  */
 
-import { flyToEntity, forceDataSourceClampToGround, applyGroundStackingZIndex } from './utils.js';
+import { flyToEntity, applyGroundStackingZIndex } from './utils.js';
+import { VECTOR_GROUND_LOAD_OPTIONS } from '../../terrain/groundPlacementCapabilities';
 
 /** 高度属性候选键（米）。缺失/非法一律保持贴地，不拉伸。 */
 const HEIGHT_PROPERTY_KEYS = ['height_m', 'height', 'HEIGHT', 'Height', 'altitude', 'elevation'];
@@ -98,7 +99,8 @@ export async function loadGeoJSON({ file, getCesium, getViewer, message, loadedD
     }
 
     const dataSource = await Cesium.GeoJsonDataSource.load(geojsonData, {
-        clampToGround: true,
+        // 贴地决策归策略（groundPlacementCapabilities），loader 只消费
+        ...VECTOR_GROUND_LOAD_OPTIONS,
         stroke: Cesium.Color.fromCssColorString('#3ddc84'),
         fill: Cesium.Color.fromCssColorString('#3ddc84').withAlpha(0.3),
         markerColor: Cesium.Color.fromCssColorString('#3ddc84'),
@@ -110,7 +112,7 @@ export async function loadGeoJSON({ file, getCesium, getViewer, message, loadedD
 
     await viewer.dataSources.add(dataSource);
     // 贴地兜底：加载期选项之外再强制实体级钳制（防文件语义绕过）
-    forceDataSourceClampToGround(dataSource, Cesium);
+    // 贴地由 groundPlacementService.applyOnImport → vector 策略统一承担，loader 不再各自兜底
     // 多面图层叠放定序：GeoJSON 无 Folder 结构，按文档中等分位给递进 zIndex，
     // 避免后写入的面覆盖先写入的面（GroundPrimitive 桶内先写入者胜出）
     applyGroundStackingZIndex(dataSource);

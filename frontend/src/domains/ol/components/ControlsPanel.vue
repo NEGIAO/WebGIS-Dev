@@ -27,9 +27,16 @@
             @select="handleDistrictSelect"
         />
 
-        <!-- 绘制子面板 -->
+        <!-- 绘制子面板：3D 走 Cesium 引擎感知面板（支持类型子集不同），2D 走 OL DrawPanel -->
+        <CesiumDrawMeasurePanel
+            v-if="drawPanelVisible && isCesium"
+            variant="draw"
+            @activate="handleCesiumActivate"
+            @action="handleCesiumDrawAction"
+            @close="drawPanelVisible = false"
+        />
         <DrawPanel
-            v-if="drawPanelVisible"
+            v-else-if="drawPanelVisible"
             @draw-type="handleDrawType"
             @edit-action="handleDrawEditAction"
             @style-change="handleDrawStyleChange"
@@ -37,9 +44,16 @@
             @close="drawPanelVisible = false"
         />
 
-        <!-- 测量子面板 -->
+        <!-- 测量子面板：3D 走 Cesium 引擎感知面板（测距/测面/测高距/方位角），2D 走 OL MeasurePanel -->
+        <CesiumDrawMeasurePanel
+            v-if="measurePanelVisible && isCesium"
+            variant="measure"
+            @activate="handleCesiumActivate"
+            @action="handleCesiumDrawAction"
+            @close="measurePanelVisible = false"
+        />
         <MeasurePanel
-            v-if="measurePanelVisible"
+            v-else-if="measurePanelVisible"
             @measure-type="handleMeasureType"
             @clear="handleClearMeasure"
             @close="measurePanelVisible = false"
@@ -167,6 +181,14 @@ import AdministrativeDivisionPanel from './AdministrativeDivisionPanel.vue';
 const DrawPanel = defineAsyncComponent(() => import('./DrawPanel.vue'));
 const MeasurePanel = defineAsyncComponent(() => import('./MeasurePanel.vue'));
 const SpatialAnalysisPanel = defineAsyncComponent(() => import('./SpatialAnalysisPanel.vue'));
+/**
+ * 3D 绘制/测量面板（引擎感知）：按当前引擎切换 UI 与功能集。
+ * 域边界说明：侧栏 shell 历史上落在 @ol/components，此处按 engine 异步引入
+ * @cesium-domain 面板，与 SidePanel.vue 异步引入 @ol 路由面板的既有做法一致。
+ */
+const CesiumDrawMeasurePanel = defineAsyncComponent(
+    () => import('@cesium-domain/components/CesiumDrawMeasurePanel.vue'),
+);
 import {
     Activity,
     Newspaper,
@@ -205,7 +227,18 @@ const props = defineProps({
         type: String,
         default: '',
     },
+    /**
+     * 当前地图引擎：'ol'（2D）| 'cesium'（3D）。
+     * 决定绘制 / 测量子面板的形态——同一入口按引擎切换 UI 与功能集。
+     */
+    engine: {
+        type: String,
+        default: 'ol',
+    },
 });
+
+/** 是否 3D 引擎（绘制 / 测量面板据此切换） */
+const isCesium = computed(() => props.engine === 'cesium');
 
 // ========== 卷帘分析支持的底图 ==========
 const SWIPE_SUPPORTED_BASEMAPS = BASEMAP_OPTIONS;
@@ -235,6 +268,7 @@ const emit = defineEmits([
     'map-interaction',
     'draw-style-change',
     'draw-edit-action',
+    'cesium-draw-action',
     'district-select',
     'enable-basemap-swipe',
     'spatial-analysis',
@@ -469,6 +503,25 @@ const handleClearMeasure = () => {
 };
 
 /**
+ * 3D 绘制 / 测量工具激活。
+ * 复用 map-interaction 通道，由 HomeView 作为唯一引擎裁决点路由到 CesiumContainer；
+ * 不支持的类型由 HomeView 统一 toast 降级提示（迁移方案 §2.2）。
+ * @param {string} type 交互类型（Point/LineString/Polygon/Rectangle/Circle/Measure*）
+ */
+const handleCesiumActivate = (type) => {
+    emit('map-interaction', type);
+};
+
+/**
+ * 3D 绘制 / 测量面板动作上抛（完成 / 取消 / 撤销 / 清除 / 定位）。
+ * 面板不直连引擎，动作一律经 HomeView 裁决后转发。
+ * @param {'finish'|'cancel'|'undo'|'clear'|'flyTo'} action
+ */
+const handleCesiumDrawAction = (action) => {
+    emit('cesium-draw-action', action);
+};
+
+/**
  * 处理空间分析请求
  * @param {Object} payload - 分析参数，包含 type（buffer/overlay/convexHull）等
  */
@@ -555,6 +608,7 @@ const getBasemapLabel = (id) => {
 /* 子面板定位：悬浮在侧边栏右侧 */
 .sidebar-shell :deep(.draw-panel),
 .sidebar-shell :deep(.measure-panel),
+.sidebar-shell :deep(.cesium-dm-panel),
 .sidebar-shell :deep(.spatial-panel) {
     position: absolute;
     left: 68px;

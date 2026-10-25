@@ -4,7 +4,6 @@
  */
 
 import { createBlobUrl, revokeBlobUrl, flyToEntity } from './utils.js';
-import { clampDataSourceToGround } from '../../terrain/terrainClampService.js';
 
 /**
  * 加载 CZML 文件到 Cesium
@@ -30,11 +29,8 @@ export async function loadCZML({ file, getCesium, getViewer, message, loadedData
         dataSource.name = file.name;
 
         await viewer.dataSources.add(dataSource);
-        // 统一贴地（地形开启时生效）：点/线/面实体贴地，时间动态实体（采样轨迹）自动跳过
-        const clampResult = clampDataSourceToGround(viewer, Cesium, dataSource);
-        if (clampResult.clamped > 0) {
-            console.warn(`[贴地] CZML "${file.name}": 地形已开启，${clampResult.clamped}/${clampResult.total} 个实体已贴地`);
-        }
+        // 贴地统一由 groundPlacementService.applyOnImport 接管（含地形未就绪排队），
+        // loader 不再各自调用 clamp —— 这是「同一件事多份实现」的清理点之一。
         flyToEntity(viewer, Cesium, dataSource, 'czml');
 
         const record = { id, name: file.name, type: 'czml', entity: dataSource, blobUrl };

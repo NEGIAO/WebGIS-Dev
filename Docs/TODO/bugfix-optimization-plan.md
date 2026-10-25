@@ -230,3 +230,36 @@ Sprint 3（穿插）：P3-1 容器二轮（O1/O2 交替）→ P2-1 bundle 分析
   - [ ] (需重设计) **TopBar 六导航钮移动端 36px 未达 40px 触屏基线**：`@media (max-width:768px)` 下 `.nav-btn` 锁 `36×36`，直接提 40px 则六钮在窄屏放不下（会溢出换行压塌导航条）。需先把次要按钮收进溢出菜单再统一 40px，属布局重设计非样式微调；本批仅落地页侧已补 `pointer:coarse` 档
   - [ ] (需用户决策) **暂存区两件疑似多余资源**：`public/images/njnu-media/d-bg2_2.png`（542KB，全仓无引用）、`public/images/njnu-media/hero-ring-preview.html`（575 行轨道环开发预览页，会随 Pages 部署到线上）。是否移出暂存由用户执行 git 操作决定
   - [ ] (提醒项) **`.github/traffic.json` 再次混入暂存区**：CI 自动生成文件（同 V3.6.17 归并时登记的先例），归并提交是否剔除由用户决定
+- [ ] **Cesium 绘制/测量完整化顺带发现**（2026-10-25 · V3.6.24 会话，按 Force_command §2.5 只记不改）：
+  - [ ] (需用户决策·L3) **`ControlsPanel.vue` 承担双引擎侧栏 shell 职责却寄居 `@ol/components`**：该文件已被 `HomeView` 全局渲染，本次又新增 `engine` prop 与 `@cesium-domain` 面板异步引入，域归属与实际职责持续背离。建议迁至 `@common/shell/`（与 `SidePanel.vue` 同级）并同步结构树——属目录调整，须走 L3 方案批准
+  - [ ] (能力缺口) **3D 侧仍不支持 `Ellipse` / 军标箭头族（`Arrow`/`WindArrow`/`BattleArrow`）/ `SelectEdit`**：本次已补齐矩形、圆、测高距、方位角，其余类型在 3D 仍返回 false 并由 HomeView toast 降级（与迁移方案 §5「非目标：不做 3D 高级图形」一致）
+  - [ ] (近似实现·记录项) **3D 圆为 64 边形环近似**（`drawGeometry.circleRingLonLats`，与 Demo 一致），非真椭球圆；导出 GeoJSON 亦按 64 点环输出。若后续需要真圆渲染，应改用 `EllipseGraphics` 并单独处理贴地描边
+  - [ ] (体验项) **测量记录清图不清记录**：与 Demo 行为一致（「清除」只清场景，「清空记录」单独按钮）。若产品希望清图时同步清记录，需在 `handleCesiumDrawAction('clear')` 内追加 `clearRecords()`
+- [ ] **Cesium 图层样式 / 右键能力扩展顺带发现**（2026-10-25 · V3.6.25 会话，按 Force_command §2.5 只记不改）：
+  - [x] (能力缺口·需立项) **3D 侧无属性表** ✅ 2026-10-25 V3.6.26 销项：新增 `CesiumAttributeTableDialog.vue`（只读表格 + 搜索 + 分页 + 行点击 flyTo），`collectEntityProperties` 从 `entity.properties` 提取，`attribute` 对矢量类开放
+  - [x] (能力缺口) **3D 侧无要素编辑** ✅ 2026-10-25 V3.6.26 部分销项：绘制成品支持顶点拖拽（`startVertexEdit`），拖拽锁相机、松手提交并重算测量值；**导入矢量仍只读**（无写回通道），测高距/方位角含派生几何暂不开放
+  - [x] (能力缺口) **3D 侧无 KML 导出** ✅ 2026-10-25 V3.6.26 销项：`buildKML` 输出 KML 2.2（Placemark + 统一样式 + XML 转义），`canExportKML` 对矢量类开放
+  - [ ] (设计限制) **样式补丁仅覆盖纯色材质**：KML 自带的虚线 / 图标 / 贴图材质改色会丢语义，故跳过；如需按要素分级着色应做「样式规则引擎」而非颜色补丁
+  - [ ] (设计限制) **绘制成品标注开关被测量开关覆盖**：右键「关闭标注」是单条临时态，`setMeasureOptions` 触发的全量重算会重置它（全局优先）。若产品要求持久化，需把单条标注状态并入 handle 并在 `refreshLabels` 中回放
+
+- [ ] **三维地形贴合后续观察**（2026-10-25 · V3.6.26 会话，按 Force_command §2.5 只记不改）：
+  - [ ] (需真机) **地形贴合与顶点拖拽未实机验证**：依赖真实地形 provider 采样时序与鼠标拾取，Node 桩件无法覆盖，见日志 §12.7 复验清单
+  - [ ] (能力缺口) **导入矢量不可编辑**：需先「转为绘制成品」或建立写回源文件通道，属独立立项
+  - [ ] (设计限制) **顶点编辑不覆盖测高距/方位角**：载荷含派生几何（三角形顶点、正北参考点），改顶点需重算整条派生链
+  - [ ] (设计限制) **属性表只读**：3D 侧无属性写回通道，开放编辑会造成「改了但没保存」的静默丢失
+- [ ] **贴地统一化 P3 收尾**（2026-10-25 · V3.6.27 会话，方案 A 只做到 P2）：
+  - [ ] **`forceDataSourceClampToGround` 仍 export**：现已只被 `vectorGroundStrategy` 调用，可内联进策略并删导出
+  - [ ] **`terrainClampService` 仍 export `isTerrainEnabled`**：外部调用点已收敛到 `terrainReadiness`，可改为内部函数
+  - [ ] **注册自检仍是 `console.warn`**：建议升级为开发期断言，并在结构树门禁里提示「能力表有、策略没有」的类型
+  - [ ] (需真机) **贴地统一化未实机回归**：5 类数据导入 + 地形切换 + 高程滑杆需按日志 §13.5 复验
+
+- [ ] **规范补强后续**（2026-10-25 · V3.6.24 会话，按 Force_command §2.5 只记不改）：
+  - [ ] (自动化缺口) **「新建 `.js` 逻辑文件」仍靠人工勾选 DoD，无脚本可检出**：可新增 `Scripts/CheckNewJsFiles.py`，读取 git 暂存区新增文件（`git diff --cached --name-only --diff-filter=A`），命中 `frontend/src/**/*.js` 且不属白名单（`vite.config.js`、构建钩子、纯脚本）时告警并要求在交接块补动机说明。需先定白名单口径，属独立立项
+  - [ ] (一致性维护) **§2.11 与 `dev-conventions.md` 摘要第 9 条为「压缩-展开」关系**：后续若修订 §2.11 措辞，须同步检查摘要，避免再次方向漂移（§10 已作要求，此处备案提醒）
+  - [ ] (门禁可用性) **§11.2 红线自查命令存在两类误报**：① 未排除 `backend/.venv`（`.gitignore:90` 已忽略），直接执行会命中 `numpy` 的 `hermesub`、`uvicorn` 的 `start_keepalive`；② 红线 2 的 `xray` 与 Cesium 云层渲染参数 `xRay` / `maxRayDistance` 大小写不敏感冲突（12+11+5+3+2+2+1 处）。建议给四条命令统一加 `--exclude-dir=.venv --exclude-dir=node_modules`，并把 `xray` 收紧为 `\bxray\b` 或 `xray-core`
+
+- [ ] **V3.6.24 归并审查发现**（2026-10-25 · V3.6.24 归并会话，按 Force_command §2.5 只记不改）：
+  - [ ] (语义存疑) **矢量样式会把标注文字一并改色**：`dataSourceDisplay.applyVectorDataSourceStyle` 中 `entity.label.fillColor = fill`，深色底图上标注可能失去对比度。若确认应保留标注原色，删掉该分支即可；若确认要跟随主题，需同步评估 KML 图标标注
+  - [ ] (既有缺口·非本批引入) **`en-US.js` 相对 `zh-CN.js` 缺 204 个键**：含 `controls.style / styleEdit / applyStyle`（HEAD 中即缺失），英文界面回落中文。属 i18n 体系性问题（英文为 zh 的子集），需单独立项补齐而非零散补键
+  - [ ] (设计限制) **全局测量开关覆盖单条标注开关**：`setMeasureOptions` 触发的全量重算会把 TOC 右键「关闭标注」的单条状态重置为全局值。注释已说明属预期，若产品要求持久化，需把单条状态并入 handle 并在 `refreshLabels` 中回放
+  - [ ] (例外备案) **`Docs/Demo/DrawManager.js` 仍为 `.js`**：`draw_manager.html` 以 `<script src>` 直载、无构建链路，属 §2.11 明列例外。若要求全仓无 `.js` 逻辑文件，需为 Demo 引入编译产物或改为 `type="module"` + 构建步骤

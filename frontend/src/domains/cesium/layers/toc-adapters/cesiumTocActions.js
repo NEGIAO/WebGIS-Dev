@@ -15,10 +15,22 @@ function extractLayerId(evt) {
 }
 
 /**
+ * 读取动作载荷字段：TOCTreeItem.emitAction 会平铺到顶层，
+ * 而 menu/commandDispatcher 产出的是 { type, payload:{...} } 形态，两种都要兼容。
+ * @param {object} evt 动作事件
+ * @param {string} key 字段名
+ * @returns {*} 顶层优先，其次 payload
+ */
+function readPayloadField(evt, key) {
+    if (evt && evt[key] !== undefined) return evt[key];
+    return evt?.payload?.[key];
+}
+
+/**
  * 处理 Cesium 节点动作
  * @param {object} evt - TOCTreeItem 冒泡的动作事件 { type, layerId?, nodeId?, payload?, ... }
  * @param {object} cesiumStore - useCesiumLayersStore() 实例
- * @returns {boolean} true = 已消费（调用方直接 return）
+ * @returns {boolean} true = 已消费（调用方直接 return）；false = 交回通用分发器
  */
 export function handleCesiumLayerTreeAction(evt, cesiumStore) {
     const nodeId = extractLayerId(evt);
@@ -36,13 +48,13 @@ export function handleCesiumLayerTreeAction(evt, cesiumStore) {
             [...(cesiumStore.records || [])].forEach((record) => cesiumStore.remove(record.id));
             return true;
         case 'toggle-layer-visibility':
-            cesiumStore.setVisible(id, !!evt.visible);
+            cesiumStore.setVisible(id, !!readPayloadField(evt, 'visible'));
             return true;
         case 'change-layer-opacity':
-            cesiumStore.setOpacity(id, Number(evt.opacity));
+            cesiumStore.setOpacity(id, Number(readPayloadField(evt, 'opacity')));
             return true;
         case 'rename-layer':
-            cesiumStore.rename(id, evt.newName ?? evt.name ?? '');
+            cesiumStore.rename(id, readPayloadField(evt, 'newName') ?? readPayloadField(evt, 'name') ?? '');
             return true;
         case 'zoom-layer':
         case 'view-layer':
@@ -51,11 +63,24 @@ export function handleCesiumLayerTreeAction(evt, cesiumStore) {
         case 'remove-layer':
             cesiumStore.remove(id);
             return true;
+        case 'solo-layer':
+            // 仅显示此图层：元数据店广播显隐，其它图层全部隐藏
+            cesiumStore.solo?.(id);
+            return true;
+        case 'toggle-layer-label-visibility':
+            cesiumStore.setLabelVisible?.(id, !!readPayloadField(evt, 'visible'));
+            return true;
+        case 'copy-layer-coordinates':
+            cesiumStore.copyCoordinates?.(id);
+            return true;
+        case 'export-layer-data':
+            cesiumStore.exportData?.(id, String(readPayloadField(evt, 'format') || 'geojson'));
+            return true;
         case 'data-set-height':
-            cesiumStore.setBaseHeight(id, Number(evt.height ?? 0));
+            cesiumStore.setBaseHeight(id, Number(readPayloadField(evt, 'height') ?? 0));
             return true;
         case 'data-set-material':
-            cesiumStore.setMaterialMode(id, String(evt.mode || 'none'));
+            cesiumStore.setMaterialMode(id, String(readPayloadField(evt, 'mode') || 'none'));
             return true;
         case 'data-reposition':
             // 打开 GLTF 坐标弹窗（弹窗 UI 挂在 CesiumContainer，由 adapter 触发）
@@ -65,9 +90,32 @@ export function handleCesiumLayerTreeAction(evt, cesiumStore) {
             // GeoTIFF 单波段拉伸至高程
             cesiumStore.requestStretchHeight?.(id);
             return true;
+        case 'terrain-fit':
+            // 贴合地形：按类型分派（矢量 clamp / 3D Tiles 配准 / glTF 相对地形），异步
+            void cesiumStore.fitToTerrain?.(id);
+            return true;
+        case 'terrain-reset':
+            // 恢复数据自带原始高程
+            cesiumStore.resetTerrainFit?.(id);
+            return true;
+        case 'open-attribute-table':
+            // 属性表：3D 侧为只读表格，UI 由 CesiumContainer 承载
+            cesiumStore.requestAttributeTable?.(id);
+            return true;
+        case 'edit-layer':
+            // 要素编辑：仅绘制成品可编辑（顶点拖拽），导入数据只读
+            cesiumStore.editFeature?.(id);
+            return true;
+        // 2D 专属能力：3D 侧无实现（菜单里已按 actions 关闭，不会出现；此处兜底吞掉）
         case 'layer-selected':
+        case 'toggle-layer-crs':
+        case 'toggle-search-layer-crs':
+        case 'import-to-3d':
             return true;
         default:
-            return true;
+            // 其余动作交回通用分发器。
+            // 历史实现此处 default: true，导致 cesium 节点的所有新动作（如 set-style-target
+            // 打开样式页签）被静默吞掉——「右键没反应」的根因之一。
+            return false;
     }
 }

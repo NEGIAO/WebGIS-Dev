@@ -30,11 +30,11 @@ import {
 import { transform } from 'ol/proj';
 import {
     flyToEntity,
-    forceDataSourceClampToGround,
     revokeBlobUrl,
     applyGroundStackingZIndex,
     parseKmlPolygonStackingRanks,
 } from './utils.js';
+import { VECTOR_GROUND_LOAD_OPTIONS } from '../../terrain/groundPlacementCapabilities';
 
 
 const KML_MIME = 'application/vnd.google-earth.kml+xml';
@@ -180,7 +180,8 @@ async function loadKmlDataSource(Cesium, viewer, kmlText) {
         // ⚠️ 已验证本地 Cesium 1.132 bundle：KmlDataSource 与 GeoJsonDataSource 的
         // clampToGround 默认值均为 false，不显式传入则图元按坐标原始高度生成，
         // 开启真实地形后被整体埋入地下（如 HENU湖泊.kmz 高度全 0 vs 当地地面 +70m）。
-        clampToGround: true,
+        // 贴地决策归策略（groundPlacementCapabilities），loader 只消费
+        ...VECTOR_GROUND_LOAD_OPTIONS,
     });
 }
 
@@ -212,9 +213,9 @@ export async function loadKML({ file, getCesium, getViewer, message, loadedDataS
     dataSource.name = file.name;
 
     await viewer.dataSources.add(dataSource);
-    // 贴地双保险：加载期 clampToGround:true + 加载后实体级强制钳制
-    // （防文件显式 altitudeMode=absolute/relativeToGround 绕过贴地）
-    forceDataSourceClampToGround(dataSource, Cesium);
+    // 贴地统一由 groundPlacementService.applyOnImport 接管：
+    // 加载期 clampToGround + 加载后实体级强制钳制都在 vector 策略内完成，
+    // 避免「同一件事两处实现」的漂移（历史上 KML 的 altitudeMode 就是靠第二道保险兜住的）。
     // 地面叠放定序（对标 QGIS 图例：文档在前的 Folder 在上）：线/面同体系递进 zIndex，
     // 文档首 Folder 最高在顶、末 Folder 最低垫底，避免末尾大面覆盖顶部图层
     applyGroundStackingZIndex(dataSource, 64, parseKmlPolygonStackingRanks(preparedText));
@@ -262,7 +263,6 @@ export async function loadKMZ({ file, getCesium, getViewer, message, loadedDataS
 
         await viewer.dataSources.add(dataSource);
         // 贴地双保险：同 loadKML，加载后实体级强制钳制
-        forceDataSourceClampToGround(dataSource, Cesium);
         // 地面叠放定序：同 loadKML（文档在前者在上，线/面同体系）
         applyGroundStackingZIndex(dataSource, 64, parseKmlPolygonStackingRanks(preparedText));
         flyToEntity(viewer, Cesium, dataSource, 'kmz');

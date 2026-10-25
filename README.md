@@ -90,7 +90,7 @@
 
 ## 🎯 项目简介
 
-**NEGIAO's WebGIS** 是一个功能完整、架构清晰的前后端分离 WebGIS 平台（当前版本 V3.6.23），前端托管于 GitHub Pages（正式域名 webgis.negiao.cn），后端以 Docker 部署在 Hugging Face Spaces，通过 RESTful API 通信，支持独立扩展。
+**NEGIAO's WebGIS** 是一个功能完整、架构清晰的前后端分离 WebGIS 平台（当前版本 V3.6.24），前端托管于 GitHub Pages（正式域名 webgis.negiao.cn），后端以 Docker 部署在 Hugging Face Spaces，通过 RESTful API 通信，支持独立扩展。
 
 > 📚 本 README 仅保留核心概览与导航。完整文档已模块化至 [`Docs/Guide/`](Docs/Guide/)，详见下方「文档导航」。
 >
@@ -553,11 +553,11 @@ tiles.negiao.cc.cd"]
 
 | 版本 | 日期 | 概要 |
 |------|------|------|
+| **V3.6.24** | 2026-10-25 | **Cesium 绘制/测量完整化 + 贴地统一化 + TOC 能力对齐 + TS 迁移（暂存区多批次归并）**。绘制/测量扩至 9 种类型（矩形 / 圆 / 测高距 / 方位角），三态交互状态机 + 测量开关 + 结果读数 + 记录档案 + 顶点拖拽编辑 + 只读属性表 + GeoJSON/CSV/TXT/KML 导出；样式页签纳入三维图层，TOC 右键能力对齐 OL；贴地逻辑由 **103 处直写 / 14 文件**收敛为「能力表 + 策略注册表 + 统一门面 + 时序权威」四层，修复**地形异步就绪窗口**致整批矢量不可见、glTF 中心原点半截入土；新增逻辑模块一律 `.ts`；修复透明度非法值致整层消失、矢量线色改不动、「编辑要素」出现在不支持类型上等缺陷。详见[完整更新日志](Docs/Guide/CHANGELOG.md) |
 | **V3.6.23** | 2026-10-22 | **README 全量核对与事实修正（纯文档版）**。逐节对照代码实测：恢复「项目简介」行 `当前版本` 标识（`vite.config.js` 正则提取 `__APP_VERSION__` 的机器读取源，缺失会静默回退 V0.0.0）；底图图层定义数 96 → 实测 106；账号体系补 Hugging Face OAuth（后端 `SUPPORTED_OAUTH_PROVIDERS` 与注册页按钮均已支持）；侧栏标签页修正为实际 8 个（`info` 默认页即新闻热榜）；本地开发镜像补 `latest` 标签（2026-08-23）；「已知限制」单元测试项更正为后端已有 6 个 unittest 文件；规模速览 i18n 命名空间 27 → 30、Docs 篇目同步。详见[完整更新日志](Docs/Guide/CHANGELOG.md) |
 | **V3.6.22** | 2026-10-20 | **Cesium 人物漫游对齐上游 0.2.1 + 审查加固**。Rapier 局部系重锚 `rebase()`（默认 10km 阈值，消除 f32 精度抖动与重力方向偏离）；静态碰撞线框叠加父级变换；贴地修正从注入竖直速度改为独立位移 `groundCorrectionU`（消除台阶弹跳）；`step(delta)` 同步 `world.timestep`；地形碰撞改 `replaceStaticColliders` 原子替换；修复双重缩放；热路径去掉每帧 `Matrix4.inverse`。验证：tsc 0 error / eslint 0，rebase 仿射往返误差 1.1e-9 m。 |
-| **V3.6.21** | 2026-10-19 | **导入体验 bug 修复包 + GLB 地理保真**。坐标弹窗改 Esc 显式取消、失败行内可重试、busy 禁重复提交；重定位失败按 `swapped` 位回挂旧实体；多文件 GLB 冲突改撤销新文件；双引擎导入统一 `GlobalLoading` 遮罩（`yieldUi.js`）；GLB 取消 `minimumPixelSize: 64` 改地理保真 LOD。 |
 
-更早版本（V3.6.20 及以前）请查阅 [完整更新日志 →](Docs/Guide/CHANGELOG.md)。当前分支 HEAD 另含 V3.6.22 之后未发版的 SidePanel 调试提交（`6bf80e5`，未记版本）。
+更早版本（V3.6.21 及以前）请查阅 [完整更新日志 →](Docs/Guide/CHANGELOG.md)。
 
 ---
 
@@ -579,6 +579,6 @@ tiles.negiao.cc.cd"]
 |:------:|:--------:|:--------:|
 | [GitHub](https://github.com/NEGIAO/WebGIS-Dev) | [webgis.negiao.cn](https://webgis.negiao.cn)（正式域名，GitHub Pages 托管） | [Hugging Face](https://NEGIAO-WebGIS.hf.space) |
 
-<sub>V3.6.23 · 开发中 · 最后更新 2026-10-22</sub>
+<sub>V3.6.24 · 开发中 · 最后更新 2026-10-25</sub>
 
 </div>

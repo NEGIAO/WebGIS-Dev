@@ -17,7 +17,7 @@
 6. **不执行任何 Git 写操作**（`commit` / `push` / `stash` / `reset` / 切分支）—— 版本控制决策权归用户
 7. **不在 `/Docs` 外新建说明类文档**；不改 `.env` / `.env.local` / `.github/workflows/` 等密钥与部署面（只提建议）
 8. **不臆造、不谎报**：API 签名 / 字段 / 配置 key / 路径必须读代码确认，未确认标 `⚠️ 未验证`；未实机运行不得写"已测试通过"
-9. **新功能必须封装**为独立 `.js` / `.ts` 文件，组件内不堆叠业务逻辑（`MapContainer.vue` 等巨型文件只出不进）
+9. **新功能必须封装**为独立 `.ts` 文件（**新建逻辑代码默认 TypeScript**，仅受运行环境限制、无法模块化的纯脚本/构建钩子可用 `.js`；既有 `.js` 不强制改写），组件内不堆叠业务逻辑（`MapContainer.vue` 等巨型文件只出不进）
 10. **新增代码必须有注释**（功能 / 参数 / 返回 / 核心逻辑）
 11. **新增配置 key 顺序恒为**：登记 `deploy/.env.example` + `backend/config/catalog.py` → 再写读取代码 → 跑门禁
 12. **数据源注册前置**：任何场景数据加载必须入 TOC/数据源店（Cesium：`loadedDataSources` + `type` 契约；OL：layer-tree），并实现显隐/透明度/定位/移除等 adapter 能力；远程 URL 模型须存 `sourceUrl`。详见 Force_command §3

@@ -365,6 +365,8 @@ const menuCapabilities = computed(() => {
         canSetHeight: !!actions.setHeight && !!props.node?.heightRange,
         canSetMaterial: !!actions.setMaterial,
         canReposition: !!actions.reposition,
+        canFitTerrain: !!actions.fitTerrain,
+        canResetTerrain: !!actions.resetTerrain,
         canStretchHeight: !!actions.stretchHeight,
         heightRange: props.node?.heightRange || null,
         currentHeight: props.node?.baseHeight ?? 0,

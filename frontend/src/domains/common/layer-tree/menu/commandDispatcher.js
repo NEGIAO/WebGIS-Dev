@@ -239,5 +239,16 @@ export function dispatchContextMenuCommand({ key, node, selectedLayerIds = [] } 
         return events;
     }
 
+    // 三维数据专属：地形贴合 / 恢复原始高程（按图层类型分派到矢量 clamp、3D Tiles 配准、glTF 偏移）
+    if (commandKey === TOC_MENU_COMMANDS.FIT_TERRAIN) {
+        events.push({ type: 'terrain-fit', payload: { layerId: nodeId } });
+        return events;
+    }
+
+    if (commandKey === TOC_MENU_COMMANDS.RESET_TERRAIN) {
+        events.push({ type: 'terrain-reset', payload: { layerId: nodeId } });
+        return events;
+    }
+
     return events;
 }

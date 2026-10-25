@@ -73,7 +73,9 @@ frontend/src/
 │   │   ├── components/
 │   │   │   ├── CesiumAdvancedEffects.vue  # 高级视觉效果（高度雾/HBAO/移轴/大气）
 │   │   │   ├── CesiumContainer.vue  # Cesium 容器（底图/地形 + URL 追踪 + 工具面板 + 拖拽导入；场景 Loading i18n）
+│   │   │   ├── CesiumAttributeTableDialog.vue  # 三维矢量属性表（只读表格 + 搜索 + 分页 + 行点击 flyTo；5000 行上限，触屏档按钮≥40px）
 │   │   │   ├── CesiumDataImportDialog.vue  # GLTF/GLB 模型放置坐标输入弹窗
+│   │   │   ├── CesiumDrawMeasurePanel.vue  # 3D 绘制/测量面板（引擎感知：variant=draw 绘制工具+样式 / measure 测量工具；测量项开关、结果读数、记录、GeoJSON 导出；触屏档 pointer:coarse 目标≥40px）
 │   │   │   ├── CesiumToolPanel.vue  # 统一控制面板（场景/数据/特效/风场/流体/漫游）
 │   │   │   └── LilGuiControls.vue  # lil-gui 动态控件渲染器
 │   │   ├── composables/
@@ -118,7 +120,15 @@ frontend/src/
 │   │   │   │   ├── useCesiumBeautify.js  # 场景美化（HDR/FXAA/定向光）
 │   │   │   │   └── useCesiumCreditHider.js  # 版权信息隐藏
 │   │   │   ├── terrain/
-│   │   │   │   ├── terrainClampService.js  # CZML 实体贴地唯一入口（矢量 DataSource 已全面走官方加载期 clampToGround；glTF 走 Entity heightReference）
+│   │   │   │   ├── groundPlacementCapabilities.ts  # 贴地能力**单一事实来源**（GROUND_MODE/REASON + 能力表 + getGroundCapability + VECTOR_GROUND_LOAD_OPTIONS；纯数据零依赖，TOC 与样式页签共用）
+│   │   │   │   ├── groundPlacementRegistry.ts  # 类型 → 策略注册表（策略只提供行为，能力从能力表取；findMissingStrategies 供启动自检）
+│   │   │   │   ├── groundPlacementService.ts  # 贴地统一门面（applyOnImport/fit/reset/setOffset/getOffset/reapplyAllOnTerrainChange/flushPending；调用方只认门面不认类型）
+│   │   │   │   ├── terrainReadiness.ts  # 地形就绪判定与补做队列（唯一 isTerrainEnabled 调用点；地形未就绪时贴地请求按 recordId 去重入队）
+│   │   │   │   ├── strategies/
+│   │   │   │   │   ├── vectorGroundStrategy.ts  # 矢量贴地策略（geojson/kml/kmz/czml/shp/wayline：实体级 clamp + 恢复原始高程）
+│   │   │   │   │   ├── tilesetGroundStrategy.ts  # 3D Tiles 贴地策略（基底采样配准 + modelMatrix 复位 + 基座海拔滑杆，只编排不重写内部实现）
+│   │   │   │   │   └── modelGroundStrategy.ts  # glTF 贴地策略（RELATIVE_TO_GROUND + 高程偏移，修正原点在几何中心的半截入土）
+│   │   │   │   ├── terrainClampService.js  # 矢量/实体级贴地原语（isTerrainEnabled / clampEntityToGround / clampDataSourceToGround；仅供 vector 策略与 readiness 调用）
 │   │   │   │   ├── terrainSampling.js  # 地形高度采样统一网关（mostDetailed 优先 + 层级阶梯防御降级）
 │   │   │   │   └── useCesiumHeightSampler.js  # 高度采样增强器（缓存/批量/进度，内部走采样网关）
 │   │   │   └── toolModules/
@@ -133,14 +143,16 @@ frontend/src/
 │   │   │       ├── shallowWaterModule.js  # 热带浅水模块（三渲二水体+闪电）
 │   │   │       └── useCesiumToolModules.js  # 工具面板模块编排（核心：模块注册表 + 按 i18n 语言重建）
 │   │   │   ├── draw/
+│   │   │       ├── drawEntityFactory.ts  # 绘制成品与测量标注实体构建器（TS：DrawPayload/StyledDescriptor/DrawHandle/MeasureOptions 接口，DrawStyleParams 复用 store 类型；面类 classificationType=TERRAIN + 贴地描边、测高距三线语义配色、方位角箭头+正北虚线；标注锚点：面积重心/线末端/垂线中点/箭头尖端；样式回放跳过语义色类型；baseAlpha 有限性兜底防 NaN 透明度整层不可见）
+│   │   │       ├── drawMeasureSpec.ts  # 绘制/测量类型元数据（TS：DrawType/MeasureType/ShapeType/InteractionModel/TypeMeta；DRAW_TYPES/MEASURE_TYPES、三态交互模型 multi|anchor|two-point|single、MIN_POINTS、CircleOutline→Circle 别名、**EDITABLE_TYPES 可编辑判据唯一事实来源**，管理器与 TOC 能力位共用）
 │   │   │       ├── scenePicker.js  # 场景取点工具（pickEarthPoint 两级取点链 pickPosition→pickEllipsoid 兜底 + Cartesian3↔经纬度换算；绘制/测量与路线选点共用）
-│   │   │       ├── useCesiumDrawMeasure.js  # P0 绘制/测量管理器（ScreenSpaceEventHandler 交互，EllipsoidGeodesic 表面距离+ENU shoelace 面积，贴地实体 + 测量结果标签；cancelActive 同步摘除预览 Label 防泄漏，removeHandle 带 contains 回执强校验）
+│   │   │       ├── useCesiumDrawMeasure.js  # 绘制/测量管理器（三态交互状态机：逐点/锚点两点/两点即完成；9 类型 Point/LineString/Polygon/Rectangle/Circle/MeasureDistance/MeasureArea/MeasureHeight/MeasureAzimuth；测距 EllipsoidGeodesic、测面 ENU shoelace、矩形/圆/方位角走 drawGeometry；测量开关实时重算标注；cancelActive 同步摘除预览 Label 防泄漏，removeHandle 带 contains 回执强校验）
 │   │   │       └── useCesiumRouteRendering.js  # P2 公交/驾车路线渲染器（贴地折线/站点/label，步骤定位/预览/清理，纯函数无 @ol 依赖；removeHandle 带 contains 回执强校验）
 │   │   ├── constants/
 │   │   │   └── basemapProviderFactory.ts  # Cesium ImageryProvider 工厂
 │   │   ├── layers/
 │   │   │   └── toc-adapters/
-│   │   │       └── cesiumTocActions.js  # cesium: 前缀动作直调元数据店
+│   │   │       └── cesiumTocActions.js  # cesium: 前缀动作直调元数据店（solo/label/copy/export 全支持；未识别动作 return false 交回通用分发器——历史上 default:true 会吞掉样式页签等新动作）
 │   │   ├── services/
 │   │   │   └── cesiumRemoteServiceAdapter.js  # 在线服务注册表 → Cesium ImageryLayer 渲染适配器（WMS/WMTS/XYZ/ArcGIS Provider 构建 + 显隐/叠放同步）
 │   │   ├── modules/
@@ -265,9 +277,13 @@ frontend/src/
 │   │   │       ├── lercDecode.worker.js  # LERC 瓦片解码 Worker（主线程卡顿修复）
 │   │   │       └── util.js  # 工具函数
 │   │   ├── stores/
-│   │   │   ├── cesiumLayerNodeBuilder.ts  # Cesium 元数据 → TOC 树节点映射（TYPE_LABELS 新增 draw/route；sourceType = cesium-draw / cesium-route / cesium-data 按 category 分组）
-│   │   │   └── cesiumLayers.ts  # Cesium 三维数据元数据店（OPACITY_SUPPORTED_TYPES 新增 draw；MANAGED_CATEGORIES = {'draw','route'} 记录免于 loadedDataSources 清除；registerDrawing/remove/purgeRecord 带 category 跟踪）
+│   │   │   ├── cesiumLayerNodeBuilder.ts  # Cesium 元数据 → TOC 树节点映射（TYPE_LABELS 含 draw/route；sourceType = cesium-draw / cesium-route / cesium-data；矢量类开放 style/label/copyCoordinates/exportLayerData（含 KML）+ soloEvent，贴合地形/恢复高程由 groundPlacementCapabilities 能力表驱动，**编辑要素判据读 drawMeasureSpec.EDITABLE_TYPES + record.shapeType**；坐标系/AOI 显式关闭）
+│   │   │   ├── cesiumLayers.ts  # Cesium 三维数据元数据店（OPACITY_SUPPORTED_TYPES 含 draw；MANAGED_CATEGORIES = {'draw','route'} 免于 loadedDataSources 清除；setStyle/setLabelVisible/solo/copyCoordinates/exportData/fitToTerrain/resetTerrainFit/requestAttributeTable/editFeature + isCesiumStyleSupportedType/isCesiumVectorType 类型判据；record 增加 labelVisible/style/shapeType 留痕，registerDrawing 可携带具体几何类型）
+│   │   │   └── useDrawMeasureStore.ts  # 3D 绘制/测量面板↔引擎共享状态（measureOptions/style/activeType/drawing/lastResult/records；只存可序列化数据，禁止 Cartesian3/Entity 入店）
 │   │   ├── utils/
+│   │   │   ├── browserIo.ts  # 浏览器侧文本剪贴与文件落盘（copyTextToClipboard 含非安全上下文 textarea 兜底 / downloadTextFile / sanitizeFileName；绘制面板与 TOC 坐标导出共用）
+│   │   │   ├── cesiumLayerSerialization.ts  # Cesium 实体 → 坐标序列化（TS：LayerShape/SerializeMeta/SerializedExport/PropertyTable；point/polyline/polygon/rectangle 反解，动态属性按当前时刻取值；输出 GeoJSON FeatureCollection / CSV / TXT / KML 2.2，并提取属性表数据供 TOC「复制坐标」「导出坐标」「属性表」使用）
+│   │   │   ├── drawGeometry.ts  # 绘制/测量纯几何（面积/周长/矩形跨度/圆环/方位角/重心/地面距离；零 Cesium 依赖，便于 tsc 与单测）
 │   │   │   └── echartsFxRuntime.js  # Cesium 图表运行时
 │   │   └── vendors/
 │   │       └── cesium-navigation/
@@ -575,7 +591,7 @@ frontend/src/
 │       ├── components/
 │       │   ├── AdministrativeDivisionPanel.vue
 │       │   ├── AdministrativeDivisionTreeNode.vue
-│       │   ├── ControlsPanel.vue
+│       │   ├── ControlsPanel.vue  # 侧栏 shell（新增 engine prop：3D 时绘制/测量子面板切换为 CesiumDrawMeasurePanel，2D 保持 OL DrawPanel/MeasurePanel；cesium-draw-action 动作上抛 HomeView）
 │       │   ├── DrawPanel.vue
 │       │   ├── LogMonitor.vue
 │       │   ├── MapContainer.vue  # OL 地图容器（底图/图层/绘制/测量/启动任务）
@@ -583,7 +599,7 @@ frontend/src/
 │       │   ├── MapDownloader.vue  # 底图下载器（框选范围 + 任务提交）⚠️ /api/download/* 后端 V3.6.5 已删，HF 404；见 Docs/TODO/plan-download-feature-git-marker.md
 │       │   ├── MyDownloadTasks.vue  # 我的下载任务列表（查看/取消/下载）⚠️ 同上，接口暂不可用
 │       │   ├── MapSwipeController.vue  # 卷帘对比控制器
-│       │   ├── MeasurePanel.vue
+│       │   ├── MeasurePanel.vue  # OL 测量子面板（2D：测距/测面；3D 由 CesiumDrawMeasurePanel 接管）
 │       │   └── SpatialAnalysisPanel.vue
 │       ├── composables/
 │       │   ├── useMapEventHandlers.js

@@ -45,6 +45,11 @@ export interface CesiumLayerRecord {
     type: string;              // geojson|kml|kmz|czml|shp|tif|gltf|3dtiles|wayline|draw|route|imagery
     /** 记录来源：data=导入数据（默认）；draw=绘制/测量；route=公交/驾车路线 */
     category?: 'data' | 'draw' | 'route';
+    /**
+     * 绘制 / 路线成品的具体几何类型（Point / Polygon / MeasureHeight / drive …）。
+     * `type` 只能表达 category，TOC 能力位（是否可编辑要素等）需要更细的判据。
+     */
+    shapeType?: string;
     engine: 'cesium';
     visible: boolean;
     opacity: number;           // 0~1
@@ -56,6 +61,21 @@ export interface CesiumLayerRecord {
     baseHeight?: number;
     /** 当前材质模式（3dtiles 专用） */
     materialMode?: string;
+    /** 标注显隐（矢量类可切换；TOC 右键「开启 / 关闭标注」回写） */
+    labelVisible?: boolean;
+    /** 最近一次应用的样式补丁（仅元数据留痕，供审计与后续回填；样式页签当前不自动回填表单） */
+    style?: CesiumLayerStylePatch;
+    /** GLTF 相对地形的高度偏移（米，TOC 高程滑杆值源；正值抬升，用于修正原点在几何中心的模型） */
+    modelHeightOffset?: number;
+}
+
+/** 矢量样式补丁（与 OL drawingToolRegistry 的字段口径对齐） */
+export interface CesiumLayerStylePatch {
+    fillColor?: string;
+    strokeColor?: string;
+    /** 0~1 */
+    fillOpacity?: number;
+    strokeWidth?: number;
 }
 
 /** 场景操作适配器（由 CesiumContainer 挂载时注册） */
@@ -72,7 +92,56 @@ export interface CesiumLayerAdapter {
     reposition?: (id: string) => void;
     /** GeoTIFF 单波段拉伸至高程（可选） */
     stretchToHeight?: (id: string) => void;
+    /** 矢量样式应用（draw 走绘制管理器，导入矢量走 DataSource 遍历） */
+    setStyle?: (id: string, patch: CesiumLayerStylePatch) => void;
+    /** 标注显隐切换（可选） */
+    setLabelVisible?: (id: string, visible: boolean) => void;
+    /** 复制坐标为文本（返回 false = 无可复制坐标） */
+    copyCoordinates?: (id: string) => boolean;
+    /** 导出坐标为文件 */
+    exportData?: (id: string, format: string) => boolean;
+    /** 打开属性表（只读，UI 挂在 CesiumContainer） */
+    openAttributeTable?: (id: string) => boolean;
+    /** 进入要素编辑（仅绘制成品，导入数据为只读） */
+    editFeature?: (id: string) => boolean;
+    /** 贴合地形（矢量 clamp / 3D Tiles 配准 / glTF 相对地形），异步 */
+    fitToTerrain?: (id: string) => Promise<{ ok: boolean; reason?: string }>;
+    /** 恢复数据自带原始高程 */
+    resetTerrainFit?: (id: string) => { ok: boolean; reason?: string };
 }
+
+/**
+ * 支持样式修改的类型（矢量类）。
+ * 栅格 / 模型 / 3D Tiles 无「填充色 / 边线色」语义，其外观由透明度与材质模式承载。
+ */
+const STYLE_SUPPORTED_TYPES = new Set([
+    'geojson',
+    'kml',
+    'kmz',
+    'czml',
+    'shp',
+    'wayline',
+    'draw',
+    'route',
+]);
+
+/** 支持标注显隐与坐标导出的类型（有顶点语义的矢量类） */
+const VECTOR_TYPES = new Set([...STYLE_SUPPORTED_TYPES]);
+
+/** 类型是否支持矢量样式修改（TOC 菜单与样式页签共用判据，避免两处各写一份白名单） */
+export function isCesiumStyleSupportedType(type: string): boolean {
+    return STYLE_SUPPORTED_TYPES.has(String(type || ''));
+}
+
+/** 类型是否具备顶点语义（标注显隐 / 复制坐标 / 导出坐标） */
+export function isCesiumVectorType(type: string): boolean {
+    return VECTOR_TYPES.has(String(type || ''));
+}
+
+/**
+ * 贴地能力判据已收口到 `terrain/groundPlacementCapabilities`（单一事实来源），
+ * 本文件不再维护第二份「可贴地类型」白名单。
+ */
 
 export const useCesiumLayersStore = defineStore('cesiumLayers', () => {
     const records = ref<CesiumLayerRecord[]>([]);
@@ -191,9 +260,15 @@ export const useCesiumLayersStore = defineStore('cesiumLayers', () => {
     /**
      * 绘制 / 路线建档（引擎感知迁移 P0/P2）：
      * 由 CesiumContainer 内的绘制管理器与路线渲染器在成品时调用。
-     * @param input { id, name, category: 'draw' | 'route' }
+     * @param input { id, name, category: 'draw' | 'route', shapeType? }
+     *        shapeType 为具体几何类型（Point / Polygon / MeasureHeight …），供 TOC 能力位细分
      */
-    function registerDrawing(input: { id: string; name: string; category: 'draw' | 'route' }): void {
+    function registerDrawing(input: {
+        id: string;
+        name: string;
+        category: 'draw' | 'route';
+        shapeType?: string;
+    }): void {
         const id = String(input?.id || '').trim();
         if (!id) return;
         if (getRecord(id)) return;
@@ -205,6 +280,7 @@ export const useCesiumLayersStore = defineStore('cesiumLayers', () => {
                 name: String(input.name || '未命名').slice(0, 60),
                 type: category,
                 category,
+                shapeType: input.shapeType ? String(input.shapeType) : undefined,
                 engine: 'cesium' as const,
                 visible: true,
                 opacity: 1,
@@ -243,6 +319,106 @@ export const useCesiumLayersStore = defineStore('cesiumLayers', () => {
         adapter?.stretchToHeight?.(id);
     }
 
+    // ────────────────────────── 矢量样式 / 标注 / 坐标（TOC 右键与样式页签） ──────────────────────────
+
+    /**
+     * 应用矢量样式补丁。
+     * 元数据留痕（record.style）与场景同步分离：adapter 未注册时只更新元数据并告警，
+     * 保证样式页签在容器未就绪时也不会「点了没反应且无提示」。
+     * @returns {boolean} 类型不支持或记录不存在时返回 false
+     */
+    function setStyle(id: string, patch: CesiumLayerStylePatch = {}): boolean {
+        const record = getRecord(id);
+        if (!record || !STYLE_SUPPORTED_TYPES.has(record.type)) return false;
+        record.style = { ...(record.style || {}), ...patch };
+        records.value = [...records.value];
+        if (!adapter?.setStyle) {
+            console.warn('[cesiumLayers] setStyle 场景操作未生效：adapter 未注册', { id });
+            return false;
+        }
+        adapter.setStyle(id, patch);
+        return true;
+    }
+
+    /** 切换标注显隐（矢量类；无 label 的图层由 adapter 返回 false 并提示） */
+    function setLabelVisible(id: string, visible: boolean): boolean {
+        const record = getRecord(id);
+        if (!record || !VECTOR_TYPES.has(record.type)) return false;
+        record.labelVisible = !!visible;
+        records.value = [...records.value];
+        if (!adapter?.setLabelVisible) return false;
+        adapter.setLabelVisible(id, !!visible);
+        return true;
+    }
+
+    /**
+     * 仅显示此图层（其它全部隐藏）。
+     * 纯元数据 + adapter 广播，不依赖引擎侧「solo 状态」概念，双端语义一致。
+     */
+    function solo(id: string): boolean {
+        const target = getRecord(id);
+        if (!target) return false;
+        records.value.forEach((record) => {
+            const next = record.id === id;
+            if (record.visible === next) return;
+            record.visible = next;
+            adapter?.setVisible(record.id, next);
+        });
+        records.value = [...records.value];
+        return true;
+    }
+
+    /** 复制坐标到剪贴板（场景侧实现，返回是否成功） */
+    function copyCoordinates(id: string): boolean {
+        const record = getRecord(id);
+        if (!record || !VECTOR_TYPES.has(record.type)) return false;
+        return adapter?.copyCoordinates?.(id) ?? false;
+    }
+
+    /** 导出坐标为文件（format: geojson|csv|txt） */
+    function exportData(id: string, format: string): boolean {
+        const record = getRecord(id);
+        if (!record || !VECTOR_TYPES.has(record.type)) return false;
+        return adapter?.exportData?.(id, format) ?? false;
+    }
+
+    /**
+     * 贴合地形。异步：3D Tiles 需要基底采样 + 地形查询。
+     * 失败原因由 adapter 负责提示（terrain-off / unsupported / sample-failed）。
+     * @returns {Promise<{ok:boolean, reason?:string}>}
+     */
+    function fitToTerrain(id: string): Promise<{ ok: boolean; reason?: string }> {
+        const record = getRecord(id);
+        if (!record) return Promise.resolve({ ok: false, reason: 'no-record' });
+        const result = adapter?.fitToTerrain?.(id);
+        return result instanceof Promise ? result : Promise.resolve(result ?? { ok: false, reason: 'no-adapter' });
+    }
+
+    /**
+     * 进入要素编辑。
+     * 3D 侧仅绘制成品可编辑（有可回写的顶点载荷）；导入矢量无写回通道，
+     * 返回 false 由宿主提示「导入数据为只读」。
+     */
+    function editFeature(id: string): boolean {
+        const record = getRecord(id);
+        if (!record) return false;
+        return adapter?.editFeature?.(id) ?? false;
+    }
+
+    /** 打开属性表（只读表格 + 行定位，UI 由容器承载） */
+    function requestAttributeTable(id: string): boolean {
+        const record = getRecord(id);
+        if (!record) return false;
+        return adapter?.openAttributeTable?.(id) ?? false;
+    }
+
+    /** 恢复数据自带原始高程（取消贴地） */
+    function resetTerrainFit(id: string): { ok: boolean; reason?: string } {
+        const record = getRecord(id);
+        if (!record) return { ok: false, reason: 'no-record' };
+        return adapter?.resetTerrainFit?.(id) ?? { ok: false, reason: 'no-adapter' };
+    }
+
     function registerAdapter(next: CesiumLayerAdapter): void {
         adapter = next;
     }
@@ -269,6 +445,15 @@ export const useCesiumLayersStore = defineStore('cesiumLayers', () => {
         setMaterialMode,
         requestReposition,
         requestStretchHeight,
+        setStyle,
+        setLabelVisible,
+        solo,
+        copyCoordinates,
+        exportData,
+        fitToTerrain,
+        resetTerrainFit,
+        requestAttributeTable,
+        editFeature,
         registerAdapter,
         unregisterAdapter,
     };

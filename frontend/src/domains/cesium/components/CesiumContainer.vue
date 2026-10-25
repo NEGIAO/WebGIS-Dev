@@ -126,6 +126,13 @@
         class="coordinate-display"
     >{{ activeCoordinateDisplay }}</div>
 
+    <!-- 三维矢量图层属性表（TOC 右键「打开属性表」，只读 + 行定位） -->
+    <CesiumAttributeTableDialog
+        :visible="attrTableVisible"
+        :data="attrTableData"
+        @close="attrTableVisible = false"
+        @locate="locateAttributeEntity"
+    />
 </template>
 
 <script setup>
@@ -136,6 +143,7 @@ import {
     onMounted,
     onUnmounted,
     ref,
+    toRaw,
     watch,
 } from 'vue';
 import { BACKEND_BASE_URL, apiGetRuntimeDefaults } from '@/api/backend';
@@ -148,6 +156,7 @@ import { translate as t } from '@common/app/useLocale';
 import { Upload } from '@lucide/vue';
 import CesiumAdvancedEffects from './CesiumAdvancedEffects.vue';
 import CesiumToolPanel from './CesiumToolPanel.vue';
+import CesiumAttributeTableDialog from './CesiumAttributeTableDialog.vue';
 import CesiumDataImportDialog from './CesiumDataImportDialog.vue';
 import FluidSimulationPanel from '@cesium-domain/modules/fluid-simulation/FluidSimulationPanel.vue';
 const ShallowWaterOverlay = defineAsyncComponent(() =>
@@ -170,6 +179,7 @@ import { useCesiumDataImport } from '../composables/dataImport/useCesiumDataImpo
 import { createCesiumDataOpsHandlers } from '../composables/dataImport/useCesiumDataOpsHandlers';
 import { useCesiumToolModules } from '../composables/toolModules/useCesiumToolModules';
 import { useCesiumLayersStore } from '@cesium-domain/stores/cesiumLayers';
+import { useDrawMeasureStore } from '@cesium-domain/stores/useDrawMeasureStore';
 import { registerEngineHandlers, unregisterEngineHandlers } from '@common/layer-tree/actions/unifiedActionRouter';
 import { TOC_LAYER_DRAG_MIME } from '@common/layer-tree/protocol';
 import { getCesiumGroundResolution } from '@common/utils/viewScale/browserAdapter';
@@ -177,6 +187,22 @@ import { createCesiumDrawMeasureFeature } from '../composables/draw/useCesiumDra
 import { createCesiumRouteFeature } from '../composables/draw/useCesiumRouteRendering';
 import { readCachedPreferredBasemap } from '@common/user/stores/useUserPreferencesStore';
 import { setRecordVisible, setRecordOpacity } from '../composables/dataImport/dataSourceDisplay';
+import {
+    applyVectorDataSourceStyle,
+    setVectorLabelVisible,
+} from '../composables/dataImport/dataSourceDisplay';
+import {
+    collectEntityProperties,
+    collectEntityShapes,
+    serializeShapes,
+} from '../utils/cesiumLayerSerialization';
+import {
+    assertGroundPlacementRegistry,
+    fitGroundPlacement,
+    resetGroundPlacement,
+    setGroundOffset,
+} from '../composables/terrain/groundPlacementService';
+import { copyTextToClipboard, downloadTextFile, sanitizeFileName } from '../utils/browserIo';
 import { setupCloudIntegration, isCloudPipelineActive } from '@cesium-domain/modules/cloud';
 import { useCesiumUrlTracking } from '../composables/layers/useCesiumUrlTracking';
 import { useCesiumWind } from '@cesium-domain/modules/wind/useCesiumWind';
@@ -385,6 +411,55 @@ function findImportRecord(id) {
     return (dataImport.loadedDataSources.value || []).find((item) => item.id === id) || null;
 }
 
+/**
+ * 收集某条三维图层记录的坐标几何（TOC 复制坐标 / 导出坐标用）。
+ * 绘制成品直接取建档载荷；导入矢量从 DataSource 实体反解（属性可能为动态，按当前时刻取值）。
+ * @param {string} id 图层 id（不含 cesium: 前缀）
+ * @returns {Array<{type:'point'|'line'|'polygon', lonLats:Array<[number,number]>}>}
+ */
+function collectLayerShapes(id) {
+    if (drawMeasureFeature.isManaged(id)) return drawMeasureFeature.getShapesById(id);
+    if (routeFeature.isManaged(id)) return routeFeature.getShapesById?.(id) || [];
+    const record = findImportRecord(id);
+    const entities = toRaw(record?.entity)?.entities?.values;
+    return Array.isArray(entities) ? collectEntityShapes(getCesium(), entities) : [];
+}
+
+// ────────────────────────── 属性表（只读） ──────────────────────────
+const attrTableVisible = ref(false);
+const attrTableData = ref(null);
+/** 当前属性表对应的图层 id（行定位时回查实体） */
+const attrTableRecordId = ref('');
+
+/**
+ * 打开某图层的属性表。
+ * 3D 侧属性来自 `entity.properties`，只读——没有可回写的属性存储，
+ * 提供编辑态会造成「改了但没保存」的静默丢失。
+ * @param {string} id 图层 id（不含 cesium: 前缀）
+ * @returns {boolean} 是否成功打开
+ */
+function showAttributeTable(id) {
+    const record = findImportRecord(id);
+    const entities = toRaw(record?.entity)?.entities?.values;
+    if (!record || !Array.isArray(entities) || !entities.length) {
+        message.warning(t('cesium.attributeTable.empty'));
+        return false;
+    }
+    const { columns, rows, truncated } = collectEntityProperties(getCesium(), entities);
+    attrTableRecordId.value = id;
+    attrTableData.value = { title: record.name, columns, rows, truncated };
+    attrTableVisible.value = true;
+    return true;
+}
+
+/** 属性表行点击 → 相机飞到该要素 */
+function locateAttributeEntity(entityId) {
+    const record = findImportRecord(attrTableRecordId.value);
+    const entity = toRaw(record?.entity)?.entities?.getById?.(entityId);
+    if (!entity) return;
+    getViewer()?.flyTo(entity, { duration: 0.8 });
+}
+
 // 导入列表 → 元数据店差量同步（新增建档/删除销档，保留用户改过的 visible/opacity）
 watch(
     () => dataImport.loadedDataSources.value,
@@ -404,6 +479,9 @@ watch(
                         max: Math.max(Math.ceil(center + 100), Math.floor(center - 100) + 1),
                     };
                     base.materialMode = String(item.materialMode || 'baimo');
+                } else if (item.type === 'gltf') {
+                    // glTF 的滑杆语义是「相对地形高度偏移」，初值取导入时的语义高度
+                    base.baseHeight = Number(item.modelHeightOffset) || 0;
                 }
                 return base;
             }),
@@ -415,12 +493,56 @@ watch(
 // ════════════════════════════════════════════
 // 绘制/测量管理器 + 公交/驾车路线渲染器（引擎感知迁移 P0/P2）
 // 方案：Docs/TODO/engine-aware-map-operations-migration-plan.md
+// 全类型扩展：Docs/LLM_record/26-10/2026-10-25/2026-10-25-cesium-draw-measure-full-migration.md
 // ════════════════════════════════════════════
+const drawMeasureStore = useDrawMeasureStore();
+
 const drawMeasureFeature = createCesiumDrawMeasureFeature({
     getCesium,
     getViewer,
     cesiumLayersStore,
+    /** 场景标注前缀走 i18n（语言切换后新绘制的标注即时跟随） */
+    getLabel: (key) => t(`cesium.drawMeasure.label.${key}`),
+    /** 绘制完成 → 纯数据载荷入店，面板据此渲染读数与记录 */
+    onResult: (result) => {
+        drawMeasureStore.setResult(result, result.summary || '');
+    },
+    /** 交互态 → 面板高亮与「完成/取消」按钮显隐 */
+    onStateChange: (state) => {
+        drawMeasureStore.setActiveType(state.drawing ? state.mode : null);
+    },
+    /** 成品被移除（撤销 / TOC 删除 / 清空）→ 读数同步失效，避免面板展示已不存在的图形 */
+    onRemoved: (id) => {
+        if (drawMeasureStore.lastResult?.id === id) drawMeasureStore.setResult(null);
+    },
+    /** 手势结束失败（取点不足等）→ 明确提示，避免「右键了没反应」 */
+    onReject: (code) => {
+        if (code === 'need-more-points') {
+            message.warning(t('cesium.drawMeasure.toast.needMorePoints'));
+        } else if (code === 'need-second-click') {
+            message.warning(t('cesium.drawMeasure.toast.needSecondClick'));
+        } else if (code === 'failed') {
+            message.warning(t('cesium.drawMeasure.toast.failed'));
+        }
+    },
 });
+
+// 初始同步：面板状态先于引擎存在（用户可能先改选项再开画）
+drawMeasureFeature.setMeasureOptions(drawMeasureStore.measureOptions);
+drawMeasureFeature.updateStyle(drawMeasureStore.style);
+
+// 面板 → 引擎单向下推（面板只写 store，引擎只读 store，避免双向回环）
+watch(
+    () => drawMeasureStore.measureOptions,
+    (options) => drawMeasureFeature.setMeasureOptions(options),
+    { deep: true },
+);
+watch(
+    () => drawMeasureStore.style,
+    (style) => drawMeasureFeature.updateStyle(style),
+    { deep: true },
+);
+
 const routeFeature = createCesiumRouteFeature({
     getCesium,
     getViewer,
@@ -429,7 +551,7 @@ const routeFeature = createCesiumRouteFeature({
 
 // 注册场景操作 adapter（store action → 句柄）
     // 惰性引用：ops 处理器在后方解构，adapter 方法调用时已就绪
-    let _rsvcSetHeight = null;
+
     let _rsvcSetMaterial = null;
     let _rsvcReposition = null;
     let _rsvcStretchHeight = null;
@@ -505,8 +627,48 @@ const routeFeature = createCesiumRouteFeature({
         dataImport.removeDataSource(id);
     },
     setBaseHeight(id, height) {
-        // useCesiumDataOpsHandlers 的处理器为对象解构签名，必须以 { id, height } 下发
-        _rsvcSetHeight?.({ id, height });
+        const record = findImportRecord(id);
+        if (!record) return;
+        /**
+         * 统一走门面：3D Tiles 由数据导入层记账基座海拔，glTF 走相对地形偏移，
+         * 容器不再按类型 if/else（这正是「贴地逻辑散落」的根源）。
+         * 注意：不得在此回调里再调 cesiumLayersStore.setBaseHeight —— store 已在调用 adapter
+         * 前置写 record.baseHeight，回调内再调会形成无限递归。
+         */
+        const result = setGroundOffset(
+            { record, viewer: getViewer(), Cesium: getCesium(), dataImport },
+            Number(height) || 0,
+        );
+        if (!result.ok) message.warning(t('cesium.terrainOffsetUnsupported'));
+        getViewer()?.scene?.requestRender?.();
+    },
+    /** 贴合地形（门面按类型分派：矢量 clamp / 3D Tiles 配准 / glTF 相对地形） */
+    async fitToTerrain(id) {
+        const record = findImportRecord(id);
+        const Cesium = getCesium();
+        if (!record || !Cesium) return { ok: false, reason: 'no-handle' };
+        const result = await fitGroundPlacement({ record, viewer: getViewer(), Cesium, dataImport });
+        if (result.ok) {
+            message.success(t('cesium.terrainFitDone', { name: record.name }));
+        } else if (result.reason === 'terrain-off') {
+            message.warning(t('cesium.terrainFitNeedTerrain'));
+        } else if (result.reason === 'unsupported') {
+            message.info(t('cesium.terrainFitUnsupported'));
+        } else {
+            message.warning(t('cesium.terrainFitFailed'));
+        }
+        getViewer()?.scene?.requestRender?.();
+        return result;
+    },
+    /** 恢复数据自带原始高程（取消贴地） */
+    resetTerrainFit(id) {
+        const record = findImportRecord(id);
+        const Cesium = getCesium();
+        if (!record || !Cesium) return { ok: false, reason: 'no-handle' };
+        const result = resetGroundPlacement({ record, viewer: getViewer(), Cesium, dataImport });
+        if (result.ok) message.success(t('cesium.terrainResetDone', { name: record.name }));
+        else message.warning(t('cesium.terrainResetFailed'));
+        return result;
     },
     setMaterialMode(id, mode) {
         _rsvcSetMaterial?.({ id, mode });
@@ -516,6 +678,92 @@ const routeFeature = createCesiumRouteFeature({
     },
     stretchToHeight(id) {
         _rsvcStretchHeight?.({ id });
+    },
+    /**
+     * 矢量样式应用（TOC 右键「样式设置」/ 样式页签定向修改）。
+     * 分流：绘制成品走管理器句柄（按 id 定向，不污染后续绘制默认样式）；
+     * 导入矢量走 DataSource 逐实体换色。
+     */
+    setStyle(id, patch) {
+        if (drawMeasureFeature.isManaged(id)) {
+            const ok = drawMeasureFeature.updateStyleById(id, patch);
+            getViewer()?.scene?.requestRender?.();
+            if (!ok) message.warning(t('cesium.drawMeasure.toast.failed'));
+            return;
+        }
+        const Cesium = getCesium();
+        const record = findImportRecord(id);
+        if (!Cesium || !record) {
+            console.warn('[CesiumContainer] setStyle 找不到可着色句柄', { id });
+            return;
+        }
+        const applied = applyVectorDataSourceStyle(Cesium, toRaw(record.entity), patch, () => {
+            getViewer()?.scene?.requestRender?.();
+        });
+        if (!applied) message.info(t('cesium.styleNotApplicable'));
+    },
+    /** 标注显隐（矢量类） */
+    setLabelVisible(id, visible) {
+        if (drawMeasureFeature.isManaged(id)) {
+            const ok = drawMeasureFeature.setLabelVisible(id, visible);
+            if (!ok) message.info(t('cesium.noLabelToToggle'));
+            getViewer()?.scene?.requestRender?.();
+            return;
+        }
+        const record = findImportRecord(id);
+        const applied = setVectorLabelVisible(toRaw(record?.entity), visible);
+        if (!applied) message.info(t('cesium.noLabelToToggle'));
+        getViewer()?.scene?.requestRender?.();
+    },
+    /** 打开属性表（只读表格 + 行定位） */
+    openAttributeTable(id) {
+        return showAttributeTable(id);
+    },
+    /** 进入 / 退出要素编辑（仅绘制成品，顶点拖拽） */
+    editFeature(id) {
+        if (!drawMeasureFeature.isManaged(id)) {
+            message.info(t('cesium.editReadOnly'));
+            return false;
+        }
+        if (drawMeasureFeature.isEditing(id)) {
+            drawMeasureFeature.stopVertexEdit();
+            message.info(t('cesium.editStopped'));
+            return true;
+        }
+        const started = drawMeasureFeature.startVertexEdit(id);
+        if (started) message.info(t('cesium.editStarted'));
+        else message.warning(t('cesium.editUnsupported'));
+        return started;
+    },
+    /** 复制坐标为文本（成功返回 true） */
+    copyCoordinates(id) {
+        const shapes = collectLayerShapes(id);
+        if (!shapes.length) {
+            message.warning(t('cesium.noCoordinates'));
+            return false;
+        }
+        const text = shapes
+            .map((shape) => shape.lonLats.map(([lon, lat]) => `${lon.toFixed(6)},${lat.toFixed(6)}`).join('\n'))
+            .join('\n\n');
+        void copyTextToClipboard(text).then((ok) => {
+            if (ok) message.success(t('cesium.coordinatesCopied', { count: shapes.length }));
+            else message.warning(t('cesium.copyCoordinatesFailed'));
+        });
+        return true;
+    },
+    /** 导出坐标为文件（geojson / csv / txt） */
+    exportData(id, format) {
+        const shapes = collectLayerShapes(id);
+        const record = cesiumLayersStore.getRecord(id);
+        const serialized = serializeShapes(shapes, format, { id, name: record?.name });
+        if (!serialized) {
+            message.warning(t('cesium.noCoordinates'));
+            return false;
+        }
+        const baseName = sanitizeFileName(record?.name || id, 'cesium-layer');
+        downloadTextFile(serialized.text, `${baseName}.${serialized.extension}`, serialized.mime);
+        message.success(t('cesium.exported', { name: `${baseName}.${serialized.extension}` }));
+        return true;
     },
 });
 
@@ -1008,6 +1256,22 @@ defineExpose({
     activateCesiumInteraction: (type) => drawMeasureFeature.activateInteraction(type),
     /** 更新后续绘制默认样式（对齐 OL「影响后续绘制」语义） */
     updateCesiumDrawingStyle: (patch) => drawMeasureFeature.updateStyle(patch),
+    /**
+     * 按 id 修改单条三维图层样式（TOC 右键「样式设置」与侧栏样式页签共用入口）。
+     * 经元数据店下发，保证 record.style 留痕与场景同步一致。
+     * @param {string} id 图层 id（不含 cesium: 前缀）
+     * @param {object} patch { fillColor, strokeColor, fillOpacity, strokeWidth }
+     * @returns {boolean} 是否受理（类型不支持时 false）
+     */
+    updateCesiumLayerStyle: (id, patch) => cesiumLayersStore.setStyle(id, patch),
+    /** 面板「完成」：返回 'ok' | 'need-more-points' | 'need-second-click' | 'not-drawing' | 'failed' */
+    finishCesiumDraw: () => drawMeasureFeature.finish(),
+    /** 面板「取消」：放弃进行中的交互，成品不受影响 */
+    cancelCesiumDraw: () => drawMeasureFeature.cancel(),
+    /** 定位到最近一条成品；无成品返回 false（宿主据此提示） */
+    flyToCesiumDrawing: () => drawMeasureFeature.flyToLast(),
+    /** 当前交互态快照 { drawing, mode, clickCount } */
+    getCesiumDrawState: () => drawMeasureFeature.getState(),
     /** 公交起终点选点（Promise<{lng,lat}|null>，右击取消） */
     startRoutePointPick: (type) => routeFeature.startPointPick(type),
     /** 渲染公交方案（载荷为 RoutePlannerPanel 解析后的 route 对象） */
@@ -1543,8 +1807,13 @@ let cloudCleanup = null;
  * 设置模块级 viewer 变量，供所有 composable 通过 getViewer() 访问
  */
 function initViewer() {
+    // 贴地策略注册自检：能力表声明需要贴地却没有策略实现的类型会在此告警，
+    // 避免「菜单有按钮、点了没反应」的静默失效
+    assertGroundPlacementRegistry();
+
     // viewer 重建（重试链路）：复位绘制/路线句柄表，防止残留旧 viewer 的死实体引用
     try { drawMeasureFeature.reset(); } catch { /* ignore */ }
+    try { drawMeasureStore.reset(); } catch { /* ignore */ }
     try { routeFeature.reset(); } catch { /* ignore */ }
 
     const mapCtor = typeof Cesium.Map === 'function' ? Cesium.Map : Cesium.Viewer;
@@ -1655,7 +1924,6 @@ const {
     handleDataImport,
     handleDataReposition,
     handleDataStretchHeight,
-    handleDataSetHeight,
     handleImportTilesetSample,
     handleDataSetMaterial,
     handleImportTilesetZip,
@@ -1670,7 +1938,6 @@ const {
 });
 
 // 惰性引用回填：adapter 闭包在调用时通过这些引用触达 ops 处理器
-_rsvcSetHeight = handleDataSetHeight;
 _rsvcSetMaterial = handleDataSetMaterial;
 _rsvcReposition = handleDataReposition;
 _rsvcStretchHeight = handleDataStretchHeight;
@@ -1685,6 +1952,8 @@ onUnmounted(() => {
 
     // 绘制/路线管理器复位（取消进行中交互、清空句柄表；实体随下方 viewer.destroy 释放）
     try { drawMeasureFeature.reset(); } catch { /* ignore */ }
+    // 面板状态同步清空：3D 场景已销毁，残留读数 / 记录会成为无法定位的孤儿数据
+    try { drawMeasureStore.reset(); } catch { /* ignore */ }
     try { routeFeature.reset(); } catch { /* ignore */ }
 
     // 统一图层管理：注销 adapter 并清档（TOC「三维数据」分组随之消失）

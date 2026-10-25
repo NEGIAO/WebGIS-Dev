@@ -1,0 +1,964 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Cesium · 绘制与测量</title>
+    <script src="https://cdn.jsdelivr.net/npm/vue@3.5.13/dist/vue.global.prod.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/cesium@1.140.0/Build/Cesium/Cesium.js"></script>
+    <link
+      href="https://cdn.jsdelivr.net/npm/cesium@1.140.0/Build/Cesium/Widgets/widgets.css"
+      rel="stylesheet"
+    />
+    <style>
+      html,
+      body,
+      #app,
+      #cesiumContainer {
+        width: 100%;
+        height: 100%;
+        margin: 0;
+        padding: 0;
+        overflow: hidden;
+        background: #000;
+      }
+
+      .lil-gui {
+        top: 10px;
+        left: 10px;
+        z-index: 999;
+      }
+
+      /* 左下：DrawManager 的实时状态 */
+      .status-panel {
+        position: absolute;
+        left: 10px;
+        bottom: 10px;
+        z-index: 998;
+        min-width: 300px;
+        max-width: 46vw;
+        padding: 10px 12px;
+        border-radius: 6px;
+        border: 1px solid #23364d;
+        color: #e8f1ff;
+        background: rgba(10, 16, 26, 0.82);
+        font:
+          13px/1.7 system-ui,
+          "Microsoft YaHei",
+          sans-serif;
+        pointer-events: none;
+        white-space: pre-line;
+      }
+
+      /* 右上：测量结果 + 记录 */
+      .measure-panel {
+        position: absolute;
+        right: 10px;
+        top: 10px;
+        z-index: 998;
+        width: 268px;
+        max-height: calc(100vh - 20px);
+        display: flex;
+        flex-direction: column;
+        border-radius: 8px;
+        border: 1px solid #23364d;
+        background: rgba(10, 16, 26, 0.86);
+        color: #cfe1f5;
+        font:
+          12px/1.6 system-ui,
+          "Microsoft YaHei",
+          sans-serif;
+        overflow: hidden;
+      }
+
+      .mp-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 9px 12px;
+        border-bottom: 1px solid #23364d;
+        background: rgba(24, 40, 60, 0.6);
+      }
+
+      .mp-title {
+        color: #8da5bd;
+        letter-spacing: 0.5px;
+      }
+
+      .mp-type {
+        padding: 1px 8px;
+        border-radius: 10px;
+        color: #05131f;
+        background: #35e0f0;
+        font-weight: 600;
+      }
+
+      .mp-body {
+        padding: 6px 12px 10px;
+        overflow-y: auto;
+      }
+
+      .mp-empty {
+        padding: 14px 12px;
+        color: #6d8299;
+      }
+
+      .mp-row {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 10px;
+        padding: 5px 0;
+        border-bottom: 1px dashed #1d2d40;
+      }
+
+      .mp-row:last-child {
+        border-bottom: none;
+      }
+
+      .mp-label {
+        color: #8da5bd;
+        flex: none;
+      }
+
+      .mp-value {
+        color: #eaf4ff;
+        font-weight: 600;
+        text-align: right;
+        word-break: break-all;
+      }
+
+      .mp-value.accent {
+        color: #35e0f0;
+      }
+
+      .mp-actions {
+        display: flex;
+        gap: 6px;
+        padding: 0 12px 10px;
+      }
+
+      .mp-actions button {
+        flex: 1;
+        padding: 5px 0;
+        border-radius: 5px;
+        border: 1px solid #2c445e;
+        background: rgba(44, 68, 94, 0.35);
+        color: #cfe1f5;
+        font-size: 12px;
+        cursor: pointer;
+      }
+
+      .mp-actions button:hover {
+        border-color: #35e0f0;
+        color: #35e0f0;
+      }
+
+      .mp-log-title {
+        padding: 7px 12px;
+        border-top: 1px solid #23364d;
+        border-bottom: 1px solid #23364d;
+        color: #8da5bd;
+        background: rgba(24, 40, 60, 0.45);
+      }
+
+      .mp-log {
+        padding: 6px 12px 10px;
+        max-height: 30vh;
+        overflow-y: auto;
+      }
+
+      .mp-log-item {
+        padding: 4px 0;
+        color: #9fb6cc;
+        border-bottom: 1px dashed #1d2d40;
+        white-space: pre-line;
+      }
+
+      .mp-log-item:last-child {
+        border-bottom: none;
+      }
+
+      .mp-log-item b {
+        color: #35e0f0;
+        font-weight: 600;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="app">
+      <div id="cesiumContainer"></div>
+
+      <!-- 测量结果 -->
+      <div class="measure-panel">
+        <div class="mp-head">
+          <span class="mp-title">测量结果</span>
+          <span class="mp-type" v-if="result">{{ result.typeName }}</span>
+        </div>
+
+        <div class="mp-empty" v-if="!result">
+          还没有测量数据。<br />用左上角面板开始绘制。
+        </div>
+
+        <div class="mp-empty" v-else-if="result.drawOnly">
+          仅绘制模式：两个测量项都没勾选。<br />在「测量项」里勾上再画即可出结果。
+        </div>
+
+        <template v-else>
+          <div class="mp-body">
+            <div class="mp-row" v-for="row in result.rows" :key="row.label">
+              <span class="mp-label">{{ row.label }}</span>
+              <span class="mp-value" :class="{ accent: row.accent }"
+                >{{ row.value }}</span
+              >
+            </div>
+          </div>
+          <div class="mp-actions">
+            <button @click="copyCoords">复制坐标</button>
+            <button @click="exportGeoJSON">导出 GeoJSON</button>
+          </div>
+        </template>
+
+        <div class="mp-log-title" v-if="records.length">
+          测量记录（{{ records.length }}）
+        </div>
+        <div class="mp-log" v-if="records.length">
+          <div class="mp-log-item" v-for="(r, i) in records" :key="i">
+            <b>{{ r.name }}</b> — {{ r.summary }}
+          </div>
+        </div>
+      </div>
+
+      <!-- 状态 -->
+      <div class="status-panel">{{ statusText }}</div>
+    </div>
+
+    <script type="module">
+      const { createApp, markRaw } = Vue;
+      import GUI from "https://cdn.jsdelivr.net/npm/lil-gui@0.19.1/dist/lil-gui.esm.js";
+      import DrawManager from "./DrawManager.js";
+
+      // ============================================================
+      // 绘制与测量
+      // ============================================================
+
+      const TYPE_NAMES = {
+        polygon: "多边形",
+        polyline: "折线",
+        rectangle: "矩形",
+        circle: "圆",
+        height: "测高距",
+        azimuth: "方位角",
+      };
+
+      const START_HINT =
+        "选择一种图形开始绘制：多边形/折线左键逐点取点、右键结束；矩形/圆左键点两次确认。\n「测量工具」里的测高距 / 方位角只取两个点，第二点落下自动出结果。\n「测量项」的「启用测量」不勾 = 纯绘制；勾上后面积标在图形中心，周长/长度标在线的最后一个点。";
+
+      /** 局部平面近似，与 DrawManager 内部测量口径保持一致 */
+      function metersPerDegree(latDeg) {
+        return {
+          mx: 111320 * Math.cos(Cesium.Math.toRadians(latDeg)),
+          my: 110540,
+        };
+      }
+
+      createApp({
+        data() {
+          return {
+            viewer: null,
+            imageryLayer: null,
+            myLilGui: null,
+            drawManager: null,
+            statusText: START_HINT,
+            result: null, // 当前图形的测量结果（供右侧面板渲染）
+            lastInfo: null, // 原始 info，用于导出
+            records: [], // 测量记录（不随图形清除而丢失）
+            // lil-gui 里的测量读数：只读展示，每次测量完成刷新
+            measure: {
+              类型: "—",
+              面积: "—",
+              周长: "—",
+              长度: "—",
+              半径: "—",
+              垂直距离: "—",
+              方位角: "—",
+            },
+            // 测量开关。这份对象直接作为 startDraw 的 options 传给 DrawManager，
+            // 字段名保持一致：measure / showArea / showPerimeter。
+            // measure 不勾 = 纯绘制（也是 DrawManager 的默认值）。
+            measureOptions: {
+              measure: true,
+              showArea: true,
+              showPerimeter: true,
+            },
+          };
+        },
+
+        mounted() {
+          this.initMap();
+          this.initDrawManager();
+          this.addlilgui();
+        },
+
+        beforeUnmount() {
+          if (this.drawManager) {
+            this.drawManager.destroy();
+            this.drawManager = null;
+          }
+          if (this.myLilGui) {
+            this.myLilGui.destroy();
+            this.myLilGui = null;
+          }
+        },
+
+        methods: {
+          initMap() {
+            let viewer = new Cesium.Viewer("cesiumContainer", {
+              baseLayer: false,
+              animation: false,
+              timeline: false,
+              fullscreenButton: false,
+              infoBox: false,
+              geocoder: false,
+              homeButton: false,
+              sceneModePicker: false,
+              baseLayerPicker: false,
+              navigationHelpButton: false,
+              selectionIndicator: false,
+              shouldAnimate: true,
+            });
+
+            window.viewer = viewer;
+            viewer.scene.debugShowFramesPerSecond = true;
+            viewer.scene.globe.enableLighting = false;
+            viewer.scene.fog.enabled = true;
+            viewer.scene.fog.density = 0.00008;
+            viewer.scene.skyAtmosphere.show = true;
+            viewer._cesiumWidget._creditContainer.style.display = "none";
+
+            // 真实地形：绘制面用 classificationType.TERRAIN + clampToGround，
+            // 有地形才能真正贴合起伏；加载失败时退化为椭球面，功能不受影响
+            Cesium.ArcGISTiledElevationTerrainProvider.fromUrl(
+              "https://elevation3d.arcgis.com/arcgis/rest/services/WorldElevation3D/Terrain3D/ImageServer",
+            )
+              .then((provider) => {
+                viewer.terrainProvider = provider;
+                this.statusText =
+                  "地形已加载，绘制面会贴合地面起伏。\n" + START_HINT;
+              })
+              .catch((error) => {
+                console.warn("地形加载失败，将在椭球面上演示", error);
+              });
+            viewer.scene.globe.depthTestAgainstTerrain = true;
+
+            let imageryLayer = viewer.imageryLayers.addImageryProvider(
+              new Cesium.UrlTemplateImageryProvider({
+                url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+                maximumLevel: 18,
+              }),
+            );
+
+            // markRaw：Cesium 的 Viewer / Layer 不要进 Vue 的响应式代理。
+            // 否则 entities.add() 返回的是代理对象，之后 entities.remove(代理)
+            // 跟内部保存的原对象对不上，标注就删不掉了。
+            this.viewer = markRaw(viewer);
+            this.imageryLayer = markRaw(imageryLayer);
+            this.resetCamera();
+          },
+
+          initDrawManager() {
+            this.drawManager = new DrawManager({
+              viewer: this.viewer,
+              onStatus: (text) => {
+                this.statusText = text;
+              },
+              onDrawComplete: (info) => {
+                this.lastInfo = info;
+                // 图形上的测量标注已由 DrawManager 按 startDraw 的 options 创建，
+                // 页面这边只负责面板 / 读数 / 记录
+                this.result = this.buildResult(info);
+                this.updateMeasureGui(info);
+                // 原始返回打到控制台，方便对着看字段
+                console.log("[onDrawComplete] 原始返回 info =", info);
+                console.log(
+                  "[onDrawComplete] 面积/周长 =",
+                  info.area,
+                  info.perimeter,
+                  "| 长度 =",
+                  info.length,
+                );
+                const summary = this.result.summary;
+                if (summary) {
+                  this.records.unshift({
+                    name: TYPE_NAMES[info.type] || info.type,
+                    summary,
+                  });
+                  if (this.records.length > 20) this.records.pop();
+                }
+                if (!this.measureOptions.measure) {
+                  this.statusText = "绘制完成（未启用测量）。";
+                }
+              },
+            });
+          },
+
+          // ============================================================
+          // 测量结果：把 info 转成面板要显示的键值对
+          // ============================================================
+
+          /** 面积：按量级自动切换 ㎡ / 公顷 / km² */
+          formatArea(m2) {
+            if (!isFinite(m2) || m2 <= 0) return "—";
+            if (m2 >= 1e6) return `${(m2 / 1e6).toFixed(3)} km²`;
+            if (m2 >= 1e4) return `${(m2 / 1e4).toFixed(2)} 公顷`;
+            return `${m2.toFixed(1)} ㎡`;
+          },
+
+          /** 长度：按量级自动切换 m / km */
+          formatLength(m) {
+            if (!isFinite(m) || m <= 0) return "—";
+            return m >= 1000
+              ? `${(m / 1000).toFixed(3)} km`
+              : `${m.toFixed(1)} m`;
+          },
+
+          /** 经纬度取 6 位小数，约 0.1m 精度 */
+          formatLonLat(lonLat) {
+            return `${lonLat[0].toFixed(6)}, ${lonLat[1].toFixed(6)}`;
+          },
+
+          /**
+           * 组装右侧面板 / 记录用的结果。
+           *
+           * 与 DrawManager 的测量开关保持同一套口径：
+           *   measure 关掉   → 一条测量值都不出，drawOnly = true
+           *   showArea       → 面积（仅 polygon / rectangle / circle 有面积项）
+           *   showPerimeter  → 周长 / 长度 / 半径 / 垂直距离 / 水平距离 / 方位角
+           * 一条测量值都没输出时 drawOnly = true，面板显示"仅绘制"。
+           */
+          buildResult(info) {
+            const rows = [];
+            const opt = this.measureOptions;
+            const parts = [];
+            const onArea = opt.measure && opt.showArea;
+            const onPerimeter = opt.measure && opt.showPerimeter;
+
+            const pushArea = (value, label) => {
+              if (!onArea) return;
+              rows.push({ label: label || "投影面积", value, accent: true });
+              parts.push(`面积 ${value}`);
+            };
+            const pushLen = (value, label) => {
+              if (!onPerimeter) return;
+              rows.push({ label, value });
+              parts.push(`${label} ${value}`);
+            };
+
+            if (info.type === "polygon") {
+              rows.push({
+                label: "顶点数",
+                value: `${info.lonLats.length} 个`,
+              });
+              pushArea(this.formatArea(info.area));
+              pushLen(this.formatLength(info.perimeter), "周长");
+              rows.push({
+                label: "首点",
+                value: this.formatLonLat(info.lonLats[0]),
+              });
+            } else if (info.type === "polyline") {
+              rows.push({
+                label: "端点数",
+                value: `${info.lonLats.length} 个`,
+              });
+              pushLen(this.formatLength(info.length), "长度");
+              rows.push({
+                label: "起点",
+                value: this.formatLonLat(info.lonLats[0]),
+              });
+              rows.push({
+                label: "终点",
+                value: this.formatLonLat(info.lonLats[info.lonLats.length - 1]),
+              });
+            } else if (info.type === "rectangle") {
+              const r = info.rectangle;
+              const { mx, my } = metersPerDegree((r.south + r.north) / 2);
+              const width = (r.east - r.west) * mx;
+              const height = (r.north - r.south) * my;
+              pushLen(this.formatLength(width), "东西跨度");
+              pushLen(this.formatLength(height), "南北跨度");
+              pushArea(this.formatArea(info.area));
+              pushLen(this.formatLength(info.perimeter), "周长");
+              rows.push({
+                label: "西南角",
+                value: `${r.west.toFixed(6)}, ${r.south.toFixed(6)}`,
+              });
+              rows.push({
+                label: "东北角",
+                value: `${r.east.toFixed(6)}, ${r.north.toFixed(6)}`,
+              });
+            } else if (info.type === "circle") {
+              rows.push({
+                label: "圆心",
+                value: this.formatLonLat(info.center.lonLats),
+              });
+              pushLen(this.formatLength(info.radius), "半径");
+              pushArea(this.formatArea(info.area));
+              pushLen(this.formatLength(info.perimeter), "周长");
+            } else if (info.type === "height") {
+              // 高距：垂直 / 水平距离都算"距离类"，归 showPerimeter 管
+              const v = this.formatLength(info.verticalDistance);
+              const h = this.formatLength(info.horizontalDistance);
+              if (onPerimeter) {
+                rows.push({ label: "垂直距离", value: v, accent: true });
+                rows.push({ label: "水平距离", value: h, accent: true });
+                rows.push({
+                  label: "斜距",
+                  value: this.formatLength(info.slopeDistance),
+                });
+                parts.push(`垂直 ${v}`, `水平 ${h}`);
+              }
+              rows.push({
+                label: "起点高程",
+                value: `${info.heights[0].toFixed(2)} m`,
+              });
+              rows.push({
+                label: "终点高程",
+                value: `${info.heights[1].toFixed(2)} m`,
+              });
+              rows.push({
+                label: "起点",
+                value: this.formatLonLat(info.lonLats[0]),
+              });
+              rows.push({
+                label: "终点",
+                value: this.formatLonLat(info.lonLats[1]),
+              });
+            } else if (info.type === "azimuth") {
+              const az = `${info.azimuth.toFixed(2)}°`;
+              if (onPerimeter) {
+                rows.push({ label: "方位角", value: az, accent: true });
+                rows.push({
+                  label: "水平距离",
+                  value: this.formatLength(info.distance),
+                });
+                parts.push(`方位角 ${az}`);
+              }
+              rows.push({
+                label: "起点",
+                value: this.formatLonLat(info.lonLats[0]),
+              });
+              rows.push({
+                label: "终点",
+                value: this.formatLonLat(info.lonLats[1]),
+              });
+            }
+
+            // 一条测量值都没输出（总开关关掉，或该类型的项全被关掉）才算"仅绘制"
+            const drawOnly = parts.length === 0;
+            return {
+              id: info.id,
+              typeName: TYPE_NAMES[info.type] || info.type,
+              rows,
+              summary: drawOnly ? "" : parts.join(" · "),
+              drawOnly,
+            };
+          },
+
+          // ============================================================
+          // 测量读数（回填到 lil-gui 的「测量结果」文件夹）
+          // ============================================================
+
+          /**
+           * 把测量结果写进 lil-gui 的只读读数，并刷新控件显示。
+           * lil-gui 不会自动监听普通对象的变化，必须显式 updateDisplay()。
+           */
+          updateMeasureGui(info) {
+            const m = this.measure;
+            const opt = this.measureOptions;
+            const onArea = opt.measure && opt.showArea;
+            const onPerimeter = opt.measure && opt.showPerimeter;
+
+            m.类型 = TYPE_NAMES[info.type] || info.type;
+            // 未启用的测量项一律显示 —，让"仅绘制"和"绘制+测量"在读数上一眼可辨
+            m.面积 =
+              onArea && info.area != null ? this.formatArea(info.area) : "—";
+            m.周长 =
+              onPerimeter && info.perimeter != null
+                ? this.formatLength(info.perimeter)
+                : "—";
+            // 长度这一格：折线放"长度"，高距放"水平距离"
+            m.长度 =
+              onPerimeter && info.length != null
+                ? this.formatLength(info.length)
+                : onPerimeter && info.horizontalDistance != null
+                  ? this.formatLength(info.horizontalDistance)
+                  : "—";
+            m.半径 =
+              onPerimeter && info.radius != null
+                ? this.formatLength(info.radius)
+                : "—";
+            m.垂直距离 =
+              onPerimeter && info.verticalDistance != null
+                ? this.formatLength(info.verticalDistance)
+                : "—";
+            m.方位角 =
+              onPerimeter && info.azimuth != null
+                ? `${info.azimuth.toFixed(2)}°`
+                : "—";
+            this.refreshMeasureGui();
+          },
+
+          resetMeasureGui() {
+            const m = this.measure;
+            m.类型 = "—";
+            m.面积 = "—";
+            m.周长 = "—";
+            m.长度 = "—";
+            m.半径 = "—";
+            m.垂直距离 = "—";
+            m.方位角 = "—";
+            this.refreshMeasureGui();
+          },
+
+          refreshMeasureGui() {
+            if (!this.measureControllers) return;
+            this.measureControllers.forEach((c) => c.updateDisplay());
+          },
+
+          // ============================================================
+          // 测量开关
+          // 图形上的测量标注由 DrawManager 自己创建与回收，
+          // 页面只把复选框状态同步过去（已画好的图形会立即重绘标注），
+          // 并同步刷新右侧面板与 lil-gui 读数。
+          // ============================================================
+
+          /** 复选框变化：同步给 DrawManager + 刷新面板/读数 */
+          onMeasureOptionChange() {
+            this.syncMeasureSubEnabled();
+            if (this.drawManager) {
+              this.drawManager.setMeasureOptions(this.measureOptions);
+            }
+            if (this.lastInfo) {
+              this.result = this.buildResult(this.lastInfo);
+              this.updateMeasureGui(this.lastInfo);
+            }
+          },
+
+          /** 总开关关掉时，把两个细分开关置灰，让依赖关系一眼可见 */
+          syncMeasureSubEnabled() {
+            if (!this.measureSubControllers) return;
+            const on = !!this.measureOptions.measure;
+            this.measureSubControllers.forEach((c) =>
+              on ? c.enable() : c.disable(),
+            );
+          },
+
+          // ============================================================
+          // 绘制控制
+          // ============================================================
+
+          /**
+           * 开始绘制。把当前测量开关作为 options 传给 DrawManager ——
+           * DrawManager 会据此在绘制完成后自己创建测量标注。
+           */
+          startDraw(type) {
+            if (!this.drawManager) return;
+            this.result = null;
+            this.lastInfo = null;
+            this.resetMeasureGui();
+            this.drawManager.startDraw(type, this.measureOptions);
+          },
+
+          /**
+           * 手动完成。DrawManager.finishDraw() 在条件不满足时会静默返回，
+           * 所以这里先做一次判断，把原因说清楚，避免"点了没反应"。
+           */
+          finishDraw() {
+            const dm = this.drawManager;
+            if (!dm) return;
+            if (!dm.mode) {
+              this.statusText = "当前没有正在进行的绘制。";
+              return;
+            }
+            if (dm.mode === "height" || dm.mode === "azimuth") {
+              this.statusText =
+                "测高距 / 方位角只取两个点，点完第二点会自动完成。";
+              return;
+            }
+            if (dm.mode === "polygon" || dm.mode === "polyline") {
+              const min = dm.mode === "polygon" ? 3 : 2;
+              if (dm.drawPositions.length < min) {
+                this.statusText = `至少需要 ${min} 个点，当前 ${dm.drawPositions.length} 个，请继续取点。`;
+                return;
+              }
+            } else {
+              this.statusText = "矩形 / 圆需要在地图上再点一次确认。";
+              return;
+            }
+            dm.finishDraw();
+          },
+
+          cancelDraw() {
+            if (!this.drawManager) return;
+            this.drawManager.cancelDraw();
+          },
+
+          clearAll() {
+            if (!this.drawManager) return;
+            // clearAll() 内部会一并摘掉测量标注
+            this.drawManager.clearAll();
+            this.result = null;
+            this.lastInfo = null;
+            this.resetMeasureGui();
+          },
+
+          clearRecords() {
+            this.records = [];
+          },
+
+          // ============================================================
+          // 结果导出
+          // ============================================================
+
+          /** 生成 GeoJSON Feature（圆按 64 边形导出，与绘制一致） */
+          buildGeoJSON() {
+            const info = this.lastInfo;
+            if (!info) return null;
+
+            const properties = {
+              id: info.id,
+              drawType: info.type,
+            };
+            if (info.area != null) properties.area_m2 = +info.area.toFixed(2);
+            if (info.perimeter != null)
+              properties.perimeter_m = +info.perimeter.toFixed(2);
+            if (info.length != null)
+              properties.length_m = +info.length.toFixed(2);
+            if (info.radius != null)
+              properties.radius_m = +info.radius.toFixed(2);
+
+            let geometry = null;
+            if (info.type === "polyline") {
+              geometry = { type: "LineString", coordinates: info.lonLats };
+            } else {
+              // 多边形 / 矩形 / 圆：补上闭合点
+              const ring = info.lonLats.map((p) => [p[0], p[1]]);
+              const first = ring[0];
+              const last = ring[ring.length - 1];
+              if (first[0] !== last[0] || first[1] !== last[1]) {
+                ring.push([first[0], first[1]]);
+              }
+              geometry = { type: "Polygon", coordinates: [ring] };
+            }
+
+            return { type: "Feature", properties, geometry };
+          },
+
+          exportGeoJSON() {
+            const feature = this.buildGeoJSON();
+            if (!feature) {
+              this.statusText = "还没有测量数据可导出。";
+              return;
+            }
+            const text = JSON.stringify(feature, null, 2);
+            const blob = new Blob([text], { type: "application/geo+json" });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = `${feature.properties.id}-${feature.properties.drawType}.geojson`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            this.statusText = `已导出 ${a.download}`;
+          },
+
+          async copyCoords() {
+            const info = this.lastInfo;
+            if (!info) {
+              this.statusText = "还没有测量数据可复制。";
+              return;
+            }
+            const text = info.lonLats
+              .map((p) => `${p[0].toFixed(6)},${p[1].toFixed(6)}`)
+              .join("\n");
+            const ok = await this.copyText(text);
+            this.statusText = ok
+              ? `已复制 ${info.lonLats.length} 个坐标点。`
+              : "复制失败，请手动从控制台或导出的 GeoJSON 中取坐标。";
+          },
+
+          /**
+           * 剪贴板兜底：file:// 下 navigator.clipboard 不可用，
+           * 退回 textarea + execCommand，保证本地双击打开也能复制。
+           */
+          async copyText(text) {
+            try {
+              if (navigator.clipboard && window.isSecureContext) {
+                await navigator.clipboard.writeText(text);
+                return true;
+              }
+            } catch (e) {
+              /* 落到下面的兜底 */
+            }
+            try {
+              const ta = document.createElement("textarea");
+              ta.value = text;
+              ta.setAttribute("readonly", "");
+              ta.style.position = "fixed";
+              ta.style.left = "-9999px";
+              document.body.appendChild(ta);
+              ta.select();
+              const ok = document.execCommand("copy");
+              document.body.removeChild(ta);
+              return ok;
+            } catch (e) {
+              return false;
+            }
+          },
+
+          // ============================================================
+          // lil-gui
+          // ============================================================
+
+          addlilgui() {
+            const dm = this.drawManager;
+            const myLilGui = new GUI({ title: "绘制与测量" });
+            this.myLilGui = myLilGui;
+
+            // ---- 绘制 ----
+            const drawFolder = myLilGui.addFolder("绘制");
+            const drawTypes = [
+              ["polygon", "绘制多边形（测面积+周长）"],
+              ["polyline", "绘制折线（测长度）"],
+              ["rectangle", "绘制矩形（测面积+周长）"],
+              ["circle", "绘制圆（测半径+面积）"],
+            ];
+            drawTypes.forEach(([type, label]) => {
+              drawFolder
+                .add({ draw: () => this.startDraw(type) }, "draw")
+                .name(label);
+            });
+
+            // ---- 测量工具（只取两点，第二点落下即出结果）----
+            const toolFolder = myLilGui.addFolder("测量工具");
+            toolFolder
+              .add({ draw: () => this.startDraw("height") }, "draw")
+              .name("测高距（两点 → 直角三角形）");
+            toolFolder
+              .add({ draw: () => this.startDraw("azimuth") }, "draw")
+              .name("测量方位角（两点 → 箭头+正北）");
+
+            // ---- 测量项（复选框）----
+            // 这份对象直接作为 startDraw 的 options 传给 DrawManager。
+            // measure 是总开关，关掉时把下面两项置灰，让依赖关系一眼可见。
+            const optFolder = myLilGui.addFolder("测量项");
+            optFolder
+              .add(this.measureOptions, "measure")
+              .name("☑ 启用测量（不勾 = 只绘制）")
+              .onChange(() => this.onMeasureOptionChange());
+            const areaCtrl = optFolder
+              .add(this.measureOptions, "showArea")
+              .name("☑ 面积（标在图形中心）")
+              .onChange(() => this.onMeasureOptionChange());
+            const perimCtrl = optFolder
+              .add(this.measureOptions, "showPerimeter")
+              .name("☑ 周长 / 长度 / 距离 / 角度")
+              .onChange(() => this.onMeasureOptionChange());
+            // 总开关关掉时，两个细分项置灰
+            this.measureSubControllers = [areaCtrl, perimCtrl];
+            this.syncMeasureSubEnabled();
+
+            // ---- 测量结果（只读读数 + 导出）----
+            // 绘制完成时由 onDrawComplete → updateMeasureGui() 回填。
+            // lil-gui 没有原生"只读文本"控件，用 .disable() 关掉编辑态。
+            const mFolder = myLilGui.addFolder("测量结果");
+            const m = this.measure;
+            this.measureControllers = [
+              mFolder.add(m, "类型").name("▸ 图形类型").disable(),
+              mFolder.add(m, "面积").name("▸ 投影面积").disable(),
+              mFolder.add(m, "周长").name("▸ 周长").disable(),
+              mFolder.add(m, "长度").name("▸ 长度 / 水平距").disable(),
+              mFolder.add(m, "半径").name("▸ 半径").disable(),
+              mFolder.add(m, "垂直距离").name("▸ 垂直距离").disable(),
+              mFolder.add(m, "方位角").name("▸ 方位角").disable(),
+            ];
+            mFolder.add({ fn: () => this.copyCoords() }, "fn").name("复制坐标");
+            mFolder
+              .add({ fn: () => this.exportGeoJSON() }, "fn")
+              .name("导出 GeoJSON");
+
+            // ---- 绘制控制 ----
+            const ctrlFolder = myLilGui.addFolder("绘制控制");
+            ctrlFolder
+              .add({ fn: () => this.finishDraw() }, "fn")
+              .name("完成绘制");
+            ctrlFolder
+              .add({ fn: () => this.cancelDraw() }, "fn")
+              .name("取消绘制");
+            ctrlFolder
+              .add({ fn: () => this.clearAll() }, "fn")
+              .name("清除图形");
+            ctrlFolder
+              .add({ fn: () => this.clearRecords() }, "fn")
+              .name("清空测量记录");
+
+            // ---- 图形样式 ----
+            const styleFolder = myLilGui.addFolder("图形样式");
+            styleFolder
+              .addColor(dm.params, "fillColor")
+              .name("填充颜色")
+              .onChange(() => dm.applyStyle());
+            styleFolder
+              .add(dm.params, "fillOpacity", 0, 1, 0.01)
+              .name("填充透明度")
+              .onChange(() => dm.applyStyle());
+            styleFolder
+              .addColor(dm.params, "outlineColor")
+              .name("边线颜色")
+              .onChange(() => dm.applyStyle());
+            styleFolder
+              .add(dm.params, "outlineWidth", 1, 10, 0.5)
+              .name("边线宽度")
+              .onChange(() => dm.applyStyle());
+            styleFolder
+              .add(dm.params, "showVertices")
+              .name("显示顶点")
+              .onChange(() => dm.applyStyle());
+            styleFolder
+              .add(dm.params, "vertexSize", 3, 20, 1)
+              .name("顶点大小")
+              .onChange(() => dm.applyStyle());
+
+            // ---- 视图 ----
+            const viewFolder = myLilGui.addFolder("视图");
+            viewFolder.add({ fn: () => dm.flyTo() }, "fn").name("飞到图形");
+            viewFolder
+              .add({ fn: () => this.resetCamera() }, "fn")
+              .name("重置视角");
+
+            // ---- 场景 ----
+            myLilGui
+              .addFolder("场景")
+              .add(this.imageryLayer, "show")
+              .name("影像底图");
+          },
+
+          resetCamera() {
+            if (!this.viewer) return;
+            // 黄山一带：地形起伏明显，适合观察绘制面贴地效果
+            this.viewer.camera.setView({
+              destination: Cesium.Cartesian3.fromDegrees(118.166, 30.132, 9000),
+              orientation: {
+                heading: Cesium.Math.toRadians(0),
+                pitch: Cesium.Math.toRadians(-50),
+                roll: 0,
+              },
+            });
+          },
+        },
+      }).mount("#app");
+    </script>
+  </body>
+</html>

@@ -100,6 +100,7 @@
                     @apply-style-template="$emit('apply-style-template', $event)"
                     @update-draw-style="$emit('update-draw-style', $event)"
                     @update-layer-style="$emit('update-layer-style', $event)"
+                    @update-cesium-layer-style="$emit('update-cesium-layer-style', $event)"
                     @highlight-attribute-feature="$emit('highlight-attribute-feature', $event)"
                     @zoom-attribute-feature="$emit('zoom-attribute-feature', $event)"
                     @draw-point-by-coordinates="$emit('draw-point-by-coordinates', $event)"
@@ -539,6 +540,7 @@ defineEmits([
     'apply-style-template',
     'update-draw-style',
     'update-layer-style',
+    'update-cesium-layer-style',
     'highlight-attribute-feature',
     'zoom-attribute-feature',
     'draw-point-by-coordinates',

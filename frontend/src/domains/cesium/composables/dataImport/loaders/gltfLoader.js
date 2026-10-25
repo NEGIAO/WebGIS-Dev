@@ -324,3 +324,33 @@ export async function getAutoPlaceCoords(viewer, Cesium) {
         return null;
     }
 }
+
+/**
+ * 调整 GLTF 模型相对地形的高度偏移（TOC 高程滑杆 / 「贴合地形」）。
+ *
+ * 为什么需要它：CLAMP_TO_GROUND 把**模型原点**钉在地表，
+ * 若 GLB 原点位于几何中心（不少建模工具导出如此），模型会「半截入土」；
+ * 而 RELATIVE_TO_GROUND + offset 既保留随地形起伏跟随的能力，又能整体抬升。
+ *
+ * @param {object} Cesium Cesium 命名空间
+ * @param {object} record loadedDataSources 记录（entity 为 Entity）
+ * @param {number|null} meters 相对地形的高度偏移；传 null 表示复位为 CLAMP_TO_GROUND
+ * @returns {boolean} 是否受理（句柄非 Entity/ModelGraphics 时 false）
+ */
+export function setModelHeightOffset(Cesium, record, meters) {
+    const entity = record?.entity;
+    if (!Cesium || !entity || !entity.model || !entity.position) return false;
+
+    if (meters === null || meters === undefined) {
+        entity.model.heightReference = Cesium.HeightReference.CLAMP_TO_GROUND;
+        entity.model.height = 0;
+        record.modelHeightOffset = 0;
+        return true;
+    }
+
+    const offset = Number(meters) || 0;
+    entity.model.heightReference = Cesium.HeightReference.RELATIVE_TO_GROUND;
+    entity.model.height = offset;
+    record.modelHeightOffset = offset;
+    return true;
+}

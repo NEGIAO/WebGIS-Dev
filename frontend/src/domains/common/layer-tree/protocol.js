@@ -47,6 +47,8 @@ export const TOC_MENU_COMMANDS = Object.freeze({
     MATERIAL: 'set-material',
     REPOSITION: 'reposition',
     STRETCH_HEIGHT: 'stretch-height',
+    FIT_TERRAIN: 'fit-terrain',
+    RESET_TERRAIN: 'reset-terrain',
 });
 
 export function normalizeTocLayerId(id) {

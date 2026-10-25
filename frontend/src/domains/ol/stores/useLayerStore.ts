@@ -3,8 +3,8 @@ import { defineStore } from 'pinia';
 import { useTOCStore } from '@common/layer-tree/stores/useTOCStore';
 import { useSwipeConfigStore } from './useSwipeConfigStore';
 import { useFeatureStyleStore } from './useFeatureStyleStore';
-import { useCesiumLayersStore } from '@cesium-domain/stores/cesiumLayers';
-import { buildCesiumDataGroup } from '@cesium-domain/stores/cesiumLayerNodeBuilder';
+import { useCesiumLayersStore, isCesiumStyleSupportedType } from '@cesium-domain/stores/cesiumLayers';
+import { buildCesiumDataGroup, CESIUM_NODE_PREFIX } from '@cesium-domain/stores/cesiumLayerNodeBuilder';
 import { useRemoteServices } from '@common/basemap/remoteServices';
 import { buildRemoteServiceGroup } from '@common/basemap/remoteServiceNodeBuilder';
 import type { LayerHandlers, LayerStoreLayer } from './layer';
@@ -103,6 +103,14 @@ export const useLayerStore = defineStore('layerStore', () => {
         ...sortedUserLayers.value
             .filter((layer) => layer.sourceType !== 'search' && !isRasterLayer(layer))
             .map((layer) => ({ id: layer.id, name: `${layer.name} (${layer.featureCount || 0})` })),
+        /**
+         * 三维图层：仅矢量类可改样式（栅格 / 模型 / 3D Tiles 无填充色语义）。
+         * id 带 `cesium:` 前缀，样式页签据此把补丁路由到 CesiumContainer，
+         * 与 TOC 节点的 id 形式保持一致，避免两套寻址。
+         */
+        ...cesiumLayersStore.records
+            .filter((record) => isCesiumStyleSupportedType(record.type))
+            .map((record) => ({ id: `${CESIUM_NODE_PREFIX}${record.id}`, name: `[3D] ${record.name}` })),
     ]);
 
     const layerTree = computed(() => {

@@ -600,6 +600,7 @@ import {
 } from '@common/basemap/arcgisAttributeQuery';
 import { useLayerStore, useAttrStore } from '@/stores';
 import { useCesiumLayersStore } from '@cesium-domain/stores/cesiumLayers';
+import { CESIUM_NODE_PREFIX } from '@cesium-domain/stores/cesiumLayerNodeBuilder';
 import { useStyleEditor } from '@ol/layer/style/useStyleEditor';
 import { getRuntimeMapTokensSync, loadRuntimeMapTokens } from '@common/services/runtimeMapTokens';
 import LayerPanel from '@common/layer-tree/components/LayerPanel.vue';
@@ -641,6 +642,7 @@ const emit = defineEmits([
     'apply-style-template',
     'update-draw-style',
     'update-layer-style',
+    'update-cesium-layer-style',
     'highlight-attribute-feature',
     'zoom-attribute-feature',
     'draw-point-by-coordinates',
@@ -975,10 +977,13 @@ function applyTemplate(templateId) {
     }
 
     // 3. 执行原有的业务 emit (保持与父组件/地图引擎的通信)
-    if (targetId === 'draw') {
-        emit('apply-style-template', { target: 'draw', templateId });
-    } else {
-        emit('apply-style-template', { target: 'layer', layerId: targetId, templateId });
+    // 三维图层走 update-cesium-layer-style，不参与 OL 的模板下发
+    if (!targetId.startsWith(CESIUM_NODE_PREFIX)) {
+        if (targetId === 'draw') {
+            emit('apply-style-template', { target: 'draw', templateId });
+        } else {
+            emit('apply-style-template', { target: 'layer', layerId: targetId, templateId });
+        }
     }
 
     // 4. 【核心修复】关键：立即调用 applyStyle() 触发地图渲染
@@ -986,15 +991,29 @@ function applyTemplate(templateId) {
     applyStyle();
 }
 
+/**
+ * 应用样式。按目标 id 分三路：
+ *   draw                      → OL 绘制图层（emit update-draw-style）
+ *   cesium:<recordId>         → 三维图层（emit update-cesium-layer-style，经 HomeView 路由到 CesiumContainer）
+ *   其它                      → OL 普通图层（emit update-layer-style）
+ */
 function applyStyle() {
     const payload = styleEditor.buildStylePayload();
-    if (selectedEditLayerId.value === 'draw') {
+    const targetId = selectedEditLayerId.value;
+    if (!targetId) return;
+
+    if (targetId === 'draw') {
         emit('update-draw-style', payload);
         return;
     }
-    if (selectedEditLayerId.value) {
-        emit('update-layer-style', { layerId: selectedEditLayerId.value, styleConfig: payload });
+    if (targetId.startsWith(CESIUM_NODE_PREFIX)) {
+        emit('update-cesium-layer-style', {
+            id: targetId.slice(CESIUM_NODE_PREFIX.length),
+            styleConfig: payload,
+        });
+        return;
     }
+    emit('update-layer-style', { layerId: targetId, styleConfig: payload });
 }
 </script>
 

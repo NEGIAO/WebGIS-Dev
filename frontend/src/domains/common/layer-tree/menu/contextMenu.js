@@ -184,6 +184,10 @@ export function buildContextMenuItems({ node, capabilities = {}, selectionState 
                 value: capabilities.materialMode || 'baimo',
             });
         }
+        if (capabilities.canFitTerrain)
+            threeD.push({ key: TOC_MENU_COMMANDS.FIT_TERRAIN, label: '贴合地形' });
+        if (capabilities.canResetTerrain)
+            threeD.push({ key: TOC_MENU_COMMANDS.RESET_TERRAIN, label: '恢复原始高程' });
         if (capabilities.canReposition)
             threeD.push({ key: TOC_MENU_COMMANDS.REPOSITION, label: '调整位置' });
         if (capabilities.canStretchHeight)

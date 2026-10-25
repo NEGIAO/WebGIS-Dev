@@ -6,6 +6,87 @@
 
 ## 版本记录
 
+### V3.6.24 (2026-10-25) — Cesium 绘制/测量完整化 + 贴地统一化 + 图层样式与 TOC 能力对齐 + TS 迁移
+
+> **版本归并说明**：本批次在暂存区曾被逐次记为 `V3.6.24 / V3.6.25 / V3.6.26 / V3.6.27 / V3.6.28` 五个版本号，而 HEAD 实际停留在 `V3.6.23`——即五份改动从未分开发版，属于同一批未提交工作。按 Force_command §5「一次 L2/L3 任务 +1 修订号、同日不合并」的反向要求（同一批次不得拆成多个版本号），并经用户明确指示「整合为一个统一的版本 V3.6.24」，本次归并为**单一版本 V3.6.24**。各阶段的过程记录仍按原样保留在 `Docs/LLM_record/` 中，不回溯改写历史日志。
+>
+> 过程记录：
+> - `Docs/LLM_record/26-10/2026-10-25/2026-10-25-cesium-draw-measure-full-migration.md`（绘制/测量迁移、样式编辑、地形贴合、贴地统一化）
+> - `Docs/LLM_record/26-10/2026-10-25/2026-10-25-ts-first-dod-gate.md`（TS 优先纳入 DoD）
+> - `Docs/LLM_record/26-10/2026-10-25/2026-10-25-v3.6.24-staged-consolidation.md`（本次归并 + 审查修复 + TS 迁移）
+> - 方案：`Docs/TODO/cesium-ground-placement-unification-plan.md`
+
+#### 一、绘制 / 测量完整化（三维侧对齐 Demo 全能力）
+
+> **背景**：3D 侧绘制/测量停留在引擎感知迁移 P0 的最小实现（点 / 线 / 面 + 测距 / 测面），矩形、圆、测高距、方位角在 3D 一律降级 toast；测量开关、结果读数、样式控制在 3D 完全缺失。本次以 `Docs/Demo/draw_manager.html` 为功能基准完整迁移。
+> **类型扩展**：`Point | LineString | Polygon | Rectangle | Circle | MeasureDistance | MeasureArea | MeasureHeight | MeasureAzimuth` 共 9 种交互类型；OL 侧 `CircleOutline` 经别名归一为 `Circle`，HomeView 的引擎路由对两套命名无感。
+> **三态交互状态机**：`multi`（逐点，双击 / 右击 / 面板「完成」结束）、`anchor`（首点定锚 + 移动预览 + 次点确认，矩形 / 圆）、`two-point`（两点即完成，测高距 / 方位角）。
+> **测量开关**：`measure / showArea / showPerimeter` 三档；总开关关闭 = 纯绘制；改开关对既有成品即时重算标注，无需重绘。
+> **引擎感知面板**：`ControlsPanel` 新增 `engine` prop，3D 下绘制 / 测量子面板切换为 `CesiumDrawMeasurePanel`（`variant=draw|measure` 双形态），2D 保持 OL `DrawPanel` / `MeasurePanel` 零改动；面板只写 Pinia store + emit 动作，动作经 HomeView 统一裁决后转发。
+> **新增能力**：结果读数（面积 / 周长 / 长度 / 半径 / 东西·南北跨度 / 垂直·水平·斜距 / 方位角 / 起终点高程）、测量记录（上限 20 条，清图不清记录）、GeoJSON 导出、坐标复制、样式即时回放（填充色 / 透明度 / 边线色 / 宽度 / 顶点）。
+> **测量口径**：测距沿用 `EllipsoidGeodesic.surfaceDistance`，测面 ENU 等距投影 shoelace；矩形跨度、圆环、方位角、面积重心落 `utils/drawGeometry.ts`（零 Cesium 依赖，便于 tsc 与单测）；单位格式化复用 `@common/map-view/units`（尊重用户 metric/imperial 偏好），未复制 Demo 的格式化函数。
+
+#### 二、Cesium 图层样式编辑 + TOC 右键能力对齐 OL
+
+> **背景**：侧栏「样式」页签只列 OL 图层，三维图层无法改样式；三维节点右键仅有「查看 / 缩放 / 移除 / 重命名 / 透明度 / 高程 / 材质 / 重定位 / 拉伸」，而 OL 节点有样式、标注、复制坐标、导出等多组动作。
+> **样式编辑**：`useLayerStore.editableLayers` 增列可着色的三维记录（id 形如 `cesium:<recordId>`，名称带 `[3D]` 前缀）；`TOCPanel.applyStyle/applyTemplate` 按 id 前缀三路分流；新增 `update-cesium-layer-style` 事件经 `SidePanel → HomeView → CesiumContainer.updateCesiumLayerStyle` 落到元数据店 `setStyle`。着色分两条实现：绘制成品走管理器 `updateStyleById`（按 id 定向，不污染后续绘制默认样式），导入矢量走 `applyVectorDataSourceStyle`（逐实体换色，只替换纯色材质，虚线/箭头/贴图保留原语义；换色后主动失效透明度快照，避免「改色后拖透明度又跳回旧色」）。
+> **修复回放缺陷**：`drawEntityFactory.applyStyleToHandle` 原实现只写线宽、颜色始终回放建档时快照，导致「改颜色被静默吞掉」。改为写入当前样式并同步回写描述表 `hexColor/baseAlpha`，保证后续透明度按新基色重算。
+> **TOC 右键扩展**：`cesiumLayerNodeBuilder` 按类型语义开放 `style / label / copyCoordinates / exportLayerData(CSV/TXT/GeoJSON/KML) / soloEvent`，保留 `setHeight / setMaterial / reposition / stretchHeight`；`cesiumLayers` 新增 `setStyle / setLabelVisible / solo / copyCoordinates / exportData / fitToTerrain / resetTerrainFit / requestAttributeTable / editFeature` 与 `isCesiumStyleSupportedType / isCesiumVectorType` 判据；`cesiumTocActions` 补齐对应分支。
+> **修复动作被吞**：`cesiumTocActions` 原 `default: true` 会把 `cesium:` 节点的一切新动作（含 `set-style-target`、批量操作）静默吞掉——改为 `return false` 交回通用分发器，这是「右键没反应」的根因之一。
+> **新增工具**：`utils/cesiumLayerSerialization.ts`（实体 → GeoJSON/CSV/TXT/KML，动态属性按当前时刻取值）、`utils/browserIo.ts`（剪贴板兜底 + 文件落盘）。
+
+#### 三、三维地形贴合 + 属性表 / 要素编辑 / KML 导出
+
+> **背景（用户痛点）**：Cesium 默认开启地形，且 `globe.depthTestAgainstTerrain = true`，任何低于地表的图元都**不可见**。排查发现矢量 / glTF / 3D Tiles 各自已有贴地机制，真正的缺口有两处：
+> ① **地形异步就绪窗口**——导入发生在地形 provider 仍是 `EllipsoidTerrainProvider` 时，`clampToGround` 不产生任何效果，图元停在椭球 0 高程；`terrainProviderChanged` 监听原先只重贴 3D Tiles，**不补做矢量**，于是整批矢量被地形挡住；
+> ② **glTF 原点在几何中心**——`CLAMP_TO_GROUND` 把模型原点钉在地表，中心原点的模型必然「半截入土」。
+> **地形贴合统一动作**：按类型分派——矢量走实体级 `clampToGround`（幂等）、3D Tiles 走既有基底采样配准、glTF 走 `RELATIVE_TO_GROUND + 偏移`；`resetGroundPlacement` 反向恢复（矢量取消 clamp、3D Tiles `modelMatrix` 复位、glTF 回 CLAMP_TO_GROUND）。TOC 右键新增「贴合地形 / 恢复原始高程」，`tif/imagery` 无高程语义不显示。
+> **glTF 高程滑杆**：`setHeight` 能力开放给 glTF，`setBaseHeight` 分流到「相对地形偏移」（值域 −20~200），解决中心原点模型埋地。
+> **属性表**：`CesiumAttributeTableDialog.vue` 只读表格 + 关键词搜索 + 100 行/页分页 + 行点击 `flyTo` 要素；数据由 `collectEntityProperties` 从 `entity.properties` 提取（5000 行上限，动态属性按当前时刻取值）。刻意不做可编辑态——3D 侧没有属性写回通道，编辑会造成静默丢失。
+> **要素编辑**：绘制成品支持顶点拖拽（`startVertexEdit`），拖拽期间锁相机，`LEFT_UP` 提交并重算面积 / 周长 / 长度、刷新标注、回写面板读数；测高距 / 方位角 / 矩形 / 圆含派生几何暂不开放（判据统一为 `drawMeasureSpec.EDITABLE_TYPES`）；导入矢量为只读并明确提示。
+> **KML 导出**：`buildKML` 输出 KML 2.2（Placemark + 统一样式，XML 转义），`canExportKML` 对矢量类开放。
+
+#### 四、贴地逻辑统一化（L3 架构重构）
+
+> **重构前审计**：`clampToGround` 63 处 / 12 文件、`heightReference` 40 处 / 10 文件，合计 **103 处直写、14 个文件**；贴地入口函数 **8 个**（`isTerrainEnabled` / `clampEntityToGround` / `clampDataSourceToGround` / `forceDataSourceClampToGround` / `fitTilesetToTerrain` / `refitTilesetToTerrain` / `fitLayerToTerrain` / `setModelHeightOffset`），语义重叠、实现各异。
+> **根因**：① 贴地是「加载的副作用」而非一等公民；② 能力判据散落 4 处；③ 时序无人统管（地形未就绪时静默返回 0）；④ 自动入口与手动入口是两套代码；⑤ 无能力自描述。
+> **四层架构**：
+> - `groundPlacementCapabilities.ts`（纯数据，零依赖）—— **能力单一事实来源**，含 `GROUND_MODE/REASON`、能力表、`VECTOR_GROUND_LOAD_OPTIONS`；
+> - `groundPlacementRegistry.ts` —— 类型 → 策略注册表，策略只提供行为，能力从能力表取；`findMissingStrategies()` 供启动自检；
+> - `groundPlacementService.ts` —— **唯一门面**：`applyOnImport / fit / reset / setOffset / getOffset / reapplyAllOnTerrainChange / flushPending`；
+> - `terrainReadiness.ts` —— **唯一时序权威**：地形就绪判定 + 按 recordId 去重的补做队列，全局仅此一处调用 `isTerrainEnabled`。
+> **三个策略**：`vectorGroundStrategy`（geojson/kml/kmz/czml/shp/wayline）、`tilesetGroundStrategy`（3D Tiles，只编排不重写内部配准）、`modelGroundStrategy`（glTF 相对地形 + 偏移）。`draw/route` 标 `mode: none`（自身已贴地，不参与导入链路）。
+> **调用方收敛**：`useCesiumDataImport` 改为监听 `loadedDataSources` 新增记录后统一 `applyOnImport`；`terrainProviderChanged` 改为 `reapplyAllOnTerrainChange` + 清队列；4 个 loader 的 `clampToGround: true` 改为消费 `VECTOR_GROUND_LOAD_OPTIONS`；`cesiumLayerNodeBuilder` 的 `fitTerrain / resetTerrain / setHeight / heightRange / baseHeight` 全部改读 `getGroundCapability`；容器 adapter 的 `setBaseHeight` 由类型分支改为门面调用。
+> **顺带修复**：`setBaseHeight` 的 glTF 分支曾回调 `cesiumLayersStore.setBaseHeight`，与 store → adapter 调用链形成**无限递归**，随统一入口一并消除。
+> **删除**：`terrainFitService.js`（被门面取代）、`cesiumLayers.isCesiumTerrainFitType`（第二份类型白名单）。
+
+#### 五、规范补强：TS 优先纳入 DoD 门禁
+
+> **背景**：用户要求「新增一条约束：新增逻辑代码优先使用 TS」。核查发现该约束**已存在**于 §2 硬边界第 11 条，若再追加同义条目将违反 §4 单一事实来源原则。
+> **真实缺口**：① 该约束只写在硬边界里，未进 §7 DoD 收尾清单——DoD 只校验「新增 `.ts` 未引入 `tsc` 报错」，**不校验**「新建 `.js` 是否已说明动机」，约束无执行闭环；② `Guide/dev-conventions.md` 摘要第 9 条仍写作「独立 `.js` / `.ts` 文件」，方向与 §2.11 相反。
+> **处置**：`Force_command.md` §7 DoD 增加检查项「新建逻辑文件已默认 `.ts`；确需新建 `.js` 逻辑文件时，交接块已写明动机（判据见 §2 第 11 条）」；`Guide/dev-conventions.md` 第 9 条改为 TS 优先表述。
+
+#### 六、本次归并的 TypeScript 迁移
+
+> **范围**：暂存区中**新增**的 4 个 `.js` 逻辑模块全部转为 `.ts`，从本版本起遵从「新建逻辑代码默认 TypeScript」：
+> - `composables/draw/drawMeasureSpec.js → .ts`（新增 `DrawType / MeasureType / ShapeType / InteractionModel / TypeMeta` 等类型；`EDITABLE_TYPES` 收敛至此作为唯一判据）
+> - `composables/draw/drawEntityFactory.js → .ts`（新增 `DrawPayload / StyledDescriptor / DrawHandle / MeasureOptions` 接口，`DrawStyleParams` 复用 store 类型避免第二份定义）
+> - `utils/browserIo.js → .ts`（显式函数签名 + JSDoc 参数类型）
+> - `utils/cesiumLayerSerialization.js → .ts`（新增 `LayerShape / SerializeMeta / SerializedExport / PropertyRow / PropertyTable`）
+> **例外（保留 `.js`）**：`Docs/Demo/DrawManager.js` 是 `draw_manager.html` 通过 `<script src>` 直载的演示脚本，无构建链路、无法模块化，属 §2.11 明列例外；转为 `.ts` 会使 Demo 失效或需引入额外编译步骤。
+
+#### 七、本次归并审查发现并修复的缺陷
+
+> ① **透明度非法值导致整层「消失」**：`useCesiumDrawMeasure.setOpacity` 原用 `Number(opacity) || 0`，`undefined` / `NaN` 会被折算成 0（全透明）；改为非法值回落 1，并对 `drawEntityFactory` 的 `baseAlpha` 统一做有限性兜底（`baseAlpha` 为 `undefined` 时 `withAlpha(NaN)` 会让实体整片不可见）。
+> ② **矢量线色改不动**：`applyVectorDataSourceStyle` 判定「纯色材质」时只认 `ColorMaterialProperty`，而 GeoJSON / KML 载入后的 `polyline.material` 常是裸 `Color` 实例，导致这类图层改色被静默跳过；补上 `instanceof Cesium.Color` 分支。
+> ③ **TOC「编辑要素」出现在不支持的类型上**：原判据只有 `category === 'draw'`，矩形 / 圆 / 测高距 / 方位角同样命中，点开必然提示「不支持」。`CesiumLayerRecord` 新增 `shapeType` 字段承载具体几何类型，节点能力位改读 `drawMeasureSpec.EDITABLE_TYPES`，与管理器共用同一份判据。
+> ④ **`_rsvcSetHeight` 悬空引用**：`setBaseHeight` 改走门面后删除该变量，全文件已无残留引用（已核验 0 处）。
+
+#### 验证
+
+> `tsc --noEmit` **0 error**；`eslint`（draw / terrain / dataImport / stores / toc-adapters / locales / 新增组件）**0 problems**；`vite build` **4277 modules** 通过；`CheckStructureTree.py`（512 条目 / 512 文件 / 漏登记 0 / 幽灵 0）与 `CheckConfigRegistry.py`（B1–B4 + F1–F3 全通过）双门禁通过；§11.2 平台红线四条自查全绿。
+> 场景交互（贴地、顶点拖拽、属性表定位、样式即时生效、坐标导出）**需真机复验**，Agent 侧未做真机验证。
+
 ### V3.6.23 (2026-10-22) — README 全量核对与事实修正（纯文档版）
 
 > 完整逐跳核对过程见 `Docs/LLM_record/26-10/2026-10-22/2026-10-22-readme-sync-review.md`；以下为归档摘要。

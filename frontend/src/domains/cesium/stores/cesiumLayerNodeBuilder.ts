@@ -9,6 +9,9 @@
  */
 
 import type { CesiumLayerRecord } from './cesiumLayers';
+import { isCesiumStyleSupportedType, isCesiumVectorType } from './cesiumLayers';
+import { getGroundCapability } from '../composables/terrain/groundPlacementCapabilities';
+import { EDITABLE_TYPES } from '../composables/draw/drawMeasureSpec';
 
 /** TOC 节点 id 前缀（动作分流依据） */
 export const CESIUM_NODE_PREFIX = 'cesium:';
@@ -39,6 +42,25 @@ function toCesiumLayerNode(record: CesiumLayerRecord): any {
     const is3DTiles = record.type === '3dtiles';
     const isGltf = record.type === 'gltf';
     const isTif = record.type === 'tif';
+    /**
+     * 能力判定按「类型语义」而非「引擎」：
+     * - 矢量类（geojson/kml/kmz/czml/shp/wayline/draw/route）→ 可改样式、可切标注、可导坐标
+     * - 栅格 / 模型 / 3D Tiles → 无填充色语义，外观由透明度与材质模式承载
+     * 属性表 / 要素编辑 / 坐标系转换 / AOI 面板为 2D 专属，3D 侧无实现，保持关闭
+     * （菜单不出现，避免「点了没反应」）。
+     */
+    const styleSupported = isCesiumStyleSupportedType(record.type);
+    const vector = isCesiumVectorType(record.type);
+    /**
+     * 贴地能力统一取自 `groundPlacementCapabilities`（单一事实来源），
+     * 不再在此手写 if (is3DTiles) / if (isGltf) —— 新增类型只改能力表 + 策略即可。
+     */
+    const groundCap = getGroundCapability(record.type);
+    const supportsFit = groundCap?.supportsFit === true;
+    const supportsReset = groundCap?.supportsReset === true;
+    const supportsOffset = groundCap?.supportsOffset === true;
+    // 3D Tiles 的值域由基底采样回填 record.heightRange；glTF 用能力表里的静态值域
+    const offsetRange = is3DTiles ? record.heightRange : groundCap?.offsetRange;
 
     return {
         id: nodeId,
@@ -50,7 +72,7 @@ function toCesiumLayerNode(record: CesiumLayerRecord): any {
         expanded: false,
         level: 1,
         featureCount: 0,
-        labelVisible: false,
+        labelVisible: record.labelVisible === true,
         showCheckbox: true,
         engine: 'cesium',
         sourceType:
@@ -68,21 +90,27 @@ function toCesiumLayerNode(record: CesiumLayerRecord): any {
         draggable: false,
         droppable: false,
         // 扩展能力标记（供 TOC 右键菜单渲染条件控件）
-        heightRange: record.heightRange ?? undefined,
-        baseHeight: Number.isFinite(record.baseHeight) ? record.baseHeight : 0,
+        heightRange: supportsOffset ? offsetRange ?? undefined : undefined,
+        // 滑杆值统一取 store 的 baseHeight：3D Tiles 为基座海拔、glTF 为相对地形偏移，
+        // 二者都由 CesiumContainer 的导入投影写入，节点构建不再关心类型差异
+        baseHeight: supportsOffset && Number.isFinite(record.baseHeight) ? record.baseHeight : 0,
         materialMode: record.materialMode ?? undefined,
         actions: {
-            attribute: false,
-            edit: false,
-            style: false,
-            label: false,
-            copyCoordinates: false,
+            // 属性表：矢量类可读 entity.properties（只读表格 + 行定位）
+            attribute: vector,
+            // 要素编辑：仅「有独立顶点自由度」的绘制成品（判据与管理器共用 EDITABLE_TYPES）；
+            // 矩形 / 圆 / 测高距 / 方位角无此自由度，菜单不出现，避免「点了提示不支持」
+            edit: record.category === 'draw' && EDITABLE_TYPES.has(String(record.shapeType || '')),
+            style: styleSupported,
+            label: vector,
+            copyCoordinates: vector,
             toggleLayerCRS: false,
-            exportLayerData: false,
-            canExportCSV: false,
-            canExportTXT: false,
-            canExportGeoJSON: false,
-            canExportKML: false,
+            exportLayerData: vector,
+            canExportCSV: vector,
+            canExportTXT: vector,
+            canExportGeoJSON: vector,
+            // KML 导出已由 cesiumLayerSerialization.buildKML 提供（统一 2.2 样式）
+            canExportKML: vector,
             openAoiPanel: false,
             zoom: true,
             remove: true,
@@ -93,11 +121,15 @@ function toCesiumLayerNode(record: CesiumLayerRecord): any {
             zoomPayload: { layerId: nodeId },
             removeEvent: 'remove-layer',
             removePayload: { layerId: nodeId },
-            soloEvent: '',
+            // 仅显示此图层：由 cesiumTocActions 在元数据店层广播显隐，无需引擎专属实现
+            soloEvent: 'solo-layer',
             soloPayload: { layerId: nodeId },
-            // 3D Tiles 独有：高程调节 + 材质模式
-            setHeight: is3DTiles,
+            // 高程调节：由能力表声明（3D Tiles 基座海拔 / glTF 相对地形偏移，共用滑杆）
+            setHeight: supportsOffset,
             setMaterial: is3DTiles,
+            // 地形贴合：由能力表声明（矢量 clamp / 3D Tiles 配准 / glTF 相对地形）
+            fitTerrain: supportsFit,
+            resetTerrain: supportsReset,
             // GLTF 独有：重定位
             reposition: isGltf,
             // TIF 独有：拉伸
