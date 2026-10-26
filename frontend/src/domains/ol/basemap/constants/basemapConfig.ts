@@ -36,7 +36,7 @@ import {
     prioritizeTileSourceRequest,
 } from '@ol/tile-source';
 // 后端/瓦片代理基址统一由 publicRuntime 派生，禁止硬编码域名与直接读取 import.meta.env
-import { backendTilesUrl, bd2wgsProxyUrl, gcj2wgsProxyUrl, tileProxyUrl } from '@/config/publicRuntime';
+import { bd2wgsProxyUrl, gcj2wgsProxyUrl, tileProxyUrl } from '@/config/publicRuntime';
 
 // ========== 预设目录(已抽离至 basemapPresets.ts,原位 re-export 保持兼容) ==========
 // 抽离原因见 basemapPresets.ts 头注释(切断登录页入口 → ol 的打包链)。
@@ -1752,12 +1752,14 @@ export const LAYER_SOURCE_DEFINITIONS: LayerSourceDefinition[] = [
         name: '船舶网',
         category: 'custom',
         group: '自定义',
-        url: backendTilesUrl('ships66/{z}/{x}/{y}.png'),
+        // 船舶网海图：走通用代理（/proxy/{上游URL}），不再使用专用 /tiles/ships66 端点。
+        // 上游仅提供 http，故此处显式写 http://（代理侧按原样透传协议）。
+        url: tileProxyUrl('http://g3.ships66.com/maps/one/{z}/{x}/{y}.png'),
         serviceType: 'xyz',
         createSource: () =>
             prioritizeTileSourceRequest(
                 new XYZ({
-                    url: backendTilesUrl('ships66/{z}/{x}/{y}.png'),
+                    url: tileProxyUrl('http://g3.ships66.com/maps/one/{z}/{x}/{y}.png'),
                 }),
             ),
     },

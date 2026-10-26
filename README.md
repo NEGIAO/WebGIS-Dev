@@ -40,13 +40,14 @@
 
 <div align="center">
 
+
 | **🗺️ 底图卷帘对比** | **🧭 罗盘寻龙点穴** |
 | :---: | :---: |
 | <a href="https://github.com/user-attachments/assets/c8cb6f16-04e0-4b9a-983f-22538e0bd65a"><img src="https://github.com/user-attachments/assets/c8cb6f16-04e0-4b9a-983f-22538e0bd65a" width="400" /></a> | <a href="https://github.com/user-attachments/assets/acbb5a56-bff7-44c3-848b-dbe178c52301"><img src="https://github.com/user-attachments/assets/acbb5a56-bff7-44c3-848b-dbe178c52301" width="400" /></a> |
 | **📐 二维数据管理** | **☁️ 三维漫游云景** |
 | <a href="https://github.com/user-attachments/assets/da18b733-8979-4beb-9ac6-c07423b86ba2"><img src="https://github.com/user-attachments/assets/da18b733-8979-4beb-9ac6-c07423b86ba2" width="400" /></a> | <a href="https://github.com/user-attachments/assets/7bedba67-d965-4640-ac32-f5d75630e434"><img src="https://github.com/user-attachments/assets/7bedba67-d965-4640-ac32-f5d75630e434" width="400" /></a> |
 | **🤖 智能助手交互** | **🌊 动态淹没分析** |
-| <a href="https://github.com/user-attachments/assets/2dbbb794-ef3e-4d7a-b16b-4f381053fec3"><img src="https://github.com/user-attachments/assets/42e3a0e1-1cc5-444f-b9f8-b71caf8d9b0a" width="400" /></a> | <a href="https://github.com/user-attachments/assets/e26761db-8f91-4f05-90f2-106b28223ab5"><img src="https://github.com/user-attachments/assets/e26761db-8f91-4f05-90f2-106b28223ab5" width="400" /></a> |
+| <a href="https://github.com/user-attachments/assets/b79777bb-6227-4375-898a-d3a612888294"><img src="https://github.com/user-attachments/assets/b79777bb-6227-4375-898a-d3a612888294" width="400" /></a> | <a href="https://github.com/user-attachments/assets/e26761db-8f91-4f05-90f2-106b28223ab5"><img src="https://github.com/user-attachments/assets/e26761db-8f91-4f05-90f2-106b28223ab5" width="400" /></a> |
 
 <div align="center">🗺️ 矢量瓦片逆向解析</div>
 <img width="1280" height="718" alt="QQ20261015-213105" src="https://github.com/user-attachments/assets/b823dd99-1f51-46a2-821c-7778e2b008e6" />
@@ -80,6 +81,8 @@
   - [后端 API 面](#后端-api-面)
   - [域名映射](#域名映射)
 - [🧭 文档导航](#-文档导航)
+  - [开发文档（`Docs/Guide/`）](#开发文档docsguide)
+  - [架构文档（`Docs/Architecture/`）](#架构文档docsarchitecture)
 - [🚧 已知限制与当前状态](#-已知限制与当前状态)
 - [Star History](#star-history)
 - [📜 版本演进](#-版本演进)
@@ -90,7 +93,7 @@
 
 ## 🎯 项目简介
 
-**NEGIAO's WebGIS** 是一个功能完整、架构清晰的前后端分离 WebGIS 平台（当前版本 V3.6.26），前端托管于 GitHub Pages（正式域名 webgis.negiao.cn），后端以 Docker 部署在 Hugging Face Spaces，通过 RESTful API 通信，支持独立扩展。
+**NEGIAO's WebGIS** 是一个功能完整、架构清晰的前后端分离 WebGIS 平台（当前版本 V3.6.27），前端托管于 GitHub Pages（正式域名 webgis.negiao.cn），后端以 Docker 部署在 Hugging Face Spaces，通过 RESTful API 通信，支持独立扩展。
 
 > 📚 本 README 仅保留核心概览与导航。完整文档已模块化至 [`Docs/Guide/`](Docs/Guide/)，详见下方「文档导航」。
 >
@@ -553,10 +556,9 @@ tiles.negiao.cc.cd"]
 
 | 版本 | 日期 | 概要 |
 |------|------|------|
+| **V3.6.27** | 2026-10-25 | **船舶网海图改走通用代理 + Dependabot 策略收敛**。① 下线专用 `/tiles/ships66/{z}/{x}/{y}.png` 端点，前端预设改用 `tileProxyUrl('http://g3.ships66.com/maps/one/{z}/{x}/{y}.png')` → `/proxy/{上游URL}` 通用流式代理，同步删除 `backendTilesUrl()` helper、tile-proxy 专用路由与配置项、vpn 侧 systemd `Environment` 与 nginx `location /tiles/`；② Dependabot 只收 major：两处 `ignore` 屏蔽 minor/patch（安全更新同样生效，需定期人工复查 security 页），并用 gh CLI 核查确认仓库无自动合并机制（`allow_auto_merge=false`、无 rulesets、无 auto-merge workflow）。详见[完整更新日志](Docs/Guide/CHANGELOG.md) |
 | **V3.6.26** | 2026-10-25 | **3D Tiles 贴地三项修复 + 线上白屏修复**。① 修复地形采样全为 0（椭球占位）时中位偏移把瓦片集**整体下压、沉入地形以下**，并将图层动作在「记录缺失 / adapter 未注册 / 类型不支持」时由静默 no-op 改为显式告警；② 修复 **GLB 高程滑杆无效**——根因是 Cesium `ModelGraphics` 无 `height` 属性（1.146 构建实测），改为把高度写入 position.z 由 `heightReference` 解释；③ 大面积 / 大起伏贴地优化：估算由中位数改为**面积加权分位数（默认 p75）**，嵌入率 50%→25%，并新增残余高差画像与 TOC 右键**「贴合到当前视野」**区域化校正；④ 修复**线上白屏**——GitHub Pages 的 Jekyll 会丢弃 `_` 开头文件，`assets/_plugin-vue_export-helper-*.js` 因此 404；构建侧剥掉 chunk 名前导下划线 + 部署侧在仓库根目录补 `.nojekyll`。详见[完整更新日志](Docs/Guide/CHANGELOG.md) |
 | **V3.6.25** | 2026-10-25 | **Cesium 懒加载重试修复 + OL↔Cesium 首次切换视野错乱修复 + 代码审查加固**。修复懒加载重试使用运行时变量 specifier 导致 dev/prod 双挂（改静态 specifier + 多浏览器瞬态判据 + 退避）；修复首次进 3D 视野错乱的三处时序缺陷（换算输入未稳定 / OL 覆盖米制 z / 回滚只回滚一半）；按 L0 审计补齐静默失败告警与结构树登记。详见[完整更新日志](Docs/Guide/CHANGELOG.md) |
-| **V3.6.24** | 2026-10-25 | **Cesium 绘制/测量完整化 + 贴地统一化 + TOC 能力对齐 + TS 迁移**。绘制/测量扩至 9 种类型（矩形/圆/测高距/方位角等）并支持顶点编辑、属性表与多格式导出；贴地逻辑由 103 处直写收敛为「能力表 + 策略注册表 + 统一门面 + 时序权威」四层；样式页签纳入三维图层，TOC 右键能力对齐 OL；4 个逻辑模块迁移 TypeScript。详见[完整更新日志](Docs/Guide/CHANGELOG.md) |
-
 更早版本（V3.6.22 及以前）请查阅 [完整更新日志 →](Docs/Guide/CHANGELOG.md)。
 
 ---
@@ -579,6 +581,6 @@ tiles.negiao.cc.cd"]
 |:------:|:--------:|:--------:|
 | [GitHub](https://github.com/NEGIAO/WebGIS-Dev) | [webgis.negiao.cn](https://webgis.negiao.cn)（正式域名，GitHub Pages 托管） | [Hugging Face](https://NEGIAO-WebGIS.hf.space) |
 
-<sub>V3.6.26 · 开发中 · 最后更新 2026-10-25</sub>
+<sub>V3.6.27 · 开发中 · 最后更新 2026-10-25</sub>
 
 </div>

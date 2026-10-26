@@ -161,11 +161,3 @@ export function gcj2wgsProxyUrl(upstreamUrl: string): string {
 export function bd2wgsProxyUrl(upstreamUrl: string): string {
     return `${TILE_PROXY_BASE_URL}/proxy/bd2wgs/${upstreamUrl}`;
 }
-
-/**
- * 拼接后端自托管瓦片 URL（/tiles/* 形式）
- * @param path tiles 下的路径，如 ships66/{z}/{x}/{y}.png
- */
-export function backendTilesUrl(path: string): string {
-    return `${TILE_PROXY_BASE_URL}/tiles/${path.replace(/^\/+/, '')}`;
-}

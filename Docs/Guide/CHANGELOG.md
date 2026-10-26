@@ -6,6 +6,31 @@
 
 ## 版本记录
 
+### V3.6.27 (2026-10-25) — 船舶网海图改走通用代理 + Dependabot 策略收敛（只收 major）
+
+> 本版本**合并同日两项独立改动**（过程中曾分别记为 3.6.27 / 3.6.28，按「同一批次不得拆成多个版本号」统一计入 V3.6.27）。
+> 过程记录：
+> - `Docs/LLM_record/26-10/2026-10-25/2026-10-25-ships66-proxy-removal.md`（专用海图端点下线）
+> - `Docs/LLM_record/26-10/2026-10-25/2026-10-25-dependabot-pr-policy.md`（Dependabot 只收 major）
+
+#### ① 船舶网海图改走通用代理（删除专用 ships66 端点）
+
+> **动机**：`/tiles/ships66/{z}/{x}/{y}.png` 是为单一底图做的专用代理，收益极低、维护成本高（需要独立上游模板配置 + nginx location + systemd env，任一漏配即整条链路静默失效）。通用 `/proxy/{上游URL}` 已能原样代理该上游，无需专设端点。
+> **前端**：`basemapConfig.ts` 的 `ships66` 预设由 `backendTilesUrl('ships66/{z}/{x}/{y}.png')` 改为 `tileProxyUrl('http://g3.ships66.com/maps/one/{z}/{x}/{y}.png')`，即 `https://vpn.negiao.cn/proxy/http://g3.ships66.com/maps/one/{z}/{x}/{y}.png`。上游仅支持 http，故显式写 `http://`（代理侧按原样透传协议）。
+> **删除死代码**：`publicRuntime.ts` 的 `backendTilesUrl()`（仅 ships66 使用）一并移除，避免留下指向已下线端点的 helper。
+> **后端（tile-proxy 仓库 + vpn 部署副本）**：删除 `routes_passthrough.py` 的专用海图路由（69/70 行）与随之失效的 `get_str` 导入、`domains/tiles/__init__.py` 文档串；删除 `docs/configuration.md` 的 `SHIPS66_TILE_URL_TEMPLATE` 条目与 `.env.example` 示例。
+> **部署面（vpn.negiao.cn）**：移除 `ops/tile-proxy.service` 的 `Environment=SHIPS66_TILE_URL_TEMPLATE`、移除 `ops/nginx-vpn.negiao.cn` 的 `location /tiles/`（该 location 今日刚加，专用端点下线后即无用）。
+> **验证**：通用代理线上实测 3/3 → `200 image/png`（4469B，约 0.45s），源站直连与经本机 nginx 均 200；前端 `tsc` 0 error、`eslint` 0 problems、构建通过。
+> **注意**：`/tiles/ships66/...` 现在返回 404（端点已下线），前端需发布 V3.6.27 后才切到新路径。
+
+#### ② Dependabot 策略收敛：只收 major 大版本更新 + 机器人不合并 main 核查
+
+> **动机**：用户明确「只接收大版本（major）依赖更新 PR，minor/patch 一律不发，否则每天刷消息」。V3.6.26 已用 ignore 屏蔽 minor/patch，本次任务核查确认该策略正确，并补齐「机器人不合并进 main」的保证与证据。
+> **时间线证据**：V3.6.25（12:21）曾用 groups 归组，但安全更新不受 schedule 约束，12:26/12:27 安全 PR #42/#43 仍被创建 → groups 压不住每日噪音；V3.6.26（14:27）改 ignore 一刀切后才根治。
+> **核查结论（gh CLI）**：`allow_auto_merge=false`、rulesets 为空、分支保护无 required checks、无 auto-merge workflow；历史依赖 PR #33/#34/#35 合并 actor 均为账号本人（人工点击）→ 仓库层面机器人无法自动合入 main。唯一不可经 API 核查的是 Copilot coding agent 的 auto-merge 开关（需网页确认关闭）。
+> **修改**：① 保留两处 `ignore`（version-update:semver-minor/patch），只允许 major 更新出 PR；② 头部注释补充「不合并、不推 main」核查证据与 Copilot 关闭指引；③ 整理 6 条残留 dependabot 远程分支的清理命令（见日志交接块）。
+> **验证**：`CheckStructureTree.py` / `CheckConfigRegistry.py` 门禁通过、平台红线自查全绿；下一次 weekly 调度（周一 09:00 Asia/Shanghai）实机观察确认只有 major 出 PR。
+
 ### V3.6.26 (2026-10-25) — 3D Tiles 贴地三项修复（沉入地形 / GLB 高程 / 大面积优化）+ 图层动作可诊断性
 
 > 本版本**合并同日三项独立修复**（过程中曾分别记为 3.6.26 / 3.6.27 / 3.6.28，为避免同日多次递增，统一计入 V3.6.26）。

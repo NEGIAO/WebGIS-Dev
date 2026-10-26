@@ -12,6 +12,15 @@ version: 2
 # security-updates **同时生效**，因此 minor / patch 级别的安全补丁不再自动出 PR。
 # 需要定期人工复查：https://github.com/NEGIAO/WebGIS-Dev/security/dependabot
 # 若日后想恢复安全补丁，删掉下面两处 ignore 块即可。
+#
+# 机器人不合并、不推 main（2026-10-25 gh CLI 核查）：
+#   - 仓库 allow_auto_merge=false、无 rulesets、无 auto-merge workflow，
+#     历史依赖 PR #33/#34/#35 合并 actor 均为账号本人（人工点击）；
+#   - Dependabot 只开 PR、只写自己的 dependabot/* 分支，合不合并完全由你决定；
+#   - 唯一可能「代点合并」的是 GitHub 的 Copilot coding agent —— 它是**账号级能力**，
+#     不落在本仓库 .github/workflows/（该目录现仅 codeql / deploy / pre-check /
+#     traffic-counter 四个 workflow）。若日后启用，需到
+#     Settings → Copilot → Coding agent 确认 auto-merge 类开关为关闭。
 # ────────────────────────────────────────────────────────────────
 
 updates:

@@ -360,7 +360,12 @@ URL 模板转换（`toCesiumUrlTemplate`）处理：
 | `/proxy/wgs2gcj/{target_url:path}` | WGS84 → GCJ-02 瓦片纠偏 |
 | `/proxy/bd2wgs/{target_url:path}` | 百度 BD-09 → WGS84（跨网格） |
 | `/proxy/wgs2bd/{target_url:path}` | WGS84 → BD-09 网格 |
-| `/tiles/ships66/{z}/{x}/{y}.png` | 船舶网专用（可选） |
+
+> **V3.6.27 变更**：原 `/tiles/ships66/{z}/{x}/{y}.png` 专用海图端点已下线——它需要
+> FastAPI env + systemd `Environment` + nginx `location` + 前端 helper 四处同时正确才可用，
+> 任一漏配即整条链路静默失效。船舶网海图现与其它第三方源一样走
+> `/proxy/http://g3.ships66.com/maps/one/{z}/{x}/{y}.png` 通用代理。
+> 路由表因此**只剩 `/proxy/*` 一个命名空间**。
 
 护栏与缓存细节见开源仓 README；本仓 **无** `/proxy/*` 路由。
 
