@@ -337,7 +337,7 @@ import { useMessage } from '@common/shell/useMessage';
 import { useLocale } from '@common/app/useLocale';
 import { useDownloadStore } from '@common/data-import/stores/useDownloadStore';
 import { triggerBrowserDownload, triggerUrlDownload } from '@common/utils/browserDownload';
-import { BACKEND_BASE_URL } from '@/config/publicRuntime';
+import { DOWNLOAD_SERVICE_BASE_URL } from '@/config/publicRuntime';
 import { copyToClipboard } from '@common/utils/clipboard';
 import { BASEMAP_OPTIONS, createLayerConfigs, resolvePresetLayerIds } from '@/constants';
 import { getRuntimeMapTokensSync, loadRuntimeMapTokens } from '@common/services/runtimeMapTokens';
@@ -437,11 +437,15 @@ function refreshLayerConfigs(tiandituTk, ovitalTdtkey) {
 }
 
 /**
- * 构建浏览器托管下载 URL（后端 /file 端点无需登录）
+ * 构建浏览器托管下载 URL（下载节点 /file 端点无需登录）
+ *
+ * 必须用 DOWNLOAD_SERVICE_BASE_URL 而不是 BACKEND_BASE_URL：
+ * 下载任务由独立节点（gis.negiao.cn）执行与存储，主后端（V3.6.5+）
+ * 已删除 /api/download/*，拼到 BACKEND_BASE_URL 会直接 404。
  */
 function buildDownloadUrl(taskId) {
     const safeId = encodeURIComponent(String(taskId || '').trim());
-    return `${BACKEND_BASE_URL}/api/download/tasks/${safeId}/file`;
+    return `${DOWNLOAD_SERVICE_BASE_URL}/api/download/tasks/${safeId}/file`;
 }
 
 /**

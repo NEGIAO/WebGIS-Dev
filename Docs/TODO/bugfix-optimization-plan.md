@@ -318,3 +318,11 @@ Sprint 3（穿插）：P3-1 容器二轮（O1/O2 交替）→ P2-1 bundle 分析
 - [x] **下线专用 ships66 海图代理** ✅ 2026-10-25 V3.6.27：前端预设改用 `tileProxyUrl('http://g3.ships66.com/maps/one/{z}/{x}/{y}.png')` → `/proxy/{上游URL}` 通用代理；删除 `backendTilesUrl()` helper、tile-proxy 专用路由与文档配置项、vpn 侧 systemd `Environment` 与 nginx `location /tiles/`。线上验证：旧端点 404、新路径 3/3 `200 image/png`、其他代理未受影响。详见 `2026-10-25-ships66-proxy-removal.md`
   - [ ] (待发布) **前端 V3.6.27 需发布后才切到新路径**：后端端点已先下线，发布窗口内船舶网底图不可用（此前因 CF 缓存 404 本就不可用，无实质回归）
   - [ ] (待推送) **tile-proxy 仓库本地已提交未推送**（commit `27183ad`）：该仓库为 vpn 部署副本的上游来源，不推送会导致下次同步把专用路由带回来
+
+- [ ] **瓦片下载节点接入**（2026-10-26 · 暂存批次，接口已实测可用但域名被拦）：
+  - [x] (已解决) **`gis.negiao.cn` 备案拦截** ✅ 2026-10-26 V3.6.28：改用 **8443 非标端口**——拦截按 SNI（443）/ Host（80）判定且与来源地域无关（香港发起同样被拦），但**不覆盖非标端口**；实测 443 → 000（6/6），8443 → 200（3/3，约 0.65s），全链路建任务/轮询/下载 GeoTIFF 均通过。详见 `Docs/Architecture/download-service.md` §5
+    - [ ] (临时性风险) **腾讯云节点为活动赠送、有效期一个月**，到期后下载功能整体失效；证书 Let's Encrypt 2027-01-24 到期。长期方案：ICP 备案 或 并入香港 VPS
+    - [ ] (建议) 不要用 Cloudflare 橙云替代 8443：CF 回源必带原域名 SNI，`--resolve` 实验 3/3 复现失败（预期 522/525）
+  - [ ] (缺陷·已记未修) **远端路径 blob 错误体未解析**：`frontend/src/api/download.js` 的响应拦截器对 `responseType: 'blob'` 的失败响应直接读 `resp.data.detail`，而 blob 场景下 `data` 是 Blob，取不到 detail → 错误信息退化为「Request failed with status code 4xx」。状态码判定（`isQuotaExceeded`）仍正确。修法：仿 `api/backend/client.js` 的 `parseBlobError`
+  - [ ] (缺陷·已记未修) **两条路径返回结构不完全一致**：`backendAPI` 会解包 `{code,data}` 信封，远端路径直接返回 `response.data`。当前本机后端已无 `/api/download/*`，无实际影响；若日后恢复需对齐
+  - [ ] (运维建议) **下载上游优先选国内源**：实测 2 片瓦片走 `tile.openstreetmap.org` 耗时 122s，而任务 TTL 仅 30 分钟；建议高德/天地图，避免大批量下载超时

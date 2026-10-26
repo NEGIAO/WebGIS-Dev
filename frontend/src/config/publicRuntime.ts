@@ -66,6 +66,16 @@ export const TILE_PROXY_MODE: string = String(
 /** 大文件下载请求超时（ms）：远长于全局 8s，GeoTIFF 流式传输耗时久（缺省 2000000ms ≈ 33 分钟） */
 export const DOWNLOAD_REQUEST_TIMEOUT_MS: number = positiveNumberEnv('VITE_DOWNLOAD_REQUEST_TIMEOUT', 2000000);
 
+/**
+ * 瓦片下载服务基址（独立节点，如 https://gis.negiao.cn）。
+ *
+ * 下载的抓取/拼装/存储/清理都在节点完成，本应用只调接口；
+ * 留空则回落到 VITE_BACKEND_URL 的同源 /api/download/*（开发期或节点未就绪时的降级路径）。
+ */
+export const DOWNLOAD_SERVICE_BASE_URL: string = stripTrailingSlash(
+    String(import.meta.env.VITE_DOWNLOAD_SERVICE_URL || '').trim() || BACKEND_BASE_URL,
+);
+
 /** 普通后端 API 请求超时（ms） */
 export const BACKEND_REQUEST_TIMEOUT_MS: number = positiveNumberEnv('VITE_BACKEND_REQUEST_TIMEOUT_MS', 20000);
 

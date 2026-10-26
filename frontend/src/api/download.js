@@ -1,9 +1,75 @@
+import axios from 'axios';
 import backendAPI from './backend';
-import { DOWNLOAD_REQUEST_TIMEOUT_MS } from '../config/publicRuntime';
+import {
+    BACKEND_BASE_URL,
+    BACKEND_REQUEST_TIMEOUT_MS,
+    DOWNLOAD_REQUEST_TIMEOUT_MS,
+    DOWNLOAD_SERVICE_BASE_URL,
+} from '../config/publicRuntime';
 
-// ⚠️ V3.6.5 起后端已删除 domains/tiles/download/，以下接口在 HF Space 返回 404。
-// 代码位置与恢复方式见 Docs/TODO/plan-download-feature-git-marker.md（本地 tag tile-download-last）。
-// 待决定：捡回后端 / 迁 VPS / 前端隐藏入口。
+// ────────────────────────────────────────────────────────────────
+// 瓦片下载服务（独立节点 gis.negiao.cn）
+//
+// V3.6.5 起后端删除了 domains/tiles/download/ 与 /proxy/*（HF Space 政策）。
+// 下载能力由独立节点承担，本应用只调接口：
+//   - 瓦片抓取、GeoTIFF 拼装、磁盘存储、缓存与过期清理，全部在节点完成；
+//   - 本应用不参与计算与存储，也不转发文件流。
+//
+// 基址由 VITE_DOWNLOAD_SERVICE_URL 指定（见 src/config/publicRuntime.ts）：
+//   已配置 → 直连节点（节点侧已按来源放行，并暴露 Content-Disposition）
+//   未配置 → 回落本机后端同源 /api/download/*（开发期 / 节点未就绪的降级路径）
+//
+// 两条路径的方法、路径、请求体与返回结构完全一致，调用方无需感知差异。
+// ────────────────────────────────────────────────────────────────
+
+/** 是否使用远端下载节点（已配置且与主后端基址不同） */
+const USE_REMOTE_SERVICE =
+    Boolean(DOWNLOAD_SERVICE_BASE_URL) && DOWNLOAD_SERVICE_BASE_URL !== BACKEND_BASE_URL;
+
+/**
+ * 下载请求客户端。
+ *
+ * 节点与主后端不是同一套用户体系，故不复用 backendAPI 的拦截器
+ * （那套会注入主站 token / 设备头，并在失败时弹全局 toast）。
+ * 这里只做「解包响应 + 归一化错误」，提示仍由调用方（MapDownloader）负责，
+ * 避免与主站错误提示重复。
+ */
+const downloadAPI = USE_REMOTE_SERVICE
+    ? axios.create({
+          baseURL: DOWNLOAD_SERVICE_BASE_URL,
+          timeout: BACKEND_REQUEST_TIMEOUT_MS,
+          headers: { 'Content-Type': 'application/json' },
+      })
+    : backendAPI;
+
+if (USE_REMOTE_SERVICE) {
+    downloadAPI.interceptors.response.use(
+        (response) => {
+            // 文件流保留完整响应：调用方要读 headers 里的文件名
+            if (response?.config?.responseType === 'blob' || response?.config?.responseType === 'arraybuffer') {
+                return response;
+            }
+            return response.data;
+        },
+        (error) => {
+            const resp = error?.response;
+            const status = Number(resp?.status || 0);
+            const detail = resp?.data?.detail;
+            const detailMsg =
+                typeof detail === 'string' ? detail : String(detail?.message || detail?.detail || '').trim();
+            const detailCode =
+                detail && typeof detail === 'object' ? String(detail?.code || '').trim() : '';
+
+            const apiError = new Error(detailMsg || error?.message || '瓦片下载服务请求失败');
+            apiError.status = status;
+            apiError.detailCode = detailCode;
+            apiError.isQuotaExceeded = status === 429;
+            apiError.isQuotaInsufficient = detailCode === 'DOWNLOAD_QUOTA_INSUFFICIENT' || status === 429;
+            apiError.originalError = error;
+            return Promise.reject(apiError);
+        },
+    );
+}
 
 /**
  * 创建新的底图下载任务
@@ -11,7 +77,7 @@ import { DOWNLOAD_REQUEST_TIMEOUT_MS } from '../config/publicRuntime';
  * @returns {Promise<any>} 后端返回的任务信息
  */
 export async function apiDownloadCreateTask(payload = {}) {
-    return backendAPI.post('/api/download/tasks', payload);
+    return downloadAPI.post('/api/download/tasks', payload);
 }
 
 /**
@@ -21,7 +87,7 @@ export async function apiDownloadCreateTask(payload = {}) {
  */
 export async function apiDownloadTaskStatus(taskId) {
     const safeId = encodeURIComponent(String(taskId || '').trim());
-    return backendAPI.get(`/api/download/tasks/${safeId}`);
+    return downloadAPI.get(`/api/download/tasks/${safeId}`);
 }
 
 /**
@@ -38,7 +104,7 @@ const DOWNLOAD_REQUEST_TIMEOUT = DOWNLOAD_REQUEST_TIMEOUT_MS;
  */
 export async function apiDownloadTaskFile(taskId, onProgress, options = {}) {
     const safeId = encodeURIComponent(String(taskId || '').trim());
-    return backendAPI.get(`/api/download/tasks/${safeId}/file`, {
+    return downloadAPI.get(`/api/download/tasks/${safeId}/file`, {
         responseType: 'blob',
         timeout: DOWNLOAD_REQUEST_TIMEOUT,
         signal: options.signal,
@@ -60,7 +126,7 @@ export async function apiDownloadTaskFile(taskId, onProgress, options = {}) {
  */
 export async function apiDownloadCancelTask(taskId) {
     const safeId = encodeURIComponent(String(taskId || '').trim());
-    return backendAPI.post(`/api/download/tasks/${safeId}/cancel`);
+    return downloadAPI.post(`/api/download/tasks/${safeId}/cancel`);
 }
 
 /**
@@ -71,7 +137,7 @@ export async function apiDownloadCancelTask(taskId) {
  */
 export async function apiEstimateTileCount(bbox, resolutionM) {
     const bboxStr = Array.isArray(bbox) ? bbox.join(',') : String(bbox || '');
-    return backendAPI.get('/api/download/estimate-tiles', { params: { bbox: bboxStr, resolution_m: resolutionM } });
+    return downloadAPI.get('/api/download/estimate-tiles', { params: { bbox: bboxStr, resolution_m: resolutionM } });
 }
 
 /**
@@ -79,5 +145,5 @@ export async function apiEstimateTileCount(bbox, resolutionM) {
  * @returns {Promise<any>} 任务列表
  */
 export async function apiDownloadListMyTasks() {
-    return backendAPI.get('/api/download/tasks');
+    return downloadAPI.get('/api/download/tasks');
 }

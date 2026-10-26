@@ -6,6 +6,19 @@
 
 ## 版本记录
 
+### V3.6.28 (2026-10-26) — 瓦片下载能力迁至独立节点（腾讯云临时方案，走 8443 端口）
+
+> 方案与实测详见 `Docs/Architecture/download-service.md`。
+
+> **背景**：V3.6.5 起 HF Space 因平台政策删除 `backend/domains/tiles/download/` 与 `/proxy/*`，下载入口失效（调用返回 404）。现由**腾讯云临时节点**承接下载能力——该机器为活动赠送、**有效期一个月**、内存较大，仅用于验证与过渡。
+> **职责划分**：`vpn.negiao.cn`（香港 VPS）只做**瓦片纠偏/直通代理**；`gis.negiao.cn`（腾讯云）只做**下载任务接口**。两者互不承担对方职责。
+> **前端**：新增 `VITE_DOWNLOAD_SERVICE_URL`（`src/config/publicRuntime.ts` 的 `DOWNLOAD_SERVICE_BASE_URL`），`src/api/download.js` 据此在「远端节点」与「本机后端」之间切换 axios 实例；`MapDownloader.vue` 的 `buildDownloadUrl` 同步改用该基址。两条路径方法/路径/请求体一致，未配置时回落本机。
+> **端口为何是 8443**：`negiao.cn` 未做 ICP 备案，托管在 Cloudflare（仅 DNS）。子域指向大陆服务器时，**443 会在 SNI 层被拦截**（带 `SNI=gis.negiao.cn` 的请求 100% RST，6/6；无 SNI 的纯 IP + Host 头 100% 200），而 **8443 不触发该拦截**（实测 3/3 → 200，约 0.65s）。因此采用 `https://gis.negiao.cn:8443`。
+> **实测（8443 全链路）**：`estimate-tiles` → `{"status":"success","tile_count":24}`；建任务 → 轮询 `pending→downloading→success`；取文件 → `200 image/tiff` 951 B（魔数 `II*\0` 合法 GeoTIFF）；`content-disposition: attachment; filename*=UTF-8''v3628-verify_200m_10_26_11.tif`；CORS 反射 `https://webgis.negiao.cn` + `Expose-Headers: Content-Disposition, Content-Length`。
+> **注意**：Cloudflare **橙云代理不能替代 8443**——CF 回源必带原域名 SNI，`--resolve` 实验已 3/3 复现失败（预期 522/525）；`Flexible` 模式走 HTTP 回源，同样被 Host 层拦截。
+> **临时性风险**：节点为一个月免费资源，到期需迁移；正解是完成 ICP 备案或把下载服务并入香港 VPS。
+> **验证**：`tsc --noEmit` 0 error、`eslint` 0 problems、双门禁通过。
+
 ### V3.6.27 (2026-10-25) — 船舶网海图改走通用代理 + Dependabot 策略收敛（只收 major）
 
 > 本版本**合并同日两项独立改动**（过程中曾分别记为 3.6.27 / 3.6.28，按「同一批次不得拆成多个版本号」统一计入 V3.6.27）。
