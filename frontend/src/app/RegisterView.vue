@@ -1,14 +1,13 @@
 <template>
     <div class="register-container">
-        <!-- 背景装饰层：经纬网格 + 品牌色光晕（与 LandingView hero-bg 同源风格） -->
-        <div
-            class="register-bg"
-            aria-hidden="true"
-        >
-            <div class="register-bg__grid"></div>
-            <div class="register-bg__blob register-bg__blob--1"></div>
-            <div class="register-bg__blob register-bg__blob--2"></div>
-        </div>
+        <!-- 动态线框地球：单颗会自转的球，悬在宇航员脚下（实现见 AuthGlobeStage）。
+             刻意先于 AuthDecorBackground 挂载 —— 两者同为 z-index:0，
+             同层由 DOM 顺序决定前后：地球在后、装饰层（含宇航员与双轨）在前，
+             宇航员因此压在地球与其轨道环之上，不会被线稿穿过 -->
+        <AuthGlobeStage />
+        <!-- 背景装饰层：经纬网 + 天光 + 双环旋转纹样 + 光斑
+             （与 Landing 首屏同一套装饰语言，实现见 AuthDecorBackground） -->
+        <AuthDecorBackground />
 
         <div class="container fade-in">
             <div class="form-header">
@@ -687,6 +686,8 @@ import { useRoute, useRouter } from 'vue-router';
 import { useMessage } from '@common/shell/useMessage';
 import { useLocale } from '@common/app/useLocale';
 import { useUserPreferencesStore } from '../stores';
+import AuthDecorBackground from './components/AuthDecorBackground.vue';
+import AuthGlobeStage from './components/AuthGlobeStage.vue';
 import { GOOGLE_OAUTH_CLIENT_ID, GUEST_PASSWORD, ASSET_BASE_URL } from '../config/publicRuntime';
 import {
     AlertCircle,
@@ -1636,54 +1637,10 @@ onUnmounted(() => {
     overflow: hidden;
 }
 
-/* 背景装饰层：顶网格 + 中央/右下光晕
-   （克制版本：单层网格、光晕大而柔，避免与卡片抢视觉） */
-.register-bg {
-    position: absolute;
-    inset: 0;
-    overflow: hidden;
-    pointer-events: none;
-}
-
-.register-bg__grid {
-    position: absolute;
-    inset: 0;
-    background-image:
-        linear-gradient(rgba(var(--brand-primary-rgb), 0.05) 1px, transparent 1px),
-        linear-gradient(90deg, rgba(var(--brand-primary-rgb), 0.05) 1px, transparent 1px);
-    background-size: 28px 28px;
-    -webkit-mask-image: radial-gradient(ellipse 90% 60% at 50% 0%, #000 15%, transparent 100%);
-    mask-image: radial-gradient(ellipse 90% 60% at 50% 0%, #000 15%, transparent 100%);
-}
-
-.register-bg__blob {
-    position: absolute;
-    border-radius: 50%;
-    pointer-events: none;
-}
-
-/* 主光晕：顶部中央对称，大气而不贴边 */
-.register-bg__blob--1 {
-    width: 620px;
-    height: 620px;
-    top: -300px;
-    left: 50%;
-    transform: translateX(-50%);
-    background: rgba(var(--brand-primary-rgb), 0.38);
-    filter: blur(130px);
-    opacity: 0.22;
-}
-
-/* 副光晕：右下角弱强调色，微微托底 */
-.register-bg__blob--2 {
-    width: 440px;
-    height: 440px;
-    bottom: -200px;
-    right: -140px;
-    background: rgba(var(--brand-accent-rgb, 87, 184, 97), 0.3);
-    filter: blur(120px);
-    opacity: 0.14;
-}
+/* 背景装饰层已抽为两个组件（app/components/）：
+   AuthDecorBackground —— 经纬网 + 天光 + 双轨纹样 + 双光斑，与 Landing 同一套语言；
+   AuthGlobeStage      —— 会自转的线框地球 + 倾斜轨道卫星 + 流星。
+   本页不再持有装饰层样式，避免与组件重复维护。 */
 
 .container {
     position: relative;
@@ -2578,19 +2535,8 @@ input:disabled {
         padding: 0;
     }
 
-    /* 小屏收窄光晕，避免贴边裁切过重 */
-    .register-bg__blob--1 {
-        width: 480px;
-        height: 480px;
-        top: -240px;
-    }
-
-    .register-bg__blob--2 {
-        width: 340px;
-        height: 340px;
-        bottom: -160px;
-        right: -120px;
-    }
+    /* 装饰层在 ≤768px 整层关闭（卡片已全屏，见 AuthDecorBackground 注释），
+       此处无需再为光斑/环做降级 */
 
     .container {
         max-width: 100%;

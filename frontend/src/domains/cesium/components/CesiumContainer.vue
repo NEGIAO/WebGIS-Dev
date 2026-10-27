@@ -174,6 +174,12 @@ import { useCesiumNavigation } from '../composables/core/useCesiumNavigation';
 import { useCesiumInteractions } from '../composables/interaction/useCesiumInteractions';
 import { initRequestRenderMode } from '@cesium-domain/composables/interaction/useCesiumRenderMode';
 import { useCesiumLayers } from '../composables/layers/useCesiumLayers';
+// 地形 provider 的 Worker 池清理函数：这两个模块已被 useCesiumLayers 静态引入，
+// 组件卸载时直接用静态导入调用即可。此前写成 import() 动态引入，Vite 会报
+// INEFFECTIVE_DYNAMIC_IMPORT（同一模块既被静态又被动态引入 → 无法分包），
+// 产物里还多出两个 0.09 kB 的空壳 chunk。
+import { destroySharedLercPool } from '../providers/terrain/ArcGISTerrainProvider.js';
+import { destroySharedGeoDecodePool } from '../providers/terrain/GeoTerrainProvider.js';
 import { useCesiumSceneActions } from '../composables/camera/useCesiumSceneActions';
 import { useCesiumDataImport } from '../composables/dataImport/useCesiumDataImport';
 import { createCesiumDataOpsHandlers } from '../composables/dataImport/useCesiumDataOpsHandlers';
@@ -2015,9 +2021,11 @@ onUnmounted(() => {
     cameraEnhanced.cleanup();
     heightSampler.cleanup();
 
-    // 清理共享地形 Worker 池（释放 Worker 线程资源）
-    import('../providers/terrain/ArcGISTerrainProvider.js').then((m) => m.destroySharedLercPool?.()).catch(() => { });
-    import('../providers/terrain/GeoTerrainProvider.js').then((m) => m.destroySharedGeoDecodePool?.()).catch(() => { });
+    // 清理共享地形 Worker 池（释放 Worker 线程资源）。
+    // 用静态导入调用，不再 import()：那两个模块本就在静态图里，
+    // 动态引入无法分包，只会触发 INEFFECTIVE_DYNAMIC_IMPORT 与空 chunk
+    destroySharedLercPool?.();
+    destroySharedGeoDecodePool?.();
 
     // 清理体积云
     if (cloudCleanup) {

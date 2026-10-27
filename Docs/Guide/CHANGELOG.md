@@ -6,6 +6,49 @@
 
 ## 版本记录
 
+### V3.6.29 (2026-10-27) — 认证页装饰体系重构（双轨三环 + 线框地球 + 流星）+ 构建告警清零
+
+> 本版本**合并同一批次的三项改动**（过程中曾分别记为 3.6.29 / 3.6.30 / 3.6.31，按「同一批次不得拆成多个版本号」统一计入 V3.6.29）。
+> 完整记录：
+> - [`2026-10-26-register-auth-decor-background.md`](../LLM_record/26-10/2026-10-26/2026-10-26-register-auth-decor-background.md)（认证页装饰层）
+> - [`2026-10-26-build-warning-fixes.md`](../LLM_record/26-10/2026-10-26/2026-10-26-build-warning-fixes.md)（构建告警）
+> - [`2026-10-27-register-globe-stage.md`](../LLM_record/26-10/2026-10-27/2026-10-27-register-globe-stage.md)（线框地球）
+
+#### 一、认证页装饰层：`AuthDecorBackground` + `useRingPatternStyle`
+
+> **背景**：`RegisterView` 此前只有 28px 经纬网 + 两枚模糊光斑（`.register-bg`），与 Landing 首屏的六层装饰形成质感断崖；而 Landing 的装饰层全部内联在 5204 行的 `LandingView.vue` 内，第二处使用只能复制。
+> **共享层**：新增 `app/composables/useRingPatternStyle.ts`，把「纹样 PNG 路径派生 + 文档级 `<style>` 注入/移除」提升为参数化 composable（`styleId` / `scope` / `ringClass` / `breakpoint`）。`LandingView` 同步迁移，`styleId` 与选择器保持原值，注入结果与改造前逐字符一致（已截图回归）。
+> **装饰层**：新增 `app/components/AuthDecorBackground.vue`，8 层结构 —— 底纹渐变 / 经纬网 / 等高线×2（`repeating-radial-gradient` + 径向 mask）/ 散点与点位（16 层渐变一次绘制）/ 天光 / 双轨 / 动态 SVG / 光斑×3。
+> **与 Landing 的差异**（刻意不同构）：Landing 是三环**同心**、以文案为中心；认证页是两条**椭圆轨道**，环心分居卡片两侧（33%/52%、67%/46%）、环径不等（780/700）、倾角相反（-13°/+11°）、旋转相对逆向，卡片落在两轨交会处。
+> **三环综合圆环**：每轨内部再套「外 / 中 / 核」三环（100% / 70.8% / 43.75%，沿用 Landing 960:680:420 的比例），三环共用同一张 PNG，但 `background-size` 分别 124% / 96% / 90%，花边因此落在三个不同半径上，叠成"外圈贴边、中圈内收、核心环收紧"的综合圆环；三环异速异向旋转，不锁死成刚体。
+> **动态 SVG**：① 两条虚线轨迹（`stroke-dashoffset` 正/反向流动，2.6s / 3.4s）；② 三处定位脉冲（`transform: scale` + `opacity`，4.4s、错峰 1.6s）；③ 自绘星座（`pathLength="1"` 归一化 + `dashoffset 1→0`，三线错峰起笔后节点呼吸）；④ 可动宇航员（线稿 + 宽面罩 + 玻璃内环；躯干三段式漂浮、自转 -3°~+5°）。
+> **移动端**：`≤768px` 时卡片改为全屏（`padding:0 / max-width:100% / min-height:100dvh`），不透明卡片会 100% 覆盖装饰层，故整层 `display:none`，避免无意义合成开销。
+> **实现约束**：① 倾角与自转必须分属「外壳 / 内环」两层，否则 `@keyframes` 的 `transform` 会覆盖静态倾角；② 纹样只能用 `background-image`，不能用 `mask`（iOS Safari 在持续旋转的父元素内会把遮罩层栅格化成黑环）；③ SVG 扩散环必须 `transform-box: fill-box`，否则按视口原点缩放会被甩出画面。
+
+#### 二、构建告警清零
+
+> **① `:deep` 落在非 scoped 样式块**（唯一的功能缺陷）：`ChatMessageList.vue` 有两个 `<style>`，第二个是非 scoped（专为 `v-html` 注入的 Markdown 服务）。移动端触控规则被写进该块，而 `:deep()` 只在 scoped 编译期被改写 —— 非 scoped 块原样输出，lightningcss 报 `'deep' is not a recognized pseudo-class`，浏览器按未知伪类处理、**整条规则被丢弃**（≤700px 时聊天操作按钮的 18px 图标从未生效）。改为 `.chat-body-wrap .action-btn svg`。
+> **② `INEFFECTIVE_DYNAMIC_IMPORT` ×2**：`CesiumContainer` 卸载时用 `import()` 调两个地形 provider 的 Worker 池清理函数，但 `useCesiumLayers` 已静态 import 同两个模块 → 动态引入无法单独成 chunk，产物里留下两个 0.09 kB 空壳。改为顶部静态导入 + 直接调用。
+> **③ `envFile` 弃用**：`vite.config.js` 的 `envFile: false` 改为 Vite 8 官方替代 `envDir: false`（语义同为"不自动加载 .env"）。模块级 `envDir` 常量仍指向 `deploy/`，供 `selectiveEnvPlugin` 内部的 `parseEnvFile` 使用，与 Vite 选项互不影响。
+> **④ 注释纠偏**：`manualChunks` 中 `vendor-rapier` 注释原写"~300KB"，实测 4.34 MB / gzip 1.67 MB —— compat 版把 wasm 以 base64 内联（约原始 wasm 的 1.33 倍）。该 chunk 仅在 `PhysicsSystem` 动态 import 且列于 `SKIP_PRELOAD_CHUNKS`，不进首屏；换非 compat 版属依赖变更，按 §1 归 L3，需先出方案。
+
+#### 三、注册页线框地球：`AuthGlobeStage`
+
+> **来源**：发现某第三方站点基于本项目 3.6.* 二次开发，认证页加了一颗会转的线框地球（类名前缀 `gis-`）。本次只借鉴其动效语言，不改本页单列居中布局。
+> **新增组件**：`app/components/AuthGlobeStage.vue`，纯 CSS/SVG，零 JS 零依赖。线框球体 / conic 扫掠光 / 三层脉冲环 / 倾斜轨道 + 卫星 / 大气层 / 九道流星 / 动效降级。
+> **伪 3D 自转**：经线 = `rx` 递减（94/62/30）而 `ry` 恒 94 的椭圆（`rx/R ≈ cos 经度`），整组旋转即成立；**纬线不转、只 ±5° 慢摆** —— 经纬同速旋转会被读成"一块旋转的网格布"，一静一动才让平面读作球体。
+> **浅色底适配**：原站是深蓝渐变 + 白线 alpha 0.13~0.35，本页底色 `--bg-secondary` 下白线不可见；线稿全部改 `rgba(var(--brand-primary-rgb), α)`，金色只留给卫星，绿蓝双主题自动联动。整层透明度另由 `--globe-opacity` 单一开关收敛。
+> **差速体系**：扫掠光 6s / 卫星 13s / 轨道虚线环 20s / 纬线摆动 30s / 经线 32s，五个周期两两不等。卫星与虚线环必须拆成两个自转层，同层则刚性绑定、永远同速。
+> **流星**：九道短线按「近 / 中 / 远」三档分粗细与亮度，每道仅在自己周期的前 15% 可见；"随机"靠位置、形态、**周期（3.8~6.7s 两两不等）** 三个维度同时变化 —— 统一周期会被眼睛识别出节拍。
+> **构图**：`left: 9%` + `bottom: 0` + `translateX(-50%)`，直径 `min(230px, 24vw, 40vh)`，球底贴屏幕底边；`≤1100px` 沿用同一锚点收至 `min(200px, 26vw, 34vh)`，`≤768px` 整层关闭。**注意**不能用 `translate(-50%, -50%)`：`bottom` 已把底边贴底，`-50%` 的纵向位移会再上推半个球径。
+> **层级**：`<AuthGlobeStage />` 挂在 `<AuthDecorBackground />` **之前** —— 两者同为 `z-index:0`，同层由 DOM 顺序定前后；地球在后、宇航员在前，避免 1.62 倍直径的轨道环压过人物。
+> **宇航员改造**：脚下多了地球后，原 `rgba(255,255,255,.78)` 半透明白会与球体线稿糊成一片，填充改不透明 `#fff`；四肢是开放路径（`fill:none`）无法填实，用 `drop-shadow(0 0 1.2px #fff)` 做白色包边，再叠一层落地投影分离前后景。
+> **轨道可感知性**：`border: 1px dashed` 绕该直径约 280 段，20s 一圈时高频图案产生频闪混叠、肉眼读作静止；且虚线若画在只有静态倾角的父级上，内层怎么转它都不会动。改为自转层上的 `repeating-conic-gradient`（36 段 / 10° 周期）+ `closest-side` 掩膜卡 1.3px 环带。
+> **同类问题横扫**：认证页 A 轨中环 / 核心环、Landing 首屏中环 / 核心环原为 `solid`，正圆实线旋转在视觉上等于静止，低 alpha 又让点线本身看不见 —— 统一改 `dashed` / `dotted` 并相应提高 alpha。**规律：正圆上只有"沿圆周分布的不连续特征"能被眼睛捕捉。**
+> **星座防顶部裁切**：SVG 用 `viewBox 1440×900` + `preserveAspectRatio="slice"` 铺满，宽高比 > 1.6 时上下各裁掉 `(900 − 720 / 宽高比) / 2` 个 viewBox 单位；星座顶部节点在 `y=74`，21:9 下直接变负。按 `min-aspect-ratio` 分三档给 `.auth-decor__constellation` 加 `translateY` 补偿。
+
+> **验证**：`eslint` 0 problems；`vite build` 通过（仅剩 chunk 体积提示）；`CheckStructureTree` 515/515 无漂移；`CheckConfigRegistry` 全绿。
+
 ### V3.6.28 (2026-10-26) — 瓦片下载能力迁至独立节点（腾讯云临时方案，走 8443 端口）
 
 > 方案与实测详见 `Docs/Architecture/download-service.md`。

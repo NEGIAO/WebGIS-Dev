@@ -788,6 +788,7 @@
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import { useLocale } from '@common/app/useLocale';
 import { useUserPreferencesStore } from '../stores';
+import { useRingPatternStyle } from './composables/useRingPatternStyle';
 import { ASSET_BASE_URL, GITHUB_STATS_WORKER_URL } from '../config/publicRuntime';
 import {
     Bot,
@@ -842,9 +843,8 @@ const logoUrl = `${normalizedBase}images/icon.webp`;
 const previewUrl = `${normalizedBase}images/preview.webp`;
 // Hugging Face 官方 logo（public/images/hf-logo.svg，品牌资产彩色版）
 const hfLogoUrl = `${normalizedBase}images/hf-logo.svg`;
-// 轨道环纹样图源（public/images/njnu-media/，桌面版 + 移动端 alpha 加强版）
-const ringPatternUrl = `${normalizedBase}images/njnu-media/d-bg2_1.png`;
-const ringPatternMobileUrl = `${normalizedBase}images/njnu-media/d-bg2_1-mobile.png`;
+// 轨道环纹样图源与注入逻辑统一由 composables/useRingPatternStyle 管理
+// （Landing / 认证页共用一份，图源路径不在本文件重复维护）
 
 // 相对 url() 的解析基准是「写下它的那份样式表」，不是组件本身：
 //   · 经 CSS 自定义属性传 URL（--brand-logo、<style> 内 v-bind 注入）时，var() 用在
@@ -856,51 +856,20 @@ const ringPatternMobileUrl = `${normalizedBase}images/njnu-media/d-bg2_1-mobile.
 //     与 <img src> 行为一致，根域名 / 子路径部署都正确。
 // 因此 URL 不进自定义属性：品牌徽牌的 mask-image 走行内样式（brandBadgeStyle）；
 // 轨道环纹样在 ::before 伪元素上、挂不了行内样式，走运行时注入的文档级 <style>
-// （见 injectRingPatternStyle）。两条通道都不经自定义属性传 URL。
+// （见 composables/useRingPatternStyle）。两条通道都不经自定义属性传 URL。
 const brandBadgeStyle = {
     '-webkit-mask-image': `url('${logoUrl}')`,
     'mask-image': `url('${logoUrl}')`,
 };
 
-const RING_PATTERN_STYLE_ID = 'landing-ring-pattern-style';
-
-/**
- * 注入轨道环纹样图源（桌面 + 移动端 alpha 加强版），幂等。
- *
- * 为什么纹样是「background-image 直接上图」而不是 mask-image：
- *   iOS Safari 合成缺陷 —— 被遮罩（mask）的图层若处于持续 transform 旋转的
- *   父元素内（.hero-bg__ring 跑 ring-spin 无限动画），遮罩层会整块栅格化成
- *   黑色，旋转环在 iOS 上呈现为黑环（线上实测）。品牌徽牌不旋转所以不受影响。
- *   改 background-image 后绕开 mask 合成路径，各平台渲染一致。
- *   纹样 PNG 本身就是淡金图案（RGB≈231,176,111），直接上图与原来
- *   "mask + 品牌金染色"观感一致；PNG 取不到时该层什么都不画，
- *   不存在"掉回整块纯色圆面"的兜底。
- */
-function injectRingPatternStyle() {
-    if (typeof document === 'undefined' || document.getElementById(RING_PATTERN_STYLE_ID)) return;
-    const el = document.createElement('style');
-    el.id = RING_PATTERN_STYLE_ID;
-    // 类名翻倍抬优先级到 (0,3,1)，稳压 SFC scoped 规则 (0,2,1)；
-    // 断点与 SFC 移动端降级块一致（max-width: 768px）
-    el.textContent = `
-.hero-bg__rings .hero-bg__ring.hero-bg__ring::before {
-    background-image: url('${ringPatternUrl}');
-    background-repeat: no-repeat;
-    background-position: center;
-}
-@media (max-width: 768px) {
-    .hero-bg__rings .hero-bg__ring.hero-bg__ring::before {
-        background-image: url('${ringPatternMobileUrl}');
-    }
-}`;
-    document.head.appendChild(el);
-}
-
-function removeRingPatternStyle() {
-    if (typeof document === 'undefined') return;
-    const el = document.getElementById(RING_PATTERN_STYLE_ID);
-    if (el) el.remove();
-}
+// 轨道环纹样：注入实现与认证页共用 composables/useRingPatternStyle。
+// styleId 与选择器保持历史原值（类名翻倍抬到 (0,3,1)、断点 768），
+// 注入结果与改造前逐字符一致，线上纹样不受影响
+useRingPatternStyle({
+    styleId: 'landing-ring-pattern-style',
+    scope: '.hero-bg__rings',
+    ringClass: 'hero-bg__ring',
+});
 
 // 核心功能卡片：图标 + i18n key，避免 10 段近似模板重复
 const FEATURES = Object.freeze([
@@ -1548,7 +1517,6 @@ async function fetchViaWorker() {
 
 onMounted(() => {
     applyLocalCaches(); // 本地缓存秒开，首屏不等待任何网络
-    injectRingPatternStyle(); // 轨道环旋转纹样（PNG 背景图，文档级 <style> 承载相对 url()）
     observeAnchors(); // 导航锚点 scroll spy（IntersectionObserver）
     observeStats(); // Hero 统计条数字滚动（进入视口触发）
     observeFeatures(); // 核心功能卡：三栏分左右对称入场
@@ -1572,7 +1540,6 @@ onBeforeUnmount(() => {
     disconnectReveal(); // 取消统一入场观察器
     window.removeEventListener('keydown', onMenuKeydown);
     disconnectViewportQuery(); // 取消页脚断行的视口断点监听
-    removeRingPatternStyle(); // 卸载注入的轨道环纹样样式
     if (landingEl.value) landingEl.value.style.overflowY = '';
 });
 </script>
@@ -2265,8 +2232,8 @@ button:focus-visible {
    旋转的父元素内（.hero-bg__ring 跑 ring-spin 无限动画），遮罩层会整块
    栅格化成黑色，旋转环在 iOS 上呈现为黑环。background-image 无此问题，
    各平台渲染一致；PNG 取不到时该层什么都不画，不存在"纯色圆面"兜底。
-   图源 url() 由运行时注入的文档级 <style> 提供（见 script
-   injectRingPatternStyle）：相对路径按文档 base 解析，兼容根域名 /
+   图源 url() 由运行时注入的文档级 <style> 提供（见 composables/
+   useRingPatternStyle）：相对路径按文档 base 解析，兼容根域名 /
    子路径部署；本块只配定位/重复/尺寸。 */
 .hero-bg__ring::before {
     content: '';
@@ -2280,7 +2247,7 @@ button:focus-visible {
 .hero-bg__ring--outer {
     width: min(960px, 86vw);
     height: min(960px, 86vw);
-    border: 1px dashed rgba(var(--brand-primary-rgb), 0.26);
+    border: 1px dashed rgba(var(--brand-primary-rgb), 0.5);
 }
 
 /* 放大到 124%：花边顶到 r=451~476（虚线在 480 内侧），发丝线被推到
@@ -2313,10 +2280,14 @@ button:focus-visible {
     );
 }
 
+/* 中环同样改虚线：正圆的实线边框旋转在视觉上等于静止（圆周完全对称），
+   本环虽有 mid 的公转金点作运动线索，但环线本身不动仍会被读成"死环"。
+   虚线墨量约为实线一半，故 alpha 相对原实线值上调补足视觉重量；
+   具体取值见下方 border，层次保持 外 > 中 > 内 递减 */
 .hero-bg__ring--mid {
     width: min(680px, 60vw);
     height: min(680px, 60vw);
-    border: 1px solid rgba(var(--brand-primary-rgb), 0.18);
+    border: 1px dashed rgba(var(--brand-primary-rgb), 0.34);
 }
 
 /* 收到 96%：花边落到 r=248~260，发丝线落到 r=323（边框 340 内侧）。
@@ -2342,10 +2313,13 @@ button:focus-visible {
     );
 }
 
+/* 核心环是最需要改的一环：它没有公转点，实线边框叠加低 alpha
+   等于"整圈完全静止"，140s 的旋转没有任何可感知的痕迹。
+   改虚线后虚线段沿圆周滑动即可读出慢转；alpha 同步上调以抵消虚线的墨量损失 */
 .hero-bg__ring--inner {
     width: min(420px, 40vw);
     height: min(420px, 40vw);
-    border: 1px solid rgba(var(--brand-primary-rgb), 0.14);
+    border: 1px dashed rgba(var(--brand-primary-rgb), 0.28);
 }
 
 /* 收到 90% 且给 0.55：花边落在 r=143~190，叠在标题后面只当质感底纹。
@@ -2453,12 +2427,12 @@ button:focus-visible {
        400px 时峰值从 0.502 掉到 0.220 —— 靠调 opacity 补不回来，因为遮罩
        本身已经被平均没了。加强后在同样位置峰值回到 0.44（1x）/ 0.77（2x），
        才有"提透明度"的空间。
-       background-image 不在此声明：由 injectRingPatternStyle 注入的同断点
+       background-image 不在此声明：由 useRingPatternStyle 注入的同断点
        @media (max-width: 768px) 规则提供（相对 url() 必须由文档级样式表解析，
        原因见桌面纹样层块注释）。 */
 
     /* 三条边框同步加深：小屏上 1px 细线本来就吃亏，
-       0.26/0.18/0.14 的绿在 #f9f9f9 上几乎读不出"这里有三个环" */
+       桌面档的绿在 #f9f9f9 上几乎读不出"这里有三个环" */
     .hero-bg__ring--outer {
         width: min(86vw, 70vh);
         height: min(86vw, 70vh);

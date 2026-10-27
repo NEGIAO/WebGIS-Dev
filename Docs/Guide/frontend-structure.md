@@ -43,12 +43,15 @@ frontend/src/
 │   ├── NotFoundView.vue  # 404 页面（notFound.* i18n）
 │   ├── OAuthCallbackView.vue  # Google/GitHub/Hugging Face OAuth 回调会话落地
 │   ├── PrivacyPolicy.vue  # 隐私政策
-│   ├── RegisterView.vue  # 注册/登录（邮箱 + Google/GitHub/Hugging Face OAuth，全量 i18n + 语言切换）
+│   ├── RegisterView.vue  # 注册/登录（邮箱 + Google/GitHub/Hugging Face OAuth，全量 i18n + 语言切换；背景装饰挂 AuthDecorBackground + AuthGlobeStage）
 │   ├── TermsOfService.vue  # 服务条款
 │   ├── components/
+│   │   ├── AuthDecorBackground.vue  # 认证页装饰层（底纹渐变 + 经纬网 + 等高线×2 + 散点/点位 + 天光 + 双轨异径逆向椭圆，每轨内套「外/中/核」三环综合圆环（同一 PNG 按 124%/96%/90% 缩放落在不同半径）+ 动态 SVG（流动轨迹 / 定位脉冲 / 自绘星座 / 漂浮宇航员：纯白填充 + 白色包边与落地投影，与脚下线框地球形成材质差）+ 光斑×3；≤768px 整层关闭）
+│   │   ├── AuthGlobeStage.vue  # 认证页线框地球（3 条 rx 递减椭圆自转伪造球体 + 2 条纬线 ±5° 慢摆 + conic 扫掠光 + 三层脉冲环 + 差速轨道环 20s / 卫星 13s + 九道流星 3.8~6.7s 错峰；线稿走 --brand-primary-rgb alpha 以适配浅色底，整层透明度由 --globe-opacity 单一开关收敛，球底贴屏幕底边（left 9% + bottom 0 + translateX(-50%)，直径 min(230px,24vw,40vh)），≤1100px 收一档、≤768px 整层关闭）
 │   │   └── SectionTitle.vue  # 通用节标题三件套（印章 + 衬线标题 + 罗盘水印；LandingView 各节复用）
 │   └── composables/
-│       └── useLazyModules.ts  # CesiumContainer / SidePanel 懒加载 + 重试逻辑（**重试必须复用同一静态字面量 specifier**：带 `?t=${Date.now()}` 的运行时变量 specifier 无法被 Vite 分析，dev 抛 Unknown variable dynamic import、prod 指向不存在路径；瞬态失败判据覆盖 Chromium/Firefox/Safari 三种措辞 + 150ms×n 退避）
+│       ├── useLazyModules.ts  # CesiumContainer / SidePanel 懒加载 + 重试逻辑（**重试必须复用同一静态字面量 specifier**：带 `?t=${Date.now()}` 的运行时变量 specifier 无法被 Vite 分析，dev 抛 Unknown variable dynamic import、prod 指向不存在路径；瞬态失败判据覆盖 Chromium/Firefox/Safari 三种措辞 + 150ms×n 退避）
+│       └── useRingPatternStyle.ts  # 轨道环旋转纹样 PNG 注入（文档级 `<style>` 承载相对 url()，绕开 scoped CSS 的 /assets/ 解析基准；Landing / 认证页共用，图源由 ASSET_BASE_URL 派生）
 ├── assets/
 │   ├── cesium-tool-theme.css
 │   ├── logo.svg

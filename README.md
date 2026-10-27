@@ -93,7 +93,7 @@
 
 ## 🎯 项目简介
 
-**NEGIAO's WebGIS** 是一个功能完整、架构清晰的前后端分离 WebGIS 平台（当前版本 V3.6.28），前端托管于 GitHub Pages（正式域名 webgis.negiao.cn），后端以 Docker 部署在 Hugging Face Spaces，通过 RESTful API 通信，支持独立扩展。
+**NEGIAO's WebGIS** 是一个功能完整、架构清晰的前后端分离 WebGIS 平台（当前版本 V3.6.29），前端托管于 GitHub Pages（正式域名 webgis.negiao.cn），后端以 Docker 部署在 Hugging Face Spaces，通过 RESTful API 通信，支持独立扩展。
 
 > 📚 本 README 仅保留核心概览与导航。完整文档已模块化至 [`Docs/Guide/`](Docs/Guide/)，详见下方「文档导航」。
 >
@@ -556,9 +556,9 @@ tiles.negiao.cc.cd"]
 
 | 版本 | 日期 | 概要 |
 |------|------|------|
-| **V3.6.28** | 2026-10-26 | **瓦片下载能力迁至独立节点（临时方案）**。HF Space 已删除 `/api/download/*`，下载改由腾讯云临时节点承接（免费一个月、内存大），前端经 `VITE_DOWNLOAD_SERVICE_URL=https://gis.negiao.cn:8443` 直连：抓取/拼装 GeoTIFF/存储/清理全在节点侧，本应用只调接口；**用 8443 端口是因为域名未 ICP 备案**——指向大陆服务器的 443 会被 SNI 层拦截（实测 100% RST），非标端口可正常通行；两条路径（远端节点 / 本机后端）方法、路径、请求体一致，未配置时回落本机。详见[完整更新日志](Docs/Guide/CHANGELOG.md) |
-| **V3.6.27** | 2026-10-25 | **船舶网海图改走通用代理 + Dependabot 策略收敛**。① 下线专用 `/tiles/ships66/{z}/{x}/{y}.png` 端点，前端预设改用 `tileProxyUrl('http://g3.ships66.com/maps/one/{z}/{x}/{y}.png')` → `/proxy/{上游URL}` 通用流式代理，同步删除 `backendTilesUrl()` helper、tile-proxy 专用路由与配置项、vpn 侧 systemd `Environment` 与 nginx `location /tiles/`；② Dependabot 只收 major：两处 `ignore` 屏蔽 minor/patch（安全更新同样生效，需定期人工复查 security 页），并用 gh CLI 核查确认仓库无自动合并机制（`allow_auto_merge=false`、无 rulesets、无 auto-merge workflow）。详见[完整更新日志](Docs/Guide/CHANGELOG.md) |
-| **V3.6.26** | 2026-10-25 | **3D Tiles 贴地三项修复 + 线上白屏修复**。① 修复地形采样全为 0（椭球占位）时中位偏移把瓦片集**整体下压、沉入地形以下**，并将图层动作在「记录缺失 / adapter 未注册 / 类型不支持」时由静默 no-op 改为显式告警；② 修复 **GLB 高程滑杆无效**——根因是 Cesium `ModelGraphics` 无 `height` 属性（1.146 构建实测），改为把高度写入 position.z 由 `heightReference` 解释；③ 大面积 / 大起伏贴地优化：估算由中位数改为**面积加权分位数（默认 p75）**，嵌入率 50%→25%，并新增残余高差画像与 TOC 右键**「贴合到当前视野」**区域化校正；④ 修复**线上白屏**——GitHub Pages 的 Jekyll 会丢弃 `_` 开头文件，`assets/_plugin-vue_export-helper-*.js` 因此 404；构建侧剥掉 chunk 名前导下划线 + 部署侧在仓库根目录补 `.nojekyll`。详见[完整更新日志](Docs/Guide/CHANGELOG.md) |
+| **V3.6.29** | 2026-10-27 | **认证页装饰体系重构（双轨三环 + 线框地球 + 流星）+ 构建告警清零**（同批次三项改动合并发布）。① 新建 `AuthDecorBackground` 承载 8 层装饰，纹样注入抽为 `useRingPatternStyle` 供 Landing / 认证页共用；两条椭圆轨道环心错位、环径不等、倾角相反，每轨内套「外/中/核」三环按同一 PNG 的 124%/96%/90% 缩放叠成综合圆环。② 新增 `AuthGlobeStage`：3 条 `rx` 递减椭圆自转伪造球体经线、2 条纬线 ±5° 慢摆（一动一静才读作球体）、conic 扫掠光、差速轨道 + 卫星、九道流星；线稿改 `--brand-primary-rgb` alpha 以适配浅色底，`--globe-opacity` 统一收敛透明度。③ 构建告警清零：修 `:deep` 落在非 scoped 块导致规则整条被丢弃、`CesiumContainer` 动态导入改静态、`envFile` 改 `envDir`。④ 横扫「实线圆旋转不可见」问题：认证页 A 轨与 Landing 首屏的中/核环统一改 `dashed`/`dotted`；星座按 `min-aspect-ratio` 分档补偿 `slice` 裁切。详见[完整更新日志](Docs/Guide/CHANGELOG.md) |
+| **V3.6.28** | 2026-10-26 | **瓦片下载能力迁至独立节点（临时方案）**。HF Space 已删除 `/api/download/*`，下载改由腾讯云临时节点承接，前端经 `VITE_DOWNLOAD_SERVICE_URL=https://gis.negiao.cn:8443` 直连；**用 8443 端口是因为域名未 ICP 备案**——指向大陆服务器的 443 会在 SNI 层被拦截（实测 100% RST），非标端口可正常通行；两条路径（远端节点 / 本机后端）方法、路径、请求体一致，未配置时回落本机。详见[完整更新日志](Docs/Guide/CHANGELOG.md) |
+| **V3.6.27** | 2026-10-25 | **船舶网海图改走通用代理 + Dependabot 策略收敛（只收 major）**。同日两项独立改动合并计入同一版本号。详见[完整更新日志](Docs/Guide/CHANGELOG.md) |
 更早版本（V3.6.22 及以前）请查阅 [完整更新日志 →](Docs/Guide/CHANGELOG.md)。
 
 ---
@@ -581,6 +581,6 @@ tiles.negiao.cc.cd"]
 |:------:|:--------:|:--------:|
 | [GitHub](https://github.com/NEGIAO/WebGIS-Dev) | [webgis.negiao.cn](https://webgis.negiao.cn)（正式域名，GitHub Pages 托管） | [Hugging Face](https://NEGIAO-WebGIS.hf.space) |
 
-<sub>V3.6.28 · 开发中 · 最后更新 2026-10-25</sub>
+<sub>V3.6.29 · 开发中 · 最后更新 2026-10-27</sub>
 
 </div>

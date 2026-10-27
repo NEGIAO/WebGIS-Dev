@@ -1222,7 +1222,10 @@ defineExpose({ scrollToBottom });
         padding: 0;
     }
 
-    .action-btn :deep(svg) {
+    /* 非 scoped 块里没有 :deep 编译（:deep 只在 scoped 样式里被改写，
+       写在这里会被浏览器当作未知伪类、整条规则丢弃）。改用组件根类限定，
+       既能命中按钮内的 svg，又不会泄漏到其它组件的 .action-btn */
+    .chat-body-wrap .action-btn svg {
         width: 18px;
         height: 18px;
     }

@@ -137,11 +137,11 @@ export default defineConfig(({ command, mode }) => {
     return {
         base: baseUrl,
 
-        // env 文件目录 = deploy/（环境文件统一收敛处）
-        envDir,
-
-        // 禁用 Vite 默认的 .env 加载（由 selectiveEnvPlugin 替代）
-        envFile: false,
+        // 禁用 Vite 默认的 .env 加载（改由 selectiveEnvPlugin 按 mode 二选一读取）。
+        // Vite 8 起 `envFile: false` 已弃用，官方替代写法是 `envDir: false`：
+        // 语义同为"不自动加载任何 .env"。注意上面的 `envDir` 常量仍指向 deploy/，
+        // 供插件内部 parseEnvFile 使用，与此处的 Vite 选项互不影响。
+        envDir: false,
 
         // 构建时注入全局常量 __APP_VERSION__（值从 README.md 自动提取）
         define: {
@@ -329,7 +329,12 @@ export default defineConfig(({ command, mode }) => {
                         if (isNodeModulePackage(id, 'axios')) return 'vendor-axios';
                         // Three.js（仅 ShallowWater 使用，~700KB）
                         if (isNodeModulePackage(id, 'three')) return 'vendor-three';
-                        // Rapier 物理引擎（仅 PlayerController 使用，~300KB）
+                        // Rapier 物理引擎（仅 PlayerController 使用）。
+                        // 体积按产物实测约 4.34 MB / gzip 1.67 MB —— compat 版把 wasm
+                        // 以 base64 内联进 JS（约为原始 wasm 的 1.33 倍），不是注释早期写的 300KB。
+                        // 只在 PhysicsSystem 里动态 import，且列在 SKIP_PRELOAD_CHUNKS 中，
+                        // 不进首屏；若日后要压这块，正解是换非 compat 版让 wasm 独立流式加载
+                        // （属依赖变更，需按 Force_command §1 走 L3 批准）。
                         if (isNodeModulePackage(id, '@dimforge/rapier3d-compat'))
                             return 'vendor-rapier';
                         // highlight.js 代码高亮（仅 AI 聊天使用，~350KB）

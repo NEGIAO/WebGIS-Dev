@@ -61,6 +61,7 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
+.workbuddy-ai
 
 # ========== 系统文件 ==========
 .DS_Store
