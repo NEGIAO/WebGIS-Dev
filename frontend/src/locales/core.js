@@ -262,6 +262,16 @@ export const coreMessages = {
             officialSite: '正式站点',
             copyright: '© 2026 NEGIAO\'s WebGIS. All rights reserved.',
             langToggleAria: '界面语言',
+            /* 页脚访客数据（第三方口径 51.la）—— 指标名与 51.la 后台保持一致 */
+            visitorTitle: '网站数据概况',
+            visitorActiveRecent: '最近活跃访客',
+            visitorTodayUsers: '今日访问人数',
+            visitorTodayPv: '今日访问量',
+            visitorYesterdayUsers: '昨日访问人数',
+            visitorYesterdayPv: '昨日访问量',
+            visitorMonthPv: '本月访问量',
+            visitorTotalPv: '总访问量',
+            visitorUpdatedAt: '数据更新于 {time}',
         },
         oauth: {
             success: '授权认证成功',
@@ -530,6 +540,16 @@ export const coreMessages = {
             officialSite: 'Official Site',
             copyright: '© 2026 NEGIAO\'s WebGIS. All rights reserved.',
             langToggleAria: 'Interface language',
+            /* Footer visitor stats (third-party source: 51.la) */
+            visitorTitle: 'Site Traffic',
+            visitorActiveRecent: 'Active Visitors',
+            visitorTodayUsers: 'Today Visitors',
+            visitorTodayPv: 'Today Pageviews',
+            visitorYesterdayUsers: 'Yesterday Visitors',
+            visitorYesterdayPv: 'Yesterday Pageviews',
+            visitorMonthPv: 'Monthly Pageviews',
+            visitorTotalPv: 'Total Pageviews',
+            visitorUpdatedAt: 'Data updated {time}',
         },
         oauth: {
             success: 'Authorization successful',

@@ -153,6 +153,11 @@ VPS tile-proxy：https://vpn.negiao.cn/proxy/...
 上游瓦片服务（Google / 高德 / 天地图 等）
 ```
 
+**第三方数据接口**：由 Cloudflare Worker `negiao-api` 承接，域名 `https://api.negiao.cn`（源码在主页仓库
+`workers/github-stats`，与 WebGIS-Dev 解耦、独立 `wrangler deploy`）。当前提供 `/api/stats`（GitHub 统计）、
+`/api/51la`（51.la 访客数据，响应含 `meta.fetchedAt / generatedAt / durationMs`，时间均为北京时间 `+08:00`，供消费方判断新鲜度）等；
+前端只调用 JSON，不在本项目内做任何第三方代理或解析。
+
 **说明**：瓦片中转与纠偏**不在** HF Space（平台禁止代理）。业务 API 仍为 `https://negiao-webgis.hf.space`。  
 **代理模式**：`VITE_TILE_PROXY_MODE=fallback`（直连失败才走 VPS 代理）。
 

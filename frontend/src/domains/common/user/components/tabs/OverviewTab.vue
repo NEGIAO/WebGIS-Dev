@@ -8,10 +8,11 @@
   数据由父组件经 props 注入，交互经 emits 上抛。
 -->
 <script setup>
-import { computed, ref } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 
 import { useLocale } from '@common/app/useLocale';
 import { formatDateTime as formatDateTimeUtil } from '@common/utils/datetime';
+import { fetchVisitorStats, formatVisitorNumber, formatUpdatedAt } from '@common/app/visitorStats';
 
 const props = defineProps({
     /** Personal statistics object (registered_at, login_count, etc.) */
@@ -99,6 +100,28 @@ const displayOnlineUsers = computed(() => {
     const unified = rt.online_users;
     if (unified !== null && unified !== undefined) return unified;
     return rt.online_users_db || 0;
+});
+
+// 第三方口径（51.la）：与上面的后端口径并列展示。
+// 两者统计范围不同（后端只覆盖本站 API 与已登录会话，51.la 覆盖全站 UV/PV），
+// 因此必须分行并标注来源，避免被误读成"同一指标的两个不同数值"
+const visitorSnapshot = ref(null);
+const visitorLine = computed(() => {
+    const metrics = visitorSnapshot.value?.metrics;
+    if (!metrics) return null;
+    const pick = (key) => (Number.isFinite(metrics[key]) ? formatVisitorNumber(metrics[key]) : '-');
+    const line = {
+        todayUsers: pick('todayUsers'),
+        todayPv: pick('todayPv'),
+        totalPv: pick('totalPv'),
+    };
+    // 三个指标全缺时不渲染这一行，避免页面上出现一排「-」
+    return Object.values(line).some((value) => value !== '-') ? line : null;
+});
+// 数据新鲜度：与指标同行展示，让用户知道这组第三方数字是什么时候抓的
+const visitorUpdatedAt = computed(() => formatUpdatedAt(visitorSnapshot.value?.updatedAt));
+onMounted(async () => {
+    visitorSnapshot.value = await fetchVisitorStats();
 });
 
 /** 相对时间：刚刚/x 分钟前/x 小时前/昨天/日期 */
@@ -316,6 +339,17 @@ function handleSubmit() {
                     <span class="realtime-name">{{ t('overview.totalApiCalls') }}</span>
                 </div>
             </div>
+            <p v-if="visitorLine" class="realtime-third">
+                <span class="realtime-third__tag">{{ t('overview.thirdPartyLabel') }}</span>
+                <span>{{ t('overview.todayVisitors') }} <b>{{ visitorLine.todayUsers }}</b></span>
+                <span>{{ t('overview.todayPv') }} <b>{{ visitorLine.todayPv }}</b></span>
+                <span>{{ t('overview.totalPv') }} <b>{{ visitorLine.totalPv }}</b></span>
+                <span
+                    v-if="visitorUpdatedAt"
+                    class="realtime-third__stamp"
+                    >{{ t('overview.dataUpdatedAt', { time: visitorUpdatedAt }) }}</span
+                >
+            </p>
             <div class="info-row contact-row">
                 <span class="info-label">{{ t('overview.adminContact') }}</span>
                 <button
@@ -616,6 +650,38 @@ function handleSubmit() {
     font-size: 10.5px;
     color: var(--text-muted);
     white-space: nowrap;
+}
+
+/* 第三方口径行：字号与颜色都比主指标低一档，明确从属于上面的四宫格 */
+.realtime-third {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 4px 12px;
+    margin: 10px 0 0;
+    padding-top: 9px;
+    border-top: 1px dashed var(--border-light);
+    font-size: 11px;
+    color: var(--text-muted);
+}
+
+.realtime-third__tag {
+    padding: 1px 6px;
+    border-radius: 4px;
+    background: var(--bg-secondary);
+    color: var(--text-secondary);
+}
+
+.realtime-third b {
+    color: var(--text-secondary);
+    font-variant-numeric: tabular-nums;
+}
+
+/* 更新时间：整行末尾的次要信息，不加边框以免与指标抢注意力；
+   等宽数字避免分钟位变化时行宽抖动 */
+.realtime-third__stamp {
+    color: var(--text-muted);
+    font-variant-numeric: tabular-nums;
 }
 
 .contact-row {

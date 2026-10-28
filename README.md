@@ -10,11 +10,11 @@
 
 <p align="center">
   <a href="https://vuejs.org/"><img src="https://img.shields.io/badge/Vue-3.5-4FC08D?logo=vuedotjs" alt="Vue" /></a>
-  <a href="https://vite.dev/"><img src="https://img.shields.io/badge/Vite-6.2-646CFF?logo=vite" alt="Vite" /></a>
-  <a href="https://openlayers.org/"><img src="https://img.shields.io/badge/OpenLayers-10.5-FFD700?logo=openlayers" alt="OpenLayers" /></a>
-  <a href="https://cesium.com/"><img src="https://img.shields.io/badge/Cesium-1.132-64B5F6?logo=cesium" alt="Cesium" /></a>
+  <a href="https://vite.dev/"><img src="https://img.shields.io/badge/Vite-8.3-646CFF?logo=vite" alt="Vite" /></a>
+  <a href="https://openlayers.org/"><img src="https://img.shields.io/badge/OpenLayers-10.11-FFD700?logo=openlayers" alt="OpenLayers" /></a>
+  <a href="https://cesium.com/"><img src="https://img.shields.io/badge/Cesium-1.146-64B5F6?logo=cesium" alt="Cesium" /></a>
   <a href="https://fastapi.tiangolo.com/"><img src="https://img.shields.io/badge/FastAPI-0.100+-009688?logo=fastapi" alt="FastAPI" /></a>
-  <a href="https://rapier.rs/"><img src="https://img.shields.io/badge/Rapier-0.14-FF6B35" alt="Rapier" /></a>
+  <a href="https://rapier.rs/"><img src="https://img.shields.io/badge/Rapier-0.21-FF6B35" alt="Rapier" /></a>
   <a href="https://pages.github.com/"><img src="https://img.shields.io/badge/Frontend-GitHub%20Pages-black?logo=github" alt="Frontend" /></a>
   <a href="https://www.docker.com/"><img src="https://img.shields.io/badge/Docker-24.x-2496ED?logo=docker" alt="Docker" /></a>
   <a href="https://huggingface.co/"><img src="https://img.shields.io/badge/Backend-Hugging%20Face-FFD21E?logo=huggingface" alt="Backend" /></a>
@@ -25,10 +25,42 @@
   🚀 <strong>在线演示</strong>：<a href="https://webgis.negiao.cn">NEGIAO's WebGIS-Dev — 欢迎点击体验</a>
 </p>
 
+<!-- 站点访问数据（51.la · 实时）：与上方技术栈徽章、下方仓库指标口径不同 —— 这里统计的是站点真实访问，
+     不含镜像、抓取与 API 调用，故用表格单独分区，避免三类指标混成一条无法辨读的徽章带。
+     7 项指标同宽同色（绿色），「数据统计时间」另起一行（灰色）—— 它是元数据而非指标，
+     若塞进表格会因 ISO 串过长（约 300px）把整表拉失衡。
+     数据由 CF Worker（workers/github-stats 的 /api/51la）解析上游后返回，边缘缓存 300s；
+     7 项指标与站内页脚、账号总览同源同字段。 -->
+
+
+<table align="center">
+  <tr>
+    <td align="center"><sub>最近活跃</sub></td>
+    <td align="center"><sub>今日访客</sub></td>
+    <td align="center"><sub>今日访问量</sub></td>
+    <td align="center"><sub>昨日访客</sub></td>
+    <td align="center"><sub>昨日访问量</sub></td>
+    <td align="center"><sub>本月访问量</sub></td>
+    <td align="center"><sub>总访问量</sub></td>
+  </tr>
+  <tr>
+    <td align="center"><img src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fapi.negiao.cn%2Fapi%2F51la&query=$.metrics.activeRecent&label=&color=4caf50&style=flat-square" alt="最近活跃" /></td>
+    <td align="center"><img src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fapi.negiao.cn%2Fapi%2F51la&query=$.metrics.todayUsers&label=&color=4caf50&style=flat-square" alt="今日访客" /></td>
+    <td align="center"><img src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fapi.negiao.cn%2Fapi%2F51la&query=$.metrics.todayPv&label=&color=4caf50&style=flat-square" alt="今日访问量" /></td>
+    <td align="center"><img src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fapi.negiao.cn%2Fapi%2F51la&query=$.metrics.yesterdayUsers&label=&color=4caf50&style=flat-square" alt="昨日访客" /></td>
+    <td align="center"><img src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fapi.negiao.cn%2Fapi%2F51la&query=$.metrics.yesterdayPv&label=&color=4caf50&style=flat-square" alt="昨日访问量" /></td>
+    <td align="center"><img src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fapi.negiao.cn%2Fapi%2F51la&query=$.metrics.monthPv&label=&color=4caf50&style=flat-square" alt="本月访问量" /></td>
+    <td align="center"><img src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fapi.negiao.cn%2Fapi%2F51la&query=$.metrics.totalPv&label=&color=4caf50&style=flat-square" alt="总访问量" /></td>
+  </tr>
+</table>
+
 <p align="center">
-  <img src="https://visitor-badge.laobi.icu/badge?page_id=negiao.webgis" alt="Views" />
-  <img src="https://img.shields.io/badge/dynamic/json?label=Total%20Clones&query=$.totalClones&url=https://raw.githubusercontent.com/NEGIAO/WebGIS-Dev/main/.github/traffic.json&color=green" alt="Total Clones" />
-  <img src="https://img.shields.io/badge/dynamic/json?label=Unique%20Cloners&query=$.totalUniqueClones&url=https://raw.githubusercontent.com/NEGIAO/WebGIS-Dev/main/.github/traffic.json?cache=1&color=blue" alt="Unique Cloners" />
+  <sub><b>数据统计时间</b></sub>
+  <img src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fapi.negiao.cn%2Fapi%2F51la&query=$.updatedAt&label=&color=9e9e9e&style=flat-square" alt="数据统计时间" />
+</p>
+
+<p align="center">
+  <img src="https://visitor-badge.laobi.icu/badge?page_id=negiao.webgis&left_text=README%20Views" alt="Views" />
   <img src="https://img.shields.io/github/last-commit/negiao/webgis-dev" alt="Last Commit" />
   <a href="https://github.com/NEGIAO/WebGIS-Dev/stargazers"><img src="https://img.shields.io/github/stars/NEGIAO/WebGIS-Dev?logo=github" alt="GitHub Stars" /></a>
   <a href="https://github.com/NEGIAO/WebGIS-Dev/forks"><img src="https://img.shields.io/github/forks/NEGIAO/WebGIS-Dev?logo=github" alt="GitHub Forks" /></a>
@@ -93,7 +125,7 @@
 
 ## 🎯 项目简介
 
-**NEGIAO's WebGIS** 是一个功能完整、架构清晰的前后端分离 WebGIS 平台（当前版本 V3.6.29），前端托管于 GitHub Pages（正式域名 webgis.negiao.cn），后端以 Docker 部署在 Hugging Face Spaces，通过 RESTful API 通信，支持独立扩展。
+**NEGIAO's WebGIS** 是一个功能完整、架构清晰的前后端分离 WebGIS 平台（当前版本 V3.6.30），前端托管于 GitHub Pages（正式域名 webgis.negiao.cn），后端以 Docker 部署在 Hugging Face Spaces，通过 RESTful API 通信，支持独立扩展。
 
 > 📚 本 README 仅保留核心概览与导航。完整文档已模块化至 [`Docs/Guide/`](Docs/Guide/)，详见下方「文档导航」。
 >
@@ -117,7 +149,7 @@
 
 | 领域 | 说明 |
 |------|------|
-| 🗺️ 2D/3D 双引擎 | OpenLayers 10.5 + Cesium 1.132 一键切换，视图状态双向同步，URL 分享还原 |
+| 🗺️ 2D/3D 双引擎 | OpenLayers 10.11 + Cesium 1.146 一键切换，视图状态双向同步，URL 分享还原 |
 | 🌐 丰富底图源 | **90 个底图预设 / 106 个图层定义**：天地图、高德、腾讯、天地图矢量、ESRI（含 Wayback 历史影像）、Sentinel-2 Cloudless、奥维等；熔断回退、GCJ-02/BD-09 纠偏、自定义 XYZ 接入 |
 | 🧭 图层管理（TOC） | 统一目录：拖拽排序、行内重命名、显隐/透明度/样式、层级叠放定序、坐标转换（WGS-84 ⇄ GCJ-02）、单层导出（CSV/TXT/GeoJSON/KML）、二维图层导入 3D |
 | 📊 属性表 | 视图范围筛选、字段可见性、全字段检索、CSV 导出、要素定位与删除 |
@@ -187,10 +219,10 @@
 
 | 层 | 选型 |
 |---|---|
-| 前端框架 | Vue 3.5（Composition API）+ Vite 6.2 + Pinia 2.3 + Vue Router 4.6 |
-| 二维地图 | OpenLayers 10.5 |
-| 三维地图 | Cesium 1.132（`@cesium/engine`）+ Three.js 0.185（特效辅助） |
-| 物理引擎 | `@dimforge/rapier3d-compat` 0.14（人物漫游刚体与碰撞） |
+| 前端框架 | Vue 3.5（Composition API）+ Vite 8.3 + Pinia 4.1 + Vue Router 5.4 |
+| 二维地图 | OpenLayers 10.11 |
+| 三维地图 | Cesium 1.146（`@cesium/engine`）+ Three.js 0.186（特效辅助） |
+| 物理引擎 | `@dimforge/rapier3d-compat` 0.21（人物漫游刚体与碰撞） |
 | 后端 | FastAPI ≥0.100（Python 3.12）、Shapely ≥2.0、SQLite 缓存、SSE 日志流 |
 | 部署 | GitHub Pages / Cloudflare Pages / Posit Connect / Vercel（前端）；Hugging Face Docker（后端） |
 | 质量 | ESLint、`vue/compiler-sfc` 编译校验、`tsc --noEmit`、结构树与配置注册表自检脚本、CodeQL |
@@ -213,7 +245,7 @@
 
 | 依赖 | 要求 | 说明 |
 |------|------|------|
-| **Node.js** | **20 LTS 及以上**（推荐 20.x / 22.x） | Vite 6 要求 Node 18+，本项目按 20 LTS 验证。仓库未在 `package.json` 声明 `engines` |
+| **Node.js** | **20 LTS 及以上**（推荐 20.x / 22.x） | Vite 8 要求 Node `^20.19.0 \|\| >=22.12.0`，本项目按 20 LTS 验证。仓库未在 `package.json` 声明 `engines` |
 | npm | 10+ | 随 Node 20 附带 |
 | Docker Desktop | 仅全栈本地联调需要 | 只跑前端 `npm run dev` **不需要** Docker |
 | Python | 3.12（容器内 `python:3.12-slim` 已固定） | 后端仅通过 Docker 运行，不支持裸 `uvicorn` |
@@ -556,9 +588,9 @@ tiles.negiao.cc.cd"]
 
 | 版本 | 日期 | 概要 |
 |------|------|------|
+| **V3.6.30** | 2026-10-28 | **接入 51.la 全站访客数据 + 依赖版本与徽章校准**。① 新增 `visitorStats.ts` 纯函数层（8s 超时、失败静默、不持状态），落地页页脚与账号总览并列展示第三方口径 UV/PV；② 消费 Worker 新增的 `updatedAt`，在页脚、用户中心、README 三处标注「数据更新于 MM-DD HH:mm」，并把 5 分钟边缘缓存的滞后语义写明；③ README 徽章与技术栈按 `package-lock.json` 实校正（Vite 8.3 / OpenLayers 10.11 / Cesium 1.146 / Rapier 0.21 / Pinia 4.1 / Vue Router 5.4 / Three 0.186），同步修正 Vite 8 的 Node 引擎要求；④ 顶部徽章重排：站点访问 7 项指标以 7 列表格分区置顶（与「技术栈」「仓库指标」两类旧徽章区分），`updatedAt` 因 ISO 串过长单列于表格下方；移除 Clones / Unique Cloners 两枚参考价值低的徽章。详见[完整更新日志](Docs/Guide/CHANGELOG.md) |
 | **V3.6.29** | 2026-10-27 | **认证页装饰体系重构（双轨三环 + 线框地球 + 流星）+ 构建告警清零**（同批次三项改动合并发布）。① 新建 `AuthDecorBackground` 承载 8 层装饰，纹样注入抽为 `useRingPatternStyle` 供 Landing / 认证页共用；两条椭圆轨道环心错位、环径不等、倾角相反，每轨内套「外/中/核」三环按同一 PNG 的 124%/96%/90% 缩放叠成综合圆环。② 新增 `AuthGlobeStage`：3 条 `rx` 递减椭圆自转伪造球体经线、2 条纬线 ±5° 慢摆（一动一静才读作球体）、conic 扫掠光、差速轨道 + 卫星、九道流星；线稿改 `--brand-primary-rgb` alpha 以适配浅色底，`--globe-opacity` 统一收敛透明度。③ 构建告警清零：修 `:deep` 落在非 scoped 块导致规则整条被丢弃、`CesiumContainer` 动态导入改静态、`envFile` 改 `envDir`。④ 横扫「实线圆旋转不可见」问题：认证页 A 轨与 Landing 首屏的中/核环统一改 `dashed`/`dotted`；星座按 `min-aspect-ratio` 分档补偿 `slice` 裁切。详见[完整更新日志](Docs/Guide/CHANGELOG.md) |
 | **V3.6.28** | 2026-10-26 | **瓦片下载能力迁至独立节点（临时方案）**。HF Space 已删除 `/api/download/*`，下载改由腾讯云临时节点承接，前端经 `VITE_DOWNLOAD_SERVICE_URL=https://gis.negiao.cn:8443` 直连；**用 8443 端口是因为域名未 ICP 备案**——指向大陆服务器的 443 会在 SNI 层被拦截（实测 100% RST），非标端口可正常通行；两条路径（远端节点 / 本机后端）方法、路径、请求体一致，未配置时回落本机。详见[完整更新日志](Docs/Guide/CHANGELOG.md) |
-| **V3.6.27** | 2026-10-25 | **船舶网海图改走通用代理 + Dependabot 策略收敛（只收 major）**。同日两项独立改动合并计入同一版本号。详见[完整更新日志](Docs/Guide/CHANGELOG.md) |
 更早版本（V3.6.22 及以前）请查阅 [完整更新日志 →](Docs/Guide/CHANGELOG.md)。
 
 ---
@@ -581,6 +613,6 @@ tiles.negiao.cc.cd"]
 |:------:|:--------:|:--------:|
 | [GitHub](https://github.com/NEGIAO/WebGIS-Dev) | [webgis.negiao.cn](https://webgis.negiao.cn)（正式域名，GitHub Pages 托管） | [Hugging Face](https://NEGIAO-WebGIS.hf.space) |
 
-<sub>V3.6.29 · 开发中 · 最后更新 2026-10-27</sub>
+<sub>V3.6.30 · 开发中 · 最后更新 2026-10-28</sub>
 
 </div>

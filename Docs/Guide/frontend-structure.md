@@ -313,6 +313,7 @@ frontend/src/
 │   │   ├── index.js  # 路由与守卫
 │   │   ├── app/
 │   │   │   ├── useLocale.js
+│   │   │   ├── visitorStats.ts  # 51.la 访客数据（第三方口径）的纯函数：接口地址 + fetchVisitorStats()（返回 { metrics, updatedAt }，8s 超时、失败返回 null）+ formatVisitorNumber()（千分位/过亿降级）+ formatUpdatedAt()（ISO → 访客本地时区 MM-DD HH:mm）；不持有状态、不做缓存 —— Worker 已输出结构化 JSON，各组件自行 fetch 与渲染
 │   │   │   ├── home/
 │   │   │   │   ├── index.ts  # barrel export
 │   │   │   │   ├── useDistrictLayer.ts  # 行政区图层管理

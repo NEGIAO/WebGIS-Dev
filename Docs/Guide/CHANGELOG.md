@@ -6,6 +6,38 @@
 
 ## 版本记录
 
+### V3.6.30 (2026-10-28) — 51.la 全站访客数据接入（含「数据更新于」时间戳）+ 依赖版本与 README 徽章校准
+
+> 同一次交付周期内的两类改动：① 第三方访客数据落到前端两处展示位，并消费 Worker 新增的 `updatedAt`；② 按 lockfile 实校正 README 顶部徽章与技术栈表。
+> 完整记录：[`2026-10-28-visitor-stats-51la.md`](../LLM_record/26-10/2026-10-28/2026-10-28-visitor-stats-51la.md)（症状 / 根因 / 方案对比 / 模块关系图 / 文件清单 / DoD / 遗留）。
+
+#### 一、51.la 访客数据
+
+> **架构约定**：51.la 访客数据的回源与解析由 Cloudflare Worker 承接（`GET https://api.negiao.cn/api/51la`，边缘缓存 300s，顶层 `schemaVersion/label/message/updatedAt` 同时满足 shields.io endpoint 契约），前端只消费结构化 JSON。由此确立：**凡第三方数据接口一律封装在 CF Worker，不混入 WebGIS-Dev 或主页站点**（免费、与业务后端隔离、天然带缓存）；HF Space 仍禁止任何第三方中转。文档同步 `system-architecture.md`（域名全景新增「边缘数据接口域名」）与 `deployment-relationship.md`。
+> **前端分层**：新增 `domains/common/app/visitorStats.ts`，只保留三件跨组件复用的**事实**——接口地址、数字格式（千分位 / 过亿降级）、时间格式；不持状态、不缓存，取数（8s 超时、失败静默返回 `null`）与渲染权留在组件。落地页页脚展示 7 项指标；账号总览只取今日 UV / 今日 PV / 总 PV，并与后端口径**分行**展示，避免被读成同一指标的两个数值。
+> **「数据更新于」时间戳**：Worker 在响应顶层新增 `updatedAt`（ISO 8601 带 `+08:00`，与 `meta.fetchedAt` 同值 = 最近一次回源抓取时刻）。取数返回值由 `metrics` 扩展为 `{ metrics, updatedAt }`，三处展示：落地页页脚（`footer-visitor__stamp`）、用户中心（`realtime-third__stamp`）、README 数据表首行；前端统一格式化为 `MM-DD HH:mm`。
+> **为什么三处都要写时间**：Worker 缓存 300s，数字天然最多滞后 5 分钟；不标注会被读者当成实时值，标了则「今日访问量不逐秒跳动」也一并有了合理解释。
+> **时区选择**：接口时间固定北京时间，前端用 `new Date()` 按**访客本地时区**渲染（海外用户读自己的时钟）；数据滞后上限仅 5 分钟，跨天歧义可忽略，故省略年份。
+> **i18n**：`landing.visitor*`（core.js：7 项指标 + 标题 + `visitorUpdatedAt: '数据更新于 {time}'`）、`overview.dataUpdatedAt`（zh-CN / en-US），走 `t(path, params)` 的 `{time}` 插值。
+
+#### 二、README 徽章与依赖版本校准
+
+> **问题**：顶部徽章停在 Vite 6.2 / OpenLayers 10.5 / Cesium 1.132 / Rapier 0.14，技术栈表还写 Pinia 2.3 / Vue Router 4.6 / Three.js 0.185，与 `package-lock.json` 实际解析结果相差 1~2 个大版本。
+> **实测值**（`package-lock.json`）：vue 3.5.44 / vite 8.3.5 / ol 10.11.0 / cesium 1.146.0 / @dimforge/rapier3d-compat 0.21.0 / pinia 4.1.0 / vue-router 5.4.0 / three 0.186.1 / echarts 6.1.0；FastAPI 仍取 `pyproject.toml` 下界 `>=0.100.0`，徽章 `0.100+` 保持不变。
+> **Node 引擎要求同步纠正**：原文「Vite 6 要求 Node 18+」→「Vite 8 要求 `^20.19.0 || >=22.12.0`」，依据为 `node_modules/vite/package.json` 的 `engines` 字段（非推测）。
+> **未改项**：`frontend/package.json` 的 `version` 仍为 `2.0.0`；该字段属既有已知限制（真实版本以 README / CHANGELOG 为准），本次不动，避免与「版本号单一事实源在 README」的原则冲突。
+
+#### 三、README 顶部徽章分区（交付后调整）
+
+> **问题**：顶部原本是「技术栈徽章 + GitHub 仓库徽章」两行平铺，站点访问数据被放在文末 `## 📊 全站访问数据（实时）` 的八行表格里 —— 读者要滚到页尾才看得到，且与 Stars / Forks 等仓库指标混排时无从分辨口径。同时 `Total Clones` / `Unique Cloners` 两枚徽章长期无人关注（clone 数受 CI 与镜像影响，不反映真实使用）。
+> **改法**：删除文末章节与对应 TOC 条目，把 7 项指标上移为顶部 `<table align="center">`（7 列 × 2 行：标签行 + 徽章行），`updatedAt` 因 ISO 串约 300px、塞进表格会把列宽拉失衡，单列于表格下方并附 `<br />` 说明。顶部由此形成三个可辨区块：技术栈（行内徽章）→ 站点访问（表格）→ 仓库指标（行内徽章）。
+> **口径可见化**：首版把「统计的是部署站点页面访问」写在 HTML 注释里，页面上根本看不见，读者只能靠域名猜。表格上方补一行可见标题（`🌐 站点访问数据 · 51.la · 实时`）与一句定义：统计对象是**部署后的网页**（`webgis.negiao.cn` 等访问域名）的页面访问量，**不是**本 GitHub 仓库的访问 / 克隆量，也不含 API 调用与爬虫抓取，且与站内页脚、账号总览同口径。
+> **为什么用表格**：徽章本身是一条无分隔的横排，两类口径混在一起时只能靠颜色猜；表格天然带列对齐与浅边框，能同时提供「分组」与「字段名」两个信息，且不需要额外图片或分隔符。
+> **删除项**：`Total Clones`、`Unique Cloners`；同时移除重复的 shields endpoint「总访问量」徽章（已由表格内 `metrics.totalPv` 承担），`views` / `last-commit` / `stars` / `forks` 保留。`.github/traffic.json` 与 `traffic-counter` 工作流未动 —— 该文件仍被 CI 更新，只是不再有徽章消费，属可清理但不在本次范围的遗留项。
+
+
+> **验证**：`eslint` 0 problems（7 个改动文件）；`tsc --noEmit` 全项目 0 error；`vite build` 通过（14.4s，仅存量 chunk 体积提示；输出至临时目录以避开沙箱对 `dist` 的批量删除限制）；`CheckStructureTree` 516/516 无漂移；`CheckConfigRegistry` B1~B4 + F1~F3 全绿。
+
 ### V3.6.29 (2026-10-27) — 认证页装饰体系重构（双轨三环 + 线框地球 + 流星）+ 构建告警清零
 
 > 本版本**合并同一批次的三项改动**（过程中曾分别记为 3.6.29 / 3.6.30 / 3.6.31，按「同一批次不得拆成多个版本号」统一计入 V3.6.29）。

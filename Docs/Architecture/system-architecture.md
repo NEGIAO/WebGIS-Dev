@@ -205,6 +205,18 @@ tiles.negiao.cc.cd"]
 | `negiao-webgis.share.connect.posit.cloud` | Posit Connect 默认 | 主页仓库触发 |
 | `negiao-web.static.hf.space` | Hugging Face Static | WebGIS-Dev 直接推送 |
 
+### 边缘数据接口域名（1 个）
+
+| 组件 | 域名 | 平台 | 说明 |
+|------|------|------|------|
+| 数据接口 Worker | `api.negiao.cn` | Cloudflare Workers | 第三方数据接口统一封装层（GitHub 统计 / 51.la 访客等）；Worker 名 `negiao-api` |
+
+> **架构约定（2026-10-27 确立）**：`api.negiao.cn` 专门承担"把第三方数据源封装成 JSON 接口"的职责 ——
+> 免费、与业务后端完全隔离、天然带边缘缓存。**新增同类接口一律放这里，不得混入 WebGIS-Dev 或主页站点**。
+> 典型场景：上游要求特殊 Header、证书异常、需要跨域、或需要把非结构化响应（HTML/JS/XML）解析成 JSON 时，
+> 解析与容错都收敛在 Worker 内，前端只消费结构化数据。
+> 实现与路由清单见主页仓库 `NEGIAO.github.io/workers/github-stats`（Worker 名 `negiao-api`，2026-10-28 由 `webgis-github-stats` 改名）。
+
 ### 后端与存储域名（2 个）
 
 | 组件 | 域名 | 平台 | 说明 |

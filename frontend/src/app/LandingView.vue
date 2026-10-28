@@ -619,6 +619,28 @@
                         </span>
                     </li>
                 </ul>
+                <!-- 51.la 访客数据：取数在 fetchVisitorStats()，这里只负责渲染。
+                     不让第三方脚本往 DOM 插节点 —— 该元素在 vnode 里无子节点，
+                     Vue 重渲染时会把它不认识的子节点整体清空（详见 script 段注释） -->
+                <div
+                    v-if="visitorStats.length"
+                    class="footer-visitor"
+                >
+                    <span class="footer-visitor__title">{{ t('landing.visitorTitle') }}</span>
+                    <span
+                        v-for="row in visitorStats"
+                        :key="row.label"
+                        class="footer-visitor__item"
+                    >
+                        <span class="footer-visitor__label">{{ row.label }}</span>
+                        <b class="footer-visitor__value">{{ row.text }}</b>
+                    </span>
+                    <span
+                        v-if="visitorUpdatedAt"
+                        class="footer-visitor__stamp"
+                        >{{ t('landing.visitorUpdatedAt', { time: visitorUpdatedAt }) }}</span
+                    >
+                </div>
                 <div
                     class="footer-rule"
                     aria-hidden="true"
@@ -789,6 +811,7 @@ import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import { useLocale } from '@common/app/useLocale';
 import { useUserPreferencesStore } from '../stores';
 import { useRingPatternStyle } from './composables/useRingPatternStyle';
+import { fetchVisitorStats, formatVisitorNumber, formatUpdatedAt } from '@common/app/visitorStats';
 import { ASSET_BASE_URL, GITHUB_STATS_WORKER_URL } from '../config/publicRuntime';
 import {
     Bot,
@@ -869,6 +892,43 @@ useRingPatternStyle({
     styleId: 'landing-ring-pattern-style',
     scope: '.hero-bg__rings',
     ringClass: 'hero-bg__ring',
+});
+
+// ============ 51.la 访客数据展示 ============
+// Worker 已把上游脚本解析成 JSON，这里直接消费，不再包一层 store：
+// fetchVisitorStats() 只管取数（含超时与失败静默），本组件持有 ref、决定顺序与渲染。
+// 顺序由 VISITOR_LABEL_KEYS 的字面量顺序决定，不依赖 JSON 键序 —— 键序在 JS 里不是契约。
+// 标签必须走 t()，否则切换语言时页脚仍是中文。
+// 历史教训：曾让第三方脚本直接往容器插 DOM，但该容器在 vnode 里无子节点，
+// Vue 3 patch 时会执行 hostSetElementText(el, '') 把它不认识的子节点整体清空，
+// 表现为"脚本加载成功但页面什么都没有"。故渲染权必须留在组件内。
+const VISITOR_LABEL_KEYS = {
+    activeRecent: 'visitorActiveRecent',
+    todayUsers: 'visitorTodayUsers',
+    todayPv: 'visitorTodayPv',
+    yesterdayUsers: 'visitorYesterdayUsers',
+    yesterdayPv: 'visitorYesterdayPv',
+    monthPv: 'visitorMonthPv',
+    totalPv: 'visitorTotalPv',
+};
+/** 一次取数的完整结果（metrics + updatedAt）；null 表示未取到或失败 */
+const visitorSnapshot = ref(null);
+const visitorStats = computed(() => {
+    const metrics = visitorSnapshot.value?.metrics;
+    if (!metrics) return [];
+    return Object.keys(VISITOR_LABEL_KEYS)
+        .filter((key) => Number.isFinite(metrics[key]))
+        .map((key) => ({
+            key,
+            label: t(`landing.${VISITOR_LABEL_KEYS[key]}`),
+            text: formatVisitorNumber(metrics[key]),
+        }));
+});
+// 数据新鲜度：接口时间是北京时间，按访客本地时区渲染；不可解析时为空串 → 整段不渲染
+const visitorUpdatedAt = computed(() => formatUpdatedAt(visitorSnapshot.value?.updatedAt));
+
+onMounted(async () => {
+    visitorSnapshot.value = await fetchVisitorStats();
 });
 
 // 核心功能卡片：图标 + i18n key，避免 10 段近似模板重复
@@ -4216,6 +4276,48 @@ button:focus-visible {
 /* 第二层 · 发丝线：两端虚化的 1px 渐变，替代实心 border 的生硬。
    中央缀一枚金点 —— 南师印章系统的"中心金点"在最小尺寸上的复用，
    与 stat-face 内圈虚线、tech-layer 序号章形成同一套金点语汇 */
+/* 51.la 访客数据：单行排布，用细竖线分隔，与页脚的细线/灰字语汇一致。
+   数据由 fetchVisitorStats() 取回、Vue 渲染；窄屏自动换行，不会溢出 */
+.footer-visitor {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    justify-content: center;
+    gap: 2px 0;
+    margin: 26px 0 12px;
+    font-size: 12px;
+    line-height: 1.9;
+    color: var(--text-muted);
+}
+
+.footer-visitor__title {
+    padding: 0 14px 0 0;
+    color: var(--text-secondary);
+    font-weight: 600;
+}
+
+.footer-visitor__item {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 6px;
+    padding: 0 14px;
+    border-left: 1px solid var(--border-light);
+}
+
+.footer-visitor__value {
+    color: var(--text-secondary);
+    font-variant-numeric: tabular-nums;
+}
+
+/* 更新时间：与指标同排但视觉权重再低一档（不抢数字），
+   靠同一道竖线前缀维持「一行数据」的读法；数字用等宽数字避免宽度跳动 */
+.footer-visitor__stamp {
+    padding: 0 0 0 14px;
+    border-left: 1px solid var(--border-light);
+    color: var(--text-muted);
+    font-variant-numeric: tabular-nums;
+}
+
 .footer-rule {
     position: relative;
     align-self: stretch;
