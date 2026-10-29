@@ -96,6 +96,7 @@ frontend/src/
 │   │   │   │   ├── dataSourceDisplay.js  # 显隐/透明度类型适配器（统一图层管理·句柄侧）
 │   │   │   │   ├── geoTiffUtils.js  # GeoTIFF 工具函数
 │   │   │   │   ├── importUtils.js  # 导入工具函数
+│   │   │   │   ├── useCesiumCrsRedeclare.js  # 三维图层「重设源坐标系」：把快照原始数值按新 CRS 重新解释，重建走 loadGeoJSON 以复用贴地/拔高/样式链路（三维侧仅 GeoJSON 留存快照）
 │   │   │   │   ├── useCesiumDataImport.js  # 数据导入主逻辑（移除/清空走对象级宿主探测卸载 detachEntityFromScene，防 type 错配静默残留）
 │   │   │   │   ├── useCesiumDataOpsHandlers.js  # 数据操作事件转发层（面板/拖拽/GLTF 弹窗 → dataImport，自容器抽离）
 │   │   │   │   └── loaders/
@@ -441,8 +442,10 @@ frontend/src/
 │   │   │   ├── crs/
 │   │   │   │   ├── coordTransform.js  # 坐标转换（GCJ-02/WGS84）
 │   │   │   │   ├── crsAware.js  # CRS 感知层
-│   │   │   │   ├── crs-engine.ts  # CRS 引擎
-│   │   │   │   └── crsUtils.js  # CRS 检测与注册
+│   │   │   │   ├── crs-engine.ts  # CRS 引擎（override > .prj > KML > 预探测 > 默认 4326；输出 confidence/ambiguous/hint）
+│   │   │   │   ├── crsPresets.ts  # CGCS2000 高斯-克吕格带号 ↔ EPSG 映射（3/6 度带 × 带号前缀）与 proj4 定义生成；零依赖，中央经线 ↔ EPSG 互算
+│   │   │   │   ├── sourceSnapshot.ts  # 导入前的源几何快照注册表（非响应式、有上限）：支撑「导入后重设源坐标系」；重投影一经执行原始数值即丢失，故必须在变换前留存
+│   │   │   │   └── crsUtils.js  # CRS 检测与注册（GeoJSON/KML 探测、量级推断、任意 EPSG 动态注册）
 │   │   │   ├── parsers/
 │   │   │   │   ├── amapAoiParser.js  # 高德 AOI 解析
 │   │   │   │   ├── amapBuildingFetcher.js  # 高德建筑白模矢量抓取（管理端 amap_key，输出 WGS-84 GeoJSON，默认直连）
@@ -641,6 +644,7 @@ frontend/src/
 │       │   │   ├── useCreateManagedVectorLayer.js
 │       │   │   ├── useDeferredUserLayerApis.js
 │       │   │   ├── useLayerControlHandlers.js
+│       │   │   ├── useLayerCrsRedeclare.js  # 图层「重设源坐标系」：按快照原始数值重新投影并替换要素（与 toggleLayerCRS 的 GCJ-02 偏移换算职责分离）
 │       │   │   ├── useLayerMetadataNormalization.js
 │       │   │   ├── useManagedLayerRegistry.js
 │       │   │   ├── useTileHDRendering.js

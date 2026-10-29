@@ -19,8 +19,18 @@ export const MAX_FILE_SIZE_MB = 200;
  * @param {() => object} ctx.getGisLoader useGisLoader 实例（含 createUploadPayloadsFromFiles）
  * @param {() => HTMLElement|null} ctx.getFileInputRef 单文件 input 引用
  * @param {() => HTMLElement|null} ctx.getFolderInputRef 文件夹 input 引用
+ * @param {() => string} [ctx.getOverrideCrs] 人工指定的源坐标系（空串=自动识别）
  */
-export function useFileUpload({ t, message, emit, props, getGisLoader, getFileInputRef, getFolderInputRef }) {
+export function useFileUpload({
+    t,
+    message,
+    emit,
+    props,
+    getGisLoader,
+    getFileInputRef,
+    getFolderInputRef,
+    getOverrideCrs,
+}) {
     /** 进度视图模型（phase/计数/汇总消息），供上传进度条渲染 */
     const uploadProgressView = computed(() => {
         const raw = props.uploadProgress || {};
@@ -90,7 +100,12 @@ export function useFileUpload({ t, message, emit, props, getGisLoader, getFileIn
             return;
         }
 
-        emit('upload-data', getGisLoader().createUploadPayloadsFromFiles(files));
+        emit(
+            'upload-data',
+            getGisLoader().createUploadPayloadsFromFiles(files, {
+                overrideCrs: getOverrideCrs?.() || '',
+            }),
+        );
 
         event.target.value = '';
     }
@@ -110,7 +125,12 @@ export function useFileUpload({ t, message, emit, props, getGisLoader, getFileIn
             );
         }
 
-        emit('upload-data', getGisLoader().createUploadPayloadFromFolder(files));
+        emit(
+            'upload-data',
+            getGisLoader().createUploadPayloadFromFolder(files, {
+                overrideCrs: getOverrideCrs?.() || '',
+            }),
+        );
 
         event.target.value = '';
     }

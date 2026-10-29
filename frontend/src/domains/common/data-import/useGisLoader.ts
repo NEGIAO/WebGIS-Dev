@@ -14,6 +14,7 @@ import {
     UNSUPPORTED_PROJECTED_CRS_MESSAGE,
 } from '@common/map-view/geo/index';
 import { useMessage } from '@common/shell/useMessage';
+import { detectGeoJSONProjectionDetailed } from '@common/data-import/crs/crsUtils';
 import {
     createUploadPayloadFromEntries,
     createUploadPayloadFromFolder,
@@ -34,13 +35,12 @@ type PacketSummary = {
     };
 };
 
-import { getNameStem, getStemKey } from '@common/utils/pathUtils';
+import { getNameStem } from '@common/utils/pathUtils';
 
 const SHP_SIDECAR_EXTENSIONS = new Set(['shp', 'shx', 'dbf', 'prj', 'cpg']);
 
 // 向后兼容的别名
 const stemOf = getNameStem;
-const stemKeyOf = getStemKey;
 
 function parseJsonBuffer(buffer: ArrayBuffer): any {
     const text = new TextDecoder('utf-8', { fatal: false }).decode(buffer);
@@ -91,20 +91,58 @@ function summarizePackets(packets: any[], errors: any[]): PacketSummary {
     };
 }
 
+/**
+ * 功能：把单个资源构建成可下发的载荷（KML / GeoJSON / TIF / 压缩包）。
+ * 参数：resource —— 扁平化后的资源
+ *       overrideCrs —— 人工指定的源坐标系（空串=自动识别）
+ *       warningSink —— 告警收集数组（坐标系歧义 / 推断提示写入这里）
+ * 返回：载荷对象；不支持的扩展名返回 null。
+ * 说明：GeoJSON 在此处完成「探测 → 重投影到 WGS84」——3D 管线只认 4326；
+ *       2D 管线另有 dataProjection 机制，互不影响。
+ */
 function buildSingleUploadPayload(
     resource: FlattenedResource,
+    overrideCrs = '',
+    warningSink?: string[],
 ): { content: unknown; type: string; name: string } | null {
     const ext = String(resource.ext || '').toLowerCase();
 
     if (ext === 'kml') {
         const parsed = parseKmlBuffer(resource.content);
-        resolveDatasetProjection({ kmlText: parsed.content, targetCrs: 'EPSG:4326' });
+        // KML 只透传文本：坐标重投影发生在消费端（2D 的 parseKmlTextToFeatures /
+        // 3D 的 prepareKmlText），那边会以人工指定优先于 srsName，故此处无需改写内容，
+        // 也不再误报「手动指定未生效」——该告警在 KML 支持 override 之后已不成立。
         return { content: parsed.content, type: 'kml', name: resource.path };
     }
 
     if (ext === 'geojson' || ext === 'json') {
         const raw = parseJsonBuffer(resource.content);
-        const projection = resolveDatasetProjection({ targetCrs: 'EPSG:4326' });
+        const detected = detectGeoJSONProjectionDetailed(raw);
+        const projection = resolveDatasetProjection({
+            overrideCrs,
+            sourceCrs: detected.code || '',
+            sourceConfidence:
+                detected.confidence === 'declared'
+                    ? 'declared'
+                    : detected.confidence === 'high' || detected.confidence === 'medium'
+                      ? 'inferred'
+                      : detected.confidence === 'ambiguous'
+                        ? 'ambiguous'
+                        : 'none',
+            sourceHint: detected.hint,
+            targetCrs: 'EPSG:4326',
+        });
+
+        if (projection.ambiguous) {
+            warningSink?.push(
+                `${resource.path}: ${projection.hint}；可在导入区的「源坐标系」中指定带号或 EPSG。`,
+            );
+        } else if (projection.confidence === 'inferred' && projection.sourceCrs !== 'EPSG:4326') {
+            warningSink?.push(
+                `${resource.path}: ${projection.hint || `按量级推断为 ${projection.sourceCrs}`}，如位置不符请手动指定。`,
+            );
+        }
+
         const projected = projection.needsTransform
             ? reprojectGeoJSON(raw, projection.sourceCrs, projection.targetCrs)
             : raw;
@@ -129,6 +167,7 @@ function buildSingleUploadPayload(
 
 async function buildShpArchivePayload(
     group: ReturnType<typeof groupShpDatasets>[number],
+    overrideCrs = '',
 ): Promise<{ content: ArrayBuffer; type: string; name: string }> {
     const JSZip = await loadJsZip();
     const zip = new JSZip();
@@ -141,7 +180,7 @@ async function buildShpArchivePayload(
     if (group.cpg) zip.file(`${baseName}.cpg`, group.cpg.content);
 
     const prjText = decodeMaybeText(group.prj?.content);
-    const projection = resolveDatasetProjection({ prjText, targetCrs: 'EPSG:4326' });
+    const projection = resolveDatasetProjection({ prjText, overrideCrs, targetCrs: 'EPSG:4326' });
 
     // Warn if PRJ exists but could not be resolved, but allow import to continue
     // The actual reproject will happen during parsing
@@ -193,6 +232,8 @@ export function useGisLoader() {
         lastPacket.value = null;
         revokeBlobUrls();
         let projectionPopupShown = false;
+        // 人工指定的源坐标系（上传区下拉），空串表示自动识别
+        const overrideCrs = String(input?.overrideCrs || '').trim();
 
         try {
             const flattened = await flattenUploadInput(input);
@@ -207,19 +248,30 @@ export function useGisLoader() {
             }
 
             const shpGroups = groupShpDatasets(supported);
-            const shpKeys = new Set(
-                shpGroups.map((group) => String(group.key || '').toLowerCase()),
-            );
+
+            // 已被某个 .shp 组认领的 sidecar（含 groupShpDatasets 内部的「单 .shp 兜底合并」）
+            const attachedSidecarPaths = new Set<string>();
+            shpGroups.forEach((group) => {
+                [group.shx, group.dbf, group.prj, group.cpg].forEach((item) => {
+                    if (item?.path) attachedSidecarPaths.add(item.path);
+                });
+            });
 
             const orphanSidecars = supported.filter((resource) => {
                 const ext = String(resource.ext || '').toLowerCase();
                 if (!SHP_SIDECAR_EXTENSIONS.has(ext)) return false;
-                return !shpKeys.has(stemKeyOf(resource.path));
+                return !attachedSidecarPaths.has(resource.path);
             });
 
             if (orphanSidecars.length) {
+                const names = orphanSidecars
+                    .slice(0, 5)
+                    .map((item) => item.path)
+                    .join('、');
+                const suffix =
+                    orphanSidecars.length > 5 ? ` 等 ${orphanSidecars.length} 个` : '';
                 warnings.value.push(
-                    `检测到 ${orphanSidecars.length} 个未匹配 .shp 的 sidecar 文件（.dbf/.shx/.prj/.cpg），已自动跳过。`,
+                    `以下 sidecar 未匹配到同名 .shp，已跳过：${names}${suffix}。若同属一个数据集，请保持文件名一致或打包为 ZIP。`,
                 );
             }
 
@@ -234,16 +286,15 @@ export function useGisLoader() {
             const nonShpResources = supported.filter((resource) => {
                 const ext = String(resource.ext || '').toLowerCase();
                 if (!SHP_SIDECAR_EXTENSIONS.has(ext)) return true;
-                const key = stemKeyOf(resource.path);
-                return !shpKeys.has(key);
+                return !attachedSidecarPaths.has(resource.path);
             });
 
             const individualPayloads = nonShpResources
-                .map((resource) => buildSingleUploadPayload(resource))
+                .map((resource) => buildSingleUploadPayload(resource, overrideCrs, warnings.value))
                 .filter(Boolean) as Array<{ content: unknown; type: string; name: string }>;
 
             const shpPayloads = await Promise.all(
-                shpGroups.map((group) => buildShpArchivePayload(group)),
+                shpGroups.map((group) => buildShpArchivePayload(group, overrideCrs)),
             );
             const payloads = [...individualPayloads, ...shpPayloads];
 
@@ -328,7 +379,7 @@ export function useGisLoader() {
         } catch (error) {
             lastError.value = error;
             if (isUnsupportedProjectedCrsError(error) && !projectionPopupShown) {
-                projectionPopupShown = true;
+                // 这里不置 projectionPopupShown：紧接着就 throw，之后不会再读它
                 if (!(error as any)?.notified) {
                     message.error(UNSUPPORTED_PROJECTED_CRS_MESSAGE, {
                         closable: true,

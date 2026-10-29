@@ -2,6 +2,7 @@ import { get as getProjection } from 'ol/proj.js';
 import { register } from 'ol/proj/proj4.js';
 import proj4 from 'proj4';
 import backendAPI from '@/api/backend';
+import { buildProj4DefForCode, isProj4String, projDefinitionAlias } from './crsPresets';
 
 const EPSG_PATTERN = /(EPSG[:/]{1,2})(\d{3,6})/i;
 const URN_EPSG_PATTERN = /urn:ogc:def:crs:EPSG::(\d{3,6})/i;
@@ -92,11 +93,18 @@ export function normalizeProjectionCode(input) {
     if (!text) return null;
 
     if (WKT_PATTERN.test(text)) {
+        const isProjectedWkt = /\bPROJ(?:CS|CRS)\s*\[/i.test(text);
         const fromAuthority = extractWktAuthorityCode(text);
         if (fromAuthority) return fromAuthority;
 
-        for (const entry of WKT_NAME_TO_EPSG) {
-            if (entry.pattern.test(text)) return entry.epsg;
+        // 投影 WKT 不能按「基准面名字」映射到地理坐标系：
+        // ESRI 风格 PRJ 常出现 SPHEROID["CGCS2000"] / GCS_WGS_1984，
+        // 若命中名字表就会把「CGCS2000 3 度带 37 带」误判成「CGCS2000 经纬度（4490）」，
+        // 于是平面坐标被当成度、整份数据落到错误位置。地理 WKT 才做名字匹配。
+        if (!isProjectedWkt) {
+            for (const entry of WKT_NAME_TO_EPSG) {
+                if (entry.pattern.test(text)) return entry.epsg;
+            }
         }
 
         const projectionName = extractWktProjectionName(text);
@@ -140,12 +148,30 @@ function sampleCoordinatesFromGeometry(geometry, out, limit = 80) {
     }
 }
 
-function inferProjectionFromCoordinates(coords) {
-    if (!coords?.length) return null;
+/**
+ * 坐标量级推断（按中国场景校准）。
+ *
+ * 旧判据是「x、y 都落在 ±20037508 内即 Web 墨卡托」，但 4326 的取值区间被 3857 完全包含，
+ * 且高斯-克吕格的米制坐标同样落在该区间 —— 结果所有平面数据都被判成 3857，
+ * 再按墨卡托反算会落到几千公里外（实测示例：(528700, 3402800) → 约 4.7°E / 29.4°N）。
+ *
+ * 新判据利用「三段互不重叠」的事实：
+ *   无带号 GK/UTM 东坐标：300k~700k（3 度带）/ 166k~834k（UTM）  → |x| < 1e6
+ *   中国境内 Web 墨卡托东坐标：8.1e6~15.0e6（东经 73°~135°）      → 1e6 ≤ |x| ≤ 15.5e6
+ *   带号前缀 GK/UTM 东坐标：13.5e6~43.5e6                         → 通常 >15.5e6
+ * 其中「带号前缀 13.5e6~15.0e6」与墨卡托存在窄重叠，故该区间按 ambiguous 处理，
+ * 交由界面提示用户确认，而不是静默猜测。
+ *
+ * @param {Array<[number, number]>} coords 采样点
+ * @returns {{code: string|null, confidence: 'high'|'medium'|'ambiguous'|'none', hint: string}}
+ */
+function inferProjectionFromCoordinatesDetailed(coords) {
+    if (!coords?.length) return { code: null, confidence: 'none', hint: '' };
 
     let total = 0;
-    let in4326 = 0;
-    let in3857 = 0;
+    let inDegrees = 0;
+    let planarNoZone = 0;
+    let mercatorLike = 0;
 
     for (const point of coords) {
         const x = Number(point?.[0]);
@@ -154,26 +180,62 @@ function inferProjectionFromCoordinates(coords) {
         total += 1;
 
         if (x >= -180 && x <= 180 && y >= -90 && y <= 90) {
-            in4326 += 1;
+            inDegrees += 1;
+            continue;
         }
 
-        if (x >= -20037508.35 && x <= 20037508.35 && y >= -20037508.35 && y <= 20037508.35) {
-            in3857 += 1;
+        const absX = Math.abs(x);
+        const absY = Math.abs(y);
+        if (absX < 1e6) {
+            planarNoZone += 1;
+        } else if (absX <= 15.5e6 && absY <= 8.5e6) {
+            mercatorLike += 1;
         }
     }
 
-    if (!total) return null;
-    if (in4326 / total >= 0.9) return 'EPSG:4326';
-    if (in3857 / total >= 0.9 && in4326 / total < 0.1) return 'EPSG:3857';
-    return null;
+    if (!total) return { code: null, confidence: 'none', hint: '' };
+
+    if (inDegrees / total >= 0.9) {
+        return { code: 'EPSG:4326', confidence: 'high', hint: '' };
+    }
+    if (planarNoZone / total >= 0.9) {
+        return {
+            code: null,
+            confidence: 'ambiguous',
+            hint: '检测到平面坐标（东坐标约 30 万~70 万米），缺少带号 / 中央经线，无法自动判定',
+        };
+    }
+    if (mercatorLike / total >= 0.9) {
+        return {
+            code: 'EPSG:3857',
+            confidence: 'medium',
+            hint: '按坐标量级推断为 Web 墨卡托（EPSG:3857）',
+        };
+    }
+    return {
+        code: null,
+        confidence: 'ambiguous',
+        hint: '坐标量级不一致或超出中国常见投影范围，需要手动指定坐标系',
+    };
 }
 
-export function detectGeoJSONProjection(geojson) {
-    if (!geojson) return null;
+/** 兼容旧调用：只取编码，歧义时返回 null */
+function inferProjectionFromCoordinates(coords) {
+    return inferProjectionFromCoordinatesDetailed(coords).code;
+}
+
+/**
+ * 功能：探测 GeoJSON 的源坐标系，并给出置信度与歧义说明。
+ * 参数：geojson —— 已解析的 GeoJSON 对象。
+ * 返回：`{ code, confidence, hint }`；declared 表示文件自带声明，inferred 表示量级推断。
+ * 说明：RFC 7946 已删除 `crs` 成员，但仍大量存在于国内数据中，因此先读声明再推断。
+ */
+export function detectGeoJSONProjectionDetailed(geojson) {
+    if (!geojson) return { code: null, confidence: 'none', hint: '' };
 
     const crsName = geojson?.crs?.properties?.name || geojson?.crs?.name;
     const normalized = normalizeProjectionCode(crsName);
-    if (normalized) return normalized;
+    if (normalized) return { code: normalized, confidence: 'declared', hint: '' };
 
     const features = Array.isArray(geojson?.features)
         ? geojson.features
@@ -187,7 +249,11 @@ export function detectGeoJSONProjection(geojson) {
         if (samples.length >= 120) break;
     }
 
-    return inferProjectionFromCoordinates(samples);
+    return inferProjectionFromCoordinatesDetailed(samples);
+}
+
+export function detectGeoJSONProjection(geojson) {
+    return detectGeoJSONProjectionDetailed(geojson).code;
 }
 
 export function detectProjectionFromKmlText(kmlText) {
@@ -212,6 +278,19 @@ export function detectProjectionFromKmlText(kmlText) {
 }
 
 export async function ensureProjectionAvailable(projectionCode) {
+    // PROJ 定义串（`+proj=…`）：散列成别名后直接注册，不走 EPSG 查询
+    const rawText = String(projectionCode || '').trim();
+    if (isProj4String(rawText)) {
+        const alias = projDefinitionAlias(rawText);
+        try {
+            if (!proj4.defs(alias)) proj4.defs(alias, rawText);
+        } catch {
+            return null;
+        }
+        register(proj4);
+        return getProjection(alias) ? alias : null;
+    }
+
     const normalized = normalizeProjectionCode(projectionCode);
     if (!normalized) return null;
 
@@ -226,6 +305,14 @@ export async function ensureProjectionAvailable(projectionCode) {
     const commonDef = COMMON_DEFS[normalized];
     if (commonDef) {
         proj4.defs(normalized, commonDef);
+        register(proj4);
+        return getProjection(normalized) ? normalized : null;
+    }
+
+    // 中国分带投影：按 EPSG 公式本地生成定义，不依赖后端在线（离线 / 内网部署同样可用）
+    const localDef = buildProj4DefForCode(normalized);
+    if (localDef) {
+        proj4.defs(normalized, localDef);
         register(proj4);
         return getProjection(normalized) ? normalized : null;
     }

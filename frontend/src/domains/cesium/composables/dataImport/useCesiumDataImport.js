@@ -444,7 +444,7 @@ export function useCesiumDataImport({ getViewer, getCesium, message, heightSampl
     // 主入口：按扩展名分发
     // ============================================================
 
-    async function loadDataFile(file) {
+    async function loadDataFile(file, options = {}) {
         const viewer = getViewer();
         const Cesium = getCesium();
         if (!viewer || !Cesium) {
@@ -454,6 +454,7 @@ export function useCesiumDataImport({ getViewer, getCesium, message, heightSampl
 
         const ext = getExtension(file.name);
         const baseCtx = loaderCtx();
+        const overrideCrs = String(options?.overrideCrs || '').trim();
 
         try {
             switch (ext) {
@@ -462,14 +463,14 @@ export function useCesiumDataImport({ getViewer, getCesium, message, heightSampl
                     if (file.name.toLowerCase().includes(TILESET_JSON_INDICATOR)) {
                         return await loadTilesetJSON({ file, ...baseCtx });
                     }
-                    return await loadGeoJSON({ file, ...baseCtx });
+                    return await loadGeoJSON({ file, overrideCrs, ...baseCtx });
                 }
                 case 'kml':
-                    return await loadKML({ file, ...baseCtx });
+                    return await loadKML({ file, overrideCrs, ...baseCtx });
                 case 'kmz':
-                    return await loadKMZ({ file, ...baseCtx });
+                    return await loadKMZ({ file, overrideCrs, ...baseCtx });
                 case 'shp':
-                    return await loadSHP({ file, ...baseCtx });
+                    return await loadSHP({ file, overrideCrs, ...baseCtx });
                 case 'glb':
                 case 'gltf': {
                     const result = await loadGLTF({ file, ...baseCtx, heightSampler });
@@ -510,11 +511,13 @@ export function useCesiumDataImport({ getViewer, getCesium, message, heightSampl
      * 外层统一挂 GlobalLoading 导入遮罩（showLoading + 双 rAF 握手后才开始重活，
      * 大文件解析期间界面有明确反馈且不冻结）
      */
-    async function loadDataFiles(files) {
-        return withImportMask('正在导入数据，请稍候…', () => importFilesInternal(files));
+    async function loadDataFiles(files, options = {}) {
+        return withImportMask('正在导入数据，请稍候…', () => importFilesInternal(files, options));
     }
 
-    async function importFilesInternal(files) {
+    async function importFilesInternal(files, options = {}) {
+        // 人工指定的源坐标系，逐文件透传（空串=自动识别）
+        const overrideCrs = String(options?.overrideCrs || '').trim();
         const shpGroups = new Map();
         const standalone = [];
 
@@ -539,14 +542,19 @@ export function useCesiumDataImport({ getViewer, getCesium, message, heightSampl
         for (const [, group] of shpGroups) {
             if (!group.shp) continue;
             try {
-                const result = await loadSHP({ file: group.shp, sidecarFiles: group.sidecars, ...baseCtx });
+                const result = await loadSHP({
+                    file: group.shp,
+                    sidecarFiles: group.sidecars,
+                    overrideCrs,
+                    ...baseCtx,
+                });
                 results.push(result);
             } catch { /* 内部已通过 message.error 提示 */ }
         }
 
         for (const file of standalone) {
             try {
-                const result = await loadDataFile(file);
+                const result = await loadDataFile(file, { overrideCrs });
                 if (result) results.push(result);
             } catch { /* 内部已提示 */ }
         }

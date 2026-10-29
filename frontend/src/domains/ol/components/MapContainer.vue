@@ -226,6 +226,7 @@ import { createDrawMeasureFeature } from '@ol/drawing/composables/useDrawMeasure
 // --- Composables (migrated to domains/ol/ and domains/common/) ---
 import { tileHDRendering } from '@ol/layer/composables/useTileHDRendering';
 import { createCoordinateSystemConversionFeature } from '@ol/utils/useCoordinateSystemConversion';
+import { createLayerCrsRedeclareFeature } from '@ol/layer/composables/useLayerCrsRedeclare';
 import { useCreateManagedVectorLayer } from '@ol/layer/composables/useCreateManagedVectorLayer';
 import { createDeferredUserLayerApis } from '@ol/layer/composables/useDeferredUserLayerApis';
 import { createDistrictManagerFeature } from '@ol/spatial-analysis/composables/useDistrictManager';
@@ -642,6 +643,17 @@ const { toggleLayerCRS, toggleSearchLayerCRS } =
         getFeatureRepresentativeLonLat,
         emitUserLayersChange,
     });
+
+// 导入后「重设源坐标系」：几何取自导入期快照，避免用户重新上传
+const { redeclareLayerCrs } = createLayerCrsRedeclareFeature({
+    mapInstanceRef: mapInstance,
+    userDataLayers,
+    message,
+    ensureFeatureId,
+    serializeManagedFeatures,
+    normalizeLayerMetadata,
+    emitUserLayersChange,
+});
 
 // [Phase 19] 初始化托管图层创建器（必须在 createMapSearchAndCoordinateInputFeature 之前）
 const { createManagedVectorLayer } = useCreateManagedVectorLayer({
@@ -1713,7 +1725,7 @@ async function startReverseGeocodePickAndDraw() {
         throw new Error('地图已卸载');
     }
 
-    let reverseResult = null;
+    let reverseResult;
     try {
         const reverseResponse = await apiReverseGeocodeWithFallback(picked.lng, picked.lat, {
             tiandituTk: tiandituTk.value, // 读取响应式 ref，确保 token 轮换后使用最新值
@@ -2107,6 +2119,7 @@ defineExpose({
     drawAmapAoiByDetailJsonInput,
     toggleLayerCRS,
     toggleSearchLayerCRS,
+    redeclareLayerCrs,
     exportLayerCoordinates,
     enableBasemapSwipe,
     runSpatialAnalysis,
@@ -2151,6 +2164,7 @@ registerEngineHandlers('ol', {
     removeUserLayer: ({ layerId }) => removeUserLayer(layerId),
     renameUserLayer: ({ layerId, newName }) => renameUserLayer(layerId, newName),
     zoomToUserLayer: ({ layerId }) => zoomToUserLayer(layerId),
+    redeclareLayerCrs: ({ layerId, crs }) => redeclareLayerCrs({ layerId, crs }),
     zoomToRemoteService: ({ serviceId }) =>
         olRemoteServiceAdapter?.zoomTo?.(serviceId) ?? false,
 });

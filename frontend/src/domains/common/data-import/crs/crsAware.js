@@ -4,6 +4,7 @@ import {
     ensureProjectionAvailable,
     normalizeProjectionCode,
 } from '@common/data-import/crs/crsUtils';
+import { resolveDatasetProjection } from '../crs-engine';
 
 const WKT_CRS_PATTERN = /\b(PROJCS|PROJCRS|GEOGCS|GEODCRS)\s*\[/i;
 
@@ -54,18 +55,18 @@ export async function resolveProjectionOrDefault(inputProjection, label = '数�
 export async function detectShpProjectionFromPrj(prjText) {
     const text = String(prjText || '');
     const candidate = detectProjectionFromPrjText(text);
-    const resolved = await resolveProjectionOrDefault(candidate, 'Shapefile');
+    const isPcsTag = String(candidate || '').toUpperCase().startsWith('PCS:');
 
-    // PRJ 中已经声明了 WKT 坐标系但缺少可直接映射的 EPSG 时，
-    // 由后续 crs-engine 负责动态注册并重投影，这里避免提前给出误导性告警。
-    if (!candidate && WKT_CRS_PATTERN.test(text)) {
-        return {
-            projection: resolved.projection,
-            warning: null,
-        };
+    // 投影 WKT 但拿不到 EPSG 编号（ESRI 风格 PRJ 的常态：只有 PARAMETER 没有 AUTHORITY）：
+    // 交给 crs-engine 按参数注册别名，避免回落到 4326 或 PCS 标签导致后续无法重投影。
+    if (text && WKT_CRS_PATTERN.test(text) && (!candidate || isPcsTag)) {
+        const engineResolved = resolveDatasetProjection({ prjText: text });
+        if (engineResolved.prjResolved && engineResolved.sourceCrs) {
+            return { projection: engineResolved.sourceCrs, warning: null };
+        }
     }
 
-    return resolved;
+    return resolveProjectionOrDefault(candidate, 'Shapefile');
 }
 
 export async function detectGeoJsonProjection(geojsonData) {

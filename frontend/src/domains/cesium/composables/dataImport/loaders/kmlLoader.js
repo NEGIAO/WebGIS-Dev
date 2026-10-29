@@ -133,7 +133,7 @@ async function reprojectKmlToWgs84(kmlText, sourceProjection) {
  * @param {string} label - 日志标签(KML / KMZ)
  * @returns {Promise<{ kmlText: string, projection: string|null }>}
  */
-async function prepareKmlText(kmlText, label = 'KML') {
+async function prepareKmlText(kmlText, label = 'KML', overrideCrs = '') {
     // 1. 归一化 kml: 前缀命名空间(就算不需要重投影也要做，保证要素可解析)
     let normalized = normalizeKmlNamespace(kmlText);
 
@@ -146,7 +146,8 @@ async function prepareKmlText(kmlText, label = 'KML') {
         .replace(/<extrude>[\s\S]*?<\/extrude>/gi, '');
 
     // 2. 检测投影(与 ol 管线同源)
-    const hint = detectKmlProjectionHint(normalized);
+    // 人工指定优先：部分 KML 的 srsName 与实际数值不符（导出工具按投影坐标写入却仍写 WGS84）
+    const hint = String(overrideCrs || '').trim() || detectKmlProjectionHint(normalized);
     const resolved = await resolveProjectionOrDefault(hint, label);
     if (resolved.warning) {
         console.warn(`[${label}] ${resolved.warning}`);
@@ -196,7 +197,15 @@ async function loadKmlDataSource(Cesium, viewer, kmlText) {
  * @param {import('vue').Ref} ctx.loadedDataSources
  * @param {{ current: number }} ctx.nextId
  */
-export async function loadKML({ file, getCesium, getViewer, message, loadedDataSources, nextId }) {
+export async function loadKML({
+    file,
+    overrideCrs = '',
+    getCesium,
+    getViewer,
+    message,
+    loadedDataSources,
+    nextId,
+}) {
     const Cesium = getCesium();
     const viewer = getViewer();
     if (!Cesium || !viewer) throw new Error('Cesium 未初始化');
@@ -205,7 +214,7 @@ export async function loadKML({ file, getCesium, getViewer, message, loadedDataS
     const kmlText = decodeTextContent(buffer);
 
     // 投影检测 + 命名空间归一化 + 坐标重投影(和ol行为保持一致)
-    const { kmlText: preparedText } = await prepareKmlText(kmlText, 'KML');
+    const { kmlText: preparedText } = await prepareKmlText(kmlText, 'KML', overrideCrs);
 
     const dataSource = await loadKmlDataSource(Cesium, viewer, preparedText);
 
@@ -242,7 +251,15 @@ export async function loadKML({ file, getCesium, getViewer, message, loadedDataS
  * @param {import('vue').Ref} ctx.loadedDataSources
  * @param {{ current: number }} ctx.nextId
  */
-export async function loadKMZ({ file, getCesium, getViewer, message, loadedDataSources, nextId }) {
+export async function loadKMZ({
+    file,
+    overrideCrs = '',
+    getCesium,
+    getViewer,
+    message,
+    loadedDataSources,
+    nextId,
+}) {
     const Cesium = getCesium();
     const viewer = getViewer();
     if (!Cesium || !viewer) throw new Error('Cesium 未初始化');
@@ -254,7 +271,7 @@ export async function loadKMZ({ file, getCesium, getViewer, message, loadedDataS
 
     try {
         // 投影检测 + 命名空间归一化 + 坐标重投影
-        const { kmlText: preparedText } = await prepareKmlText(kmlString, 'KMZ');
+        const { kmlText: preparedText } = await prepareKmlText(kmlString, 'KMZ', overrideCrs);
 
         const dataSource = await loadKmlDataSource(Cesium, viewer, preparedText);
 

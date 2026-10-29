@@ -161,6 +161,76 @@
                             <span class="lp-val mono">{{ extent }}</span>
                         </div>
                     </section>
+
+                    <!-- 重设源坐标系：只在导入期保留了原始几何时出现（见 crs/sourceSnapshot）。
+                         判定错了就地改，不必重新上传 —— 补上「导入后不可逆」那半个缺口。
+                         二维全类型留存快照；三维仅 GeoJSON（KML 坐标在解析期已变换、SHP 已按
+                         .prj / override 走完），其余类型自然不渲染，不做基于已投影坐标的伪反推 -->
+                    <section
+                        v-if="canResetCrs"
+                        class="lp-crs"
+                    >
+                        <div class="lp-crs-head">
+                            <span class="lp-crs-title">
+                                <Globe :size="11" :stroke-width="2.4" />
+                                重设源坐标系
+                            </span>
+                            <span class="lp-crs-tip">判定有误时改这里，按原始数值重新投影</span>
+                        </div>
+                        <div class="lp-crs-body">
+                            <select
+                                v-model="crsDraft"
+                                class="lp-crs-select"
+                            >
+                                <option value="">预置坐标系…</option>
+                                <optgroup label="常用">
+                                    <option
+                                        v-for="preset in BASIC_CRS_PRESETS"
+                                        :key="preset.code"
+                                        :value="preset.code"
+                                    >
+                                        {{ preset.label }} · {{ preset.code.slice(5) }}
+                                    </option>
+                                </optgroup>
+                                <optgroup label="CGCS2000 三度带">
+                                    <option
+                                        v-for="preset in cgcsPresets"
+                                        :key="preset.code"
+                                        :value="preset.code"
+                                    >
+                                        {{ preset.hint }} · {{ preset.code.slice(5) }}
+                                    </option>
+                                </optgroup>
+                                <optgroup label="UTM">
+                                    <option
+                                        v-for="preset in utmPresets"
+                                        :key="preset.code"
+                                        :value="preset.code"
+                                    >
+                                        {{ preset.hint }} · {{ preset.code.slice(5) }}
+                                    </option>
+                                </optgroup>
+                            </select>
+                            <input
+                                v-model="crsCustom"
+                                class="lp-crs-input"
+                                type="text"
+                                spellcheck="false"
+                                placeholder="或 EPSG:4547 / +proj=…"
+                            />
+                            <button
+                                class="lp-crs-apply"
+                                type="button"
+                                :disabled="!crsNext"
+                                @click="applyCrsReset"
+                            >
+                                重新投影
+                            </button>
+                        </div>
+                        <p class="lp-crs-warn">
+                            以「原始数值」重新解释为所选坐标系，当前图层随即替换为换算结果；原始数值仍留在内存中，可反复改判。
+                        </p>
+                    </section>
                 </div>
 
                 <div
@@ -176,7 +246,7 @@
 </template>
 
 <script setup>
-import { computed, onBeforeUnmount, onMounted } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import {
     CircleDot,
     Crosshair,
@@ -195,13 +265,19 @@ import {
     Tag,
     X,
 } from '@lucide/vue';
+import {
+    BASIC_CRS_PRESETS,
+    listCgcs2000Presets,
+    listUtmPresets,
+} from '@common/data-import/crs/crsPresets';
+import { getSourceSnapshot, hasSourceSnapshot } from '@common/data-import/crs/sourceSnapshot';
 
 const props = defineProps({
     visible: { type: Boolean, default: false },
     layer: { type: Object, default: null },
 });
 
-const emit = defineEmits(['close']);
+const emit = defineEmits(['close', 'reproject']);
 
 const SOURCE_TYPE_LABELS = {
     draw: '绘制',
@@ -232,9 +308,62 @@ const geometryMeta = computed(() => GEOMETRY_META[geometryRaw.value] || null);
 const geometryLabel = computed(() => geometryMeta.value?.label || geometryRaw.value || '未知');
 const geometryIcon = computed(() => geometryMeta.value?.icon || Layers);
 
-const crsLabel = computed(
-    () => props.layer?.raw?.crs || props.layer?.standardTocItem?.crs || 'EPSG:4326',
+// ── 重设源坐标系（导入期保留原始几何时可用；2D 全类型、3D 仅 GeoJSON） ──
+const crsDraft = ref('');
+const crsCustom = ref('');
+/** CGCS2000 三度带 21 条 + UTM 中国带号 43~53：与上传区下拉同源，避免两套清单 */
+const cgcsPresets = listCgcs2000Presets(3);
+const utmPresets = listUtmPresets({ zoneFrom: 43, zoneTo: 53 });
+
+/** TOC 节点 id：事件上报用（三维节点带引擎前缀，HomeView 据此分流） */
+const nodeId = computed(() => String(props.layer?.id || '').trim());
+/**
+ * 快照键 = 引擎侧图层 id。二维节点 id 与之一致，三维节点带 `cesium:` 前缀
+ * （见 cesiumLayerNodeBuilder），故此处按前缀剥除。
+ * 不 import 该常量：common 层不得反向依赖 cesium 域，前缀在此只作字面量约定。
+ */
+const snapshotKey = computed(() => {
+    const raw = String(props.layer?.raw?.id || '').trim();
+    if (raw) return raw;
+    const id = nodeId.value;
+    return id.startsWith('cesium:') ? id.slice('cesium:'.length) : id;
+});
+/**
+ * 快照注册表刻意不做响应式（可能很大，见 sourceSnapshot 注释），
+ * 这里以 visible / snapshotKey 作为依赖，弹窗每次打开重新判定一次。
+ */
+const canResetCrs = computed(
+    () => !!(props.visible && snapshotKey.value && hasSourceSnapshot(snapshotKey.value)),
 );
+const crsNext = computed(() => crsCustom.value.trim() || crsDraft.value);
+
+watch(
+    () => [props.visible, snapshotKey.value],
+    () => {
+        crsDraft.value = '';
+        crsCustom.value = '';
+    },
+);
+
+function applyCrsReset() {
+    if (!crsNext.value || !nodeId.value) return;
+    emit('reproject', { layerId: nodeId.value, crs: crsNext.value });
+}
+
+const crsLabel = computed(() => {
+    const raw = props.layer?.raw || {};
+    const item = props.layer?.standardTocItem || {};
+    const meta = raw.metadata || item.metadata || {};
+    // 导入时判定/指定的源坐标系优先展示（比默认 4326 更有诊断价值）；
+    // 三维图层没有 2D 那套 metadata，直接取快照里记录的判定结果
+    return (
+        raw.crs ||
+        item.crs ||
+        meta.sourceCrs ||
+        getSourceSnapshot(snapshotKey.value)?.sourceCrs ||
+        'EPSG:4326'
+    );
+});
 
 const centerLongitude = computed(() => {
     return props.layer?.raw?.longitude ?? props.layer?.standardTocItem?.longitude ?? null;
@@ -596,6 +725,102 @@ onBeforeUnmount(() => {
 .lp-empty p {
     margin: 0;
     font-size: var(--fs-sm, 12px);
+}
+
+/* 重设源坐标系：与 lp-details 同一边框语汇，但底色略深以示「可操作」 */
+.lp-crs {
+    margin-top: 10px;
+    padding: 10px;
+    background: var(--toc-hint-bg, #f5f8f5);
+    border: 1px solid var(--toc-hint-border, #edf2ed);
+    border-radius: var(--panel-radius-sm, 8px);
+}
+
+.lp-crs-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 8px;
+    margin-bottom: 8px;
+}
+
+.lp-crs-title {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: var(--fs-xs, 11px);
+    font-weight: 600;
+    color: var(--text-secondary, #666);
+}
+
+.lp-crs-title svg {
+    flex-shrink: 0;
+    color: var(--text-muted, #999);
+}
+
+.lp-crs-tip {
+    font-size: 10px;
+    color: var(--text-muted, #999);
+}
+
+.lp-crs-body {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.lp-crs-select,
+.lp-crs-input {
+    min-width: 0;
+    height: 32px;
+    padding: 0 8px;
+    font-size: 12px;
+    color: var(--text-primary, #333);
+    background: #fff;
+    border: 1px solid var(--toc-hint-border, #e2e8e2);
+    border-radius: 6px;
+}
+
+.lp-crs-select {
+    flex: 1 1 150px;
+}
+
+.lp-crs-input {
+    flex: 0 1 150px;
+}
+
+.lp-crs-apply {
+    flex: 0 0 auto;
+    height: 32px;
+    padding: 0 12px;
+    font-size: 12px;
+    font-weight: 600;
+    color: #fff;
+    background: var(--brand-primary, #4caf50);
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+}
+
+.lp-crs-apply:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.lp-crs-warn {
+    margin: 8px 0 0;
+    font-size: 10px;
+    line-height: 1.6;
+    color: var(--text-muted, #999);
+}
+
+/* 触屏：控件抬高到 40px，与上传区选择器一致 */
+@media (pointer: coarse) {
+    .lp-crs-select,
+    .lp-crs-input,
+    .lp-crs-apply {
+        height: 40px;
+    }
 }
 
 /* 窄屏适配 */

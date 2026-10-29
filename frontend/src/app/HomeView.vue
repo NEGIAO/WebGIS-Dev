@@ -1485,8 +1485,20 @@ function handleActivateMagic(effectName) {
     }
 }
 
+/**
+ * 导入串行闸门：两个引擎共用同一个遮罩（appStore 的 loading 是布尔量、非引用计数），
+ * 并发导入时后者的 hideLoading 会把先跑者的遮罩关掉；Cesium 侧也没有内层闸门。
+ * 因此在上传载荷的唯一入口处统一拒绝第二次进入。
+ */
+const isImporting = ref(false);
+
 /** 处理文件上传 */
 async function handleUploadData(data) {
+    if (isImporting.value) {
+        message.warning('上一次导入尚未完成，请稍候再试');
+        return;
+    }
+    isImporting.value = true;
     showLoading(t('loading.gisImport'));
     try {
         // 载荷 {resources: File[]} 对两引擎同构：
@@ -1499,6 +1511,7 @@ async function handleUploadData(data) {
         await Promise.resolve(mapContainerRef.value?.addUserDataLayer(data));
     } finally {
         hideLoading();
+        isImporting.value = false;
     }
 }
 
@@ -1705,6 +1718,23 @@ function handleDrawAmapAoiFromJson(payload) {
  */
 function handleToggleLayerCRS(payload) {
     mapContainerRef.value?.toggleLayerCRS?.(payload);
+}
+
+/**
+ * 重设图层源坐标系（属性弹窗 → 重设源坐标系）。
+ * 几何来自导入期快照，故不需要重新上传。
+ * 按 id 前缀分流：三维节点带 `cesium:`（由 cesiumLayerNodeBuilder 生成），
+ * 其余走 OL；两侧能力各自封装，HomeView 只做路由。
+ */
+function handleReprojectLayer(payload) {
+    const layerId = String(payload?.layerId || '').trim();
+    const crs = String(payload?.crs || '').trim();
+    if (!layerId || !crs) return;
+    if (layerId.startsWith('cesium:')) {
+        cesiumContainerRef.value?.redeclareLayerCrs?.({ layerId, crs });
+        return;
+    }
+    mapContainerRef.value?.redeclareLayerCrs?.({ layerId, crs });
 }
 
 /**
@@ -2224,6 +2254,7 @@ onMounted(async () => {
                     @draw-point-by-coordinates="handleDrawPointByCoordinates"
                     @draw-amap-aoi-from-json="handleDrawAmapAoiFromJson"
                     @toggle-layer-crs="handleToggleLayerCRS"
+                    @reproject-layer="handleReprojectLayer"
                     @export-layer-data="handleExportLayerData"
                     @import-to-3d="handleImportOlLayerTo3D"
                     @switch-tab="handleSwitchSidePanelTab"

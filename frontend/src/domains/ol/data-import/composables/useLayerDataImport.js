@@ -20,6 +20,7 @@ import {
     normalizeProjectionCode,
 } from '@common/map-view/geo/index';
 import { parseShpPartsToGeoJSON } from '@common/data-import/parsers/shpParser';
+import { rememberSourceSnapshot } from '@common/data-import/crs/sourceSnapshot';
 import { applyKmlStylesToFeatures } from '@common/data-import/parsers/kmlStyleParser';
 import { createStandardItem } from '@common/layer-tree/factory';
 import { useGisLoader } from '@common/data-import/useGisLoader';
@@ -783,8 +784,8 @@ export function useLayerDataImport({
         // URL 模式使用 fromUrl（仅读元数据，不下载全部像素）
         // Blob 模式使用 fromBlob
         // 使用 Worker Pool 在后台线程解码，不阻塞 UI
-        let sampleBandCount = 0;
-        let nodataValue = null;
+        let sampleBandCount;
+        let nodataValue;
         let singleBandStretch = null;
         let firstImageRef = null;
         let blob = null;
@@ -843,7 +844,7 @@ export function useLayerDataImport({
         });
 
         let viewCfg = null;
-        let hasGeorefExtent = false;
+        let hasGeorefExtent;
         try {
             viewCfg = await source.getView();
             hasGeorefExtent = !!(
@@ -965,11 +966,34 @@ export function useLayerDataImport({
         return id;
     }
 
+    /**
+     * 本次导入人工指定的源坐标系（上传区下拉）。
+     * 放在 composable 作用域而非逐层透传：2D 解析链有 7 处调用 resolveSupportedProjection，
+     * 逐层加参会把签名污染到每个解析分支。
+     *
+     * ⚠️ 该变量只在「同一时刻仅有一次导入在跑」时成立，因此由 importInFlight 强制串行：
+     * 旧实现只靠注释假设调用方不会并发，两个导入重叠时后者会覆盖该值、先结束者的
+     * finally 又会把它清空，导致数据被按错的 CRS 解释。
+     */
+    let activeOverrideCrs = '';
+    /** 导入串行闸门：true 表示有导入在跑，此时拒绝新导入而不是让两者共享 activeOverrideCrs */
+    let importInFlight = false;
+
     async function resolveSupportedProjection(
         rawProjection,
         fallbackProjection = 'EPSG:4326',
         label = '数据',
     ) {
+        // 人工指定优先级最高：直接尝试解析，失败则明确报错而不是回落
+        const forced = normalizeProjectionCode(activeOverrideCrs || '');
+        if (forced) {
+            const supported = await ensureProjectionAvailable(forced);
+            if (supported) return supported;
+            throw new Error(
+                `${label}指定的坐标系 ${forced} 无法解析，请核对 EPSG 编号（如 4547）或改回自动识别。`,
+            );
+        }
+
         const normalized = normalizeProjectionCode(rawProjection);
         if (!normalized) return fallbackProjection;
 
@@ -1152,12 +1176,22 @@ export function useLayerDataImport({
         return features;
     }
 
-    async function parseUploadedFeatures({ content, type, name = '' }) {
+    /**
+     * 解析直传的单个文件（非文件夹/压缩包主链路）。
+     *
+     * 返回值从「要素数组」升级为「要素 + 源几何快照」：重设坐标系需要重投影**之前**
+     * 的原始数值，而这里正是唯一还能拿到它的地方。KML 例外 —— 其坐标在解析期即由
+     * srsName 决定并完成重投影，没有「原始数值另有归属」的问题，故快照为 null。
+     *
+     * @returns {Promise<{features: Array, snapshot: null|{geojson: any, sourceCrs: string}}>}
+     */
+    async function parseUploadedVector({ content, type, name = '' }) {
         const normalizedType = getNormalizedUploadType(type, name);
 
         if (normalizedType === 'kml') {
             const kmlText = decodeTextContent(content);
-            return parseKmlTextToFeatures(kmlText, 'KML');
+            const features = await parseKmlTextToFeatures(kmlText, 'KML', activeOverrideCrs || null);
+            return { features, snapshot: null };
         }
 
         if (normalizedType === 'kmz' || normalizedType === 'zip') {
@@ -1171,15 +1205,24 @@ export function useLayerDataImport({
             }
 
             if (vectorPacket.kind === 'kml') {
-                return parseKmlTextToFeatures(
+                const features = await parseKmlTextToFeatures(
                     vectorPacket.kmlString,
                     normalizedType === 'kmz' ? 'KMZ/KML' : 'ZIP/KML',
-                    vectorPacket.dataProjection || 'EPSG:4326',
+                    activeOverrideCrs || vectorPacket.dataProjection || 'EPSG:4326',
                 );
+                return { features, snapshot: null };
             }
 
             if (vectorPacket.kind === 'shp') {
-                const geojson = await parseShpPartsToGeoJSON(vectorPacket.shpParts);
+                let sourceGeometry = null;
+                let sourceCrs = '';
+                const geojson = await parseShpPartsToGeoJSON(vectorPacket.shpParts, {
+                    overrideCrs: activeOverrideCrs,
+                    onSourceGeometry: (rawGeoJSON, crs) => {
+                        sourceGeometry = rawGeoJSON;
+                        sourceCrs = crs;
+                    },
+                });
                 const gjFormat = new GeoJSON();
                 const featureCollection = Array.isArray(geojson)
                     ? {
@@ -1187,10 +1230,14 @@ export function useLayerDataImport({
                           features: geojson.flatMap((item) => item.features || []),
                       }
                     : geojson;
-                return gjFormat.readFeatures(featureCollection, {
+                const features = gjFormat.readFeatures(featureCollection, {
                     dataProjection: 'EPSG:4326',
                     featureProjection: 'EPSG:3857',
                 });
+                return {
+                    features,
+                    snapshot: sourceGeometry ? { geojson: sourceGeometry, sourceCrs } : null,
+                };
             }
 
             if (vectorPacket.kind === 'geojson') {
@@ -1201,10 +1248,11 @@ export function useLayerDataImport({
                     'GeoJSON',
                 );
                 const gjFormat = new GeoJSON();
-                return gjFormat.readFeatures(geojsonData, {
+                const features = gjFormat.readFeatures(geojsonData, {
                     dataProjection,
                     featureProjection: 'EPSG:3857',
                 });
+                return { features, snapshot: { geojson: geojsonData, sourceCrs: dataProjection } };
             }
 
             throw new Error('不支持的文件格式：压缩包中未找到可用矢量数据');
@@ -1219,10 +1267,11 @@ export function useLayerDataImport({
                 'GeoJSON',
             );
             const gjFormat = new GeoJSON();
-            return gjFormat.readFeatures(geojsonData, {
+            const features = gjFormat.readFeatures(geojsonData, {
                 dataProjection,
                 featureProjection: 'EPSG:3857',
             });
+            return { features, snapshot: { geojson: geojsonData, sourceCrs: dataProjection } };
         }
 
         if (normalizedType === 'shp') {
@@ -1230,7 +1279,18 @@ export function useLayerDataImport({
                 '[SHP] 检测到单个 .shp 文件上传，属性信息可能不完整。\n' +
                 '建议：请将 .shp, .dbf, .shx, .prj, .cpg 等同名文件一起上传或打包成 ZIP。'
             );
-            const geojson = await parseShpPartsToGeoJSON({ shp: content });
+            let sourceGeometry = null;
+            let sourceCrs = '';
+            const geojson = await parseShpPartsToGeoJSON(
+                { shp: content },
+                {
+                    overrideCrs: activeOverrideCrs,
+                    onSourceGeometry: (rawGeoJSON, crs) => {
+                        sourceGeometry = rawGeoJSON;
+                        sourceCrs = crs;
+                    },
+                },
+            );
             const gjFormat = new GeoJSON();
             const detectedProjection = detectGeoJSONProjection(geojson);
             const dataProjection = await resolveSupportedProjection(
@@ -1238,10 +1298,14 @@ export function useLayerDataImport({
                 'EPSG:4326',
                 'SHP',
             );
-            return gjFormat.readFeatures(geojson, {
+            const features = gjFormat.readFeatures(geojson, {
                 dataProjection,
                 featureProjection: 'EPSG:3857',
             });
+            return {
+                features,
+                snapshot: sourceGeometry ? { geojson: sourceGeometry, sourceCrs } : null,
+            };
         }
 
         throw new Error(`不支持的文件类型: ${normalizedType || type}`);
@@ -1300,12 +1364,16 @@ export function useLayerDataImport({
 
                 let features = [];
                 let layerType = packet.kind;
+                // 源几何快照：只在「原始数值尚未被变换」时非空
+                let sourceGeometry = null;
+                let sourceGeometryCrs = '';
 
                 if (packet.kind === 'kml') {
                     features = await parseKmlTextToFeatures(
                         packet.kmlString,
                         normalizedType === 'kmz' ? 'KMZ/KML' : 'ZIP/KML',
-                        packet.dataProjection || 'EPSG:4326',
+                        // 人工指定优先于包内声明：KML 的 srsName 常与真实数值不符
+                        activeOverrideCrs || packet.dataProjection || 'EPSG:4326',
                     );
                     layerType = normalizedType === 'kmz' ? 'kmz' : 'kml';
                 } else if (packet.kind === 'geojson') {
@@ -1319,9 +1387,19 @@ export function useLayerDataImport({
                         dataProjection,
                         featureProjection: 'EPSG:3857',
                     });
+                    // GeoJSON 的原始数值可直接留作快照（dataProjection 即其真实归属）
+                    sourceGeometry = packet.geojsonData;
+                    sourceGeometryCrs = dataProjection;
                     layerType = 'geojson';
                 } else if (packet.kind === 'shp') {
-                    const geojson = await parseShpPartsToGeoJSON(packet.shpParts);
+                    // 交出重投影前的几何，供「重设源坐标系」复用（见 crs/sourceSnapshot）
+                    const geojson = await parseShpPartsToGeoJSON(packet.shpParts, {
+                        overrideCrs: activeOverrideCrs,
+                        onSourceGeometry: (sourceGeoJSON, sourceCrs) => {
+                            sourceGeometry = sourceGeoJSON;
+                            sourceGeometryCrs = sourceCrs;
+                        },
+                    });
                     const gjFormat = new GeoJSON();
                     const featureCollection = Array.isArray(geojson)
                         ? {
@@ -1350,9 +1428,12 @@ export function useLayerDataImport({
                     metadata: {
                         labelField,
                         dispatchEntry: packet.entryName || '',
+                        // 优先用引擎实际判定结果（可能是 WKT: 别名），packet 里的只是文件声明
+                        sourceCrs:
+                            sourceGeometryCrs || packet.sourceCrs || packet.dataProjection || '',
                     },
                 });
-                await createManagedVectorLayer({
+                const newLayerId = await createManagedVectorLayer({
                     name: layerName,
                     type: layerType,
                     sourceType: 'upload',
@@ -1362,10 +1443,23 @@ export function useLayerDataImport({
                     metadata: {
                         labelField,
                         dispatchEntry: packet.entryName || '',
+                        sourceCrs:
+                            sourceGeometryCrs || packet.sourceCrs || packet.dataProjection || '',
                         standardTocItem,
                     },
                     fitView: importedCount === 0,
                 });
+
+                // 快照在图层 id 确定后才能登记；超限（要素过多）时静默跳过，
+                // 属性面板的「重设源坐标系」入口自然不出现
+                if (newLayerId && sourceGeometry) {
+                    rememberSourceSnapshot(newLayerId, {
+                        geojson: sourceGeometry,
+                        sourceCrs: sourceGeometryCrs || packet.sourceCrs || 'EPSG:4326',
+                        targetCrs: 'EPSG:4326',
+                        featureCount: features.length,
+                    });
+                }
 
                 importedCount += 1;
                 reportImportProgress({
@@ -1458,7 +1552,7 @@ export function useLayerDataImport({
      * 根据文件类型自动分发到对应的处理管线：
      * - 文件夹/ZIP/KMZ → gisInlet.dispatch 解析后批量导入
      * - TIF/TIFF → createManagedRasterLayer 栅格处理
-     * - GeoJSON/KML/SHP → parseUploadedFeatures 矢量处理
+     * - GeoJSON/KML/SHP → parseUploadedVector 矢量处理
      *
      * @param {Object} params
      * @param {string|ArrayBuffer|Object} params.content - 文件内容
@@ -1466,8 +1560,17 @@ export function useLayerDataImport({
      * @param {string} params.name - 文件名
      * @param {Array|null} [params.resources=null] - 文件夹导入时的资源列表
      */
-    async function addUserDataLayer({ content, type, name, resources, file = null }) {
+    async function addUserDataLayer({ content, type, name, resources, file = null, overrideCrs = '' }) {
         if (!mapInstance.value) return;
+        // 串行闸门：activeOverrideCrs 是本次导入的作用域值，并发导入会互相覆盖，
+        // 因此显式拒绝第二次进入（而不是依赖调用方自觉），保证「赋值 → 使用 → 清空」独占。
+        if (importInFlight) {
+            message.warning('上一次导入尚未完成，请稍候再试');
+            return;
+        }
+        importInFlight = true;
+        // 本次导入的源坐标系覆盖值（空串=自动识别）；finally 中清空，避免影响后续导入
+        activeOverrideCrs = String(overrideCrs || '').trim();
         try {
             // 遮罩握手：先让 GlobalLoading 真正上屏（showLoading + 双 rAF），
             // 再进入重活；同步解析/解码阶段面板也能给出可见反馈，不再"卡死无任何提示"
@@ -1484,6 +1587,9 @@ export function useLayerDataImport({
                 return;
             }
             message.error('文件解析失败: ' + e.message, { closable: true, duration: 0 });
+        } finally {
+            activeOverrideCrs = '';
+            importInFlight = false;
         }
     }
 
@@ -1563,7 +1669,11 @@ export function useLayerDataImport({
                 return;
             }
 
-            const features = await parseUploadedFeatures({ content, type: normalizedType, name });
+            const { features, snapshot } = await parseUploadedVector({
+                content,
+                type: normalizedType,
+                name,
+            });
             if (!features.length) throw new Error('无有效数据');
             const labelField = pickFeatureLabelField(features);
             const standardTocItem = buildStandardLayerItem({
@@ -1573,10 +1683,12 @@ export function useLayerDataImport({
                 featureCount: features.length,
                 metadata: {
                     labelField,
+                    // 直传路径同样要写 sourceCrs：属性面板据此显示「判成了什么」
+                    sourceCrs: snapshot?.sourceCrs || '',
                 },
             });
 
-            await createManagedVectorLayer({
+            const vectorLayerId = await createManagedVectorLayer({
                 name,
                 type: normalizedType,
                 sourceType: 'upload',
@@ -1585,10 +1697,20 @@ export function useLayerDataImport({
                 autoLabel: true,
                 metadata: {
                     labelField,
+                    sourceCrs: snapshot?.sourceCrs || '',
                     standardTocItem,
                 },
                 fitView: true,
             });
+
+            if (vectorLayerId && snapshot?.geojson) {
+                rememberSourceSnapshot(vectorLayerId, {
+                    geojson: snapshot.geojson,
+                    sourceCrs: snapshot.sourceCrs || 'EPSG:4326',
+                    targetCrs: 'EPSG:4326',
+                    featureCount: features.length,
+                });
+            }
             reportImportProgress({
                 phase: 'done',
                 total: 1,
@@ -1614,7 +1736,7 @@ export function useLayerDataImport({
         queryRasterValueAtCoordinate,
         projectExtentToMapView,
         addUserDataLayer,
-        parseUploadedFeatures,
+        parseUploadedVector,
         isTiffType,
     };
 }

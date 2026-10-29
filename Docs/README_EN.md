@@ -126,7 +126,7 @@
 | Area | Description |
 |------|------|
 | 📥 Multi-format import | GeoJSON / JSON / KML / KMZ / SHP (zip or loose parts) / CZML / GLB / GLTF / 3D Tiles (zip) / GeoTIFF / CSV / GPX; dual 2D/3D pipelines, ZIP grouping, `.prj` projection detection, retryable inline errors |
-| 🏢 Building footprint scraping | Three sources: Building-1 (Tencent), Building-2 (Amap), Tianditu vector tiles; drag-select footprints with height, cross-tile identity merge, auto-registered into TOC |
+| 🏢 Building footprint scraping | **Tencent Maps / Amap / Tianditu** vector tiles: Tencent and Amap scrape building footprints and heights at CE level, Tianditu supports **full parsing of 12 layer types**; one decoding/assembly pipeline behind all three, so lifting the layer filter extends full parsing to Tencent and Amap; cross-tile identity merge, auto-registered into TOC |
 | 📐 Spatial analysis | **8 operations**: buffer, overlay, Voronoi, hotspot aggregation, fishnet (square/hexagon), convex hull, multi-ring buffer, simplify (exact computation with Shapely) |
 | 🔬 3D analysis | Height-limit analysis, viewshed analysis (`cesium/modules/analysis`) |
 | ✨ 3D effects | Volumetric cloud ray marching, Bruneton atmosphere, BSM cloud shadows, wind particles, fluid flood simulation, shallow-water overlay, post-processing (HBAO / tilt-shift / fog) |
@@ -192,6 +192,22 @@ Modules by engine domain, for fast code navigation:
 ---
 
 ## ⚠️ Building Data Scraping — Compliance Notice
+
+### Data Sources
+
+All three sources are publicly accessible vector tile services, operated by commercial platforms and a government agency:
+
+| UI label | Real source | Coverage in this project |
+|---|---|---|
+| Tencent | **Tencent Maps** (Tencent Location Service) | **Only** building-level (CE) fetch & parsing |
+| Amap | **Amap** (Amap Open Platform) | **Only** building-level (CE) fetch & parsing |
+| Tianditu | **Tianditu** (National Platform for Common Geospatial Information Services) | **Full parsing**, 12 selectable layers |
+
+Tencent, Amap and Tianditu share the same tile-decoding and geometry-assembly pipeline; only layer filtering and credential policy differ.
+**The frontend implements building-level (CE) scraping for Tencent and Amap, and full parsing for Tianditu only.**
+Lifting the layer filter on the same parser extends full parsing to Tencent and Amap — one of the reasons this project is open source.
+
+> The UI labels were previously anonymized as "Building-1 / Building-2 / Vector tiles" for compliance reasons; they now show the real sources. Historical logs keep the original anonymization rationale.
 
 - Use the building-scraping capability only where you hold official authorization;
 - Bypassing permissions, circumventing access controls, cracking, or any other unauthorized technique is strictly prohibited;
@@ -306,7 +322,7 @@ docker run -p 7860:7860 negiao/webgis
 docker pull negiao/webgis_dev:V3.5
 ```
 
-> ⚠️ That image was built on **2026-08-03** for frontend **V3.5.10**, so it lags the current code (V3.6.22+). It shares its source with `deploy/docker-compose.yml` (built from `deploy/Dockerfile`); run `--build` locally if you need parity with the source.
+> ⚠️ That image was built on **2026-08-03** for frontend **V3.5.10**, so it lags the current code (V3.6.31). It shares its source with `deploy/docker-compose.yml` (built from `deploy/Dockerfile`); run `--build` locally if you need parity with the source.
 
 ## 📁 Project Structure
 
@@ -544,11 +560,11 @@ Listed plainly so the README does not overpromise:
 
 | Version | Date | Summary |
 |------|------|------|
-| **V3.6.22** | 2026-10-20 | **Player roaming aligned with upstream 0.2.1 + hardening.** Rapier local-frame rebasing (`rebase()`, 10 km default) removes f32 precision jitter and gravity-direction drift; static collider debug lines now apply parent transforms; ground snapping moved to an independent `groundCorrectionU` displacement (no more stair bouncing); `step(delta)` syncs `world.timestep`; terrain colliders swapped atomically via `replaceStaticColliders`; double-zoom bug fixed; per-frame `Matrix4.inverse` removed from the hot path. Verified: tsc 0 errors, 1.1e-9 m rebase round-trip error. |
-| **V3.6.21** | 2026-10-19 | **Import UX bug-fix pack + GLB geo-fidelity.** Coordinate dialog cancels on Esc, inline retryable errors, busy state blocks double submits; failed reposition restores the previous entity via a `swapped` flag; multi-file GLB conflict revokes the new file; unified `GlobalLoading` mask across both engines; GLB drops `minimumPixelSize: 64` for geo-fidelity LOD. |
-| **V3.6.20** | 2026-10-17 | **Merged multi-batch release**: TOC rename routed through ActionRouter (no longer reverted by broadcasts); district layer field `_layer`→`layer` (fixes coordinate conversion / export / edit / 3D import); backend guest `guest_no`; landing page rebuilt in NJNU style (seal section headers, self-hosted serif subset); hero preview image; layer property dialog and TopBar rewritten on design tokens. |
+| **V3.6.31** | 2026-10-29 | **Arbitrary projected CRS on import (manual declaration + corrected inference + no silent fallback + post-import redeclare).** A "Source CRS" selector in the upload area (auto / WGS 84 / CGCS2000 / Web Mercator / CGCS2000 3-degree zones / UTM zones 43-53 / custom EPSG or `+proj=`) feeds both 2D and 3D pipelines and outranks `.prj`, KML `srsName` and GeoJSON `crs`. Magnitude inference rewritten into three disjoint bands (degrees / unzoned planar → ambiguous / Mercator), so planar data is no longer silently read as Web Mercator; a SHP without `.prj` that looks planar now fails with an actionable error instead of guessing. `crsPresets.ts` generates CGCS2000 3/6-degree zone and 120 UTM definitions locally (offline-capable, verified against epsg.io). 3D reprojects before `GeoJsonDataSource.load` and strips the `crs` member, with backend fallback for arbitrary EPSG. Per-feature degradation counts dropped features. Layers can be **re-declared after import** from the retained pre-reprojection geometry — in 2D for every vector type, in 3D for GeoJSON. Also restores real data-source attribution (Tencent / Amap / Tianditu) and fixes SHP sidecar grouping (NFC + case normalisation). |
+| **V3.6.30** | 2026-10-28 | **51.la site-wide visitor metrics + dependency and badge calibration.** New `visitorStats.ts` pure-function layer (8 s timeout, silent failure, stateless) surfaces third-party UV/PV in the landing footer and account overview; consumes the Worker's new `updatedAt` and labels "data updated at" in three places, documenting the 5-minute edge-cache lag. README badges and tech-stack table recalibrated against `package-lock.json` (Vite 8.3 / OpenLayers 10.11 / Cesium 1.146 / Rapier 0.21 / Pinia 4.1 / Vue Router 5.4 / Three 0.186) plus the Vite 8 Node engine requirement; badge layout regrouped. |
+| **V3.6.29** | 2026-10-27 | **Auth-page decoration rebuilt (dual-track three-ring + wireframe globe + meteors) + build-warning cleanup.** `AuthDecorBackground` carries eight decoration layers, with the ring-pattern injection extracted into `useRingPatternStyle` shared by landing and auth pages; `AuthGlobeStage` fakes a sphere from three `rx`-decreasing rotating ellipses plus two latitude lines on opposite slow swings, conic sweep light, differential orbits and nine meteors. Build warnings cleared by fixing `:deep` inside a non-scoped block, making `CesiumContainer` a static import and switching `envFile` to `envDir`; solid-ring rotation invisibility swept by switching middle/core rings to `dashed`/`dotted`. |
 
-Earlier versions (V3.6.19 and before): [full CHANGELOG →](Guide/CHANGELOG.md). The current branch HEAD already contains unreleased commits after V3.6.22.
+Earlier versions (V3.6.28 and before): [full CHANGELOG →](Guide/CHANGELOG.md).
 
 ---
 
@@ -570,6 +586,6 @@ Earlier versions (V3.6.19 and before): [full CHANGELOG →](Guide/CHANGELOG.md).
 |:------:|:--------:|:-------:|
 | [GitHub](https://github.com/NEGIAO/WebGIS-Dev) | [webgis.negiao.cn](https://webgis.negiao.cn) (primary, GitHub Pages) | [Hugging Face](https://NEGIAO-WebGIS.hf.space) |
 
-<sub>V3.6.22 · in development · README synced 2026-10-22</sub>
+<sub>V3.6.31 · in development · README synced 2026-10-29</sub>
 
 </div>

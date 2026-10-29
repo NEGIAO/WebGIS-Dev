@@ -18,7 +18,16 @@ import { VECTOR_GROUND_LOAD_OPTIONS } from '../../terrain/groundPlacementCapabil
  * @param {import('vue').Ref} ctx.loadedDataSources
  * @param {{ current: number }} ctx.nextId
  */
-export async function loadSHP({ file, sidecarFiles = [], getCesium, getViewer, message, loadedDataSources, nextId }) {
+export async function loadSHP({
+    file,
+    sidecarFiles = [],
+    overrideCrs = '',
+    getCesium,
+    getViewer,
+    message,
+    loadedDataSources,
+    nextId,
+}) {
     const Cesium = getCesium();
     const viewer = getViewer();
     if (!Cesium || !viewer) throw new Error('Cesium 未初始化');
@@ -35,7 +44,7 @@ export async function loadSHP({ file, sidecarFiles = [], getCesium, getViewer, m
         if (ext === 'cpg') parts.cpg = await sidecar.arrayBuffer();
     }
 
-    const geojson = await parseShpPartsToGeoJSON(parts);
+    const geojson = await parseShpPartsToGeoJSON(parts, { overrideCrs });
 
     const featureCollections = Array.isArray(geojson) ? geojson : [geojson];
     const totalFeatureCount = featureCollections.reduce(

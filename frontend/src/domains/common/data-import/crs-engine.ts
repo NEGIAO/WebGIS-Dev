@@ -6,4 +6,7 @@ export {
     isUnsupportedProjectedCrsError,
     resolveDatasetProjection,
     reprojectGeoJSON,
+    ensureCrsDef,
 } from './crs/crs-engine';
+
+export type { ProjectionConfidence } from './crs/crs-engine';

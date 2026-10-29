@@ -11,6 +11,11 @@ type WebkitDataTransferItem = DataTransferItem & {
 
 type GisDropZoneOptions = {
     onUpload?: (payload: GisDispatchInput) => void | Promise<void>;
+    /**
+     * 人工指定的源坐标系（上传区下拉）。拖拽导入与点击上传走同一条管线，
+     * 因此这里也必须透传，否则「拖到上传区」会静默退回自动识别。
+     */
+    getOverrideCrs?: () => string;
 };
 
 /**
@@ -39,7 +44,10 @@ function hasFileItems(dataTransfer?: DataTransfer | null): boolean {
  * @param {DataTransfer | null | undefined} dataTransfer
  * @returns {object | null}
  */
-function createDropUploadPayload(dataTransfer?: DataTransfer | null): GisDispatchInput | null {
+function createDropUploadPayload(
+    dataTransfer?: DataTransfer | null,
+    overrideCrs = '',
+): GisDispatchInput | null {
     if (!dataTransfer) return null;
 
     const entryItems = (Array.from(dataTransfer.items || []) as WebkitDataTransferItem[])
@@ -50,12 +58,12 @@ function createDropUploadPayload(dataTransfer?: DataTransfer | null): GisDispatc
         .filter(Boolean);
 
     if (entryItems.length) {
-        return createUploadPayloadFromEntries(entryItems);
+        return createUploadPayloadFromEntries(entryItems, { overrideCrs });
     }
 
     const files = Array.from(dataTransfer.files || []);
     if (!files.length) return null;
-    return createUploadPayloadsFromFiles(files);
+    return createUploadPayloadsFromFiles(files, { overrideCrs });
 }
 
 /**
@@ -64,7 +72,7 @@ function createDropUploadPayload(dataTransfer?: DataTransfer | null): GisDispatc
  * @param {object} options
  * @param {(payload: object) => void | Promise<void>} options.onUpload
  */
-export function useGisDropZone({ onUpload }: GisDropZoneOptions) {
+export function useGisDropZone({ onUpload, getOverrideCrs }: GisDropZoneOptions) {
     const isDragging = ref(false);
 
     function handleDragEnter(event: DragEvent) {
@@ -98,7 +106,8 @@ export function useGisDropZone({ onUpload }: GisDropZoneOptions) {
 
     function handleDrop(event: DragEvent): GisDispatchInput | null {
         isDragging.value = false;
-        const payload = createDropUploadPayload(event?.dataTransfer);
+        const overrideCrs = String(getOverrideCrs?.() || '').trim();
+        const payload = createDropUploadPayload(event?.dataTransfer, overrideCrs);
         if (!payload) return null;
 
         onUpload?.(payload);

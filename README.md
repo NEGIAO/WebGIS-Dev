@@ -81,7 +81,7 @@
 | **🤖 智能助手交互** | **🌊 动态淹没分析** |
 | <a href="https://github.com/user-attachments/assets/b79777bb-6227-4375-898a-d3a612888294"><img src="https://github.com/user-attachments/assets/b79777bb-6227-4375-898a-d3a612888294" width="400" /></a> | <a href="https://github.com/user-attachments/assets/e26761db-8f91-4f05-90f2-106b28223ab5"><img src="https://github.com/user-attachments/assets/e26761db-8f91-4f05-90f2-106b28223ab5" width="400" /></a> |
 
-<div align="center">🗺️ 矢量瓦片逆向解析</div>
+<div align="center">🗺️ 腾讯 / 高德 / 天地图 矢量瓦片解析</div>
 <img width="1280" height="718" alt="QQ20261015-213105" src="https://github.com/user-attachments/assets/b823dd99-1f51-46a2-821c-7778e2b008e6" />
 
 </div>
@@ -125,7 +125,7 @@
 
 ## 🎯 项目简介
 
-**NEGIAO's WebGIS** 是一个功能完整、架构清晰的前后端分离 WebGIS 平台（当前版本 V3.6.30），前端托管于 GitHub Pages（正式域名 webgis.negiao.cn），后端以 Docker 部署在 Hugging Face Spaces，通过 RESTful API 通信，支持独立扩展。
+**NEGIAO's WebGIS** 是一个功能完整、架构清晰的前后端分离 WebGIS 平台（当前版本 V3.6.31），前端托管于 GitHub Pages（正式域名 webgis.negiao.cn），后端以 Docker 部署在 Hugging Face Spaces，通过 RESTful API 通信，支持独立扩展。
 
 > 📚 本 README 仅保留核心概览与导航。完整文档已模块化至 [`Docs/Guide/`](Docs/Guide/)，详见下方「文档导航」。
 >
@@ -164,7 +164,7 @@
 | 领域 | 说明 |
 |------|------|
 | 📥 多格式数据导入 | GeoJSON / JSON / KML / KMZ / SHP（zip 或散件）/ CZML / GLB / GLTF / 3D Tiles（zip）/ GeoTIFF / CSV / GPX；2D/3D 双管线、ZIP 批量分组、`.prj` 投影识别、失败行内可重试 |
-| 🏢 建筑白模抓取 | 建筑 1（腾讯）/ 建筑 2（高德）/ 天地图矢量瓦片三类数据源；框选抓取轮廓与楼高、跨瓦片同标识融合、自动入库 TOC |
+| 🏢 建筑白模抓取 | **腾讯地图 / 高德地图 / 天地图** 三类矢量瓦片：腾讯、高德实现建筑层级（CE）轮廓与楼高抓取解析，天地图实现 **12 类图层全量解析**；三者共用同一套解码与几何装配链路，放开图层过滤即可对腾讯、高德做全量解析；跨瓦片同标识融合、自动入库 TOC |
 | 📐 空间分析 | **8 算子**：缓冲区、叠加、泰森多边形、热点聚合、渔网（方格/六边形）、凸包、多环缓冲、几何简化（Shapely 后端精确计算） |
 | 🔬 三维分析 | 限高分析、可视域分析（`cesium/modules/analysis`，逐像素/射线两套实现） |
 | ✨ 三维特效 | 体积云 ray marching、Bruneton 大气、BSM 云影、风场粒子、流体淹没模拟、浅水叠加、后处理（HBAO / 移轴 / 雾） |
@@ -230,6 +230,24 @@
 ---
 
 ## ⚠️ 建筑抓取合规声明（必读）
+
+### 数据来源
+
+三类数据源均为公开可访问的矢量瓦片服务，分属商业平台与政府机构：
+
+| 界面标签 | 真实来源 | 本项目实现程度 |
+|---|---|---|
+| 腾讯 | **腾讯地图**（腾讯位置服务） | 仅建筑层级（CE）抓取解析 |
+| 高德 | **高德地图**（高德开放平台） | 仅建筑层级（CE）抓取解析 |
+| 天地图 | **天地图**（国家地理信息公共服务平台） | **全量解析**，12 类图层可选 |
+
+三者共用同一套瓦片解码与几何装配链路，差别只在图层过滤与凭证策略。
+**前端只实现了腾讯、高德的建筑层级（CE）抓取，天地图做了全量解析**；
+在同一套解析器上放开图层过滤，即可对腾讯、高德做全量解析——这也是本项目开源的意义之一。
+
+> 此前三类来源在界面与文档中曾以「建筑 1 / 建筑 2 / 矢量瓦片」匿名标识（出于合规考虑），现已恢复真实来源；历史版本日志仍保留当时的匿名化说明与原因。
+
+### 使用边界
 
 - 仅允许在你已获得官方授权的场景下使用建筑抓取能力；
 - 严禁绕过权限、规避访问控制、破解或其他未授权技术手段；
@@ -588,9 +606,9 @@ tiles.negiao.cc.cd"]
 
 | 版本 | 日期 | 概要 |
 |------|------|------|
+| **V3.6.31** | 2026-10-28 | **数据导入支持任意投影坐标系（人工声明 + 判定修正 + 缺 CRS 不静默）**。① 上传区新增「源坐标系」选择（自动 / WGS84 / CGCS2000 / Web 墨卡托 / CGCS2000 三度带 / UTM 中国带号 43~53 / 自定义 EPSG 或 `+proj=` 串），2D 与 3D 共用同一入口，优先级高于 `.prj`、KML `srsName` 与 GeoJSON `crs`；② 量级判定重构为「度 / 无带号平面 / 墨卡托」三段，平面坐标不再被静默判成 Web 墨卡托；缺 `.prj` 且判为平面坐标时**报错要求指定带号**而非猜测；③ 新增 `crsPresets.ts`，按 EPSG 公式本地生成 CGCS2000 3/6 度带与 UTM 120 带定义（与 epsg.io 逐条核对），离线可用，`ensureCrsDef` / `ensureProjectionAvailable` 统一入口；④ 3D 链路在 `loadGeoJSON` 前完成重投影并剥离 `crs` 成员，修复打包链路完全跳过检测的问题；支持 `+proj=` 定义串；⑤ 逐要素降级：坏点只丢该要素并计数提示；`sourceCrs` 写入图层元数据供复核；⑥ 导入后可**重设源坐标系**（留存重投影前原始几何，属性弹窗直接改判，无需重传）；⑦ 修复 SHP sidecar 分组（NFC + 大小写归一 + 单 shp 兜底合并），解决「文件在却报缺少 .dbf」；⑧ 建筑抓取恢复**腾讯 / 高德 / 天地图**真实署名，并写明「前两者仅建筑层级（CE）、天地图全量 12 类」的实现边界。详见[完整更新日志](Docs/Guide/CHANGELOG.md) |
 | **V3.6.30** | 2026-10-28 | **接入 51.la 全站访客数据 + 依赖版本与徽章校准**。① 新增 `visitorStats.ts` 纯函数层（8s 超时、失败静默、不持状态），落地页页脚与账号总览并列展示第三方口径 UV/PV；② 消费 Worker 新增的 `updatedAt`，在页脚、用户中心、README 三处标注「数据更新于 MM-DD HH:mm」，并把 5 分钟边缘缓存的滞后语义写明；③ README 徽章与技术栈按 `package-lock.json` 实校正（Vite 8.3 / OpenLayers 10.11 / Cesium 1.146 / Rapier 0.21 / Pinia 4.1 / Vue Router 5.4 / Three 0.186），同步修正 Vite 8 的 Node 引擎要求；④ 顶部徽章重排：站点访问 7 项指标以 7 列表格分区置顶（与「技术栈」「仓库指标」两类旧徽章区分），`updatedAt` 因 ISO 串过长单列于表格下方；移除 Clones / Unique Cloners 两枚参考价值低的徽章。详见[完整更新日志](Docs/Guide/CHANGELOG.md) |
 | **V3.6.29** | 2026-10-27 | **认证页装饰体系重构（双轨三环 + 线框地球 + 流星）+ 构建告警清零**（同批次三项改动合并发布）。① 新建 `AuthDecorBackground` 承载 8 层装饰，纹样注入抽为 `useRingPatternStyle` 供 Landing / 认证页共用；两条椭圆轨道环心错位、环径不等、倾角相反，每轨内套「外/中/核」三环按同一 PNG 的 124%/96%/90% 缩放叠成综合圆环。② 新增 `AuthGlobeStage`：3 条 `rx` 递减椭圆自转伪造球体经线、2 条纬线 ±5° 慢摆（一动一静才读作球体）、conic 扫掠光、差速轨道 + 卫星、九道流星；线稿改 `--brand-primary-rgb` alpha 以适配浅色底，`--globe-opacity` 统一收敛透明度。③ 构建告警清零：修 `:deep` 落在非 scoped 块导致规则整条被丢弃、`CesiumContainer` 动态导入改静态、`envFile` 改 `envDir`。④ 横扫「实线圆旋转不可见」问题：认证页 A 轨与 Landing 首屏的中/核环统一改 `dashed`/`dotted`；星座按 `min-aspect-ratio` 分档补偿 `slice` 裁切。详见[完整更新日志](Docs/Guide/CHANGELOG.md) |
-| **V3.6.28** | 2026-10-26 | **瓦片下载能力迁至独立节点（临时方案）**。HF Space 已删除 `/api/download/*`，下载改由腾讯云临时节点承接，前端经 `VITE_DOWNLOAD_SERVICE_URL=https://gis.negiao.cn:8443` 直连；**用 8443 端口是因为域名未 ICP 备案**——指向大陆服务器的 443 会在 SNI 层被拦截（实测 100% RST），非标端口可正常通行；两条路径（远端节点 / 本机后端）方法、路径、请求体一致，未配置时回落本机。详见[完整更新日志](Docs/Guide/CHANGELOG.md) |
 更早版本（V3.6.22 及以前）请查阅 [完整更新日志 →](Docs/Guide/CHANGELOG.md)。
 
 ---
@@ -613,6 +631,6 @@ tiles.negiao.cc.cd"]
 |:------:|:--------:|:--------:|
 | [GitHub](https://github.com/NEGIAO/WebGIS-Dev) | [webgis.negiao.cn](https://webgis.negiao.cn)（正式域名，GitHub Pages 托管） | [Hugging Face](https://NEGIAO-WebGIS.hf.space) |
 
-<sub>V3.6.30 · 开发中 · 最后更新 2026-10-28</sub>
+<sub>V3.6.31 · 开发中 · 最后更新 2026-10-29</sub>
 
 </div>

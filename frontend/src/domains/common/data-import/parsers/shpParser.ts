@@ -7,6 +7,7 @@ import {
     UNSUPPORTED_PROJECTED_CRS_MESSAGE,
 } from '../crs-engine';
 import { parseDbfBuffer, type DbfData } from './dbfParser';
+import { detectGeoJSONProjectionDetailed } from '../crs/crsUtils';
 import { useMessage } from '@common/shell/useMessage';
 
 export type ShpDataset = {
@@ -75,12 +76,18 @@ function stemOf(path = ''): string {
 export function groupShpDatasets(resources: FlattenedResource[]): ShpDataset[] {
     const groups = new Map<string, Partial<ShpDataset>>();
 
+    // 归一化：NFC（macOS 传入的分解式文件名） + 小写（Windows 不区分大小写）。
+    // 只按原名做精确匹配时，「国界线.SHP / 国界线.dbf」这类大小写或编码差异
+    // 会把同一份数据拆成互不相干的组，表现为「明明上传了 .dbf 却报缺失」。
+    const normalizeKey = (value: string): string =>
+        String(value || '').normalize('NFC').toLowerCase();
+
     for (const resource of resources) {
         const ext = String(resource.ext || '').toLowerCase();
         if (!['shp', 'shx', 'dbf', 'prj', 'cpg'].includes(ext)) continue;
 
-        const dir = pathDir(resource.path);
-        const stem = stemOf(resource.path);
+        const dir = normalizeKey(pathDir(resource.path));
+        const stem = normalizeKey(stemOf(resource.path));
         const key = dir ? `${dir}/${stem}` : stem;
         const current = groups.get(key) || { key };
 
@@ -93,7 +100,26 @@ export function groupShpDatasets(resources: FlattenedResource[]): ShpDataset[] {
         groups.set(key, current);
     }
 
-    return Array.from(groups.values())
+    const withShp = Array.from(groups.values()).filter(
+        (item): item is Partial<ShpDataset> & { shp: FlattenedResource } => !!item.shp,
+    );
+
+    // 兜底：整批只有一个 .shp 时，把「有 sidecar 但没有 shp」的孤儿组合并进来。
+    // 现实里常见把 sidecar 改名（加后缀、去空格）后与 .shp 一起上传，严格配名会全部丢弃；
+    // 仅一个 .shp 时不存在归属歧义，合并比报「缺少 .dbf」更符合用户意图。
+    if (withShp.length === 1) {
+        const target = withShp[0];
+        for (const item of groups.values()) {
+            if (item.shp) continue;
+            if (!item.dbf && !item.shx && !item.prj && !item.cpg) continue;
+            target.dbf = target.dbf || item.dbf;
+            target.shx = target.shx || item.shx;
+            target.prj = target.prj || item.prj;
+            target.cpg = target.cpg || item.cpg;
+        }
+    }
+
+    return withShp
         .filter((item): item is ShpDataset => !!item.shp)
         .sort((a, b) => a.key.localeCompare(b.key));
 }
@@ -447,7 +473,17 @@ function buildParseAttempts(params: {
     return attempts;
 }
 
-export async function parseShpPartsToGeoJSON(parts: ShpPartsInput): Promise<any> {
+export async function parseShpPartsToGeoJSON(
+    parts: ShpPartsInput,
+    options: {
+        overrideCrs?: string;
+        /**
+         * 交出「重投影之前」的原始几何与判定结果。
+         * 供上层登记源几何快照，用于导入后重设坐标系——变换过就追不回来了。
+         */
+        onSourceGeometry?: (geojson: any, sourceCrs: string) => void;
+    } = {},
+): Promise<any> {
     const [shpBuffer, dbfBuffer, shxBuffer, prjBuffer, cpgBuffer] = await Promise.all([
         toArrayBuffer(parts?.shp),
         toArrayBuffer(parts?.dbf),
@@ -519,11 +555,10 @@ export async function parseShpPartsToGeoJSON(parts: ShpPartsInput): Promise<any>
     
     // 尝试使用增强的 DBF 解析器获取更完整的属性信息
     // 仅在 shpjs 解析时未包含 DBF 的情况下尝试
-    let dbfData: DbfData | null = null;
     if (dbfBuffer instanceof ArrayBuffer && !usedAttempt?.usesDbf) {
         try {
             console.warn('[SHP] 启动自定义 DBF 解析...');
-            dbfData = parseDbfBuffer(dbfBuffer, cpgText);
+            const dbfData = parseDbfBuffer(dbfBuffer, cpgText);
             
             if (dbfData.warnings.length > 0) {
                 console.warn('[SHP] DBF 解析警告:', dbfData.warnings);
@@ -540,7 +575,6 @@ export async function parseShpPartsToGeoJSON(parts: ShpPartsInput): Promise<any>
         } catch (_err: any) {
             // 自定义 DBF 解析失败:回退 shpjs 属性,不阻断导入;以 warning 提示用户
             message.warning('自定义 DBF 解析失败，已回退使用 shpjs 属性。');
-            dbfData = null;
             // 不中断流程，继续使用 shpjs 的属性
         }
     } else if (dbfBuffer instanceof ArrayBuffer && usedAttempt?.usesDbf) {
@@ -556,8 +590,42 @@ export async function parseShpPartsToGeoJSON(parts: ShpPartsInput): Promise<any>
         });
     }
 
-    const projection = resolveDatasetProjection({ prjText, targetCrs: 'EPSG:4326' });
+    // 无 .prj 时按坐标量级推断：平面坐标（米）不能默认当 4326，
+    // 否则会静默落到错误位置；判不出就停下，由用户在导入区指定带号 / EPSG。
+    const detected = prjText ? null : detectGeoJSONProjectionDetailed(featureCollection);
+    const projection = resolveDatasetProjection({
+        prjText,
+        overrideCrs: options?.overrideCrs || '',
+        sourceCrs: detected?.code || '',
+        sourceConfidence:
+            detected?.confidence === 'declared'
+                ? 'declared'
+                : detected?.confidence === 'ambiguous'
+                  ? 'ambiguous'
+                  : detected && detected.confidence !== 'none'
+                    ? 'inferred'
+                    : 'none',
+        sourceHint: detected?.hint || '',
+        targetCrs: 'EPSG:4326',
+    });
     const projectionName = projection.prjName || projection.sourceCrs || '未知投影';
+    // 诊断：投影判定结果直接打出来，便于用户/维护者确认「到底认成了什么」
+    console.warn('[SHP][CRS]', {
+        prjProvided: projection.prjProvided,
+        sourceCrs: projection.sourceCrs,
+        confidence: projection.confidence,
+        needsTransform: projection.needsTransform,
+        prjName: projection.prjName,
+    });
+
+    if (projection.ambiguous && !options?.overrideCrs) {
+        const hintText = projection.hint || '缺少 .prj，且坐标像平面坐标（米），无法自动判定';
+        message.error(`${hintText}。请在导入区「源坐标系」指定带号或 EPSG 后重试。`, {
+            closable: true,
+            duration: 0,
+        });
+        throw createUnsupportedProjectedCrsError(hintText, true);
+    }
 
     if (projection.prjProvided && !projection.prjResolved) {
         message.error(buildProjectionFailureMessage(projectionName), {
@@ -570,14 +638,29 @@ export async function parseShpPartsToGeoJSON(parts: ShpPartsInput): Promise<any>
         );
     }
 
+    // 无论是否真的需要变换，都把原始几何交出去：判成 4326 也可能判错
+    options?.onSourceGeometry?.(featureCollection, projection.sourceCrs);
+
     if (!projection.needsTransform) return featureCollection;
 
     try {
+        let droppedFeatures = 0;
         const projected = reprojectGeoJSON(
             featureCollection,
             projection.sourceCrs,
             projection.targetCrs,
+            {
+                onInvalid: (stats) => {
+                    droppedFeatures = stats.droppedFeatures;
+                },
+            },
         );
+        if (droppedFeatures > 0) {
+            message.warning(
+                `坐标系转换时有 ${droppedFeatures} 个要素落在有效范围外，已跳过（其余要素已正常导入）。`,
+                { duration: 5200 },
+            );
+        }
         const validationError = validateGeoJsonCoordinates(projected, projection.targetCrs);
         if (validationError) {
             message.error(buildProjectionFailureMessage(projectionName), {
@@ -606,6 +689,6 @@ export async function parseShpPartsToGeoJSON(parts: ShpPartsInput): Promise<any>
         if (isUnsupportedProjectedCrsError(error)) {
             throw error;
         }
-        throw new Error(error?.message || UNSUPPORTED_PROJECTED_CRS_MESSAGE);
+        throw new Error(error?.message || UNSUPPORTED_PROJECTED_CRS_MESSAGE, { cause: error });
     }
 }

@@ -124,6 +124,54 @@
                             </button>
                         </div>
                     </div>
+                    <div class="upload-crs">
+                        <label
+                            class="upload-crs-label"
+                            :title="t('layer.crsHint')"
+                        >{{ t('layer.crsLabel') }}</label>
+                        <select
+                            v-model="importCrsPreset"
+                            class="upload-crs-select"
+                            :disabled="!!importCrsCustom.trim()"
+                        >
+                            <option value="">{{ t('layer.crsAuto') }}</option>
+                            <optgroup :label="t('layer.crsGroupBasic')">
+                                <option
+                                    v-for="preset in basicCrsPresets"
+                                    :key="preset.code"
+                                    :value="preset.code"
+                                >
+                                    {{ preset.label }} · {{ preset.hint }}
+                                </option>
+                            </optgroup>
+                            <optgroup :label="t('layer.crsGroupCgcs2000')">
+                                <option
+                                    v-for="preset in cgcs2000CrsPresets"
+                                    :key="preset.code"
+                                    :value="preset.code"
+                                >
+                                    {{ preset.hint }} · EPSG:{{ preset.code.slice(5) }}
+                                </option>
+                            </optgroup>
+                            <optgroup :label="t('layer.crsGroupUtm')">
+                                <option
+                                    v-for="preset in utmCrsPresets"
+                                    :key="preset.code"
+                                    :value="preset.code"
+                                >
+                                    {{ preset.hint }} · EPSG:{{ preset.code.slice(5) }}
+                                </option>
+                            </optgroup>
+                        </select>
+                        <input
+                            v-model="importCrsCustom"
+                            class="upload-crs-input"
+                            type="text"
+                            spellcheck="false"
+                            :title="t('layer.crsHint')"
+                            :placeholder="t('layer.crsCustomPlaceholder')"
+                        />
+                    </div>
                     <div class="upload-tip">{{ t('layer.uploadTip') }}</div>
                     <div class="upload-crs-tip">
                         <span>{{ t('layer.fileSizeLimit', { size: MAX_FILE_SIZE_MB }) }}</span>
@@ -561,6 +609,7 @@
             :visible="propertiesDialogVisible"
             :layer="propertiesDialogLayer"
             @close="propertiesDialogVisible = false"
+            @reproject="handleReprojectLayer"
         />
     </div>
 </template>
@@ -611,6 +660,7 @@ const MapDownloader = defineAsyncComponent(() => import('@ol/components/MapDownl
 import LayerPropertiesDialog from '@common/layer-tree/components/LayerPropertiesDialog.vue';
 import { useGeocoding } from '../composables/useGeocoding';
 import { useFileUpload, MAX_FILE_SIZE_MB } from '../composables/useFileUpload';
+import { BASIC_CRS_PRESETS, listCgcs2000Presets, listUtmPresets } from '@common/data-import/crs/crsPresets';
 import { useSharedResources } from '../composables/useSharedResources';
 import { useTreeActionDispatcher } from '../composables/useTreeActionDispatcher';
 
@@ -650,6 +700,7 @@ const emit = defineEmits([
     'toggle-layer-crs',
     'export-layer-data',
     'import-to-3d',
+    'reproject-layer',
     'rename-layer',
 ]);
 
@@ -681,6 +732,13 @@ const tabIndex = computed(() =>
 const propertiesDialogVisible = ref(false);
 const propertiesDialogLayer = ref(null);
 
+// 属性弹窗「重设源坐标系」→ 上抛给容器层：快照与 OL 数据源都在引擎侧，
+// 本组件只做事件转发，不持有任何地图对象（分层边界）
+function handleReprojectLayer(payload) {
+    if (!payload?.layerId || !payload?.crs) return;
+    emit('reproject-layer', payload);
+}
+
 // ══════ P2 拆分：以下逻辑抽离至 composables（见 unified-layer-management-refactor-plan.md）══════
 const {
     coordInputLon, coordInputLat, coordInputCRS, coordInputError,
@@ -695,6 +753,17 @@ const {
     drawPointByGeocodeAddress, startReverseGeocodePick,
 } = useGeocoding({ t, message, emit, tiandituTk });
 
+/** 导入源坐标系：预设下拉 + 自定义 EPSG 输入（自定义优先，留空则用下拉） */
+const importCrsPreset = ref('');
+const importCrsCustom = ref('');
+const basicCrsPresets = BASIC_CRS_PRESETS;
+const cgcs2000CrsPresets = listCgcs2000Presets(3);
+/** UTM 只列覆盖中国的带号（43~53），全 60 带会让下拉过长 */
+const utmCrsPresets = listUtmPresets({ zoneFrom: 43, zoneTo: 53 });
+const importCrsOverride = computed(
+    () => String(importCrsCustom.value || '').trim() || importCrsPreset.value,
+);
+
 const {
     uploadProgressView, shouldShowUploadProgress, uploadProgressPercent, uploadProgressLabel,
     triggerFileUpload, triggerFolderUpload, handleFileUpload, handleDirectoryUpload,
@@ -704,6 +773,7 @@ const {
     getGisLoader: () => gisLoader,
     getFileInputRef: () => fileInputRef.value,
     getFolderInputRef: () => folderInputRef.value,
+    getOverrideCrs: () => importCrsOverride.value,
 });
 
 const {
@@ -741,6 +811,8 @@ const {
     handleDrop: handleUploadDrop,
 } = useGisDropZone({
     onUpload: (payload) => emit('upload-data', payload),
+    // 拖到上传区与点击上传等价，源坐标系同样生效（拖到地图上则没有该下拉，保持自动识别）
+    getOverrideCrs: () => importCrsOverride.value,
 });
 // ══════ P2 拆分结束 ══════
 
@@ -1496,6 +1568,61 @@ function applyStyle() {
     font-weight: 700;
     color: var(--toc-card-title-dark);
     margin-bottom: 6px;
+}
+
+/* 源坐标系选择：预设下拉 + 自定义 EPSG。
+   下拉承载预设（含 CGCS2000 三度带 21 条），输入框用于任意 EPSG；
+   两者同时有值时以输入框为准（见 importCrsOverride）。 */
+.upload-crs {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin: 8px 0 6px;
+    padding: 0 2px;
+}
+
+.upload-crs-label {
+    flex: 0 0 auto;
+    font-size: 11px;
+    color: var(--toc-text-secondary);
+    white-space: nowrap;
+}
+
+.upload-crs-select {
+    flex: 1 1 auto;
+    min-width: 0;
+    height: 24px;
+    padding: 0 4px;
+    border: 1px solid var(--toc-border-active);
+    border-radius: 4px;
+    background: var(--toc-primary-bg);
+    color: var(--toc-text-dark);
+    font-size: 11px;
+}
+
+.upload-crs-input {
+    flex: 0 0 84px;
+    width: 84px;
+    height: 24px;
+    padding: 0 6px;
+    border: 1px solid var(--toc-border-active);
+    border-radius: 4px;
+    background: var(--toc-primary-bg);
+    color: var(--toc-text-dark);
+    font-size: 11px;
+}
+
+.upload-crs-input::placeholder {
+    color: var(--toc-text-secondary);
+}
+
+/* 触屏档：可点击目标 ≥40px（Force_command §3 移动端基线，判据为 pointer 能力而非宽度） */
+@media (pointer: coarse) {
+    .upload-crs-select,
+    .upload-crs-input {
+        height: 40px;
+        font-size: 13px;
+    }
 }
 
 .upload-tip {

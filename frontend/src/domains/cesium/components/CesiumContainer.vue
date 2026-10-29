@@ -183,6 +183,7 @@ import { destroySharedGeoDecodePool } from '../providers/terrain/GeoTerrainProvi
 import { useCesiumSceneActions } from '../composables/camera/useCesiumSceneActions';
 import { useCesiumDataImport } from '../composables/dataImport/useCesiumDataImport';
 import { createCesiumDataOpsHandlers } from '../composables/dataImport/useCesiumDataOpsHandlers';
+import { createCesiumCrsRedeclareFeature } from '../composables/dataImport/useCesiumCrsRedeclare';
 import { useCesiumToolModules } from '../composables/toolModules/useCesiumToolModules';
 import { useCesiumLayersStore } from '@cesium-domain/stores/cesiumLayers';
 import { useDrawMeasureStore } from '@cesium-domain/stores/useDrawMeasureStore';
@@ -314,6 +315,8 @@ registerEngineHandlers('cesium', {
         cesiumLayersStore.flyTo(stripCesiumPrefix(layerId));
     },
     zoomToRemoteService: ({ serviceId }) => zoomToRemoteService(serviceId),
+    // 三维「重设源坐标系」：定义在本文件下方（依赖元数据店与前缀剥离），闭包在调用时才求值
+    redeclareLayerCrs: ({ layerId, crs }) => redeclareLayerCrs({ layerId, crs }),
 });
 
 // 监听 activeBasemap 变化兜底：CesiumToolPanel 等其它入口也能触发 URL 同步
@@ -415,6 +418,32 @@ function stripCesiumPrefix(layerId) {
 /** 按 id 查 loadedDataSources 句柄记录 */
 function findImportRecord(id) {
     return (dataImport.loadedDataSources.value || []).find((item) => item.id === id) || null;
+}
+
+// ── 三维「重设源坐标系」：几何取自导入期快照，重建走导入链路（见 useCesiumCrsRedeclare）──
+const { redeclareLayerCrs: redeclareCrsCore } = createCesiumCrsRedeclareFeature({
+    getCesium,
+    getViewer,
+    message,
+    loadedDataSources: dataImport.loadedDataSources,
+    nextId: dataImport.nextId,
+});
+
+/**
+ * TOC / 属性弹窗入口：按新源坐标系重建三维图层。
+ * 重建会换掉数据源句柄，而显隐与透明度只存在元数据店（按 id 保留），新句柄的初始态
+ * 恒为「显示 / 不透明」—— 故重建后必须按旧值再下发一次，否则隐藏过的图层会重新出现。
+ * @param {{layerId: string, crs: string}} payload
+ * @returns {Promise<boolean>} 是否完成
+ */
+async function redeclareLayerCrs({ layerId, crs } = {}) {
+    const id = stripCesiumPrefix(layerId);
+    const before = (cesiumLayersStore.records || []).find((item) => item.id === id);
+    const ok = await redeclareCrsCore({ layerId: id, crs });
+    if (!ok || !before) return ok;
+    cesiumLayersStore.setVisible(id, before.visible !== false);
+    cesiumLayersStore.setOpacity(id, Number.isFinite(before.opacity) ? before.opacity : 1);
+    return ok;
 }
 
 /**
@@ -1274,7 +1303,8 @@ async function toggleReverseGeocodePick() {
 async function importUserData(data) {
     const files = Array.isArray(data?.resources) ? data.resources : [];
     if (!files.length) return false;
-    await handleDataImport({ files });
+    // 源坐标系覆盖值随载荷透传（TOC 上传区下拉），空串表示自动识别
+    await handleDataImport({ files, overrideCrs: data?.overrideCrs || '' });
     return true;
 }
 
@@ -1296,6 +1326,8 @@ defineExpose({
     toggleReverseGeocodePick,
     zoomToRemoteService,
     importUserData,
+    /** 三维「重设源坐标系」：按导入期快照把原始数值重新解释为指定 CRS（仅 GeoJSON） */
+    redeclareLayerCrs,
     /** ── 引擎感知迁移 P0/P2：绘制/测量 + 路线能力接口（HomeView 按引擎路由） ── */
     /** 交互激活：Point/LineString/Polygon/MeasureDistance/MeasureArea/Clear/UndoLastDrawing；不支持类型返回 false */
     activateCesiumInteraction: (type) => drawMeasureFeature.activateInteraction(type),

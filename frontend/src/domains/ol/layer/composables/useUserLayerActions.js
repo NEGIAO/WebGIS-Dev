@@ -1,6 +1,7 @@
 import { useMessage } from '@common/shell/useMessage';
 import { useFeatureStyleStore } from '@ol/stores/useFeatureStyleStore';
 import { getFeatureIdFromFeature } from '@common/data-protocol/featureKey';
+import { forgetSourceSnapshot } from '@common/data-import/crs/sourceSnapshot';
 
 export function useUserLayerActions({
     mapInstance,
@@ -99,6 +100,10 @@ export function useUserLayerActions({
 
         const id = normalizeLayerId(layerId);
         if (!id) return;
+
+        // 图层一旦移除，导入期留存的原始几何即失去归属：同步释放，避免 id 复用时张冠李戴。
+        // 放在此处而非各 return 前，是因为下面两条分支（有记录 / 只剩地图图层）都以「该 id 已不存在」收场。
+        forgetSourceSnapshot(id);
 
         const idx = userDataLayers.findIndex((item) => normalizeLayerId(item?.id) === id);
         if (idx < 0) {

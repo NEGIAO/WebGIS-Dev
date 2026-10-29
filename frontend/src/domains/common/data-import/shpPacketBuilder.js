@@ -85,6 +85,7 @@ export async function buildShpPacketsFromBrowserFiles(files = [], options = {}) 
             sourceName: options.sourceName || 'browser-file-list',
             entryName: `${group.stem}.shp`,
             dataProjection: projectionResolved.projection,
+            sourceCrs: projectionResolved.projection,
             needsReprojection: !['EPSG:4326', 'EPSG:3857'].includes(
                 String(projectionResolved.projection || '').toUpperCase(),
             ),
