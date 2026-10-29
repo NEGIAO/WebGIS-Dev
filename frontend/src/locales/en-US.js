@@ -641,6 +641,7 @@ export default {
             err_key_required: 'Amap credential is not configured; contact admin to configure it',
             err_tdt_key_required: 'Tianditu credential is not configured; contact admin to configure it',
             tdt_permission: 'Current Tianditu credential lacks vector-tile permission (301010); use a permitted credential or contact admin',
+            err_credential_format: 'Credential format invalid (24-64 alphanumeric chars expected); aborted. Leave blank to use the admin default',
             tiandituTk: 'Tianditu credential (optional)',
             tiandituTkPlaceholder: 'Leave blank to use admin default credential; not saved',
             amapKey: 'Amap credential (optional)',

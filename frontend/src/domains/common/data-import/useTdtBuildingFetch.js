@@ -46,6 +46,13 @@ export function useTdtBuildingFetch() {
         aborter?.abort();
     }
 
+    /**
+     * 建筑单层抓取（默认 tk 取管理端 L2 配置）。
+     * @param {{minLng:number,minLat:number,maxLng:number,maxLat:number}} bbox WGS-84 范围
+     * @param {number} zoom 抓取级别
+     * @param {string} [inputTk] 面板临时 tk（优先，不保存；面板侧已做 24~64 位字母数字闸门）
+     * @returns {Promise<object|null>} GeoJSON，取消/失败返回 null
+     */
     async function startFetch(bbox, zoom = TDT_DEFAULT_ZOOM, inputTk = '') {
         const bad = validateTdtBbox(bbox);
         if (bad) {
@@ -115,7 +122,7 @@ export function useTdtBuildingFetch() {
      * 全量矢量抓取（新增，不动老 startFetch）。
      * @param {{minLng:number,minLat:number,maxLng:number,maxLat:number}} bbox WGS-84 范围
      * @param {number} zoom 抓取级别
-     * @param {string} inputTk 用户临时 tk（优先，不保存）
+     * @param {string} [inputTk] 面板临时 tk（优先，不保存；面板侧已做 24~64 位字母数字闸门）
      * @param {string[]} layers 多选层码（缺省用 selectedLayers）
      * @returns {Promise<object|null>} { layers, stats }，取消/失败返回 null
      */

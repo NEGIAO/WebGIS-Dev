@@ -326,3 +326,7 @@ Sprint 3（穿插）：P3-1 容器二轮（O1/O2 交替）→ P2-1 bundle 分析
   - [ ] (缺陷·已记未修) **远端路径 blob 错误体未解析**：`frontend/src/api/download.js` 的响应拦截器对 `responseType: 'blob'` 的失败响应直接读 `resp.data.detail`，而 blob 场景下 `data` 是 Blob，取不到 detail → 错误信息退化为「Request failed with status code 4xx」。状态码判定（`isQuotaExceeded`）仍正确。修法：仿 `api/backend/client.js` 的 `parseBlobError`
   - [ ] (缺陷·已记未修) **两条路径返回结构不完全一致**：`backendAPI` 会解包 `{code,data}` 信封，远端路径直接返回 `response.data`。当前本机后端已无 `/api/download/*`，无实际影响；若日后恢复需对齐
   - [ ] (运维建议) **下载上游优先选国内源**：实测 2 片瓦片走 `tile.openstreetmap.org` 耗时 122s，而任务 TTL 仅 30 分钟；建议高德/天地图，避免大批量下载超时
+
+- [ ] **管理端密钥框同类自动填充风险**（2026-10-29 · V3.6.32 顺带发现，按 §2.5 只记不改）：
+  - [ ] (缺陷·已记未修) **`ApiKeysManagementPanel.vue` 的「默认 AI API Key」为 `type="password"` 且未声明 `autocomplete`**：与 V3.6.32 修复的建筑抓取凭证框属同一类问题 —— Chrome 对 password 字段忽略 autocomplete，会把本站点登录密码填入；该面板一旦「填入并保存」，密码就会写进密钥表，形成真正的 L2 污染（本次事故中数据库未被污染，属侥幸）。修法：改 `type="text"` + `-webkit-text-security` 遮蔽，或至少补 `autocomplete="new-password"` + `data-lpignore` / `data-1p-ignore` / `data-bwignore`，并在保存前加 24~64 位字母数字格式闸门。预估 0.2 人日
+  - [ ] (待确认) **游客可打开建筑抓取面板**：本次事故的放大条件 —— 低权限会话触发高权限凭据被注入并外发。是否收紧 `buildings` tab 的可见性或配额，属产品决策，未在本轮改动范围内

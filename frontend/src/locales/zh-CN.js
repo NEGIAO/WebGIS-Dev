@@ -783,6 +783,7 @@ export default {
             err_key_required: '管理端未配置高德凭证，请联系管理员补充配置',
             err_tdt_key_required: '管理端未配置天地图凭证，请联系管理员补充配置',
             tdt_permission: '当前天地图凭证缺少矢量瓦片权限（301010），请更换有权限的凭证或联系管理员',
+            err_credential_format: '临时凭证格式不符（应为 24~64 位字母数字），已中止；留空则使用管理端默认凭证',
             tiandituTk: '天地图凭证（可选）',
             tiandituTkPlaceholder: '留空使用管理端默认凭证；不会保存',
             amapKey: '高德凭证（可选）',

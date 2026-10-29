@@ -110,9 +110,10 @@ export function useAmapBuildingFetch() {
     }
 
     /**
-     * 开始抓取（key 取管理端 L2 配置的 amap_key，无需面板传入）。
+     * 开始抓取（默认 key 取管理端 L2 配置的 amap_key）。
      * @param {{minLng:number,minLat:number,maxLng:number,maxLat:number}} bbox WGS-84 范围
      * @param {number} zoom 抓取级别
+     * @param {string} [inputKey] 面板临时 key（优先，不保存；面板侧已做 24~64 位字母数字闸门）
      * @returns {Promise<object|null>} GeoJSON，取消/失败返回 null
      */
     async function startFetch(bbox, zoom = AMAP_DEFAULT_ZOOM, inputKey = '') {
@@ -122,7 +123,9 @@ export function useAmapBuildingFetch() {
             error.value = bad;
             return null;
         }
-        // 管理端 L2 密钥（API 密钥管理 → amap_key），与地质/天气等模块同通道
+        // 管理端 L2 密钥（API 密钥管理 → amap_key）为默认来源，与地质/天气等模块同通道；
+        // inputKey 仅承载面板显式输入（面板凭证框已弃用 type="password"，不再被浏览器
+        // 密码管理器自动填充，且提交前做格式闸门，见 V3.6.32 泄露修复）。
         await loadRuntimeMapTokens().catch(() => {});
         const key = String(inputKey || getRuntimeMapTokensSync().amapKey || '').trim();
         if (!key) {

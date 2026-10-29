@@ -6,6 +6,16 @@
 
 ## 版本记录
 
+### V3.6.32 (2026-10-29) — 建筑抓取临时凭证框加固（登录密码被浏览器自动填充并外发修复）
+
+> **问题**：用户在 DevTools 中看到两条请求的凭据字段里是自己**登录密码** —— `https://jsapi.amap.com/web/init?key=…` 与 `https://tile0.tianditu.gov.cn/vts?t=vt&pk=…&tk=…`。排查确认数据库侧无恙（`api_keys.amap_key` 32 位 `90…`、`tianditu_tk` 32 位 `b8…`，互不相同且非该密码），污染发生在前端：建筑抓取面板的「临时凭证」输入框使用 `type="password"`，而 Chrome 密码管理器**对 password 字段忽略 `autocomplete="off"`**，会把本站点（`webgis.negiao.cn`）保存的登录凭据自动填入。凭据库按 origin 索引、与会话身份无关，因此**游客态下被填入的仍是管理员密码**；该值再经 `inputKey || L2` 的短路优先级当作临时凭证，明文拼进两家第三方的 GET query（天地图按瓦片逐请求，0.2° 范围量级达千次）。
+> **A · 自动填充切断**：输入框由 `type="password"` 改为 `type="text"` + `-webkit-text-security: disc` 遮蔽 —— 密码管理器只识别 password 字段，改类型后彻底不再命中；同时补齐 `autocomplete="off"`、每源唯一 `name`（`map-source-credential-<source>`）、`autocorrect` / `autocapitalize` / `spellcheck` 关闭，以及 LastPass / 1Password / Bitwarden 的 `data-lpignore` / `data-1p-ignore` / `data-bwignore` 标记。Firefox 不支持该 CSS 属性，凭证退化为明文显示，属可接受降级（本就是用户自己输入的值）。
+> **B · 三源凭据分离**：原实现是**一个** `sourceCredential` ref 供腾讯 / 高德 / 天地图三个 tab 共用，切 tab 不重置 —— 即使不误填密码，天地图的 tk 也会被当作高德 key 发出去。现改为 `credentials` reactive（`tencent` / `amap` / `tianditu` 三份独立草稿）+ 带 setter 的 `computed` 代理，输入框仍只有一个，但每个源各自留存自己的值。
+> **C · 格式闸门**：提交前校验非空凭证必须是 24~64 位字母数字（高德 key 与天地图 tk 实测均为 32 位），不符即中止并提示，不再把可疑串发往第三方；留空仍走管理端 L2，`useAmapBuildingFetch` / `useTdtBuildingFetch` 的 `inputKey` / `inputTk` 覆盖能力按用户要求保留。
+> **D · 未改动的部分**：`api_keys` 表结构、`runtimeMapTokens` 缓存与轮换逻辑、两个 fetcher 的 URL 拼装均未改 —— 事故链路只在前端输入层与优先级短路这一处。新增 i18n 键 `err_credential_format`（中英各一）。
+> **验证**：ESLint 5 个改动文件 0 problems；`vite build` 通过（4412 modules / 12.67s）；`CheckStructureTree` 520/520（漏登记 0、幽灵条目 0）；`CheckConfigRegistry` 全绿（catalog 130 key）；平台红线 R1~R4 全绿（本机无 `rg`，改用 `grep -riE` 等价执行；R2 的 36 处命中全为 `xRay` 子串误报，与 V3.6.31 记录一致）。
+> **未覆盖**：`ApiKeysManagementPanel.vue` 的「默认 AI API Key」仍是 `type="password"` 且未加 `autocomplete`，同类风险已记入 `Docs/TODO/bugfix-optimization-plan.md`；天地图 tk 仍不可避免以 query 形式出现（服务端强制要求），本次只保证不再有非 tk 值流入。
+
 ### V3.6.31 (2026-10-28) — 数据导入支持任意投影坐标系（人工声明 + 判定修正 + 缺 CRS 不静默 + 导入后可重设）
 
 > **问题**：导入链路此前只能正确处理 EPSG:4326。三条断点：① 打包/3D 链路调用 `resolveDatasetProjection({ targetCrs })` 时一个入参都没传，`sourceCrs` 恒为 4326，重投影分支永不执行；② 2D 侧虽有检测，但量级判据是「x、y 落在 ±20037508 内即 Web 墨卡托」，而 4326 区间被它完全包含、高斯-克吕格的米制坐标同样落在其中 —— 于是**所有平面数据都被判成 3857**，再按墨卡托反算直接落到境外（示例：`(528700, 3402800)` → 约 4.7°E / 29.4°N）；③ 没有任何人工声明入口，文章里「不确定就问生产方」那一步在界面上无处填写。对照 mapshaper 源码（`src/crs/`、`commands/mapshaper-proj.mjs`）后进一步确认：它的核心约定是「CRS 是数据集元数据、投影是显式动作、缺 CRS 直接拒绝」，而我们的兜底过于宽松。

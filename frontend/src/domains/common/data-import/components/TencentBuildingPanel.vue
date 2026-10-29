@@ -103,12 +103,25 @@
             <div class="txb-source-desc">
                 {{ isAmap ? t('shell.buildings.sourceDescAmap') : (isTianditu ? t('shell.buildings.sourceDescTianditu') : t('shell.buildings.sourceDescTencent')) }}
             </div>
+            <!-- 临时凭证（可选）：留空即用管理端 L2 配置。
+                 刻意不用 type="password" —— Chrome 密码管理器对 password 字段忽略
+                 autocomplete="off"，会把本 origin 保存的登录密码自动填入（凭据库按 origin
+                 索引，与会话身份无关，游客态下同样会填管理员密码），该值曾以 ?key= / ?tk=
+                 明文发往第三方。改用 text + CSS 遮蔽后，密码管理器不再将其识别为凭据框。 -->
             <label class="txb-field txb-token-field">
                 <span>{{ isTianditu ? t('shell.buildings.tiandituTk') : (isAmap ? t('shell.buildings.amapKey') : t('shell.buildings.sourceCredential')) }}</span>
                 <input
                     v-model="sourceCredential"
-                    type="password"
+                    type="text"
+                    class="txb-credential-input"
+                    :name="`map-source-credential-${source}`"
                     autocomplete="off"
+                    autocorrect="off"
+                    autocapitalize="off"
+                    spellcheck="false"
+                    data-lpignore="true"
+                    data-1p-ignore="true"
+                    data-bwignore="true"
                     :placeholder="isTianditu
                         ? t('shell.buildings.tiandituTkPlaceholder')
                         : (isAmap ? t('shell.buildings.amapKeyPlaceholder') : t('shell.buildings.sourceCredentialTencentPlaceholder'))"
@@ -461,7 +474,28 @@ function layerFeatureCount(code) {
 }
 
 const form = reactive({ minLng: '', minLat: '', maxLng: '', maxLat: '' });
-const sourceCredential = ref('');
+/** 三个数据源各自的临时凭证草稿（留空 = 用管理端 L2）；分开存，避免切 tab 时把 A 源的凭证发给 B 源 */
+const credentials = reactive({ tencent: '', amap: '', tianditu: '' });
+/** 当前数据源对应的输入框绑定：显示各自的草稿，切换 tab 不串值 */
+const sourceCredential = computed({
+    get: () => credentials[source.value] || '',
+    set: (value) => {
+        credentials[source.value] = String(value ?? '');
+    },
+});
+/** 临时凭证格式闸门：仅接受 24~64 位字母数字（高德 key / 天地图 tk 实测均为 32 位） */
+const CREDENTIAL_PATTERN = /^[A-Za-z0-9]{24,64}$/;
+
+/**
+ * 校验临时凭证格式。
+ * @param {string} input 用户输入
+ * @returns {string} 空串表示通过（含留空走 L2 的情况），否则返回提示文案
+ */
+function credentialFormatError(input) {
+    const value = String(input || '').trim();
+    if (!value) return '';
+    return CREDENTIAL_PATTERN.test(value) ? '' : t('shell.buildings.err_credential_format');
+}
 const zoom = ref(TXB_DEFAULT_ZOOM);
 const complianceAccepted = ref(false);
 const complianceConfirmed = ref(false);
@@ -585,9 +619,16 @@ async function onFetch() {
         message.warning(t('shell.buildings.err_nan'));
         return;
     }
+    // 临时凭证只做「本次使用」，留空则回落到管理端 L2；格式不符时中止，绝不把可疑串发往第三方。
+    const credential = credentials[source.value].trim();
+    const credentialError = credentialFormatError(credential);
+    if (credentialError) {
+        message.warning(credentialError);
+        return;
+    }
     // 天地图走全量分层抓取（多选层码），腾讯/高德走各自单源抓取。
     if (isTianditu.value) {
-        const out = await tdb.startVectorFetch(bbox, zoom.value, sourceCredential.value.trim(), tdb.selectedLayers.value);
+        const out = await tdb.startVectorFetch(bbox, zoom.value, credential, tdb.selectedLayers.value);
         if (!out) return;
         const files = tdb.buildVectorImportFiles();
         if (!files.length) {
@@ -598,8 +639,10 @@ async function onFetch() {
         message.success(t('shell.buildings.vectorImported', { layers: files.length, count: result.value?.featureCount || 0 }));
         return;
     }
-    // 用户临时输入的 tk 优先，留空时由 composable 使用管理端 L2 配置。
-    const fc = await startFetch(bbox, zoom.value, sourceCredential.value.trim());
+    // 高德可带临时 key，留空由 composable 回落到管理端 L2；腾讯白模当前无需凭证，不传第三参。
+    const fc = isAmap.value
+        ? await amb.startFetch(bbox, zoom.value, credential)
+        : await startFetch(bbox, zoom.value);
     if (!fc) return;
     if (!fc.features.length) {
         message.warning(t('shell.buildings.empty'));
@@ -817,6 +860,14 @@ async function onFetch() {
 .txb-field input:focus,
 .txb-zoom select:focus {
     border-color: var(--brand-primary);
+}
+
+/* 凭证框遮蔽：用 text + CSS 文本遮蔽替代 type="password"。
+   password 类型会被浏览器密码管理器强行填充（autocomplete="off" 对其无效），
+   改为 text 后不再被识别为登录凭据框；Firefox 不支持该属性，退化为明文显示。 */
+.txb-credential-input {
+    -webkit-text-security: disc;
+    letter-spacing: 1px;
 }
 
 .txb-row {
