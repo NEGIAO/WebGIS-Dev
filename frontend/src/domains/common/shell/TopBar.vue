@@ -551,7 +551,7 @@ function fallbackCopyViaExecCommand(text) {
 
     textarea.select();
 
-    let succeeded = false;
+    let succeeded;
     try {
         succeeded = document.execCommand('copy');
     } catch (_e) {
@@ -1154,6 +1154,9 @@ onBeforeUnmount(() => {
 
     .btn-icon {
         font-size: 17px;
+    }
+    .logo-link {
+        gap: 6px;
     }
 }
 </style>

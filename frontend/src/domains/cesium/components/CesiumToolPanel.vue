@@ -55,8 +55,14 @@
                         :title="compactMode ? t('cesium.expandMode') : t('cesium.compactMode')"
                         @click="compactMode = !compactMode"
                     >
-                        <Settings
-                            :size="20"
+                        <Maximize2
+                            v-if="compactMode"
+                            :size="18"
+                            stroke-width="2"
+                        />
+                        <Minimize2
+                            v-else
+                            :size="18"
                             stroke-width="2"
                         />
                     </button>
@@ -863,6 +869,8 @@ import {
     Layers,
     Link,
     LocateFixed,
+    Maximize2,
+    Minimize2,
     MapPin,
     Mountain,
     Navigation,
@@ -876,7 +884,6 @@ import {
     Route,
     ScanEye,
     Send,
-    Settings,
     SlidersHorizontal,
     Square,
     Sun,
@@ -933,7 +940,7 @@ const UI_STATE_VERSION = 3;
 const storedUiState = readStoredUiState();
 const shouldRestoreExpansionState = storedUiState.uiStateVersion === UI_STATE_VERSION;
 const activeTab = ref(storedUiState.activeTab || 'scene');
-const compactMode = ref(!!storedUiState.compactMode);
+const compactMode = ref(storedUiState.compactMode !== false);
 const expandedLayerSectionIds = ref(
     new Set(shouldRestoreExpansionState ? storedUiState.expandedLayerSectionIds || [] : []),
 );
@@ -1278,7 +1285,9 @@ function handleFileSelect(event) {
     top: 12px;
     left: 12px;
     z-index: var(--z-popover);
-    max-width: min(390px, calc(100% - 24px));
+    /* 与 .cesium-tool-panel 的 520px 展开宽度对齐：外壳若仍按 390px 收口，
+       面板会溢出外壳盒子（当前无 overflow:hidden 才没被裁掉，属侥幸） */
+    max-width: min(520px, calc(100% - 24px));
     color: var(--ctp-text);
     pointer-events: none;
 }
@@ -1335,7 +1344,7 @@ function handleFileSelect(event) {
 
 /* 主面板容器 */
 .cesium-tool-panel {
-    width: min(380px, calc(100vw - 24px));
+    width: min(520px, calc(100vw - 24px));
     max-height: calc(100vh - 116px);
     display: flex;
     flex-direction: column;
@@ -1345,6 +1354,10 @@ function handleFileSelect(event) {
     background: rgba(var(--ctp-surface-rgb), 0.92);
     box-shadow: 0 20px 48px rgba(var(--ctp-drop-deep-rgb), 0.42);
     backdrop-filter: blur(16px);
+}
+
+.cesium-tool-panel.compact {
+    width: min(380px, calc(100vw - 24px));
 }
 
 .cesium-tool-shell.is-embedded .cesium-tool-panel {
@@ -1381,9 +1394,16 @@ function handleFileSelect(event) {
     align-items: center;
     justify-content: center;
     border-radius: 8px;
-    border: 1px solid rgba(var(--ctp-green-alt-rgb), 0.32);
-    background: rgba(var(--ctp-active-deep-rgb), 0.62);
-    color: var(--ctp-mint-mark);
+    border: 1px solid rgba(var(--brand-primary-rgb), 0.35);
+    background: linear-gradient(
+        135deg,
+        rgba(var(--brand-primary-rgb), 0.18),
+        rgba(var(--brand-accent-rgb), 0.08)
+    );
+    color: var(--brand-primary-dark);
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.8),
+        0 2px 8px rgba(var(--brand-primary-rgb), 0.12);
 }
 
 .panel-copy {
@@ -1422,14 +1442,14 @@ function handleFileSelect(event) {
     justify-content: center;
     border: 1px solid rgba(var(--ctp-ice-rgb), 0.24);
     border-radius: 7px;
-    background: rgba(var(--ctp-white-rgb), 0.07);
+    background: rgba(var(--brand-primary-rgb), 0.06);
     color: var(--ctp-icon);
     cursor: pointer;
 }
 
 .icon-btn:hover {
-    border-color: rgba(var(--ctp-ice-rgb), 0.48);
-    background: rgba(var(--ctp-white-rgb), 0.13);
+    border-color: rgba(var(--brand-primary-rgb), 0.5);
+    background: rgba(var(--brand-primary-rgb), 0.12);
 }
 
 /* 顶部 Tab 导航栏 */
@@ -1458,14 +1478,14 @@ function handleFileSelect(event) {
 }
 
 .tab-btn:hover {
-    background: rgba(var(--ctp-white-rgb), 0.08);
-    color: var(--ctp-tab-hover);
+    background: rgba(var(--brand-primary-rgb), 0.1);
+    color: var(--brand-primary-dark);
 }
 
 .tab-btn.active {
-    border-color: rgba(var(--ctp-green-alt-rgb), 0.38);
-    background: rgba(var(--ctp-active-tab-rgb), 0.6);
-    color: var(--ctp-tab-active);
+    border-color: transparent;
+    background: var(--brand-gradient);
+    color: #fff;
 }
 
 /* 面板主体滚动区域 */
@@ -1480,7 +1500,7 @@ function handleFileSelect(event) {
 }
 
 .panel-scroll::-webkit-scrollbar-track {
-    background: rgba(var(--ctp-white-rgb), 0.02);
+    background: rgba(var(--brand-primary-rgb), 0.05);
 }
 
 .panel-scroll::-webkit-scrollbar-thumb {
@@ -1492,6 +1512,7 @@ function handleFileSelect(event) {
     display: grid;
     gap: 12px;
     padding: 12px;
+    min-width: 0;
 }
 
 
@@ -1511,7 +1532,7 @@ function handleFileSelect(event) {
     border: 1px solid rgba(var(--ctp-ice-rgb), 0.16);
     border-radius: 8px;
     padding: 9px 10px;
-    background: rgba(var(--ctp-white-rgb), 0.06);
+    background: rgba(var(--brand-primary-rgb), 0.05);
 }
 
 .overview-label {
@@ -1527,11 +1548,39 @@ function handleFileSelect(event) {
     white-space: nowrap;
 }
 
-.quick-actions,
+/* 场景 Tab 快捷操作：三个按钮强制单行（回初始视角 / 飞越珠峰 / 加载3D） */
+.quick-actions {
+    display: flex;
+    flex-wrap: nowrap;
+    gap: 7px;
+}
+
 .module-actions {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(112px, 1fr));
     gap: 7px;
+}
+
+/* 子项等宽填满单行，过长标签自动省略，避免换行 */
+.quick-actions > .tool-action,
+.quick-actions > .scene-sample-dropdown {
+    flex: 1 1 0;
+    min-width: 0;
+}
+
+.quick-actions .tool-action {
+    padding: 6px 6px;
+}
+
+.quick-actions .tool-action > span:not(.scene-sample-chevron) {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.scene-sample-dropdown .tool-action {
+    width: 100%;
 }
 
 .empty-state {
@@ -1555,7 +1604,7 @@ function handleFileSelect(event) {
     border: 1px solid rgba(var(--ctp-ice-rgb), 0.18);
     border-radius: 7px;
     padding: 6px 10px;
-    background: rgba(var(--ctp-white-rgb), 0.065);
+    background: rgba(var(--brand-primary-rgb), 0.05);
     color: var(--ctp-text);
     cursor: pointer;
     font-size: 12px;
@@ -1563,15 +1612,16 @@ function handleFileSelect(event) {
 }
 
 .tool-action:hover {
-    border-color: rgba(var(--ctp-ice-rgb), 0.42);
-    background: rgba(var(--ctp-white-rgb), 0.12);
+    border-color: rgba(var(--brand-primary-rgb), 0.4);
+    background: rgba(var(--brand-primary-rgb), 0.1);
+    color: var(--brand-primary-dark);
 }
 
 .tool-action.mini {
     min-height: 28px;
     padding: 4px 8px;
     font-size: 11px;
-    background: rgba(var(--ctp-white-rgb), 0.04);
+    background: rgba(var(--brand-primary-rgb), 0.05);
 }
 
 
@@ -1582,23 +1632,33 @@ function handleFileSelect(event) {
     overflow: hidden;
     display: flex;
     flex-direction: column;
-    border: 1px solid rgba(var(--ctp-ice-rgb), 0.16);
+    border: 1px solid rgba(var(--brand-primary-rgb), 0.14);
     border-radius: 8px;
-    background: rgba(var(--ctp-white-rgb), 0.035);
+    background: #fff;
     transition: all 0.2s ease;
 }
 
+/* 与 .module-card 统一：点击展开后菜单级高亮 */
 .option-group.expanded {
-    border-color: rgba(var(--ctp-green-alt-rgb), 0.32);
-    background: rgba(var(--ctp-expand-rgb), 0.35);
+    border-color: rgba(var(--brand-primary-rgb), 0.45);
+    background: rgba(var(--brand-primary-rgb), 0.06);
+    box-shadow: 0 2px 14px rgba(var(--brand-primary-rgb), 0.12);
+}
+
+.option-group.expanded .section-head {
+    color: var(--brand-primary-dark);
 }
 
 .section-head {
     display: flex;
     align-items: center;
-    color: rgba(var(--ctp-mint-text-rgb), 0.92);
+    color: var(--text-primary);
     font-size: 12px;
     font-weight: 700;
+}
+
+.section-main svg {
+    color: var(--brand-primary);
 }
 
 .section-toggle {
@@ -1623,7 +1683,7 @@ function handleFileSelect(event) {
     display: inline-flex;
     align-items: center;
     gap: 6px;
-    color: rgba(var(--ctp-ice-text-rgb), 0.55);
+    color: var(--text-secondary);
     font-size: 11px;
 }
 
@@ -1639,9 +1699,10 @@ function handleFileSelect(event) {
     display: flex;
     flex-direction: column;
     gap: 8px;
-    padding: 8px 10px 10px;
-    border-top: 1px solid rgba(var(--ctp-ice-rgb), 0.1);
-    background: rgba(var(--ctp-shadow-rgb), 0.15);
+    padding: 8px 10px 10px 14px;
+    border-top: 1px solid rgba(var(--brand-primary-rgb), 0.16);
+    border-left: 2px solid rgba(var(--brand-primary-rgb), 0.22);
+    background: rgba(var(--brand-primary-rgb), 0.045);
 }
 
 .option-grid {
@@ -1657,11 +1718,11 @@ function handleFileSelect(event) {
     align-items: center;
     justify-content: space-between;
     gap: 6px;
-    border: 1px solid rgba(var(--ctp-ice-rgb), 0.15);
+    border: 1px solid rgba(var(--brand-primary-rgb), 0.14);
     border-radius: 6px;
     padding: 0 10px;
-    background: rgba(var(--ctp-white-rgb), 0.04);
-    color: rgba(var(--ctp-ice-text-rgb), 0.8);
+    background: #fff;
+    color: var(--text-primary);
     cursor: pointer;
     font-size: 11px;
     font-weight: 600;
@@ -1669,15 +1730,16 @@ function handleFileSelect(event) {
 }
 
 .option-card:hover:not(:disabled) {
-    border-color: rgba(var(--ctp-ice-rgb), 0.35);
-    background: rgba(var(--ctp-white-rgb), 0.08);
-    color: var(--ctp-white-solid);
+    border-color: rgba(var(--brand-primary-rgb), 0.4);
+    background: rgba(var(--brand-primary-rgb), 0.06);
+    color: var(--brand-primary-dark);
 }
 
 .option-card.active {
-    border-color: rgba(var(--ctp-green-alt-rgb), 0.55);
-    background: rgba(var(--ctp-active-rgb), 0.55);
-    color: var(--ctp-green);
+    border-color: var(--brand-primary);
+    background: var(--brand-gradient);
+    color: #fff;
+    box-shadow: 0 2px 8px rgba(var(--brand-primary-dark-rgb), 0.28);
 }
 
 .option-card-label {
@@ -1693,12 +1755,16 @@ function handleFileSelect(event) {
 }
 
 .option-card.active .preset-index {
-    color: #6ee7b7;
+    color: #ffffff;
 }
 
 .option-card-check {
     flex: 0 0 auto;
     color: var(--ctp-green);
+}
+
+.option-card.active .option-card-check {
+    color: #fff;
 }
 
 .custom-basemap-editor {
@@ -1707,7 +1773,7 @@ function handleFileSelect(event) {
     border: 1px solid rgba(var(--ctp-ice-rgb), 0.14);
     border-radius: 7px;
     padding: 8px;
-    background: rgba(var(--ctp-white-rgb), 0.045);
+    background: rgba(var(--brand-primary-rgb), 0.05);
 }
 
 .custom-basemap-input-row {
@@ -1733,10 +1799,10 @@ function handleFileSelect(event) {
     display: inline-flex;
     align-items: center;
     gap: 4px;
-    border: 1px solid rgba(var(--ctp-green-alt-rgb), 0.42);
+    border: 1px solid transparent;
     border-radius: 6px;
-    background: rgba(var(--ctp-submit-rgb), 0.76);
-    color: var(--ctp-submit-text);
+    background: var(--brand-gradient);
+    color: #fff;
     cursor: pointer;
     font-size: 11px;
     font-weight: 700;
@@ -1772,11 +1838,11 @@ function handleFileSelect(event) {
     padding: 0 6px;
     border: 1px solid rgba(var(--ctp-ice-rgb), 0.2);
     border-radius: 6px;
-    background: rgba(var(--ctp-white-rgb), 0.06);
+    background: rgba(var(--brand-primary-rgb), 0.05);
     color: inherit;
     font-size: 11px;
     outline: none;
-    color-scheme: dark;
+    color-scheme: light;
 }
 
 .wms-layer-select:focus {
@@ -1790,7 +1856,7 @@ function handleFileSelect(event) {
     border: 1px solid rgba(var(--ctp-ice-rgb), 0.14);
     border-radius: 7px;
     padding: 10px;
-    background: rgba(var(--ctp-white-rgb), 0.045);
+    background: rgba(var(--brand-primary-rgb), 0.05);
 }
 
 .remote-service-header {
@@ -1820,7 +1886,7 @@ function handleFileSelect(event) {
     font-size: 11px;
     cursor: pointer;
     flex: 1;
-    color-scheme: dark;
+    color-scheme: light;
 }
 
 /* ===== 下拉 option 弹出层（wms-layer-select / remote-service-type-select 共用） =====
@@ -1895,10 +1961,10 @@ function handleFileSelect(event) {
     display: inline-flex;
     align-items: center;
     gap: 4px;
-    border: 1px solid rgba(var(--ctp-green-alt-rgb), 0.42);
+    border: 1px solid transparent;
     border-radius: 6px;
-    background: rgba(var(--ctp-submit-rgb), 0.76);
-    color: var(--ctp-submit-text);
+    background: var(--brand-gradient);
+    color: #fff;
     cursor: pointer;
     font-size: 11px;
     font-weight: 700;
@@ -1923,21 +1989,22 @@ function handleFileSelect(event) {
 }
 
 .overlay-card {
-    border: 1px solid rgba(var(--ctp-ice-rgb), 0.14);
+    border: 1px solid rgba(var(--brand-primary-rgb), 0.14);
     border-radius: 7px;
-    background: rgba(var(--ctp-white-rgb), 0.035);
+    background: #fff;
     overflow: hidden;
     transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .overlay-card:hover {
-    border-color: rgba(var(--ctp-ice-rgb), 0.3);
-    background: rgba(var(--ctp-white-rgb), 0.06);
+    border-color: rgba(var(--brand-primary-rgb), 0.32);
+    background: rgba(var(--brand-primary-rgb), 0.04);
 }
 
 .overlay-card.active {
-    border-color: rgba(var(--ctp-green-alt-rgb), 0.35);
-    background: rgba(var(--ctp-expand-card-rgb), 0.35);
+    border-color: rgba(var(--brand-primary-rgb), 0.4);
+    background: rgba(var(--brand-primary-rgb), 0.06);
+    box-shadow: inset 3px 0 0 var(--brand-primary);
 }
 
 .overlay-card-header {
@@ -1961,7 +2028,7 @@ function handleFileSelect(event) {
     width: 6px;
     height: 6px;
     border-radius: 50%;
-    background: rgba(var(--ctp-white-rgb), 0.25);
+    background: rgba(15, 23, 42, 0.18);
     flex-shrink: 0;
     transition: all 0.2s ease;
 }
@@ -1979,7 +2046,7 @@ function handleFileSelect(event) {
 }
 
 .overlay-card-title {
-    color: rgba(var(--ctp-mint-text-rgb), 0.92);
+    color: var(--text-primary);
     font-size: 12px;
     font-weight: 700;
     overflow: hidden;
@@ -1988,7 +2055,7 @@ function handleFileSelect(event) {
 }
 
 .overlay-card-desc {
-    color: rgba(var(--ctp-ice-text-rgb), 0.48);
+    color: var(--text-secondary);
     font-size: 10px;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -2010,7 +2077,7 @@ function handleFileSelect(event) {
     height: 24px;
     border: none;
     border-radius: 5px;
-    background: rgba(var(--ctp-white-rgb), 0.05);
+    background: rgba(var(--brand-primary-rgb), 0.05);
     color: rgba(var(--ctp-ice-text-rgb), 0.6);
     cursor: pointer;
     transition: all 0.15s ease;
@@ -2061,7 +2128,7 @@ function handleFileSelect(event) {
 .overlay-card-controls {
     padding: 6px 10px 8px 22px;
     border-top: 1px solid rgba(var(--ctp-ice-rgb), 0.08);
-    background: rgba(var(--ctp-shadow-rgb), 0.15);
+    background: rgba(var(--brand-primary-rgb), 0.05);
 }
 
 .overlay-control-row {
@@ -2087,7 +2154,7 @@ function handleFileSelect(event) {
     height: 3px;
     -webkit-appearance: none;
     appearance: none;
-    background: rgba(var(--ctp-white-rgb), 0.15);
+    background: rgba(var(--brand-primary-rgb), 0.05);
     border-radius: 2px;
     outline: none;
 }
@@ -2124,7 +2191,7 @@ function handleFileSelect(event) {
     position: relative;
     border: 1px dashed rgba(var(--ctp-ice-rgb), 0.3);
     border-radius: 8px;
-    background: rgba(var(--ctp-white-rgb), 0.02);
+    background: rgba(var(--brand-primary-rgb), 0.05);
     cursor: pointer;
     transition: all 0.2s ease;
 }
@@ -2329,234 +2396,6 @@ function handleFileSelect(event) {
 }
 
 
-/* ==========================================================================
-   1. 基础容器与外层 Shell（关键：全链路高度约束与 min-height: 0）
-   ========================================================================== */
-.cesium-tool-shell {
-    position: absolute;
-    top: 12px;
-    left: 12px;
-    z-index: var(--z-popover);
-    max-width: min(390px, calc(100% - 24px));
-    color: var(--ctp-text);
-    pointer-events: none;
-}
-
-.cesium-tool-shell.is-embedded {
-    position: relative;
-    inset: auto;
-    z-index: auto;
-    width: 100%;
-    max-width: none;
-    color: var(--text-primary);
-    pointer-events: auto;
-}
-
-.tool-launcher,
-.cesium-tool-panel {
-    pointer-events: auto;
-}
-
-.tool-launcher {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    min-height: 38px;
-    border: 1px solid rgba(var(--ctp-ice-rgb), 0.42);
-    border-radius: 8px;
-    padding: 0 12px;
-    background: rgba(var(--ctp-surface-rgb), 0.88);
-    color: var(--ctp-text-launcher);
-    box-shadow: 0 14px 34px rgba(var(--ctp-drop-rgb), 0.34);
-    backdrop-filter: blur(14px);
-    cursor: pointer;
-    font-size: 13px;
-    font-weight: 700;
-}
-
-.tool-launcher:hover {
-    border-color: rgba(var(--ctp-cyan-soft-rgb), 0.72);
-    background: rgba(var(--ctp-surface-hover-rgb), 0.94);
-}
-
-.launcher-count {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    min-width: 18px;
-    height: 18px;
-    border-radius: 999px;
-    background: var(--ctp-green);
-    color: var(--ctp-ink);
-    font-size: 11px;
-}
-
-/* 主面板容器：确定严格的纵向 Flex 布局 */
-.cesium-tool-panel {
-    width: min(380px, calc(100vw - 24px));
-    /* 关键 1: 严格限制面板整体最大高度，留出上下边距 */
-    /* max-height: calc(100vh - 100px);  */
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
-    border: 1px solid rgba(var(--ctp-ice-rgb), 0.28);
-    border-radius: 10px;
-    background: rgba(var(--ctp-surface-rgb), 0.92);
-    box-shadow: 0 20px 48px rgba(var(--ctp-drop-deep-rgb), 0.42);
-    backdrop-filter: blur(16px);
-}
-
-.cesium-tool-shell.is-embedded .cesium-tool-panel {
-    width: 100%;
-    max-height: none;
-    border-color: rgba(var(--ctp-embed-border-rgb), 0.18);
-    background: var(--ctp-white-solid);
-    box-shadow: none;
-    color: var(--text-primary);
-}
-
-/* 面板头部 Header */
-.panel-header {
-    flex-shrink: 0; /* 关键 2: 头部固定不缩放 */
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 12px;
-    padding: 12px 14px;
-    border-bottom: 1px solid rgba(var(--ctp-ice-rgb), 0.16);
-}
-
-.panel-title-block {
-    min-width: 0;
-    display: flex;
-    align-items: center;
-    gap: 10px;
-}
-
-.panel-mark {
-    width: 34px;
-    height: 34px;
-    flex: 0 0 auto;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    border-radius: 8px;
-    border: 1px solid rgba(var(--ctp-green-alt-rgb), 0.32);
-    background: rgba(var(--ctp-active-deep-rgb), 0.62);
-    color: var(--ctp-mint-mark);
-}
-
-.panel-copy {
-    min-width: 0;
-    display: grid;
-    gap: 2px;
-}
-
-.panel-title {
-    color: var(--ctp-title);
-    font-size: 14px;
-    font-weight: 800;
-    line-height: 1.2;
-}
-
-.panel-subtitle {
-    max-width: 210px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    color: rgba(var(--ctp-ice-text-rgb), 0.66);
-    font-size: 11px;
-}
-
-.panel-actions {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-}
-
-.icon-btn {
-    width: 30px;
-    height: 30px;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    border: 1px solid rgba(var(--ctp-ice-rgb), 0.24);
-    border-radius: 7px;
-    background: rgba(var(--ctp-white-rgb), 0.07);
-    color: var(--ctp-icon);
-    cursor: pointer;
-}
-
-.icon-btn:hover {
-    border-color: rgba(var(--ctp-ice-rgb), 0.48);
-    background: rgba(var(--ctp-white-rgb), 0.13);
-}
-
-/* 顶部 Tab 导航栏 */
-.panel-tabs {
-    flex-shrink: 0; /* 关键 3: Tab 栏固定不缩放 */
-    display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    gap: 4px;
-    padding: 6px 8px;
-    border-bottom: 1px solid rgba(var(--ctp-ice-rgb), 0.14);
-}
-
-.tab-btn {
-    min-width: 0;
-    height: 32px;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: 6px;
-    border: 1px solid transparent;
-    border-radius: 7px;
-    background: transparent;
-    color: rgba(var(--ctp-ice-soft-rgb), 0.72);
-    cursor: pointer;
-    font-size: 12px;
-    font-weight: 700;
-}
-
-.tab-btn:hover {
-    background: rgba(var(--ctp-white-rgb), 0.08);
-    color: var(--ctp-tab-hover);
-}
-
-.tab-btn.active {
-    border-color: rgba(var(--ctp-green-alt-rgb), 0.38);
-    background: rgba(var(--ctp-active-tab-rgb), 0.6);
-    color: var(--ctp-tab-active);
-}
-
-/* 主面板滚动区域（Tab 内容根容器） */
-.panel-scroll {
-    flex: 1;           /* 自动占据剩余全部空间 */
-    min-height: 0;     /* 关键 4: 允许Flex子项目尺寸小于内容本身，从而触发滚动 */
-    overflow-y: auto;  /* 开启纵向滚动条 */
-    scrollbar-gutter: stable;
-}
-
-.panel-scroll::-webkit-scrollbar {
-    width: 5px;
-}
-
-.panel-scroll::-webkit-scrollbar-track {
-    background: rgba(var(--ctp-white-rgb), 0.02);
-}
-
-.panel-scroll::-webkit-scrollbar-thumb {
-    background: rgba(var(--ctp-ice-rgb), 0.2);
-    border-radius: 999px;
-}
-
-.panel-page {
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-    padding: 12px;
-    min-height: 0;
-}
 
 
 /* ==========================================================================
@@ -2567,6 +2406,8 @@ function handleFileSelect(event) {
     flex-direction: column;
     gap: 10px;
     min-height: 0;
+    min-width: 0;
+    width: 100%;
 }
 
 /* 模块卡片根容器 */
@@ -2574,18 +2415,20 @@ function handleFileSelect(event) {
     position: relative;
     display: flex;
     flex-direction: column;
-    border: 1px solid rgba(var(--ctp-ice-rgb), 0.12);
+    min-width: 0;
+    width: 100%;
+    border: 1px solid rgba(var(--brand-primary-rgb), 0.14);
     border-radius: 9px;
-    background: linear-gradient(180deg, rgba(var(--ctp-white-rgb), 0.04) 0%, rgba(var(--ctp-white-rgb), 0.01) 100%);
-    box-shadow: 0 2px 8px rgba(var(--ctp-shadow-rgb), 0.2);
+    background: #fff;
+    box-shadow: 0 1px 2px rgba(20, 45, 25, 0.04);
     overflow: hidden;
     transition: border-color 0.2s cubic-bezier(0.16, 1, 0.3, 1),
                 background 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .module-card:hover {
-    border-color: rgba(var(--ctp-ice-rgb), 0.32);
-    background: rgba(var(--ctp-white-rgb), 0.06);
+    border-color: rgba(var(--brand-primary-rgb), 0.32);
+    background: rgba(var(--brand-primary-rgb), 0.03);
 }
 
 /* 激活运行态侧边发光高亮条 */
@@ -2596,20 +2439,39 @@ function handleFileSelect(event) {
     left: 0;
     bottom: 0;
     width: 3px;
-    background: var(--ctp-green);
-    box-shadow: 0 0 10px rgba(var(--ctp-green-rgb), 0.8);
+    background: var(--brand-primary);
+    box-shadow: 0 0 10px rgba(var(--brand-primary-rgb), 0.8);
     z-index: 2;
 }
 
 .module-card.expanded {
-    border-color: rgba(var(--ctp-green-alt-rgb), 0.38);
-    background: rgba(var(--ctp-expand-module-rgb), 0.35);
+    border-color: rgba(var(--brand-primary-rgb), 0.45);
+    background: rgba(var(--brand-primary-rgb), 0.07);
+    box-shadow: 0 2px 14px rgba(var(--brand-primary-rgb), 0.12);
+}
+
+/* 点击展开后：页头图标与标题同步点亮，明确「当前高亮」 */
+.module-card.expanded .module-card-icon {
+    border-color: rgba(var(--brand-primary-rgb), 0.4);
+    background: rgba(var(--brand-primary-rgb), 0.18);
+    color: var(--brand-primary-dark);
+}
+
+.module-card.expanded .module-card-title {
+    color: var(--brand-primary-dark);
+}
+
+.module-card.expanded .module-expand-btn {
+    color: var(--brand-primary-dark);
 }
 
 /* Header 头部 */
 .module-card-header {
     flex-shrink: 0; /* 标题固定，不受展开内容挤压 */
+    min-width: 0;
     width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -2639,9 +2501,9 @@ function handleFileSelect(event) {
     align-items: center;
     justify-content: center;
     border-radius: 7px;
-    border: 1px solid rgba(var(--ctp-ice-rgb), 0.18);
-    background: rgba(var(--ctp-chip-bg-rgb), 0.75);
-    color: var(--ctp-green);
+    border: 1px solid rgba(var(--brand-primary-rgb), 0.2);
+    background: rgba(var(--brand-primary-rgb), 0.1);
+    color: var(--brand-primary);
 }
 
 .module-card-info {
@@ -2649,16 +2511,22 @@ function handleFileSelect(event) {
     flex-direction: column;
     gap: 2px;
     min-width: 0;
+    flex: 1;
+    overflow: hidden;
 }
 
 .module-card-title-row {
     display: flex;
     align-items: center;
     gap: 8px;
+    min-width: 0;
+    width: 100%;
 }
 
 .module-card-title {
-    color: var(--ctp-title);
+    flex: 1;
+    min-width: 0;
+    color: var(--text-primary);
     font-size: 13px;
     font-weight: 700;
     overflow: hidden;
@@ -2667,7 +2535,7 @@ function handleFileSelect(event) {
 }
 
 .module-card-desc {
-    color: rgba(var(--ctp-ice-text-rgb), 0.5);
+    color: var(--text-secondary);
     font-size: 11px;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -2676,15 +2544,16 @@ function handleFileSelect(event) {
 
 .module-card-badge {
     display: inline-flex;
+    flex-shrink: 0;
     align-items: center;
     gap: 5px;
     padding: 2px 7px;
     border-radius: 999px;
     font-size: 10px;
     font-weight: 600;
-    background: rgba(var(--ctp-white-rgb), 0.06);
-    color: rgba(var(--ctp-ice-text-rgb), 0.6);
-    border: 1px solid rgba(var(--ctp-white-rgb), 0.08);
+    background: #fff;
+    color: var(--text-secondary);
+    border: 1px solid var(--border-light);
 }
 
 .module-card-badge .badge-dot {
@@ -2696,16 +2565,17 @@ function handleFileSelect(event) {
 
 .module-card-badge.success,
 .module-card-badge.active {
-    border-color: rgba(var(--ctp-green-rgb), 0.35);
-    background: rgba(var(--ctp-green-rgb), 0.12);
-    color: var(--ctp-green);
+    border-color: rgba(var(--brand-primary-rgb), 0.35);
+    background: rgba(var(--brand-primary-rgb), 0.12);
+    color: var(--brand-primary-dark);
 }
 
 .module-expand-btn {
     display: inline-flex;
+    flex-shrink: 0;
     align-items: center;
     justify-content: center;
-    color: rgba(var(--ctp-ice-text-rgb), 0.4);
+    color: var(--text-secondary);
 }
 
 .chevron-icon {
@@ -2718,26 +2588,16 @@ function handleFileSelect(event) {
 
 /* 核心优化：展开内容区 Body（独立局部滚动保护） */
 .module-card-body {
-    padding: 10px 12px 12px;
-    border-top: 1px solid rgba(var(--ctp-ice-rgb), 0.1);
-    background: rgba(var(--ctp-shadow-rgb), 0.28);
+    padding: 10px 12px 12px 14px;
+    border-top: 1px solid rgba(var(--brand-primary-rgb), 0.16);
+    border-left: 2px solid rgba(var(--brand-primary-rgb), 0.22); /* 子菜单左导轨：强化层级 */
+    background: rgba(var(--brand-primary-rgb), 0.045); /* 子菜单微微高亮 */
     display: flex;
     flex-direction: column;
     gap: 10px;
-    
-    /* 解决溢出与撑爆的核心设置： */
-    max-height: 360px;   /* 约束单卡片最大高度，超出自动卡片内滚动，不至于顶爆整个面板 */
-    overflow-y: auto;   /* 启用纵向局部滚动条 */
-    scrollbar-width: thin; /* 兼容 Firefox 瘦滚动条 */
-}
 
-/* 局部滚动条美化 */
-.module-card-body::-webkit-scrollbar {
-    width: 4px;
-}
-.module-card-body::-webkit-scrollbar-thumb {
-    background: rgba(var(--ctp-ice-rgb), 0.25);
-    border-radius: 4px;
+    /* 不限制高度、不启用卡片内滚动：渲染参数一次性全部渲染，
+       由外层 .panel-scroll 统一控制一次拖动，避免多重滚动互相干扰 */
 }
 
 /* 模块操作按钮网格 */
@@ -2755,32 +2615,32 @@ function handleFileSelect(event) {
     align-items: center;
     justify-content: center;
     gap: 5px;
-    border: 1px solid rgba(var(--ctp-ice-rgb), 0.16);
+    border: 1px solid rgba(var(--brand-primary-rgb), 0.16);
     border-radius: 6px;
-    background: rgba(var(--ctp-white-rgb), 0.05);
-    color: rgba(var(--ctp-mint-text-rgb), 0.85);
+    background: #fff;
+    color: var(--text-primary);
     cursor: pointer;
     font-size: 11px;
     font-weight: 600;
 }
 
 .module-action-btn:hover:not(:disabled) {
-    border-color: rgba(var(--ctp-ice-rgb), 0.45);
-    background: rgba(var(--ctp-white-rgb), 0.12);
-    color: var(--ctp-white-solid);
+    border-color: rgba(var(--brand-primary-rgb), 0.45);
+    background: rgba(var(--brand-primary-rgb), 0.08);
+    color: var(--brand-primary-dark);
 }
 
 .module-action-btn.active {
-    border-color: rgba(var(--ctp-green-alt-rgb), 0.5);
-    background: rgba(var(--ctp-active-rgb), 0.6);
-    color: var(--ctp-green);
+    border-color: transparent;
+    background: var(--brand-gradient);
+    color: #fff;
 }
 
 /* LilGuiControls 嵌入面板容器 */
 .module-controls-wrapper {
     border-radius: 6px;
-    background: rgba(var(--ctp-shadow-rgb), 0.2);
-    border: 1px solid rgba(var(--ctp-ice-rgb), 0.08);
+    background: #fff;
+    border: 1px solid rgba(var(--brand-primary-rgb), 0.12);
     padding: 6px;
     width: 100%;
     overflow-x: hidden; /* 防横向溢出 */

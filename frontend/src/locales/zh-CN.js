@@ -1232,7 +1232,7 @@ export default {
         sampleI3s: '美国摄影测量数据',
         sampleLod: '美国Dragon 3D Tiles',
         sampleGxu: '广西大学校区 GLB',
-        load3DModel: '加载 3D 模型',
+        load3DModel: '加载3D',
         // 远程 3D 服务加载（V3.4.x 数据 Tab 新卡片）
         remoteService: '远程 3D 服务',
         remoteServiceHint: '支持 Cesium Ion、ArcGIS I3S、3D Tiles、GLB/GLTF 直链',
@@ -1257,6 +1257,13 @@ export default {
         noCoordinates: '该图层没有可导出或复制的坐标',
         coordinatesCopied: '已复制 {count} 个图形坐标',
         copyCoordinatesFailed: '复制失败，请改用右键「导出坐标」',
+        // 右下角坐标 HUD：仅「提示 / 无障碍」文案走 i18n；
+        // 面板内的可见数据标签与数值格式仍由组件与 useCesiumInteractions 产出（中文），
+        // 整体本地化需先改为结构化坐标，已记入 Docs/TODO/bugfix-optimization-plan.md
+        copyCoordinateSuccess: '坐标已复制',
+        copyCoordinateFailed: '坐标复制失败',
+        copyCoordinateTitle: '点击复制当前坐标',
+        copyCoordinateAria: '复制当前坐标',
         exported: '已导出 {name}',
         terrainFitDone: '{name} 已贴合地形',
         terrainFitNeedTerrain: '当前为椭球地形，请先开启真实地形再贴合',
@@ -1431,7 +1438,7 @@ export default {
             scene: {
                 title: '场景导航',
                 description: '相机飞行和演示数据',
-                home: '回到初始视角',
+                home: '初始视角',
                 everest: '飞越珠峰',
                 tileset: '加载3D模型',
             },

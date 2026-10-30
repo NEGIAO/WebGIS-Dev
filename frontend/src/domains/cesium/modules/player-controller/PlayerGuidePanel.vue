@@ -49,13 +49,14 @@ defineEmits(['close']);
 <style scoped>
 .player-guide {
     position: fixed;
-    bottom: 32px;
-    right: 12px;
+    right: 16px;
+    bottom: 86px;
     z-index: calc(var(--z-toast) - 1);
     display: flex;
     flex-direction: column;
     align-items: flex-end;
     gap: 6px;
+    max-width: calc(100vw - 32px);
     pointer-events: none;
 }
 
@@ -65,12 +66,13 @@ defineEmits(['close']);
     align-items: center;
     gap: 6px;
     padding: 4px 10px;
-    background: rgba(15, 23, 42, 0.75);
+    background: rgba(255, 255, 255, 0.92);
     backdrop-filter: blur(10px);
-    border: 1px solid rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(var(--brand-primary-rgb), 0.3);
     border-radius: 20px;
     font-size: 12px;
-    color: #cbd5e1;
+    color: var(--brand-primary-dark);
+    box-shadow: 0 3px 12px rgba(0, 0, 0, 0.12);
     pointer-events: auto;
 }
 
@@ -78,12 +80,12 @@ defineEmits(['close']);
     width: 7px;
     height: 7px;
     border-radius: 50%;
-    background: #22c55e;
-    box-shadow: 0 0 6px #22c55880;
+    background: var(--brand-primary);
+    box-shadow: 0 0 6px rgba(var(--brand-primary-rgb), 0.55);
 }
 .pill-dot.fp {
-    background: #3b82f6;
-    box-shadow: 0 0 6px #3b82f680;
+    background: var(--brand-accent);
+    box-shadow: 0 0 6px rgba(var(--brand-accent-rgb), 0.55);
 }
 
 .pill-label {
@@ -92,14 +94,14 @@ defineEmits(['close']);
 }
 
 .pill-fly {
-    color: #38bdf8;
+    color: var(--warning);
     font-size: 13px;
 }
 
 .pill-close {
     background: none;
     border: none;
-    color: #64748b;
+    color: var(--text-muted);
     cursor: pointer;
     font-size: 12px;
     padding: 0 2px;
@@ -108,7 +110,7 @@ defineEmits(['close']);
     pointer-events: auto;
 }
 .pill-close:hover {
-    color: #e2e8f0;
+    color: var(--brand-primary);
 }
 
 /* 键位提示条 */
@@ -117,10 +119,11 @@ defineEmits(['close']);
     align-items: center;
     gap: 0;
     padding: 5px 12px;
-    background: rgba(15, 23, 42, 0.65);
+    background: rgba(255, 255, 255, 0.92);
     backdrop-filter: blur(10px);
-    border: 1px solid rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(var(--brand-primary-rgb), 0.24);
     border-radius: 8px;
+    box-shadow: 0 3px 12px rgba(0, 0, 0, 0.1);
     pointer-events: auto;
 }
 
@@ -133,7 +136,7 @@ defineEmits(['close']);
 .key-sep {
     width: 1px;
     height: 14px;
-    background: rgba(255, 255, 255, 0.1);
+    background: rgba(var(--brand-primary-rgb), 0.22);
     margin: 0 8px;
 }
 
@@ -145,9 +148,9 @@ kbd {
     font-size: 10px;
     font-weight: 700;
     text-align: center;
-    color: #e2e8f0;
-    background: rgba(255, 255, 255, 0.1);
-    border: 1px solid rgba(255, 255, 255, 0.12);
+    color: var(--brand-primary-dark);
+    background: rgba(var(--brand-primary-rgb), 0.08);
+    border: 1px solid rgba(var(--brand-primary-rgb), 0.28);
     border-radius: 3px;
     line-height: 1.5;
 }
@@ -159,7 +162,7 @@ kbd {
 em {
     font-style: normal;
     font-size: 10px;
-    color: #64748b;
+    color: var(--text-secondary);
     margin-left: 1px;
     margin-right: 4px;
 }
@@ -173,5 +176,20 @@ em {
 .guide-slide-leave-to {
     opacity: 0;
     transform: translateX(16px);
+}
+
+@media (max-width: 767px) {
+    .player-guide {
+        right: 12px;
+        bottom: 142px;
+        max-width: calc(100vw - 24px);
+    }
+
+    .guide-keys {
+        flex-wrap: wrap;
+        justify-content: flex-end;
+        row-gap: 4px;
+        padding: 6px 9px;
+    }
 }
 </style>

@@ -330,3 +330,17 @@ Sprint 3（穿插）：P3-1 容器二轮（O1/O2 交替）→ P2-1 bundle 分析
 - [ ] **管理端密钥框同类自动填充风险**（2026-10-29 · V3.6.32 顺带发现，按 §2.5 只记不改）：
   - [ ] (缺陷·已记未修) **`ApiKeysManagementPanel.vue` 的「默认 AI API Key」为 `type="password"` 且未声明 `autocomplete`**：与 V3.6.32 修复的建筑抓取凭证框属同一类问题 —— Chrome 对 password 字段忽略 autocomplete，会把本站点登录密码填入；该面板一旦「填入并保存」，密码就会写进密钥表，形成真正的 L2 污染（本次事故中数据库未被污染，属侥幸）。修法：改 `type="text"` + `-webkit-text-security` 遮蔽，或至少补 `autocomplete="new-password"` + `data-lpignore` / `data-1p-ignore` / `data-bwignore`，并在保存前加 24~64 位字母数字格式闸门。预估 0.2 人日
   - [ ] (待确认) **游客可打开建筑抓取面板**：本次事故的放大条件 —— 低权限会话触发高权限凭据被注入并外发。是否收紧 `buildings` tab 的可见性或配额，属产品决策，未在本轮改动范围内
+
+- [ ] **「OSM代理」底图被上游拦截**（2026-10-30 · V3.6.33 实测发现，按用户决定保留官方源）：
+  - [ ] (缺陷·已记未修) **`osm_Backend_Proxy` 当前不可用**：`vpn.negiao.cn/proxy/tile.openstreetmap.org/*` 返回 256×256「403 Access blocked」提示图。HTTP 状态仍为 200（代理不校验响应内容），且带 `Cache-Control: max-age=604800`，错误图在 Cloudflare 边缘缓存 7 天。实测同期 `tile.openstreetmap.de` 经同一代理正常（37512 B / 27989 B），`mt1.google.com` 亦正常，故问题定位在 OSM 基金会对该出口 IP 的政策拦截，而非代理整体故障。触发特征：短时间十余次请求即可触发，正常浏览一屏地图（数十张瓦片）必然命中。可选修法：① 代理侧为 OSM 单独配置合规 User-Agent（含联系方式）并按政策限速、避免缓存 4xx 内容；② 上游改 `tile.openstreetmap.de`；③ 自托管 OSM 瓦片。预估 0.3 人日（不含 ③）。**进展（2026-10-30）**：① 的身份修复与「相同字节瓦片检测」已在独立仓 `tile-proxy` 1.2.0 实现（待部署）；部署后必须 purge `vpn.negiao.cn/proxy/tile.openstreetmap.org/*` 的 Cloudflare 边缘缓存 —— 旧拦截图带 `s-maxage=604800`，不清会继续按 7 天 TTL 返回。
+
+- [ ] **架构文档坐标系归属失实**（2026-10-30 · V3.6.33 顺带发现，按 §2.5 只记不改）：
+  - [ ] (缺陷·已记未修) **`Docs/Architecture/tile-rectify-system.md` §2 把「天地图」列为 GCJ-02 使用者**：与代码现状不符 —— `basemapConfig.ts` 中天地图各图源均以 `tk` 直连 `t0.tianditu.gov.cn` / DataServer，**未走** `gcj2wgsProxyUrl`；实际经纠偏代理的是高德（`imagery_amap_wgs` / `vector_amap_wgs` / `amap_label`）、腾讯（`vector_tengxun_wgs`）、Google 中国（`vector_Google_clean` / `imagery_google_water`），BD-09 仅百度（`vector_baidu_wgs`）。天地图发布 CGCS2000（与 WGS-84 差异 1 m 量级），本无需纠偏。本次撰写对外文案时按代码核对后已避开该错误，但架构文档本身未改。修法：把该表「谁在用」列的「天地图」移除，并补一句「天地图发布 CGCS2000，可直接按 WGS-84 使用」。预估 0.1 人日
+
+- [ ] **坐标 HUD 可见文本未本地化**（2026-10-30 · V3.6.33 顺带发现，按 §2.5 只记不改）：
+  - [ ] (缺陷·已记未修) **英文界面下右下角坐标卡仍显示中文**：`CesiumContainer.vue` 的 `coordinateGroups` 直接拼 `经度 / 纬度 / 海拔 / 方位 / 俯仰 / 翻滚 / 米 / 速度`，`useCesiumInteractions.js` 的 `coordinateDisplay` 更是以中文串形式产出（`经度: {lng}, 纬度: {lat}, 海拔: {height}米`）。本次只把**新增的提示与无障碍文案**（toast / `title` / `aria-label`）接入 i18n，可见数据标签与数值格式保持原状，避免出现「英文标签 + 中文数值」的半本地化混合。修法：① `useCesiumInteractions` 改为暴露结构化 `coordinateParts = { lng, lat, height } | null`（当前仅 `CesiumContainer.vue` 一个消费方，改动面小）；② 组件内用 `t()` 带参模板格式化，新增 `coordinateValue` / `coordinateAttitude` / `coordinateCameraValue` / `coordinateSpeedSuffix` 四组中英模板；③ 同步补 `位置 / 姿态 / 相机海拔 / 漫游 / 移动鼠标取点` 五键。预估 0.3 人日
+  - [ ] (一致性) **`identifyPresentation.js` 的内联兜底色按绿主题写死**（`#2e7d32` / `#33443a`）：蓝主题下若 InfoBox iframe 注入失败会退回绿字。实际触发概率低（`bindInfoBoxTheme` 在 `initViewer` 即绑定），未改；若后续把 InfoBox 换肤逻辑挪出 iframe，应一并去掉写死值
+
+- [ ] **`--ctp-*` 令牌语义塌缩**（2026-10-30 · V3.6.33 顺带发现，技术债）：
+  - [ ] (重构建议) **`cesium-tool-theme.css` v4 把 `--ctp-green` / `--ctp-green-alt` / `--ctp-active-rgb` / `--ctp-submit-rgb` 等语义不同的令牌全部别名到同一个 `--brand-primary`**：当前无功能影响（使用处本就只取色），但「令牌名不再描述用途」，后续新增控件容易选错语义。建议下一轮把仍在使用的 `--ctp-*` 逐步替换为直接引用 `--brand-*`，最终删除该文件，让 Cesium 域与全站共用一套令牌。预估 0.4 人日（含回归）
+  - [ ] (一致性) **`--ctp-green-alt` 已成死令牌**：v4 后无任何使用处（仅 `-rgb` 变体在用），可在上述重构中一并删除

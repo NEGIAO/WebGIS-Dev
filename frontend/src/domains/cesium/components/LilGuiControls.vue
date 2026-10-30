@@ -90,7 +90,7 @@ function createController(control) {
 
     guiTarget[control.id] = getControlValue(control);
 
-    let controller = null;
+    let controller;
     if (control.type === 'range') {
         controller = gui.add(
             guiTarget,
@@ -236,19 +236,19 @@ function destroyGui() {
 .lil-gui-host :deep(.cesium-lil-gui) {
     width: 100% !important;
     overflow: hidden;
-    border: 1px solid rgba(155, 216, 255, 0.14);
+    border: 1px solid rgba(var(--brand-primary-rgb), 0.2);
     border-radius: 8px;
-    background: rgba(3, 18, 28, 0.72);
-    color: #eefbf3;
-    --background-color: rgba(3, 18, 28, 0.72);
-    --title-background-color: rgba(15, 40, 54, 0.92);
-    --title-text-color: #f6fffb;
-    --text-color: rgba(238, 251, 243, 0.9);
-    --widget-color: rgba(155, 216, 255, 0.16);
-    --hover-color: rgba(155, 216, 255, 0.24);
-    --focus-color: rgba(74, 222, 128, 0.36);
-    --number-color: #85d7ff;
-    --string-color: #b8ffd6;
+    background: rgba(255, 255, 255, 0.92);
+    color: var(--text-primary);
+    --background-color: rgba(255, 255, 255, 0.92);
+    --title-background-color: rgba(var(--brand-primary-rgb), 0.1);
+    --title-text-color: var(--text-primary);
+    --text-color: var(--text-primary);
+    --widget-color: rgba(0, 0, 0, 0.05);
+    --hover-color: rgba(var(--brand-primary-rgb), 0.1);
+    --focus-color: rgba(var(--brand-primary-rgb), 0.22);
+    --number-color: var(--text-primary);
+    --string-color: var(--text-primary);
     --font-size: 11px;
     --input-font-size: 11px;
     --widget-height: 24px;
@@ -282,7 +282,7 @@ function destroyGui() {
 
 .lil-gui-host :deep(.cesium-lil-gui .lil-name) {
     overflow: hidden;
-    color: rgba(238, 251, 243, 0.84);
+    color: rgba(31, 41, 55, 0.85);
     font-weight: 700;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -290,7 +290,7 @@ function destroyGui() {
 
 .lil-gui-host :deep(.cesium-lil-gui input),
 .lil-gui-host :deep(.cesium-lil-gui select) {
-    color: #eefbf3;
+    color: #1f2937;
 }
 
 /* ===== 模块内嵌下拉 option 弹出层（lil-gui 动态注入的 .lil-selector） =====
@@ -299,7 +299,7 @@ function destroyGui() {
    显式接管 option 配色 + color-scheme 暗色化弹层框架，与工具面板暗色观感对齐。
    :deep() 编译后 data-v 属性锚定在 .lil-gui-host 宿主上，对运行时注入 DOM 依然命中。 */
 .lil-gui-host :deep(.cesium-lil-gui select) {
-    color-scheme: dark;
+    color-scheme: light;
 }
 
 .lil-gui-host :deep(.cesium-lil-gui select option) {

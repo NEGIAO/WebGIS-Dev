@@ -1020,7 +1020,7 @@ export default {
         sampleI3s: 'Henan Univ Geology Building (I3S)',
         sampleLod: 'Discrete LOD Sample (3d-tiles-samples)',
         sampleGxu: 'Guangxi University Campus GLB',
-        load3DModel: 'Load 3D Model',
+        load3DModel: 'Load 3D',
         // Remote 3D service loading (V3.4.x Data tab new card)
         remoteService: 'Remote 3D Service',
         remoteServiceHint: 'Supports Cesium Ion, ArcGIS I3S, 3D Tiles, and direct GLB/GLTF URLs',
@@ -1045,6 +1045,14 @@ export default {
         noCoordinates: 'This layer has no coordinates to export or copy',
         coordinatesCopied: 'Copied coordinates of {count} shape(s)',
         copyCoordinatesFailed: 'Copy failed — use "Export coordinates" from the context menu instead',
+        // Coordinate HUD (bottom-right): only the tooltip / a11y strings are localized;
+        // the visible data labels and value formatting still come from the component and
+        // useCesiumInteractions in Chinese — full localization needs structured coordinates
+        // first, tracked in Docs/TODO/bugfix-optimization-plan.md
+        copyCoordinateSuccess: 'Coordinates copied',
+        copyCoordinateFailed: 'Failed to copy coordinates',
+        copyCoordinateTitle: 'Click to copy the current coordinates',
+        copyCoordinateAria: 'Copy current coordinates',
         exported: 'Exported {name}',
         terrainFitDone: '{name} is now fitted to the terrain',
         terrainFitNeedTerrain: 'Terrain is currently the ellipsoid — enable real terrain before fitting',
@@ -1219,7 +1227,7 @@ export default {
             scene: {
                 title: 'Scene Navigation',
                 description: 'Camera flights and demo data',
-                home: 'Return home view',
+                home: 'Home view',
                 everest: 'Fly to Everest',
                 tileset: 'Load 3D model',
             },

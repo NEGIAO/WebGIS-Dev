@@ -1090,6 +1090,12 @@ function applyStyle() {
 </script>
 
 <style scoped>
+/* iOS Safari：图标 SVG 作为 flex 子项时默认 flex-shrink: 1，窄屏/长名称挤压下
+   会被压成 0 宽，表现为目录树图标「塌陷」。图标一律不参与收缩。 */
+svg {
+    flex: none;
+}
+
 /* ===== 绘制面板布局 ===== */
 .eco-panel-scroll {
     padding: 6px 4px;
@@ -1118,6 +1124,8 @@ function applyStyle() {
     display: inline-flex;
     align-items: center;
     justify-content: center;
+    /* iOS Safari：行盒基线会把图标顶偏，归零后才是几何居中 */
+    line-height: 0;
     border-radius: 6px;
     background: var(--brand-gradient);
     color: #ffffff;
@@ -1674,6 +1682,7 @@ function applyStyle() {
     display: inline-flex;
     align-items: center;
     justify-content: center;
+    line-height: 0;
     width: 20px;
     height: 20px;
     border-radius: 6px;
@@ -2349,6 +2358,7 @@ function applyStyle() {
     display: inline-flex;
     align-items: center;
     justify-content: center;
+    line-height: 0;
     width: 18px;
     height: 18px;
     border-radius: 5px;

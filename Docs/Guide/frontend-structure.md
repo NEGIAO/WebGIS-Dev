@@ -91,6 +91,7 @@ frontend/src/
 │   │   │   │   ├── cesiumRuntime.js  # Cesium 运行时加载（await ensureCesiumLoaded()）
 │   │   │   │   ├── cesiumStorage.js  # Cesium 状态持久化
 │   │   │   │   ├── cesiumTimeSystem.js  # 时间系统
+│   │   │   │   ├── useCesiumInfoBoxTheme.js  # InfoBox 主题化（向描述 iframe 注入白底深字样式，跟随 data-theme 切换）
 │   │   │   │   └── useCesiumNavigation.js  # 导航控件集成（罗盘/缩放）
 │   │   │   ├── dataImport/
 │   │   │   │   ├── dataSourceDisplay.js  # 显隐/透明度类型适配器（统一图层管理·句柄侧）

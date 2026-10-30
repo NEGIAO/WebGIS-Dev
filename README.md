@@ -125,7 +125,7 @@
 
 ## 🎯 项目简介
 
-**NEGIAO's WebGIS** 是一个功能完整、架构清晰的前后端分离 WebGIS 平台（当前版本 V3.6.32），前端托管于 GitHub Pages（正式域名 webgis.negiao.cn），后端以 Docker 部署在 Hugging Face Spaces，通过 RESTful API 通信，支持独立扩展。
+**NEGIAO's WebGIS** 是一个功能完整、架构清晰的前后端分离 WebGIS 平台（当前版本 V3.6.33），前端托管于 GitHub Pages（正式域名 webgis.negiao.cn），后端以 Docker 部署在 Hugging Face Spaces，通过 RESTful API 通信，支持独立扩展。
 
 > 📚 本 README 仅保留核心概览与导航。完整文档已模块化至 [`Docs/Guide/`](Docs/Guide/)，详见下方「文档导航」。
 >
@@ -150,7 +150,8 @@
 | 领域 | 说明 |
 |------|------|
 | 🗺️ 2D/3D 双引擎 | OpenLayers 10.11 + Cesium 1.146 一键切换，视图状态双向同步，URL 分享还原 |
-| 🌐 丰富底图源 | **90 个底图预设 / 106 个图层定义**：天地图、高德、腾讯、天地图矢量、ESRI（含 Wayback 历史影像）、Sentinel-2 Cloudless、奥维等；熔断回退、GCJ-02/BD-09 纠偏、自定义 XYZ 接入 |
+| 🌐 丰富底图源 | **91 个底图预设 / 107 个图层定义**：天地图、高德、腾讯、天地图矢量、ESRI（含 Wayback 历史影像）、Sentinel-2 Cloudless、OSM、奥维等；熔断回退、GCJ-02/BD-09 纠偏、自定义 XYZ 接入 |
+| 🧩 非标准瓦片在线纠偏 | **GCJ-02 / BD-09 → WGS-84**：高德、腾讯与 Google 中国的 GCJ-02 瓦片、百度的 BD-09 瓦片经独立纠偏服务**逐瓦片重采样**，输出与标准 XYZ 网格对齐的 256×256 影像，前端按普通底图直接加载，2D/3D 双引擎零改造；百度侧为跨网格重投影，另提供反向 `wgs2gcj` / `wgs2bd` 与通用直通代理 |
 | 🧭 图层管理（TOC） | 统一目录：拖拽排序、行内重命名、显隐/透明度/样式、层级叠放定序、坐标转换（WGS-84 ⇄ GCJ-02）、单层导出（CSV/TXT/GeoJSON/KML）、二维图层导入 3D |
 | 📊 属性表 | 视图范围筛选、字段可见性、全字段检索、CSV 导出、要素定位与删除 |
 | ✏️ 绘制与测量 | 点/线/面/矩形/椭圆/圆/箭头/风向/军标共 9 类绘制；测距、测面；跨图层顶点编辑 |
@@ -581,7 +582,7 @@ tiles.negiao.cc.cd"]
 | 项目 | 状态 | 说明 |
 |---|---|---|
 | **在线底图导出（GeoTIFF）** | ⚠️ **前端保留、后端已下线** | `MapDownloader.vue` 依赖 `/api/download/*`，该模块在 V3.6.5 移除，HF 环境返回 404。方案见 `Docs/TODO/plan-download-*` |
-| **瓦片纠偏（BD-09/GCJ-02 重采样）** | ⚠️ **已迁出本仓** | 迁至独立服务，`tile-rectify-system.md` 为历史设计稿 |
+| **瓦片纠偏（BD-09/GCJ-02 重采样）** | ⚠️ **实现已迁出本仓，能力仍在线** | 迁至独立仓 `tile-proxy`（线上 `vpn.negiao.cn/proxy/*`）；HF Space 政策禁止挂载 `/proxy/*`，故本仓只保留接入契约，见 [`tile-rectify-system.md`](Docs/Architecture/tile-rectify-system.md) |
 | **新闻热榜 `cls`（财联社）** | ⚠️ 上游恒定 504 | 该平台标签页为空；其余 21 个平台正常 |
 | **新闻 / 瓦片直连** | ⚠️ 国内间歇不可达 | 实际主通道为 `vpn.negiao.cn` 代理 |
 | **`frontend/package.json` 版本号** | ⚠️ 未维护 | 字段值为 `2.0.0`，真实版本以 README / CHANGELOG 为准 |
@@ -606,9 +607,9 @@ tiles.negiao.cc.cd"]
 
 | 版本 | 日期 | 概要 |
 |------|------|------|
+| **V3.6.33** | 2026-10-30 | **非标准瓦片在线纠偏文案回填 + Cesium 浮层与原生控件主题统一**。① 落地页核心功能新增第 11 张卡（与「建筑白模」同为整行宽卡，3 列 / 2 列断点均为 6 行、无孤卡），说明 GCJ-02（高德 / 腾讯 / Google 中国）与 BD-09（百度，跨网格）瓦片经服务端逐瓦片重采样后按标准 XYZ 网格直接使用；② 两份 README 的「核心能力 · 地图内核」各新增一行，写明机制与双引擎零改造；③ 订正「已知限制」中把 `tile-rectify-system.md` 称作「历史设计稿」的失实措辞 —— 该服务仍在生产运行，只是实现不在本仓；④ 新增「OSM代理」底图（图层定义 `osm_Backend_Proxy` + 预设 `osm_Backend_Proxy_preset`，走 `vpn.negiao.cn/proxy` 统一瓦片代理，解决 OSM 官方源境内间歇不可达）；⑤ **三维域并入全站主题体系** —— `--ctp-*` 令牌全族改别名指向 `--brand-*`，高级控制台（展开宽度 380→520px）、lil-gui 参数控件、Cesium 原生工具栏 / 搜索 / 动画 / 时间轴 / 底图选择器、罗盘 / 缩放栏 / 比例尺全部改为「浅玻璃 + 品牌色」，并随绿 / 蓝主题联动；InfoBox 正文在独立 iframe 内，新建 `useCesiumInfoBoxTheme.js` 注入主题样式并跟随 `data-theme` 重注入；⑥ 右下角坐标由只读文本改为可点击复制的按钮（位置 / 姿态 / 相机海拔三组）；⑦ 修复 iOS 图标塌陷、移动端折叠手柄缩小、语言切换激活态扁平、OL 移动端控制条占满底部、图层面板「URL 操作」子菜单指针穿缝即消失等问题。详见[完整更新日志](Docs/Guide/CHANGELOG.md) |
 | **V3.6.32** | 2026-10-29 | **建筑抓取临时凭证框加固（登录密码被浏览器自动填充外发修复）**。① 该输入框原为 `type="password"`，Chrome 密码管理器对 password 字段忽略 `autocomplete=off`，会把**本站点保存的登录密码**填入 —— 凭据库按 origin 索引、与会话身份无关，实测游客态下填的仍是管理员密码；② 该值经「临时凭证优先于 L2」的短路逻辑，以 `?key=` / `?tk=` 明文发往 jsapi.amap.com 与 tile*.tianditu.gov.cn（天地图按瓦片逐请求，0.2° 范围量级达千次）；③ 改为 `type="text"` + `-webkit-text-security: disc` 遮蔽，密码管理器不再将其识别为凭据框，并补齐 `autocomplete` / 每源唯一 `name` / LastPass·1Password·Bitwarden 的 ignore 标记；④ 腾讯·高德·天地图改为**各自独立的凭证草稿**，修复单一 ref 导致「切 tab 后 A 源凭证被发给 B 源」；⑤ 提交前新增 24~64 位字母数字**格式闸门**，留空仍走管理端 L2（`amap_key` / `tianditu_tk`，数据库值本身未受影响）。详见[完整更新日志](Docs/Guide/CHANGELOG.md) |
 | **V3.6.31** | 2026-10-28 | **数据导入支持任意投影坐标系（人工声明 + 判定修正 + 缺 CRS 不静默）**。① 上传区新增「源坐标系」选择（自动 / WGS84 / CGCS2000 / Web 墨卡托 / CGCS2000 三度带 / UTM 中国带号 43~53 / 自定义 EPSG 或 `+proj=` 串），2D 与 3D 共用同一入口，优先级高于 `.prj`、KML `srsName` 与 GeoJSON `crs`；② 量级判定重构为「度 / 无带号平面 / 墨卡托」三段，平面坐标不再被静默判成 Web 墨卡托；缺 `.prj` 且判为平面坐标时**报错要求指定带号**而非猜测；③ 新增 `crsPresets.ts`，按 EPSG 公式本地生成 CGCS2000 3/6 度带与 UTM 120 带定义（与 epsg.io 逐条核对），离线可用，`ensureCrsDef` / `ensureProjectionAvailable` 统一入口；④ 3D 链路在 `loadGeoJSON` 前完成重投影并剥离 `crs` 成员，修复打包链路完全跳过检测的问题；支持 `+proj=` 定义串；⑤ 逐要素降级：坏点只丢该要素并计数提示；`sourceCrs` 写入图层元数据供复核；⑥ 导入后可**重设源坐标系**（留存重投影前原始几何，属性弹窗直接改判，无需重传）；⑦ 修复 SHP sidecar 分组（NFC + 大小写归一 + 单 shp 兜底合并），解决「文件在却报缺少 .dbf」；⑧ 建筑抓取恢复**腾讯 / 高德 / 天地图**真实署名，并写明「前两者仅建筑层级（CE）、天地图全量 12 类」的实现边界。详见[完整更新日志](Docs/Guide/CHANGELOG.md) |
-| **V3.6.30** | 2026-10-28 | **接入 51.la 全站访客数据 + 依赖版本与徽章校准**。① 新增 `visitorStats.ts` 纯函数层（8s 超时、失败静默、不持状态），落地页页脚与账号总览并列展示第三方口径 UV/PV；② 消费 Worker 新增的 `updatedAt`，在页脚、用户中心、README 三处标注「数据更新于 MM-DD HH:mm」，并把 5 分钟边缘缓存的滞后语义写明；③ README 徽章与技术栈按 `package-lock.json` 实校正（Vite 8.3 / OpenLayers 10.11 / Cesium 1.146 / Rapier 0.21 / Pinia 4.1 / Vue Router 5.4 / Three 0.186），同步修正 Vite 8 的 Node 引擎要求；④ 顶部徽章重排：站点访问 7 项指标以 7 列表格分区置顶（与「技术栈」「仓库指标」两类旧徽章区分），`updatedAt` 因 ISO 串过长单列于表格下方；移除 Clones / Unique Cloners 两枚参考价值低的徽章。详见[完整更新日志](Docs/Guide/CHANGELOG.md) |
 更早版本（V3.6.22 及以前）请查阅 [完整更新日志 →](Docs/Guide/CHANGELOG.md)。
 
 ---
@@ -631,6 +632,6 @@ tiles.negiao.cc.cd"]
 |:------:|:--------:|:--------:|
 | [GitHub](https://github.com/NEGIAO/WebGIS-Dev) | [webgis.negiao.cn](https://webgis.negiao.cn)（正式域名，GitHub Pages 托管） | [Hugging Face](https://NEGIAO-WebGIS.hf.space) |
 
-<sub>V3.6.32 · 开发中 · 最后更新 2026-10-29</sub>
+<sub>V3.6.33 · 开发中 · 最后更新 2026-10-30</sub>
 
 </div>

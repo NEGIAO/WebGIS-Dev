@@ -1,71 +1,73 @@
 /**
  * Cesium 工具面板主题变量（--ctp-*）
- * 统一管理 CesiumToolPanel（3D 工具浮层）的颜色设计令牌。
+ * 统一管理 CesiumToolPanel / LilGuiControls 等 Cesium 浮层的颜色设计令牌。
  * 修改此文件即可全局更新该面板观感；App.vue 全局 @import 引入（与 toc-theme.css 同位）。
  *
- * 域约定（V3.4.56，规划 P2-2「组件域令牌收敛」决策落地）：
- * - 本面板为刻意设计的独立暗色身份，不并入全局 --panel-* 浮层令牌，也不随绿/蓝主题联动；
- * - 基色一律 -rgb 三元组令牌（rgba(var(--ctp-x-rgb), α)，α 语义留在使用处）；实色用同名实色令牌；
- * - 嵌入浅色态（.is-embedded）的 var(--text-primary, #1e293b) 等兜底字面量为防御写法，不再套令牌；
- * - P3-1 拆分 CesiumToolPanel 子组件时，各子组件直接复用本文件，禁止回退硬编码。
+ * v4（2026-10-30）：历史遗留的 Catppuccin 暗色海军蓝/Catppuccin 青绿身份已废弃，
+ * 统一收敛为「浅色玻璃 + 项目品牌主题」设计语言，与 OL 控制中心 / 自定义比例尺对齐：
+ *   - 面板底：rgba(255,255,255,*) 浅玻璃（backdrop-filter 由使用处提供）；
+ *   - 强调色：一律引用 --brand-*，随绿/蓝主题（[data-theme="blue"]）自动联动；
+ *   - 文本：浅底用深灰/品牌深绿，保证可读；
+ *   - 警示族沿用全局 --danger / --warning，跨主题一致。
+ * P3-1 拆分 CesiumToolPanel 子组件时，各子组件直接复用本文件，禁止回退硬编码。
  */
 
 :root {
-    /* ===== 基色（-rgb 三元组，α 就地保留） ===== */
-    --ctp-ice-rgb: 155, 216, 255; /* 冰蓝主强调：边框/描边/悬停光晕/滑轨 */
-    --ctp-white-rgb: 255, 255, 255; /* 白系薄层：发丝线/微面/高光 */
-    --ctp-ice-text-rgb: 220, 243, 255; /* 冰蓝亮文本 */
-    --ctp-ice-soft-rgb: 225, 244, 255; /* 冰蓝次文本（页签默认） */
-    --ctp-cyan-rgb: 100, 200, 255; /* 青蓝功能色（飞至/悬停底） */
-    --ctp-cyan-soft-rgb: 118, 202, 255; /* 启动器悬停描边 */
-    --ctp-green-rgb: 61, 220, 132; /* 主强调绿（= --ctp-green 实色）光晕/徽章 */
-    --ctp-green-alt-rgb: 74, 222, 128; /* 活性绿（开关/滑块/状态点） */
-    --ctp-mint-text-rgb: 238, 251, 243; /* 薄荷白文本（带 α 用法） */
-    --ctp-shadow-rgb: 0, 0, 0; /* 中性压暗：内衬底/投影 */
+    /* ===== 基色（-rgb 三元组，α 就地保留；优先引用 --brand-* 实现主题联动） ===== */
+    --ctp-ice-rgb: var(--brand-primary-rgb);   /* 描边/分隔/滑轨：品牌绿（蓝主题自动转蓝） */
+    --ctp-white-rgb: 255, 255, 255;           /* 白系薄层：玻璃高光/微面 */
+    --ctp-ice-text-rgb: 60, 72, 82;           /* 次要文本：深灰（浅底可读） */
+    --ctp-ice-soft-rgb: 90, 103, 112;         /* 次文本（页签默认）：中灰 */
+    --ctp-cyan-rgb: var(--brand-accent-rgb);  /* 悬停/飞至：品牌强调 */
+    --ctp-cyan-soft-rgb: var(--brand-accent-rgb); /* 启动器悬停描边：品牌强调 */
+    --ctp-green-rgb: var(--brand-primary-rgb);/* 主强调绿（跟随主题）光晕/徽章 */
+    --ctp-green-alt-rgb: var(--brand-primary-rgb); /* 活性绿（开关/滑块/状态点） */
+    --ctp-mint-text-rgb: var(--brand-primary-dark-rgb); /* 薄荷白文本 → 品牌深绿（浅底可读） */
+    --ctp-shadow-rgb: 0, 0, 0;                /* 中性压暗：投影 */
 
-    /* ===== 暗海军蓝面族（浮层底/投影） ===== */
-    --ctp-surface-rgb: 9, 24, 34; /* 暗海军蓝：面板/启动器主底 */
-    --ctp-surface-hover-rgb: 12, 39, 55; /* 暗海军蓝：启动器悬停底 */
-    --ctp-input-bg-rgb: 3, 18, 28; /* 暗海军蓝：输入框底 */
-    --ctp-chip-bg-rgb: 12, 38, 52; /* 暗海军蓝：模块图标底 */
-    --ctp-chip-bg-alt-rgb: 15, 40, 54; /* 暗海军蓝：数据卡类型图标底 */
-    --ctp-drop-rgb: 0, 7, 14; /* 投影色：启动器 */
-    --ctp-drop-deep-rgb: 0, 8, 15; /* 投影色：面板 */
+    /* ===== 浅玻璃面族（替代原暗海军蓝） ===== */
+    --ctp-surface-rgb: 255, 255, 255;         /* 面板/启动器主底：白玻璃 */
+    --ctp-surface-hover-rgb: 245, 247, 246;   /* 悬停底：极浅品牌灰绿 */
+    --ctp-input-bg-rgb: 248, 250, 249;        /* 输入框底 */
+    --ctp-chip-bg-rgb: 241, 246, 243;         /* 模块图标底 */
+    --ctp-chip-bg-alt-rgb: 238, 244, 241;     /* 数据卡图标底 */
+    --ctp-drop-rgb: 0, 0, 0;                  /* 投影色：启动器 */
+    --ctp-drop-deep-rgb: 0, 0, 0;             /* 投影色：面板 */
 
-    /* ===== 深绿选中/展开族 ===== */
-    --ctp-active-rgb: 30, 110, 75; /* 深绿选中：选项卡/模块按钮激活底 */
-    --ctp-active-tab-rgb: 33, 117, 82; /* 深绿选中：页签激活底 */
-    --ctp-active-deep-rgb: 15, 73, 48; /* 深绿选中：panel-mark 底 */
-    --ctp-submit-rgb: 21, 128, 79; /* 深绿选中：自定义底图提交钮底 */
-    --ctp-expand-rgb: 10, 47, 37; /* 深绿展开：选项组 */
-    --ctp-expand-card-rgb: 15, 54, 40; /* 深绿展开：overlay 卡激活 */
-    --ctp-expand-module-rgb: 8, 38, 29; /* 深绿展开：模块卡 */
-    --ctp-embed-border-rgb: 57, 142, 87; /* 嵌入浅色态：品牌绿边框 */
+    /* ===== 品牌浅色调（激活/展开底，跟随主题） ===== */
+    --ctp-active-rgb: var(--brand-primary-rgb);
+    --ctp-active-tab-rgb: var(--brand-primary-rgb);
+    --ctp-active-deep-rgb: var(--brand-primary-rgb);
+    --ctp-submit-rgb: var(--brand-primary-rgb);
+    --ctp-expand-rgb: var(--brand-primary-rgb);
+    --ctp-expand-card-rgb: var(--brand-primary-rgb);
+    --ctp-expand-module-rgb: var(--brand-primary-rgb);
+    --ctp-embed-border-rgb: var(--brand-primary-rgb);
 
-    /* ===== 警示族 ===== */
-    --ctp-danger-rgb: 255, 100, 100; /* 危险红：悬停底 */
-    --ctp-danger-mid-rgb: 255, 120, 120; /* 危险红：清空按钮文本 */
-    --ctp-danger-soft-rgb: 255, 143, 143; /* 危险红：移除按钮浅文本 */
-    --ctp-warning-rgb: 250, 204, 21; /* 警示黄（重定位按钮） */
+    /* ===== 警示族（沿用全局功能色，跨主题一致） ===== */
+    --ctp-danger-rgb: var(--danger-rgb);
+    --ctp-danger-mid-rgb: var(--danger-rgb);
+    --ctp-danger-soft-rgb: 252, 165, 165;     /* danger-light #fecaca */
+    --ctp-warning-rgb: var(--warning-rgb);
 
-    /* ===== 实色 ===== */
-    --ctp-green: #3ddc84; /* 主强调绿（= rgb(61,220,132)）：计数徽章/激活态/滑块 */
-    --ctp-green-alt: #4ade80; /* 活性绿实色（= rgb(74,222,128)） */
-    --ctp-green-bright: #64f3a4; /* 滑块悬停亮绿 */
-    --ctp-cyan: #64c8ff; /* 青蓝实色（飞至/操作悬停字） */
-    --ctp-text: #eefbf3; /* 主文本：薄荷白 */
-    --ctp-title: #f6fffb; /* 标题文本 */
-    --ctp-text-launcher: #f4fbff; /* 启动器文字 */
-    --ctp-icon: #eaf8ff; /* 图标按钮色 */
-    --ctp-tab-hover: #f7fffb; /* 页签悬停字 */
-    --ctp-tab-active: #ecfff5; /* 页签激活字 */
-    --ctp-mint-mark: #a7f3d0; /* panel-mark 字 */
-    --ctp-submit-text: #f5fff9; /* 提交按钮字 */
-    --ctp-thumb: #e9f7ff; /* 开关滑块底 */
-    --ctp-ink: #062315; /* 绿底上的深墨（徽章字/激活滑块） */
-    --ctp-option-bg: #0d202d; /* 下拉 option 底 */
-    --ctp-white-solid: #ffffff; /* 纯白：嵌入态面板底/重命名输入底/悬停字 */
-    --ctp-danger-soft-solid: #ff8f8f; /* 危险红实色（悬停字） */
-    --ctp-warning-solid: #facc15; /* 警示黄实色（悬停字） */
-    --ctp-ink-neutral: #333; /* 白底控件深灰字（重命名输入） */
+    /* ===== 实色（尽量引用 --brand-* 实现主题联动） ===== */
+    --ctp-green: var(--brand-primary);         /* 主强调绿（跟随主题） */
+    --ctp-green-alt: var(--brand-accent);      /* 活性绿实色 */
+    --ctp-green-bright: var(--brand-primary-light); /* 滑块悬停亮绿 */
+    --ctp-cyan: var(--brand-accent);           /* 青蓝 → 品牌强调 */
+    --ctp-text: var(--text-primary);           /* 主文本 #333 */
+    --ctp-title: #1f2937;                      /* 标题深灰 */
+    --ctp-text-launcher: #1f2937;              /* 启动器文字 */
+    --ctp-icon: var(--brand-primary-dark);     /* 图标按钮色 */
+    --ctp-tab-hover: var(--brand-primary-dark);/* 页签悬停字 */
+    --ctp-tab-active: #ffffff;                 /* 页签激活字（在渐变底上） */
+    --ctp-mint-mark: var(--brand-primary-dark);/* panel-mark 字 */
+    --ctp-submit-text: #ffffff;                /* 提交按钮字 */
+    --ctp-thumb: #ffffff;                      /* 开关滑块底 */
+    --ctp-ink: #0a3d1a;                        /* 绿底上的深墨（徽章字/激活滑块） */
+    --ctp-option-bg: #ffffff;                  /* 下拉 option 底 */
+    --ctp-white-solid: #ffffff;                /* 纯白：嵌入态面板底 */
+    --ctp-danger-soft-solid: var(--danger-light); /* 危险红实色 */
+    --ctp-warning-solid: var(--warning);       /* 警示黄实色 */
+    --ctp-ink-neutral: #333;                   /* 白底控件深灰字 */
 }

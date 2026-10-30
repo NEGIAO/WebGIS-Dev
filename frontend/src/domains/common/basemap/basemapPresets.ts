@@ -55,8 +55,14 @@ export const BASEMAP_PRESETS: BasemapPresetDefinition[] = [
     },
     {
         id: 'google_Backend_Proxy_preset',
-        label: '后端代理谷歌',
+        label: '谷歌代理',
         stack: ['google_Backend_Proxy', 'label_tianditu'],
+    },
+    // OSM 代理：矢量底图自带注记，不叠注记层（与 vector_osm_preset 同构）
+    {
+        id: 'osm_Backend_Proxy_preset',
+        label: 'OSM代理',
+        stack: ['osm_Backend_Proxy'],
     },
     { id: 'imagery_amap_wgs_preset', label: '高德影像(WGS)', stack: ['imagery_amap_wgs'] },
     { id: 'vector_amap_wgs_preset', label: '高德地图(WGS)', stack: ['vector_amap_wgs'] },

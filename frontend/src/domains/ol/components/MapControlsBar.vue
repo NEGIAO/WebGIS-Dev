@@ -896,37 +896,31 @@ onUnmounted(() => {
 }
 
 @media (max-width: 768px) {
+    /* 移动端改为右侧竖条：只保留缩放 / 主页(定位) 图标，隐藏经纬度文本 */
     .map-controls-group {
         right: 12px;
-        bottom: 33px;
+        bottom: 10%;
+        flex-direction: column;
+        align-items: center;
         gap: 8px;
+        padding: 8px 6px;
+        width: auto;
+        border-radius: 22px;
     }
 
-    .coordinate-display {
-        min-width: 0;
-        flex: 1;
+    /* 移动端不显示坐标文本、复制与格式编辑入口 */
+    .coordinate-section {
+        display: none;
+    }
+
+    .divider {
+        width: 60%;
+        height: 1px;
+        flex-shrink: 0;
     }
 
     .copy-tooltip {
         display: none;
-    }
-
-    .format-menu {
-        position: fixed;
-        left: 12px;
-        right: 12px;
-        bottom: 62px; /* 控制条高度 54px + 间距 8px，菜单显示在上方 */
-        top: auto;
-        max-width: none;
-        max-height: 50vh;
-    }
-
-    .format-menu-content {
-        min-width: unset;
-    }
-
-    .decimal-options {
-        grid-template-columns: 1fr 1fr 1fr;
     }
 }
 </style>

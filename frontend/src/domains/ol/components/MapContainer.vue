@@ -2865,7 +2865,7 @@ onUnmounted(() => unregisterEngineHandlers('ol'));
 @media (max-width: 768px) {
     :deep(.ol-scale-bar),
     :deep(.ol-scale-line) {
-        bottom: 4px;
+        bottom: 30px;
         left: 4px;
         padding: 22px 28px 8px 10px;
         min-width: 180px;

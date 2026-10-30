@@ -43,9 +43,11 @@ export function buildAttributeTableHtml(attributes, maxRows = 20) {
                 text.length > CELL_VALUE_MAX_LENGTH
                     ? `${text.slice(0, CELL_VALUE_MAX_LENGTH)}…`
                     : text;
+            // 类名供 Cesium InfoBox iframe 内的主题样式挂钩（父页 CSS 无法穿透 iframe）；
+            // 内联颜色为兜底，保证即便主题样式未注入也仍是深色可读文字。
             return (
-                `<tr><th style="color:#777;padding:2px 6px 2px 0;text-align:left;white-space:nowrap;vertical-align:top;font-weight:normal">${escapeHtmlText(key)}</th>` +
-                `<td style="word-break:break-all">${escapeHtmlText(display)}</td></tr>`
+                `<tr><th class="cesium-identify-key" style="color:#777;padding:2px 6px 2px 0;text-align:left;white-space:nowrap;vertical-align:top;font-weight:normal">${escapeHtmlText(key)}</th>` +
+                `<td class="cesium-identify-value" style="word-break:break-all;color:#33443a">${escapeHtmlText(display)}</td></tr>`
             );
         })
         .join('');
@@ -68,7 +70,8 @@ export function buildIdentifyGroupsHtml(groups, options = {}) {
         .slice(0, options.maxGroups ?? 8)
         .map(
             (group) =>
-                `<div style="font-weight:600;margin:6px 0 2px;color:#1d4ed8">${escapeHtmlText(group.heading)}</div>` +
+                // 类名供 Cesium InfoBox iframe 主题样式挂钩；内联色为兜底（默认绿色主题一致）
+                `<div class="cesium-identify-heading" style="font-weight:600;margin:6px 0 2px;color:#2e7d32">${escapeHtmlText(group.heading)}</div>` +
                 buildAttributeTableHtml(group.attributes),
         )
         .join('');

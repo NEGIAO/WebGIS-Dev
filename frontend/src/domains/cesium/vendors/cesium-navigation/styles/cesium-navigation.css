@@ -1,30 +1,95 @@
+/* =========================================================
+   Cesium 导航控件 / 罗盘 / 比例尺 — 浅色玻璃 + 品牌主题
+   2026-10-30 重写：与 OL 控制中心、自定义比例尺统一视觉语言
+   依赖全局 --brand-* 设计令牌（随绿/蓝主题 [data-theme="blue"] 联动）
+   ========================================================= */
+
+/* ---------- 比例尺（distance-legend，对齐 OL 自定义比例尺） ---------- */
 .distance-legend {
   pointer-events: auto;
   position: absolute;
-  border-radius: 15px;
-  padding-left: 5px;
-  padding-right: 5px;
   bottom: 30px;
   height: 30px;
   width: 125px;
   box-sizing: content-box;
+  padding: 8px 12px;
+  border-radius: 6px;
+  background:
+    linear-gradient(
+      180deg,
+      rgba(var(--brand-accent-light-rgb, 91, 207, 137), 0.12) 0%,
+      rgba(var(--brand-primary-rgb, 76, 175, 80), 0.04) 48%,
+      transparent 100%
+    ),
+    rgba(255, 255, 255, 0.88);
+  backdrop-filter: blur(12px) saturate(160%);
+  -webkit-backdrop-filter: blur(12px) saturate(160%);
+  border: 1px solid rgba(var(--brand-primary-rgb, 76, 175, 80), 0.28);
+  box-shadow:
+    0 8px 24px rgba(0, 0, 0, 0.12),
+    inset 0 1px 0 rgba(255, 255, 255, 0.65),
+    inset 0 0 12px rgba(var(--brand-accent-light-rgb, 91, 207, 137), 0.06);
+  /* 与 OL 比例尺同语言的切角 */
+  clip-path: polygon(
+    10px 0,
+    100% 0,
+    100% calc(100% - 10px),
+    calc(100% - 10px) 100%,
+    0 100%,
+    0 10px
+  );
+  transition: border-color 0.2s cubic-bezier(0.16, 1, 0.3, 1),
+    box-shadow 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* 顶部品牌高光线（对齐 OL ::before） */
+.distance-legend::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 12%;
+  right: 12%;
+  height: 1px;
+  pointer-events: none;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    var(--brand-accent, #57b861),
+    transparent
+  );
+  opacity: 0.75;
+  box-shadow: 0 0 6px rgba(var(--brand-accent-rgb, 87, 184, 97), 0.35);
+}
+
+/* 左上 HUD 角标（对齐 OL ::after） */
+.distance-legend::after {
+  content: '';
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  width: 6px;
+  height: 6px;
+  border-left: 1px solid rgba(var(--brand-accent-rgb, 87, 184, 97), 0.7);
+  border-top: 1px solid rgba(var(--brand-accent-rgb, 87, 184, 97), 0.7);
+  pointer-events: none;
 }
 
 .distance-legend-label {
   display: inline-block;
-  font-family: 'Roboto', sans-serif;
-  font-size: 14px;
-  font-weight: lighter;
+  font-family: var(--font-mono, 'SF Mono', 'JetBrains Mono', Consolas, monospace);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.4px;
   line-height: 30px;
-  color: #FFFFFF;
+  color: var(--brand-accent-dark, #0a6815);
   width: 125px;
   text-align: center;
 }
 
 .distance-legend-scale-bar {
-  border-left: 1px solid #FFFFFF;
-  border-right: 1px solid #FFFFFF;
-  border-bottom: 1px solid #FFFFFF;
+  border-left: 1px solid var(--brand-primary, #4caf50);
+  border-right: 1px solid var(--brand-primary, #4caf50);
+  border-bottom: 1px solid var(--brand-primary, #4caf50);
   position: absolute;
   height: 10px;
   top: 15px;
@@ -43,13 +108,21 @@ screen and (max-height: 420px) {
   }
 }
 
+/* ---------- 缩放 / 复位控件栏（对齐 OL 控制中心浅玻璃风） ---------- */
 .navigation-controls {
   position: absolute;
   right: 42px;
   top: 210px;
-  width: 30px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  font-weight: 300;
+  width: 32px;
+  border: 1px solid rgba(var(--brand-primary-rgb, 76, 175, 80), 0.22);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.18),
+    0 0 0 1px rgba(var(--brand-primary-rgb, 76, 175, 80), 0.08);
+  font-weight: 400;
+  overflow: hidden;
   -webkit-touch-callout: none;
   -webkit-user-select: none;
   -khtml-user-select: none;
@@ -60,24 +133,36 @@ screen and (max-height: 420px) {
 
 .navigation-control {
   cursor: pointer;
-  border-bottom: 1px solid #555555;
-}
-
-.naviagation-control:active {
-  color: #FFF;
+  color: var(--brand-primary-dark, #2c6e49);
+  border-bottom: 1px solid rgba(var(--brand-primary-rgb, 76, 175, 80), 0.15);
+  background: transparent;
+  transition: color 0.2s ease, background 0.2s ease;
 }
 
 .navigation-control-last {
   cursor: pointer;
-  border-bottom: 1px solid #555555;
+  color: var(--brand-primary-dark, #2c6e49);
   border-bottom: 0;
+  background: transparent;
+  transition: color 0.2s ease, background 0.2s ease;
+}
+
+.navigation-control:hover,
+.navigation-control-last:hover {
+  color: var(--brand-primary, #4caf50);
+  background: rgba(var(--brand-primary-rgb, 76, 175, 80), 0.12);
+}
+
+.navigation-control:active,
+.navigation-control-last:active {
+  background: rgba(var(--brand-primary-rgb, 76, 175, 80), 0.22);
 }
 
 .navigation-control-icon-zoom-in {
   position: relative;
   text-align: center;
   font-size: 20px;
-  color: #FFFFFF;
+  color: var(--brand-primary-dark, #2c6e49);
   padding-bottom: 4px;
 }
 
@@ -85,7 +170,7 @@ screen and (max-height: 420px) {
   position: relative;
   text-align: center;
   font-size: 20px;
-  color: #FFFFFF;
+  color: var(--brand-primary-dark, #2c6e49);
 }
 
 .navigation-control-icon-reset {
@@ -93,12 +178,19 @@ screen and (max-height: 420px) {
   left: 10px;
   width: 10px;
   height: 10px;
-  fill: rgba(255, 255, 255, 0.8);
+  fill: var(--brand-primary-dark, #2c6e49);
   padding-top: 6px;
   padding-bottom: 6px;
   box-sizing: content-box;
 }
 
+.navigation-control-icon-active {
+  color: var(--brand-primary, #4caf50);
+  fill: var(--brand-primary, #4caf50);
+  filter: drop-shadow(0 0 4px rgba(var(--brand-primary-rgb, 76, 175, 80), 0.7));
+}
+
+/* ---------- 罗盘（浅玻璃 + 品牌） ---------- */
 .compass {
   pointer-events: auto;
   position: absolute;
@@ -107,6 +199,20 @@ screen and (max-height: 420px) {
   width: 95px;
   height: 95px;
   overflow: hidden;
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid rgba(var(--brand-primary-rgb, 76, 175, 80), 0.22);
+  border-radius: 50%;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2),
+    0 0 0 1px rgba(var(--brand-primary-rgb, 76, 175, 80), 0.12);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  transition: background 0.2s ease, box-shadow 0.2s ease;
+}
+
+.compass:hover {
+  background: rgba(255, 255, 255, 0.97);
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.28),
+    0 0 10px rgba(var(--brand-primary-rgb, 76, 175, 80), 0.3);
 }
 
 .compass-outer-ring {
@@ -114,7 +220,8 @@ screen and (max-height: 420px) {
   top: 0;
   width: 95px;
   height: 95px;
-  fill: rgba(255, 255, 255, 0.5);
+  fill: var(--brand-primary-dark, #2c6e49);
+  color: var(--brand-primary-dark, #2c6e49);
 }
 
 .compass-outer-ring-background {
@@ -124,7 +231,7 @@ screen and (max-height: 420px) {
   width: 44px;
   height: 44px;
   border-radius: 44px;
-  border: 12px solid rgba(47, 53, 60, 0.8);
+  border: 12px solid rgba(var(--brand-primary-rgb, 76, 175, 80), 0.85);
   box-sizing: content-box;
 }
 
@@ -134,11 +241,22 @@ screen and (max-height: 420px) {
   top: 0;
   width: 95px;
   height: 95px;
-  fill: #CCC;
+  fill: rgba(31, 41, 55, 0.7);
+  color: rgba(31, 41, 55, 0.7);
+  transition: color 0.2s ease, fill 0.2s ease;
+}
+
+.compass-gyro:hover {
+  color: var(--brand-primary, #4caf50);
+  fill: var(--brand-primary, #4caf50);
 }
 
 .compass-gyro-active {
-  fill: #68ADFE;
+  color: var(--warning, #f8b600);
+  fill: var(--warning, #f8b600);
+  filter:
+    drop-shadow(0 0 3px rgba(255, 255, 255, 0.95))
+    drop-shadow(0 0 8px rgba(var(--warning-rgb, 248, 182, 0), 0.95));
 }
 
 .compass-gyro-background {
@@ -148,13 +266,14 @@ screen and (max-height: 420px) {
   width: 33px;
   height: 33px;
   border-radius: 33px;
-  background-color: rgba(47, 53, 60, 0.8);
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  background-color: rgba(var(--brand-primary-rgb, 76, 175, 80), 0.85);
+  border: 1px solid rgba(255, 255, 255, 0.4);
   box-sizing: content-box;
 }
 
 .compass-gyro-background:hover+.compass-gyro {
-  fill: #68ADFE;
+  color: var(--brand-primary, #4caf50);
+  fill: var(--brand-primary, #4caf50);
 }
 
 .compass-rotation-marker {
@@ -162,15 +281,19 @@ screen and (max-height: 420px) {
   top: 0;
   width: 95px;
   height: 95px;
-  fill: #68ADFE;
+  fill: #e11d48;
+  color: #e11d48;
+  filter:
+    drop-shadow(0 0 3px rgba(255, 255, 255, 0.95))
+    drop-shadow(0 0 6px rgba(225, 29, 72, 0.85));
 }
 
-/* =========================================================
-   移动端适配（替代上游默认的小屏隐藏行为）：
-   罗盘与缩放栏统一 scale(0.8) 等比缩小，保持桌面版比例与同轴关系；
-   位置按宿主页面顶部工具栏/FPS 胶囊（约占 y12–74）换算，贴右缘下移。
-   JS 侧 Knockout visible 绑定写内联样式，优先级不受影响。
-   ========================================================= */
+/* SVG 继承颜色 */
+.cesium-nav-svg path {
+  fill: currentColor !important;
+}
+
+/* ---------- 移动端适配 ---------- */
 @media screen and (max-width: 700px),
 screen and (max-height: 420px) {
   .navigation-controls,
@@ -178,26 +301,26 @@ screen and (max-height: 420px) {
     display: block;
   }
 
-  /* 罗盘 95px → 约 76px，放在顶部状态区下方，贴右缘 */
+  /* 罗盘 95px → 约 86px，贴右缘、顶部状态区下方 */
   .compass {
     right: 8px;
     top: 84px;
-    transform: scale(0.8);
+    transform: scale(0.9);
     transform-origin: top right;
   }
 
-  /* 缩放栏同样 ×0.8（30px → 约 24px），与罗盘同轴居中 */
+  /* 缩放栏整体放大 ×1.2（32px → 约 38px 宽），比桌面端更大、更易于点按 */
   .navigation-controls {
-    right: 33px;
-    top: 171px;
-    transform: scale(0.8);
+    right: 30px;
+    top: 191px;
+    transform: scale(1.2);
     transform-origin: top right;
   }
 
-  /* 触控命中高度放宽（×0.8 后视觉约 32px），图标居中 */
+  /* 触控命中高度放宽（×1.2 后视觉约 53px），图标居中 */
   .navigation-control,
   .navigation-control-last {
-    min-height: 40px;
+    min-height: 44px;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -217,93 +340,4 @@ screen and (max-height: 420px) {
   .compass {
     display: none;
   }
-}
-
-/* =========================================================
-   高对比度深色主题覆盖 (原 cesium-navigation-theme.css)
-   ========================================================= */
-
-/* 罗盘主体 */
-.compass {
-  background: rgba(15, 23, 42, 0.75) !important;
-  border-radius: 50%;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.1) !important;
-  transition: background 0.2s ease, box-shadow 0.2s ease;
-}
-
-.compass:hover {
-  background: rgba(15, 23, 42, 0.9) !important;
-  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.6), 0 0 10px rgba(0, 229, 255, 0.3) !important;
-}
-
-/* 罗盘文字/刻度 */
-.compass-outer-ring {
-  color: rgba(240, 246, 252, 0.85) !important;
-}
-
-.compass:hover .compass-outer-ring {
-  color: #ffffff !important;
-}
-
-/* 旋转标记 */
-.compass-rotation-marker {
-  color: #00e5ff !important;
-  filter: drop-shadow(0 0 4px rgba(0, 229, 255, 0.8));
-}
-
-/* 陀螺仪 */
-.compass-gyro-background {
-  background: rgba(255, 255, 255, 0.08) !important;
-  border-radius: 50%;
-}
-
-.compass-gyro {
-  color: rgba(203, 213, 225, 0.7) !important;
-  transition: color 0.2s ease;
-}
-
-.compass-gyro:hover {
-  color: #00e5ff !important;
-}
-
-.compass-gyro-active {
-  color: #00f0ff !important;
-  filter: drop-shadow(0 0 6px rgba(0, 240, 255, 0.9));
-}
-
-/* 导航控件栏 */
-.navigation-controls {
-  background: rgba(15, 23, 42, 0.75) !important;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.1) !important;
-  border-radius: 10px;
-}
-
-/* 按钮 */
-.navigation-control,
-.navigation-control-last {
-  color: rgba(226, 232, 240, 0.8) !important;
-  background: transparent !important;
-  transition: color 0.2s ease, background 0.2s ease;
-}
-
-.navigation-control:hover,
-.navigation-control-last:hover {
-  color: #ffffff !important;
-  background: rgba(0, 229, 255, 0.2) !important;
-}
-
-.navigation-control:active,
-.navigation-control-last:active {
-  background: rgba(0, 229, 255, 0.35) !important;
-}
-
-/* 激活态图标 */
-.navigation-control-icon-active {
-  color: #00f0ff !important;
-  filter: drop-shadow(0 0 4px rgba(0, 240, 255, 0.8));
-}
-
-/* SVG 继承颜色 */
-.cesium-nav-svg path {
-  fill: currentColor !important;
 }

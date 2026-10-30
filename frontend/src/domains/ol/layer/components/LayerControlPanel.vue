@@ -340,8 +340,8 @@
             >
                 <div
                     class="context-menu-item context-has-submenu"
-                    @mouseenter="showUrlSubmenu = true"
-                    @mouseleave="showUrlSubmenu = false"
+                    @mouseenter="openUrlSubmenu"
+                    @mouseleave="scheduleUrlSubmenuClose"
                 >
                     <span>URL 操作</span>
                     <ChevronRight
@@ -353,6 +353,7 @@
                         v-if="showUrlSubmenu"
                         class="context-submenu"
                         :style="layerContextSubmenuStyle"
+                        @mouseenter="cancelUrlSubmenuClose"
                     >
                         <button
                             class="context-menu-item"
@@ -537,6 +538,33 @@ const wmsLayersLoading = ref(false);
 let wmsLayersFetchToken = 0; // 防止连续输入导致的竞态回填
 const showLayerContextMenu = ref(false);
 const showUrlSubmenu = ref(false);
+// URL 子菜单延迟关闭：鼠标从父项移到子菜单的间隙/斜穿相邻项时，
+// mouseleave 会立刻触发；直接置 false 会让子菜单在指针到达前消失。
+// 统一走 220ms 延迟 + 进入即取消。
+let urlSubmenuCloseTimer = null;
+
+function openUrlSubmenu() {
+    if (urlSubmenuCloseTimer) {
+        clearTimeout(urlSubmenuCloseTimer);
+        urlSubmenuCloseTimer = null;
+    }
+    showUrlSubmenu.value = true;
+}
+
+function scheduleUrlSubmenuClose() {
+    if (urlSubmenuCloseTimer) clearTimeout(urlSubmenuCloseTimer);
+    urlSubmenuCloseTimer = setTimeout(() => {
+        urlSubmenuCloseTimer = null;
+        showUrlSubmenu.value = false;
+    }, 220);
+}
+
+function cancelUrlSubmenuClose() {
+    if (urlSubmenuCloseTimer) {
+        clearTimeout(urlSubmenuCloseTimer);
+        urlSubmenuCloseTimer = null;
+    }
+}
 const contextMenuLayer = ref(null);
 const layerContextMenuAnchor = ref({ top: 0, left: 0 });
 const layerOpacityMap = ref(new Map()); // 存储图层透明度，key: layerId, value: opacity (0-1)
@@ -707,10 +735,12 @@ const layerContextSubmenuStyle = computed(() => {
     const availableRight = containerWidth - layerContextMenuAnchor.value.left;
     const canOpenRight = availableRight > CONTEXT_MENU_WIDTH + CONTEXT_SUBMENU_WIDTH + 20;
 
-    return {
-        left: canOpenRight ? `${CONTEXT_MENU_WIDTH - 4}px` : `-${CONTEXT_SUBMENU_WIDTH + 4}px`,
-        top: '0px',
-    };
+    // 用 100%/right:100% 贴住父项边缘，而不是按菜单宽度写死偏移：
+    // 写死值比父项实际宽度多出几像素，中间的缝会让 mouseleave 在指针
+    // 移过去的路上触发，子菜单当场消失。
+    return canOpenRight
+        ? { left: '100%', top: '0px' }
+        : { right: '100%', top: '0px' };
 });
 
 watch(
@@ -846,6 +876,7 @@ function onDrop(evt, dropIndex) {
 }
 
 function closeLayerContextMenu() {
+    cancelUrlSubmenuClose();
     showLayerContextMenu.value = false;
     showUrlSubmenu.value = false;
     contextMenuLayer.value = null;
@@ -892,6 +923,7 @@ function onLayerContextMenu(layer, index, event) {
         name: String(layer.name || layer.id),
         index: Number(index),
     };
+    cancelUrlSubmenuClose();
     showUrlSubmenu.value = false;
     showLayerContextMenu.value = true;
 }
@@ -1215,6 +1247,8 @@ onMounted(() => {
 onBeforeUnmount(() => {
     unbindAnchorListeners();
     clearLongPressTimer();
+    // URL 子菜单的延迟关闭定时器：卸载后仍在飞行会向已销毁的 ref 写值
+    cancelUrlSubmenuClose();
     window.removeEventListener('pointerdown', handleGlobalPointerDown);
 });
 </script>

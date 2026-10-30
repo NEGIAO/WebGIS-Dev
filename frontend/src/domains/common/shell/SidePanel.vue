@@ -950,15 +950,23 @@ onUnmounted(() => {
 
         transform: translateX(0%);
         /* 保持的水平偏移 */
+        transition: background 0.2s ease;
+    }
+
+    /* 修复：移动端点按触发 :hover/:active 时不再缩成 30px（沿用桌面端视觉） */
+    .toggle-handle:hover,
+    .toggle-handle:active {
+        width: 80px;
+        background: var(--brand-accent-dark);
     }
 
     .handle-icon {
-        /* 旋转箭头方向 */
+        /* 移动端箭头为上下方向（与桌面端的左右区分） */
         transition: transform 0.3s ease;
         transform: rotate(90deg);
         width: 20px;
-        /* 建议给 SVG 设置明确大小 */
         height: 20px;
+        color: var(--brand-accent);
     }
 
     .handle-icon.is-flipped {

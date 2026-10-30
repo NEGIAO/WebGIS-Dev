@@ -1748,6 +1748,26 @@ export const LAYER_SOURCE_DEFINITIONS: LayerSourceDefinition[] = [
             ),
     },
     {
+        id: 'osm_Backend_Proxy',
+        name: 'OSM代理',
+        category: 'custom',
+        group: '自定义',
+        // OSM 官方瓦片在境内间歇不可达（见 README「已知限制」），此条目改走统一瓦片代理
+        // /proxy/{上游 host+path}，与 google_Backend_Proxy 同形，仅上游不同。
+        // OSM 官方自 2023 起只用单域名 tile.openstreetmap.org，不再有 {a-c} 子域，故不写 {s}。
+        url: tileProxyUrl('tile.openstreetmap.org/{z}/{x}/{y}.png'),
+        serviceType: 'xyz',
+        // OSM 官方最高 z19；不设则会在 z20+ 反复请求 404 瓦片
+        maxZoom: 19,
+        createSource: () =>
+            prioritizeTileSourceRequest(
+                new XYZ({
+                    url: tileProxyUrl('tile.openstreetmap.org/{z}/{x}/{y}.png'),
+                    maxZoom: 19,
+                }),
+            ),
+    },
+    {
         id: 'ships66',
         name: '船舶网',
         category: 'custom',
