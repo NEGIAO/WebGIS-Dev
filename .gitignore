@@ -63,6 +63,9 @@ pnpm-debug.log*
 lerna-debug.log*
 .workbuddy-ai
 .workbuddy
+dist-perf
+dist-perf-before
+dist-verify
 
 # ========== 系统文件 ==========
 .DS_Store

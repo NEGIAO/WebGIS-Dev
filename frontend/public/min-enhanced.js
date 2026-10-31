@@ -63,72 +63,72 @@ function registerDelayedStatsLoader() {
         window.addEventListener('load', function () {
             setTimeout(function () {
                 // Supabase
-                try {
-                    const supabaseScript = document.createElement('script');
-                    supabaseScript.src = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2';
-                    supabaseScript.onload = function () {
-                        try {
-                            const SB_URL = 'https://zifovhnylhlwnviiilbo.supabase.co';
-                            const SB_KEY = 'sb_publishable_oMMXVnMuHW0JCYASt4hpcQ_X8d65i0l';
-                            const _client = supabase.createClient(SB_URL, SB_KEY);
-                            async function startTracking() {
-                                try {
-                                    let userIP = null;
-                                    try {
-                                        const ipRes = await fetch(
-                                            'https://api.ipify.org?format=json',
-                                        );
-                                        const ipJson = await ipRes.json();
-                                        userIP = ipJson.ip;
-                                    } catch (e) {
-                                        console.log('无法获取公网IP，Supabase 统计将缺少 IP：', e);
-                                    }
-                                    const path = window.location.pathname;
-                                    await _client
-                                        .from('page_views')
-                                        .insert([{ page_url: path, visitor_ip: userIP }]);
-                                    const today = new Date();
-                                    today.setHours(0, 0, 0, 0);
-                                    const todayISO = today.toISOString();
-                                    const [totalCount, todayCount] = await Promise.all([
-                                        _client
-                                            .from('page_views')
-                                            .select('*', { count: 'exact', head: true })
-                                            .eq('page_url', path),
-                                        userIP
-                                            ? _client
-                                                  .from('page_views')
-                                                  .select('*', { count: 'exact', head: true })
-                                                  .eq('page_url', path)
-                                                  .eq('visitor_ip', userIP)
-                                                  .gte('created_at', todayISO)
-                                            : Promise.resolve({ count: 0 }),
-                                    ]);
-                                    const totalEl = document.getElementById('total-pv-val');
-                                    const todayEl = document.getElementById('today-personal-val');
-                                    if (totalEl)
-                                        totalEl.innerText = (totalCount && totalCount.count) || 0;
-                                    if (todayEl)
-                                        todayEl.innerText = (todayCount && todayCount.count) || 0;
-                                } catch (err) {
-                                    console.log('Supabase startTracking 错误：', err);
-                                }
-                            }
-                            startTracking();
-                            console.log(
-                                'Supabase 统计已初始化（延迟加载，来自 main-enhanced.js）。',
-                            );
-                        } catch (e) {
-                            console.log('Supabase 初始化内部错误：', e);
-                        }
-                    };
-                    supabaseScript.onerror = function (e) {
-                        console.log('加载 Supabase SDK 失败：', e);
-                    };
-                    document.head.appendChild(supabaseScript);
-                } catch (err) {
-                    console.info('插入 Supabase 脚本出错：', err);
-                }
+                // try {
+                //     const supabaseScript = document.createElement('script');
+                //     supabaseScript.src = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2';
+                //     supabaseScript.onload = function () {
+                //         try {
+                //             const SB_URL = 'https://zifovhnylhlwnviiilbo.supabase.co';
+                //             const SB_KEY = 'sb_publishable_oMMXVnMuHW0JCYASt4hpcQ_X8d65i0l';
+                //             const _client = supabase.createClient(SB_URL, SB_KEY);
+                //             async function startTracking() {
+                //                 try {
+                //                     let userIP = null;
+                //                     try {
+                //                         const ipRes = await fetch(
+                //                             'https://api.ipify.org?format=json',
+                //                         );
+                //                         const ipJson = await ipRes.json();
+                //                         userIP = ipJson.ip;
+                //                     } catch (e) {
+                //                         console.log('无法获取公网IP，Supabase 统计将缺少 IP：', e);
+                //                     }
+                //                     const path = window.location.pathname;
+                //                     await _client
+                //                         .from('page_views')
+                //                         .insert([{ page_url: path, visitor_ip: userIP }]);
+                //                     const today = new Date();
+                //                     today.setHours(0, 0, 0, 0);
+                //                     const todayISO = today.toISOString();
+                //                     const [totalCount, todayCount] = await Promise.all([
+                //                         _client
+                //                             .from('page_views')
+                //                             .select('*', { count: 'exact', head: true })
+                //                             .eq('page_url', path),
+                //                         userIP
+                //                             ? _client
+                //                                   .from('page_views')
+                //                                   .select('*', { count: 'exact', head: true })
+                //                                   .eq('page_url', path)
+                //                                   .eq('visitor_ip', userIP)
+                //                                   .gte('created_at', todayISO)
+                //                             : Promise.resolve({ count: 0 }),
+                //                     ]);
+                //                     const totalEl = document.getElementById('total-pv-val');
+                //                     const todayEl = document.getElementById('today-personal-val');
+                //                     if (totalEl)
+                //                         totalEl.innerText = (totalCount && totalCount.count) || 0;
+                //                     if (todayEl)
+                //                         todayEl.innerText = (todayCount && todayCount.count) || 0;
+                //                 } catch (err) {
+                //                     console.log('Supabase startTracking 错误：', err);
+                //                 }
+                //             }
+                //             startTracking();
+                //             console.log(
+                //                 'Supabase 统计已初始化（延迟加载，来自 main-enhanced.js）。',
+                //             );
+                //         } catch (e) {
+                //             console.log('Supabase 初始化内部错误：', e);
+                //         }
+                //     };
+                //     supabaseScript.onerror = function (e) {
+                //         console.log('加载 Supabase SDK 失败：', e);
+                //     };
+                //     document.head.appendChild(supabaseScript);
+                // } catch (err) {
+                //     console.info('插入 Supabase 脚本出错：', err);
+                // }
 
                 // MapMyVisitors
                 try {

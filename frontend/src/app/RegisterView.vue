@@ -1463,9 +1463,37 @@ async function handleGoogleOneTap(response) {
     }
 }
 
+// GSI 脚本源：原固定在 index.html <head> 无条件加载，导致落地页等无关页面
+// 也拉取第三方脚本；现改为按需注入（仅登录/注册页用到）。见 V3.6.35。
+const GSI_SCRIPT_SRC = 'https://accounts.google.com/gsi/client';
+// 防止重复 append <script> 的注入标记
+let gsiScriptInjecting = false;
+
+/**
+ * 按需注入 Google Identity Services 脚本（仅登录/注册页用到）。
+ * 未加载且尚未发起注入时才创建 <script> 并挂到 <head>，全局仅注入一次。
+ */
+function ensureGsiScript() {
+    if (window.google?.accounts?.id) return; // 已就绪，无需注入
+    if (gsiScriptInjecting) return; // 注入进行中，避免重复 append
+    if (document.querySelector(`script[src="${GSI_SCRIPT_SRC}"]`)) {
+        gsiScriptInjecting = true; // 已有标签（可能仍在加载）
+        return;
+    }
+    const s = document.createElement('script');
+    s.src = GSI_SCRIPT_SRC;
+    s.async = true;
+    s.defer = true;
+    s.onload = () => { gsiScriptInjecting = false; };
+    s.onerror = () => { gsiScriptInjecting = false; };
+    document.head.appendChild(s);
+    gsiScriptInjecting = true;
+}
+
 /**
  * 等待 Google Identity Services 脚本就绪（GSI 为 async 异步加载，
  * onMounted 时可能尚未完成，无等待则 OneTap 静默失效）。
+ * 未就绪时先按需注入脚本，再轮询直到就绪或超时。
  * @param {number} timeoutMs 最大等待毫秒数，默认 5000
  * @returns {Promise<boolean>} 就绪返回 true；超时返回 false
  */
@@ -1475,6 +1503,7 @@ function waitForGsi(timeoutMs = 5000) {
             resolve(true);
             return;
         }
+        ensureGsiScript(); // 未就绪则按需注入
         const start = Date.now();
         const timer = setInterval(() => {
             if (window.google?.accounts?.id) {

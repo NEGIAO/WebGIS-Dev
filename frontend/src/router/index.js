@@ -1,7 +1,9 @@
 // 应用路由表：登录/落地/主页等页面入口，含分享模式与鉴权守卫逻辑
 import { createRouter, createWebHashHistory } from 'vue-router';
-import RegisterView from '../app/RegisterView.vue';
 import LandingView from '../app/LandingView.vue';
+// RegisterView 仅 /register 路由使用，改为按需加载：
+// 避免把 2600+ 行组件及其 api/backend→axios 依赖链拉入首屏关键路径（性能追踪实测）。
+const RegisterView = () => import('../app/RegisterView.vue');
 import { useAuthStore } from '@common/user/stores/useAuthStore';
 import { useAppStore } from '@common/app/stores/useAppStore';
 import { useUrlParamStore } from '@common/url-state/stores/useUrlParamStore';

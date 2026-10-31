@@ -2,28 +2,46 @@
 <html lang="zh-CN">
     <!--    
         NEGIAO's WebGIS
-        联系作者：1482918576
+        联系作者：yaonaigao@qq.com
         GitHub: https://github.com/NEGIAO
+        update:2026-10-31
+        Version: 3.6.35
 -->
 
     <head>
         <meta charset="UTF-8" />
         <!-- 隐藏 Referer 信息避免被跟踪 -->
         <!-- <meta name="referrer" content="no-referrer"> -->
-        <!-- 品牌 icon.webp 全站唯一网络请求：preload 提前触发，
-             favicon 与首屏 logo <img> 均命中同一缓存响应 -->
-        <link
-            rel="preload"
-            href="./images/icon.webp"
-            as="image"
-            type="image/webp"
-        />
+        <!-- 品牌 icon.webp 同时作为 favicon 与首屏 logo <img>；
+             二者同为同源请求，浏览器 HTTP 缓存会共享同一条响应，无需额外 preload。
+             preload 因 credentials mode 与 favicon 不匹配反而产生一次冗余请求并触发
+             控制台告警，已于 V3.6.35 移除（实测 icon 由 3 次请求降为缓存共享）。 -->
         <link
             rel="icon"
             href="./images/icon.webp"
             type="image/webp"
         />
         <!-- 自定义网页的logo：favicon / LandingView / TopBar / RegisterView 共用同一资源 -->
+
+        <!-- LCP 纹样图预加载：该图由 useRingPatternStyle.ts 运行时注入为 CSS background，
+             初始 HTML 不可发现，性能追踪实测造成约 480ms 的资源加载延迟。
+             按断点分别预加载（仅命中其一），fetchpriority=high 提升抓取优先级。 -->
+        <link
+            rel="preload"
+            href="./images/njnu-media/d-bg2_1.webp"
+            as="image"
+            type="image/webp"
+            fetchpriority="high"
+            media="(min-width: 768px)"
+        />
+        <link
+            rel="preload"
+            href="./images/njnu-media/d-bg2_1-mobile.webp"
+            as="image"
+            type="image/webp"
+            fetchpriority="high"
+            media="(max-width: 767.98px)"
+        />
 
         <meta
             name="viewport"
@@ -32,30 +50,34 @@
         <!-- 多设备自适应：shrink-to-fit=no 禁止 iOS Safari 在横向溢出时整页缩小（F12 模拟不会复现该行为）；
              viewport-fit=cover 适配刘海屏安全区 -->
 
-        <!-- Font Awesome (BootCDN 加速国内访问)
-             media="print" + onload 交换:CSS 异步加载不阻塞首屏渲染(图标可能晚到约百毫秒);
-             noscript 兜底保证无 JS 环境仍能加载图标样式 -->
+        <!-- Font Awesome 6.4.0（自托管，见 public/fontawesome/）
+             1) 同源加载：省掉 bootcdn 的 DNS+TCP+TLS 一次跨域握手，且不受第三方可用性波动影响；
+             2) 目录保持上游 css/ 与 webfonts/ 同级布局，CSS 内 url(../webfonts/…) 相对路径
+                无需任何改写，子路径部署（base './'）下同样成立；
+             3) 字体 preload：@font-face 要等 CSS 解析完才发起请求，提前拉 solid-900
+                （项目 58 处 fas + 26 处 fab，solid 为必用档）可与 CSS 解析并行；
+                crossOrigin 不可省——字体请求恒为 CORS 模式，缺该属性会导致 preload 与
+                实际请求的凭据模式不匹配，反而重复下载一次。
+             4) 由 media="print" 异步 hack 改回同步：同源后 CSS 与 HTML 复用同一连接，
+                阻塞成本仅一个 RTT，换来图标不再延迟出现，也免去 noscript 兜底分支。 -->
+        <link
+            rel="preload"
+            href="/fontawesome/webfonts/fa-solid-900.woff2"
+            as="font"
+            type="font/woff2"
+            crossorigin
+        />
         <link
             rel="stylesheet"
-            href="https://cdn.bootcdn.net/ajax/libs/font-awesome/6.4.0/css/all.min.css"
-            media="print"
-            onload="this.media='all'; this.onload=null;"
+            href="/fontawesome/css/all.min.css"
         />
-        <noscript>
-            <link
-                rel="stylesheet"
-                href="https://cdn.bootcdn.net/ajax/libs/font-awesome/6.4.0/css/all.min.css"
-            />
-        </noscript>
-
-        <!-- 关键资源预加载：减少首屏渲染等待 -->
-        <link rel="preconnect" href="https://cdn.bootcdn.net" crossorigin />
-        <!-- Cesium CDN 预连接（仅握手，不下载资源，不阻塞首屏） -->
-        <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin />
 
         <title>NEGIAO's WebGIS</title>
-        <!-- Google Identity Services (One Tap / Sign In With Google) -->
-        <script src="https://accounts.google.com/gsi/client" async defer></script>
+        <!-- Google Identity Services 不在此处加载：
+             V3.6.35 起改由 RegisterView.vue 的 ensureGsiScript() 按需注入（仅登录/注册页），
+             本文件曾遗留一个 async 的 <script>，会让落地页/地图页等无关页面
+             也去连 accounts.google.com（国内不可达，白占连接槽并拖 load）。
+             如需恢复预加载，先确认这一点是否仍成立。 -->
     </head>
 
     <body>

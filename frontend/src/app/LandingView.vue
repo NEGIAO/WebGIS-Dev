@@ -290,8 +290,10 @@
                                 :src="previewUrl"
                                 :alt="feature.title"
                                 class="feature-hero-preview__img"
-                                loading="lazy"
+                                fetchpriority="high"
                                 decoding="async"
+                                width="1996"
+                                height="769"
                                 draggable="false"
                             />
                         </div>
@@ -483,7 +485,10 @@
                     <img
                         :src="starChartSrc"
                         :alt="t('landing.ossChartAlt')"
+                        width="800"
+                        height="450"
                         loading="lazy"
+                        decoding="async"
                         referrerpolicy="no-referrer"
                         @error="onChartError"
                     />

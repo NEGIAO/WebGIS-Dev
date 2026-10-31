@@ -6,6 +6,31 @@
 
 ## 版本记录
 
+### V3.6.35 (2026-10-31) — 首屏 LCP 预加载 + RegisterView 按需加载
+
+> **背景**：Chrome DevTools MCP 对落地页的追踪显示，LCP 元素为环纹背景图 `d-bg2_1.webp`，其 69.8% 的 LCP 时间耗在「资源加载延迟」——该图由 `useRingPatternStyle.ts` 运行时注入为 CSS background，初始 HTML 不可发现，浏览器只能等 JS 执行后才发起请求；同时 `RegisterView` 被静态导入路由，把 2600+ 行组件与 `api/backend`→`axios` 拉入首屏关键链。
+
+> **改动**：
+> 1. `frontend/index.html` 新增两张环纹图的 `preload`（桌面 / 移动断点二选一），带 `fetchpriority="high"`、`type="image/webp"`。
+> 2. `frontend/src/router/index.js` 的 `RegisterView` 改为 `() => import('../app/RegisterView.vue')`。
+> 3. `frontend/src/app/composables/useRingPatternStyle.ts` 图源同步 `.png` → `.webp`。
+> 4. `frontend/index.html` **移除失效的 `icon.webp` `preload`**：该 preload 因 `credentials` mode 与 favicon 实际请求不匹配，反而产生一次冗余请求并触发控制台告警；移除后 `icon.webp` 由 3 次请求降为同源 HTTP 缓存共享（favicon / LandingView logo / TopBar / RegisterView 共用同一资源，缓存复用）。
+> 5. `frontend/index.html` **移除落地页无条件加载的 Google GSI 静态 `<script>`**：原 `<head>` 内 `accounts.google.com/gsi/client` 会让落地页 / 地图页等无关页面也去连第三方源（国内不可达，白占连接槽并拖 `load`）；改由 `RegisterView.vue` 的 `ensureGsiScript()` 在登录 / 注册页**按需注入**（组件内已具备 `GSI_SCRIPT_SRC` + 防重复注入逻辑）。`vite.config.js` 的 `googleGsiPlugin` 仍按 `VITE_GOOGLE_OAUTH_CLIENT_ID` 决定是否保留 `gsi:start/gsi:end` 区块，二者不冲突。
+> 6. `frontend/src/app/LandingView.vue` 落地页英雄图（feature 卡片 `preview.webp`）**去除 `loading="lazy"` + 加 `fetchpriority="high"` + 补 `width="1996" height="769"`**：原 `lazy` 使其排在全部 JS 模块之后才请求，改为高优先级 eager 后首屏更早可见，并消除懒加载缺宽高告警。
+
+> **实测（生产构建 + `vite preview`，Chrome DevTools MCP）**：
+> - Slow 4G + CPU 4×：LCP 3471 ms → 2793 ms（-678 ms），资源加载延迟 2728 ms → 594 ms，图片请求发起 2731 ms → 598 ms，优先级 Low → High。
+> - 入口 chunk：187.8 kB / 61.3 kB gzip → 98.7 kB / 34.0 kB gzip（-44.5%）。
+> - 未节流：LCP 255 ms → 247 ms，资源加载延迟 95 ms → 5 ms。
+
+> **补充：本地 dev 冷加载复测（2026-10-31 二次测试，Chrome DevTools MCP 对 `http://localhost:5173`）**：
+> - 落地页 `accounts.google.com/gsi/client` 请求数 `1 → 0`（`hasGsiScriptTag=false`），首屏 `resourceCount 107 → 80`。
+> - 英雄图 `preview.webp` 请求发起由「排在全部 JS 模块之后」提前至 `≈390 ms`（eager + `fetchpriority=high`）。
+> - 控制台 `Lazy-loaded images should have explicit dimensions` issue `2 → 1`：已为 starChart 补 `width="800" height="450"`；剩余 1 项为 Chrome 对 `width:100%;height:auto` 响应式懒加载图的已知误报（属性已显式存在，浏览器按 800×450 推导 `aspect-ratio` 预留空间，无 CLS）。
+> - LCP / FCP 在 dev（非打包）模式下未被探针捕获，不具生产代表性；生产口径 LCP 见上方构建实测。
+
+> **遗留**：优化后渲染延迟升至 1608 ms（Slow 4G + CPU 4×），主线程 JS 成为新瓶颈；GTM 184.6 kB / 65 ms 与 Google 系脚本对国内用户仍有可用性风险，留待后续评估。另，落地页 `js.users.51.la/22001747.js`（国际版 51.la 脚本）稳定返回 403、偶发 503，属外部统计依赖问题，非本次改动引入，建议后续评估是否移除国际版脚本或统一改用国内版。
+
 ### V3.6.34 (2026-10-31) — 整合多次不规范提交为单一版本：首屏打包优化 + TIF 按需加载 + 移动端信息层级收敛
 
 > **整合说明**：同日暂存区曾被逐次记为 V3.6.34 / V3.6.35 / V3.6.36 三个版本，而 HEAD 实际停留在 V3.6.33。按 Force_command §5「同一批次不得拆成多个版本号」，整合为单一版本 V3.6.34。包含三条工作线：① 首屏打包与依赖加载优化（构建链根治 + 异步组件韧性）；② TIF/GeoTIFF 解码依赖按需加载（geotiff 309 kB 不再进入首屏）；③ 移动端信息层级收敛 + Cesium 控制条与 OL 全面对齐。

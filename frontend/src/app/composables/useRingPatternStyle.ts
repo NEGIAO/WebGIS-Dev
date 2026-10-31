@@ -27,8 +27,8 @@ import { onBeforeUnmount, onMounted } from 'vue';
 import { ASSET_BASE_URL } from '../../config/publicRuntime';
 
 /** 纹样图源（public/images/njnu-media/）：桌面版 + 移动端 alpha 加强版 */
-const RING_PATTERN_FILE = 'images/njnu-media/d-bg2_1.png';
-const RING_PATTERN_MOBILE_FILE = 'images/njnu-media/d-bg2_1-mobile.png';
+const RING_PATTERN_FILE = 'images/njnu-media/d-bg2_1.webp';
+const RING_PATTERN_MOBILE_FILE = 'images/njnu-media/d-bg2_1-mobile.webp';
 
 /** 注入参数 */
 export interface RingPatternStyleOptions {
