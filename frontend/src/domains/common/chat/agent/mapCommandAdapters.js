@@ -169,6 +169,7 @@ export function createOlMapCommandAdapter({
     getMap,
     getRuntimeState,
     setBasemap,
+    addSearchLayer,
 } = {}) {
     const captureState = () => captureOlState(getMap?.(), getRuntimeState);
 
@@ -312,11 +313,76 @@ export function createOlMapCommandAdapter({
         };
     }
 
+    /**
+     * 把搜索结果落到「搜索结果图层」（写入 TOC），不移动视口。
+     *
+     * 复用 2D 搜索面板同一条建层逻辑（sourceType='search' + 系统默认样式 + 自动标注），
+     * 因此符号化由既有图层体系完成，本命令只负责传坐标与名称。
+     */
+    async function addSearchResultLayer({ name, lng, lat, address } = {}) {
+        const coordinate = validateLngLat(lng, lat);
+        if (coordinate.error) {
+            return { success: false, code: 'INVALID_ARGUMENT', message: coordinate.error };
+        }
+        if (typeof addSearchLayer !== 'function') {
+            return {
+                success: false,
+                code: 'MAP_RUNTIME_NOT_READY',
+                message: 'OpenLayers search layer sink is not ready',
+            };
+        }
+
+        const layerName = String(name || '').trim() || `搜索结果_${coordinate.lng.toFixed(5)}_${coordinate.lat.toFixed(5)}`;
+        let created;
+        try {
+            created = await addSearchLayer({
+                name: layerName,
+                lng: coordinate.lng,
+                lat: coordinate.lat,
+                service: 'agent',
+                raw: address ? { address: String(address) } : null,
+            });
+        } catch (error) {
+            return {
+                success: false,
+                code: 'SEARCH_LAYER_FAILED',
+                message: `Failed to add search result layer: ${error?.message || 'unknown error'}`,
+                resultingMapState: captureState(),
+            };
+        }
+        if (!created) {
+            return {
+                success: false,
+                code: 'SEARCH_LAYER_FAILED',
+                message: 'OpenLayers rejected the search result coordinates',
+                resultingMapState: captureState(),
+            };
+        }
+        // 坐标合法但建层被拒（map 未就绪 / 要素为空）：不能报成功，否则 TOC 里根本没有这条
+        if (!created.layerId) {
+            return {
+                success: false,
+                code: 'SEARCH_LAYER_FAILED',
+                message: `OpenLayers failed to register layer "${created.layerName}" in the layer tree`,
+                resultingMapState: captureState(),
+            };
+        }
+        return {
+            success: true,
+            code: 'OK',
+            message: `Added search result layer: ${created.layerName}`,
+            layerId: created.layerId,
+            layerName: created.layerName,
+            resultingMapState: captureState(),
+        };
+    }
+
     return {
         captureState,
         setViewCenter,
         zoomToExtent,
         switchBasemap,
+        addSearchResultLayer,
     };
 }
 
@@ -325,6 +391,7 @@ export function createCesiumMapCommandAdapter({
     getCesium,
     getRuntimeState,
     setBasemap,
+    importGeoJson,
 } = {}) {
     const captureState = () => getRuntimeState?.() || null;
 
@@ -518,11 +585,90 @@ export function createCesiumMapCommandAdapter({
         };
     }
 
+    /**
+     * 把搜索结果落到 3D 图层树（TOC「三维数据」分组），不移动相机。
+     *
+     * 走的是既有 GeoJSON 导入通道（与面板上传同一条管线），因此符号化沿用导入默认样式；
+     * `silent: true` 让这次导入不挂遮罩、不弹提示——搜索是高频轻操作，
+     * 不该被一个导入进度浮层打断。
+     */
+    async function addSearchResultLayer({ name, lng, lat, address } = {}) {
+        const coordinate = validateLngLat(lng, lat);
+        if (coordinate.error) {
+            return { success: false, code: 'INVALID_ARGUMENT', message: coordinate.error };
+        }
+        if (typeof importGeoJson !== 'function') {
+            return {
+                success: false,
+                code: 'MAP_RUNTIME_NOT_READY',
+                message: 'Cesium data import sink is not ready',
+            };
+        }
+        if (typeof File !== 'function') {
+            return {
+                success: false,
+                code: 'SEARCH_LAYER_FAILED',
+                message: 'File API is unavailable in this environment',
+            };
+        }
+
+        const layerName = String(name || '').trim() || `搜索结果_${coordinate.lng.toFixed(5)}_${coordinate.lat.toFixed(5)}`;
+        const featureCollection = {
+            type: 'FeatureCollection',
+            features: [
+                {
+                    type: 'Feature',
+                    geometry: { type: 'Point', coordinates: [coordinate.lng, coordinate.lat] },
+                    properties: {
+                        name: layerName,
+                        ...(address ? { address: String(address) } : {}),
+                    },
+                },
+            ],
+        };
+
+        try {
+            const file = new File(
+                [JSON.stringify(featureCollection)],
+                `${layerName}.geojson`,
+                { type: 'application/geo+json' },
+            );
+            // importGeoJson 返回本次新增的导入记录（null = 没加载出任何数据），
+            // 不能只看「调用是否抛错」——loader 内部会吞异常，那样会把失败报成成功
+            const record = await importGeoJson({ resources: [file], silent: true });
+            if (!record) {
+                return {
+                    success: false,
+                    code: 'SEARCH_LAYER_FAILED',
+                    message: 'Cesium data import produced no layer (the GeoJSON payload was rejected or empty)',
+                    resultingMapState: captureState(),
+                };
+            }
+            return {
+                success: true,
+                code: 'OK',
+                // TOC 名称取自文件名（含 .geojson 后缀），回传实际建档名而不是本地拼的名字
+                message: `Added search result layer: ${record.name || layerName}`,
+                layerId: record.id || null,
+                layerName: record.name || layerName,
+                resultingMapState: captureState(),
+            };
+        } catch (error) {
+            return {
+                success: false,
+                code: 'SEARCH_LAYER_FAILED',
+                message: `Failed to add search result layer: ${error?.message || 'unknown error'}`,
+                resultingMapState: captureState(),
+            };
+        }
+    }
+
     return {
         captureState,
         setViewCenter,
         setCameraOrientation,
         zoomToExtent,
         switchBasemap,
+        addSearchResultLayer,
     };
 }

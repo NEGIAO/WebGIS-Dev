@@ -358,7 +358,8 @@ export function createMapSearchAndCoordinateInputFeature({
             return;
         }
 
-        let detail = null;
+        // 不预置 null：try 内必然赋值后才被读取，catch 分支要么 return 要么 rethrow
+        let detail;
         try {
             detail = await fetchAmapPoiDetailAoi({
                 poiid,
@@ -431,19 +432,24 @@ export function createMapSearchAndCoordinateInputFeature({
     }
 
     /**
-     * 处理地名搜索跳转
-     * 接收 LayerControlPanel 解析后的定位载荷并渲染搜索结果图层
-     * @param {Object} payload - 搜索结果 { lng, lat, name, zoom }
+     * 仅创建「搜索结果」受管图层（写入 TOC），不移动视口。
+     *
+     * 与 handleSearchJump 共用同一条建层逻辑：Agent 搜索命中后也走这里落图，
+     * 这样 2D 的搜索结果与前端的搜索面板行为一致（同一个 sourceType='search' 分组、
+     * 同一套 SEARCH_RESULT_STYLE 与自动标注），不需要另造一套点符号体系。
+     *
+     * 返回 `layerId` 可能为 null（map 未就绪 / 要素为空导致建层被拒）——调用方须据此判断
+     * 是否真的落图，不能只看返回值非空就报成功。
+     *
+     * @param {Object} payload 搜索结果 { lng, lat, name, poiid, service, raw }
+     * @returns {Promise<{layerId: string|null, layerName: string, lng: number, lat: number} | null>}
+     *   坐标非法时返回 null
      */
-    function handleSearchJump(payload) {
-        if (!mapInstanceRef.value || !payload) return;
+    async function createSearchResultLayer(payload) {
+        const lon = Number(payload?.lng);
+        const lat = Number(payload?.lat);
+        if (!Number.isFinite(lon) || !Number.isFinite(lat)) return null;
 
-        const lon = Number(payload.lng);
-        const lat = Number(payload.lat);
-        if (Number.isNaN(lon) || Number.isNaN(lat)) {
-            message.warning?.('无法解析该结果的坐标');
-            return;
-        }
         const coord = fromLonLat([lon, lat]);
 
         const layerName = (payload.name || `搜索结果_${lon.toFixed(5)}_${lat.toFixed(5)}`).trim();
@@ -473,7 +479,7 @@ export function createMapSearchAndCoordinateInputFeature({
         }
 
         const f = new Feature(featureProperties);
-        createManagedVectorLayer?.({
+        const layerId = await createManagedVectorLayer?.({
             name: layerName,
             type: 'search',
             sourceType: 'search',
@@ -497,12 +503,33 @@ export function createMapSearchAndCoordinateInputFeature({
             });
         }
 
+        return { layerId: layerId || null, layerName, lng: lon, lat };
+    }
+
+    /**
+     * 处理地名搜索跳转
+     * 接收 LayerControlPanel 解析后的定位载荷并渲染搜索结果图层
+     * @param {Object} payload - 搜索结果 { lng, lat, name, zoom }
+     */
+    async function handleSearchJump(payload) {
+        if (!mapInstanceRef.value || !payload) return;
+
+        const created = await createSearchResultLayer(payload);
+        if (!created) {
+            message.warning?.('无法解析该结果的坐标');
+            return;
+        }
+        // 建层被拒（map 未就绪等）不阻断定位：用户至少能看到位置本身
+        if (!created.layerId) {
+            message.warning?.(`图层创建失败：${created.layerName}`);
+        }
+
         // AOI 提取改为“点击 POI 项 -> 注入弹窗 -> 手动粘贴 JSON”流程。
         // 这里不再自动请求 AOI，避免触发验证弹窗并减少无效请求。
 
         // 动画缩放到位置
         mapInstanceRef.value?.getView()?.animate?.({
-            center: coord,
+            center: fromLonLat([created.lng, created.lat]),
             zoom: Number(payload.zoom) > 0 ? Number(payload.zoom) : 16,
             duration: 700,
         });
@@ -620,6 +647,7 @@ export function createMapSearchAndCoordinateInputFeature({
 
     return {
         handleSearchJump,
+        createSearchResultLayer,
         drawPointByCoordinatesInput,
         drawAmapAoiByDetailJsonInput,
     };

@@ -11,6 +11,9 @@ const COMMAND_SPECS = Object.freeze({
     setCameraOrientation: { supportedViews: ['cesium'] },
     zoomToExtent: { supportedViews: ['ol', 'cesium'] },
     switchBasemap: { supportedViews: ['ol', 'cesium'] },
+    // 搜索结果落图：把命中的 POI 交给各引擎既有的「导入 / 受管图层」通道，
+    // 使其出现在 TOC 并沿用系统默认符号，不引入第二套点样式。
+    addSearchResultLayer: { supportedViews: ['ol', 'cesium'] },
 });
 
 function buildError({ code, command, view, message, supportedViews }) {

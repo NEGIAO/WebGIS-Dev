@@ -1487,15 +1487,26 @@ async function toggleReverseGeocodePick() {
  * 统一导入入口（3D 模式下 SidePanel 上传/共享资源/拖拽的落点）：
  * 接收 gisLoader 载荷（resources 即原始 File[]），转入 Cesium 导入管线。
  * 导入成功后经 syncFromImport 自动建档 → TOC「三维数据」分组接管管理。
- * @param {{resources?: File[], name?: string}} data
- * @returns {Promise<boolean>} 是否接受了载荷
+ *
+ * 返回值用 `loadedDataSources` **差集回读**：`handleDataImport` 内部会吞掉异常
+ * （失败提示由 loader 自己发），因此「调用返回」不等于「真的建档」。只回 true/false
+ * 会让调用方把「解析失败、什么都没加载」报成成功——Agent 搜索结果落图正是这种场景。
+ *
+ * @param {{resources?: File[], name?: string, overrideCrs?: string, silent?: boolean}} data
+ * @returns {Promise<Object|null>} 本次新增的导入记录；未加载出任何数据时返回 null
  */
 async function importUserData(data) {
     const files = Array.isArray(data?.resources) ? data.resources : [];
-    if (!files.length) return false;
-    // 源坐标系覆盖值随载荷透传（TOC 上传区下拉），空串表示自动识别
-    await handleDataImport({ files, overrideCrs: data?.overrideCrs || '' });
-    return true;
+    if (!files.length) return null;
+    const beforeIds = new Set(dataImport.loadedDataSources.value.map((item) => item.id));
+    // 源坐标系覆盖值随载荷透传（TOC 上传区下拉），空串表示自动识别；
+    // silent=true 供 Agent 搜索结果落图使用：不挂导入遮罩、不弹提示
+    await handleDataImport({
+        files,
+        overrideCrs: data?.overrideCrs || '',
+        silent: !!data?.silent,
+    });
+    return dataImport.loadedDataSources.value.find((item) => !beforeIds.has(item.id)) || null;
 }
 
 defineExpose({

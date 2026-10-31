@@ -19,10 +19,10 @@ export function createCesiumDataOpsHandlers({
     isComponentUnmounted,
 }) {
     /** 面板/拖拽导入数据文件（内部已有失败提示） */
-    async function handleDataImport({ files, overrideCrs = '' }) {
+    async function handleDataImport({ files, overrideCrs = '', silent = false }) {
         if (isComponentUnmounted()) return;
         try {
-            await dataImport.loadDataFiles(Array.from(files), { overrideCrs });
+            await dataImport.loadDataFiles(Array.from(files), { overrideCrs, silent });
         } catch {
             // loadDataFiles 内部已通过 message.error 提示
         }

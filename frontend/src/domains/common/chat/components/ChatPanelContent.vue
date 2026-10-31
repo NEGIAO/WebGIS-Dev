@@ -129,6 +129,7 @@ const session = createChatSession();
 const {
     buildMapContext,
     buildSettledMapContext,
+    captureMapContext,
     recordMapAction,
     resetMapContextSession,
 } = useAgentMapContext();
@@ -195,6 +196,8 @@ function initGISCommander() {
     try {
         gisCommander.value = createGISCommander({
             commandBus: agentMapCommandBus,
+            // 「附近的餐馆」需要当前视图中心做周边检索；这里传无副作用快照，避免推进 changesSinceLastTurn 基准
+            getMapContext: captureMapContext,
         });
 
         agentExecutor.value = new AgentExecutor({

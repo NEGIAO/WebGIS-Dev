@@ -681,7 +681,7 @@ const { createManagedVectorLayer } = useCreateManagedVectorLayer({
     styleTemplates: STYLE_TEMPLATES,
 });
 
-const { handleSearchJump, drawPointByCoordinatesInput, drawAmapAoiByDetailJsonInput } =
+const { handleSearchJump, createSearchResultLayer, drawPointByCoordinatesInput, drawAmapAoiByDetailJsonInput } =
     createMapSearchAndCoordinateInputFeature({
         message,
         mapInstanceRef: mapInstance,
@@ -2117,6 +2117,11 @@ defineExpose({
     removeDistrictLayer,
     drawPointByCoordinatesInput,
     drawAmapAoiByDetailJsonInput,
+    /**
+     * 仅落图层、不移动视口：把搜索结果作为「搜索结果图层」写入 TOC。
+     * Agent 搜索已自行通过命令总线定位，重复动画会互相打断，故两者分开暴露。
+     */
+    addSearchResultLayer: createSearchResultLayer,
     toggleLayerCRS,
     toggleSearchLayerCRS,
     redeclareLayerCrs,

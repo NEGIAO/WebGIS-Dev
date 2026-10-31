@@ -159,9 +159,9 @@ backendAPI.interceptors.response.use(
     },
     (error) => {
         // 处理网络错误、超时等
-        let message = '请求失败，请稍后重试';
+        // 不预置文案：下方 error.response / error.request / 其他 三条分支必然赋值后才读取（eslint no-useless-assignment）
+        let message;
         let status = 0;
-        let isQuotaExceeded = false;
         let detailMsg = '';
         let detailCode = '';
 
@@ -222,7 +222,8 @@ backendAPI.interceptors.response.use(
 
             // ⭐ 特殊处理 429 配额用完（含统一 API 配额池的下载额度不足）
             if (status === 429) {
-                isQuotaExceeded = true;
+                // 本分支在下方立即 reject 返回，故不再置 isQuotaExceeded 标记
+                // （赋值后无任何读取点，属 eslint no-useless-assignment）；标记由 apiError.isQuotaExceeded 直接给出
                 // 优先用后端返回的 message（结构化 detail），避免显示"请求过于频繁"误导用户
                 message = detailMsg || getHttpStatusMessage(429);
                 const apiError = new Error(message);
@@ -251,18 +252,19 @@ backendAPI.interceptors.response.use(
             message = error.message || '未知错误，请稍后重试';
         }
 
-        // 只在非配额用完的情况下输出错误日志
-        if (!isQuotaExceeded) {
-            // 用户提示由下方 showError 负责；错误对象保留在 rejected 的 apiError.originalError 便于排查，不输出 console.error
-            // console.error(`[Backend API] ${status ? `[${status} ${getHttpStatusMessage(status)}]` : '[网络错误]'}`, message, error);
-            // 后端已返回结构化 message 时，拼接状态码前缀：「401，登录状态已失效，请重新登录」
-            // 避免直接抛字典原始字符串或仅显示 HTTP 状态描述
-            const toastMsg = detailMsg ? `${status}，${detailMsg}` : (typeof message === 'string' ? message : String(message?.message || JSON.stringify(message)));
-            showError(toastMsg, { duration: 6000 });
-        }
+        // 配额用完（429）已在上面提前 reject 返回，能走到这里的都不是配额错误，
+        // 故不再用 isQuotaExceeded 做分支判断（该标记此前恒为 false，属死逻辑）。
+        // 用户提示由下方 showError 负责；错误对象保留在 rejected 的 apiError.originalError 便于排查，不输出 console.error
+        // 后端已返回结构化 message 时，拼接状态码前缀：「401，登录状态已失效，请重新登录」
+        // 避免直接抛字典原始字符串或仅显示 HTTP 状态描述
+        // config.silent 允许调用方关闭这条全局提示：多引擎降级链路（如搜索先试 Amap、
+        // 失败再转 Nominatim）里，中间那次失败不该以红色报错的形式呈现给用户。
+        const shouldToast = !error.config?.silent;
+        const toastMsg = detailMsg ? `${status}，${detailMsg}` : (typeof message === 'string' ? message : String(message?.message || JSON.stringify(message)));
+        if (shouldToast) showError(toastMsg, { duration: 6000 });
 
         const apiError = new Error(message);
-        apiError.isQuotaExceeded = isQuotaExceeded;
+        apiError.isQuotaExceeded = false;
         apiError.status = status;
         apiError.detailCode = detailCode;
         apiError.statusText = getHttpStatusMessage(status);

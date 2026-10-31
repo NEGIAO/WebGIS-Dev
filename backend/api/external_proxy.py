@@ -340,6 +340,7 @@ async def proxy_amap_place_text(
     request: Request,
     keywords: str = Query(..., min_length=1, max_length=100),
     city: str = Query(default="", max_length=40),
+    citylimit: bool = Query(default=False),
     page: int = Query(default=1, ge=1, le=100),
     offset: int = Query(default=10, ge=1, le=50),
     extensions: str = Query(default="base", pattern="^(base|all)$"),
@@ -350,7 +351,8 @@ async def proxy_amap_place_text(
 
     参数：
     - keywords: 搜索关键词。
-    - city: 可选城市限制。
+    - city: 可选城市限制（城市名 / adcode / citycode）。
+    - citylimit: 为真时严格限定在 `city` 内，不再返回其它城市的结果。
     - page/offset: 分页参数。
     - extensions: `base` 或 `all`。
 
@@ -362,15 +364,69 @@ async def proxy_amap_place_text(
     2. 请求上游接口；
     3. 统一错误映射后返回。
     """
+    upstream_params: Dict[str, Any] = {
+        "keywords": str(keywords).strip(),
+        "city": str(city or "").strip(),
+        "page": int(page),
+        "offset": int(offset),
+        "extensions": str(extensions or "base").strip(),
+    }
+    if citylimit:
+        upstream_params["citylimit"] = "true"
     return await _request_amap_json(
         request,
         "/v3/place/text",
         "poi_search",
+        params=upstream_params,
+    )
+
+
+@router.get("/amap/place/around")
+async def proxy_amap_place_around(
+    request: Request,
+    location: str = Query(..., min_length=3, max_length=80),
+    keywords: str = Query(default="", max_length=100),
+    radius: int = Query(default=3000, ge=0, le=50000),
+    page: int = Query(default=1, ge=1, le=100),
+    offset: int = Query(default=10, ge=1, le=25),
+    sortrule: str = Query(default="distance", pattern="^(distance|weight)$"),
+    extensions: str = Query(default="base", pattern="^(base|all)$"),
+    _current_user: Dict[str, Any] = Depends(require_api_access_or_guest),
+) -> Dict[str, Any]:
+    """
+    功能：高德 POI 周边检索代理（圆形区域搜索）。
+
+    参数：
+    - location: 圆心 `lng,lat`（高德坐标系 GCJ-02）。
+    - keywords: 检索关键词。**不要留空**：高德要求 `keywords` 与 `types` 至少提供其一，
+      而本路由未暴露 `types`，两者皆空时上游会直接返回参数错误（INVALID_PARAMS）。
+    - radius: 半径（米，0~50000，默认 3000）。
+    - sortrule: `distance`（按距离，默认）或 `weight`（综合权重）。
+
+    返回：
+    - 原样转发高德 `/v3/place/around` JSON 响应。
+
+    处理过程：
+    1. 校验并读取后端托管高德 key；
+    2. 请求上游周边检索接口；
+    3. 统一错误映射后返回。
+
+    为什么单独需要这个接口：`/v3/geocode/geo` 只做「地址 → 坐标」，
+    传入「餐馆」这类类目词会返回 ENGINE_RESPONSE_DATA_ERROR(30001)；
+    而 `/v3/place/text` 无位置偏置，搜「餐馆」会返回全国范围首条。
+    「附近的餐馆」这类「类目词 + 空间约束」的意图只有 around 能正确表达。
+    """
+    return await _request_amap_json(
+        request,
+        "/v3/place/around",
+        "poi_search_around",
         params={
-            "keywords": str(keywords).strip(),
-            "city": str(city or "").strip(),
+            "location": str(location).strip(),
+            "keywords": str(keywords or "").strip(),
+            "radius": int(radius),
             "page": int(page),
             "offset": int(offset),
+            "sortrule": str(sortrule or "distance").strip(),
             "extensions": str(extensions or "base").strip(),
         },
     )

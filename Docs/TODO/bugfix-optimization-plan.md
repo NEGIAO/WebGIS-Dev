@@ -355,3 +355,14 @@ Sprint 3（穿插）：P3-1 容器二轮（O1/O2 交替）→ P2-1 bundle 分析
 - [ ] **ol 桶导入会绕过 tree-shaking（dev 侧）**（2026-10-31 · V3.6.36 顺带发现，按 §2.5 只记不改）：
   - [ ] (优化·已记未修) **`import { X } from 'ol/source'` 这类桶导入在 dev 下会把整个子目录预打包**：Vite 的依赖预打包按 import 说明符整包处理、**不做 tree-shaking**，因此 `ol/source` 桶会把 `ol/source/GeoTIFF`（→ geotiff 309 kB）一并带进首屏模块图；生产构建能 tree-shake，故只在 dev 暴露，极易被误判为「代码有问题」。V3.6.36 已修掉唯一一处 `ol/source` 桶，但 `ol/geom`（`useMapEventHandlers.js:32`、`useDrawMeasure.js:12`、`drawingGeometryUtils.js:6`、`transitRouteBuilder.js:3`）、`ol/control`（`MapContainer.vue:202`、`mapRuntimeDeps.js:5`）仍为桶导入。修法：① 存量逐处改子路径（`ol/geom/Polygon.js` 等）；② 加 ESLint `no-restricted-imports` 规则禁止 `ol/source`、`ol/layer`、`ol/geom`、`ol/control`、`ol/format`、`ol/interaction` 等桶路径，防止复发。预估 0.3 人日
   - [ ] (文档) **「dev 预打包不做 tree-shaking」应写入约定**：该认知目前只存在于 `olRemoteServiceAdapter.js` 的就地注释与 V3.6.36 日志中，尚未进入 `Docs/Guide/dev-conventions.md`。建议在「分层边界」后补一节「依赖导入约定」，写明桶导入的 dev/prod 行为差异与禁止清单。预估 0.1 人日
+
+- [ ] **ESLint 存量告警（ESLint 10 recommended 新增规则）**（2026-10-31 · V3.6.36 顺带发现，按 §2.5 只记不改）
+  - [ ] (一致性) **根因**：`frontend/eslint.config.js` 使用 `js.configs.recommended`，ESLint 升级至 10.13.0 后 `preserve-caught-error` / `no-useless-assignment` 进入 recommended 且为 `error`，存量代码写于规则之前。**基线 55 条 / 26 文件**，V3.6.36 已修 `api/locationSearch.js`（20）+ `api/backend/client.js`（2）+ `useMapSearchAndCoordinateInput.js` 的 `let detail`（1），**剩余 32 条 / 24 文件**
+  - [ ] (功能) 剩余分布：`no-useless-assignment` 24、`preserve-caught-error` 5、`@typescript-eslint/no-unused-vars` 1、`no-extra-boolean-cast` 1、`vue/no-v-html` 1。重跑命令：`cd frontend && node node_modules/eslint/bin/eslint.js src`
+  - [ ] (风险) `preserve-caught-error` **不可机械批量加 `cause`**：少数场景是有意丢弃原始错误（对外脱敏 / 避免泄露上游 URL），应逐处判断后加注释说明「为何不保留」，否则只是把告警搬进注释
+  - [ ] (建议) 评估「锁定 ESLint 大版本 + 升级时先跑一次全量清理」的节奏，否则每次升级都会重复"升级即满屏报红"
+
+- [ ] **Agent 图层工具（清单 / 显隐 / 透明度 / 定位）**（2026-10-31 · 设计已定稿，待重做）
+  - [ ] (功能) 设计已定稿（双引擎处理器 + 命令总线白名单 + id 解析 + 状态回读），代码全部丢失：`chat/agent/layerCommandHandlers.ts`（未跟踪文件被并行会话清理）、`MapCommandBus` 的 4 条 COMMAND_SPECS、两个 adapter 的 `layerApi` 注入、`HomeView` 的图层投影与依赖注入、4 条工具声明与提示词、`TOOL_REGISTRY` 映射
+  - [ ] (已处理) V3.6.36 整合时清掉了 `GISCommander.js` 里遗留的 4 个孤儿方法（`listLayers` / `setLayerVisibility` / `setLayerOpacity` / `zoomToLayer`）及其 typedef —— 它们对应的命令从未在 `MapCommandBus` 注册，调用只会返回 `UNKNOWN_COMMAND`。**重做时从零补齐整条链路，不要再只加门面方法**
+  - [ ] (流程) 教训：同仓库多会话并行时，`git checkout` / `git clean` 类操作会连带清掉他方未跟踪文件。建议并行期间只在**已提交**基线上开工，或先 `git add -A` 固化再动手

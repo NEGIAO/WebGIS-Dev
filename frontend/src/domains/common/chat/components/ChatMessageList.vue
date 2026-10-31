@@ -276,12 +276,13 @@ const copiedIndex = ref(-1);
 const unseenCount = ref(0);
 let copiedTimer = null;
 
-/** 空状态 GIS 快捷建议词（随语言切换） */
+/** 空状态 GIS 快捷建议词（随语言切换）
+ *  注意：这些文案本身就是发给 Agent 的 prompt，改动前先确认对应工具链可用 */
 const suggestions = computed(() => [
     t('chat.suggestions.locate'),
     t('chat.suggestions.switchBase'),
     t('chat.suggestions.search'),
-    t('chat.suggestions.changeStyle'),
+    t('chat.suggestions.weather'),
 ]);
 
 /** Hero 首屏：仅剩欢迎语且未在生成（隐藏欢迎气泡，展示大头像 + 建议词） */

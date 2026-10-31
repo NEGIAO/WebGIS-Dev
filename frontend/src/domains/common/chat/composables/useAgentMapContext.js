@@ -100,6 +100,10 @@ function summarizeAction(entry) {
             return `切换底图${params.presetId ? `: ${params.presetId}` : ''}`;
         case 'search_and_zoom':
             return `搜索定位${params.query || ''}`;
+        // 天气为只读工具：不改变地图状态，但仍属用户本轮动作，需给出可读摘要，
+        // 否则 recentActions 会退化为 "[get_weather] get_weather" 的噪声。
+        case 'get_weather':
+            return `查询天气${params.city || params.adcode || ''}`;
         default:
             return entry.command;
     }
@@ -206,6 +210,8 @@ export function useAgentMapContext() {
     return {
         buildMapContext,
         buildSettledMapContext,
+        // 无副作用的轻量快照：不推进 changesSinceLastTurn 的基准，供工具层读取当前中心等只读需求
+        captureMapContext: captureMapContextOnly,
         recordMapAction: recordMapAction,
         getMapActionJournal: () => [...mapActionJournal],
         resetMapContextSession,

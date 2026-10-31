@@ -125,7 +125,7 @@
 
 ## 🎯 项目简介
 
-**NEGIAO's WebGIS** 是一个功能完整、架构清晰的前后端分离 WebGIS 平台（当前版本 V3.6.35），前端托管于 GitHub Pages（正式域名 webgis.negiao.cn），后端以 Docker 部署在 Hugging Face Spaces，通过 RESTful API 通信，支持独立扩展。
+**NEGIAO's WebGIS** 是一个功能完整、架构清晰的前后端分离 WebGIS 平台（当前版本 V3.6.36），前端托管于 GitHub Pages（正式域名 webgis.negiao.cn），后端以 Docker 部署在 Hugging Face Spaces，通过 RESTful API 通信，支持独立扩展。
 
 > 📚 本 README 仅保留核心概览与导航。完整文档已模块化至 [`Docs/Guide/`](Docs/Guide/)，详见下方「文档导航」。
 >
@@ -607,10 +607,10 @@ tiles.negiao.cc.cd"]
 
 | 版本 | 日期 | 概要 |
 |------|------|------|
+| **V3.6.36** | 2026-10-31 | **Agent 能力扩展 + 搜索链路修复（多批未提交改动整合为单一版本）**。① 新增只读工具 `get_weather`（高德天气，实况 / 四日预报），`AgentExecutor` 注册映射、工具结果白名单补 `weather` 字段，空状态演示建议词改为四条各命中一条能力路径；② 底图关键词匹配改「最长优先 + 代理优先」，系统提示词 8.6k → 1.4k 字符（-83%），`switch_basemap` 的 `url` 通道恢复为一等能力；③ `locationSearch.js` 19 处 `throw new Error` 补 `{ cause }`，`backend/client.js` 清无用赋值并支持 `config.silent`；④ 新增后端 `/api/proxy/amap/place/around`，Agent 搜索改「地理编码 → 周边检索（5km→50km）→ 城市限定文本 → 全国文本 → Nominatim」四级降级并锚定当前视图中心，修复 400 报错与「结果总落在北京」；⑤ 搜索命中自动落图进 TOC：2D 复用 `createManagedVectorLayer`（`sourceType=search`）进「搜索结果图层」分组，3D 序列化为单点 GeoJSON 走 `importUserData` 进「三维数据」分组，导入链补 `silent` 跳过遮罩；⑥ 本轮复核修复：2D/3D 落图改「读回判定」不再乐观上报、`cityCache` 提到工厂作用域、提示词补回「不调用未声明命令」与「不复述带 key 的 URL」两条约束、清理 4 个调用即 `UNKNOWN_COMMAND` 的孤儿图层方法。详见[完整更新日志](Docs/Guide/CHANGELOG.md) |
 | **V3.6.35** | 2026-10-31 | **首屏 LCP 预加载 + RegisterView 按需加载**。① `index.html` 为落地页环纹背景图 `d-bg2_1.webp` 增加按断点 `preload` + `fetchpriority=high`，解决该图因运行时 CSS 注入而无法被初始文档发现的问题；Slow 4G + CPU 4× 实测资源加载延迟 2728 ms → 594 ms、LCP 3471 ms → 2793 ms（-678 ms）；② `router/index.js` 的 `RegisterView` 由静态导入改为动态 `import()`，入口 chunk 187.8 kB（gzip 61.3 kB）→ 98.7 kB（gzip 34.0 kB，-44.5%），并将 `RegisterView` + `api/backend`→`axios` 移出首屏关键路径；另外移除落地页无条件加载的 Google GSI 第三方脚本（改由 RegisterView 按需注入）与失效的 `icon.webp` preload，并为落地页英雄图与 starChart 补显式宽高以消除控制台告警。详见[完整更新日志](Docs/Guide/CHANGELOG.md) |
 | **V3.6.34** | 2026-10-31 | **移动端信息层级收敛 + Cesium 控制条对齐 OL + 首屏打包与依赖加载优化（构建链根治 + 异步组件韧性）+ TIF 解码依赖按需加载**。① OL/Cesium 坐标控制条逐项同构（显隐开关 → 坐标胶囊 → 瓦片级别 → 分隔线 → 主页），触屏默认收起、桌面默认展开，视觉统一为浅色玻璃外壳 + 内层品牌胶囊 + 等宽数值字体；Cesium 触屏坐标收敛为「经度, 纬度, 海拔」单行，瓦片级别由相机高度反解 OL zoom（取整规则与 OL `displayZoom` 一致）；② TOC 触屏默认只显示一级、点击逐级展开，搜索命中强制展开；落地页移动菜单关闭钮改 Lucide `X` SVG 修复 iOS 不居中；③ 移除 Vite 8 / rolldown 下失效的手动 `manualChunks` 与 `modulePreload` 白名单（应用模块被错并入以第三方库命名的 chunk、入口被迫引用 591 kB 的 `vendor-geotiff` blob），首屏 gzip 传输约 365 kB → 120 kB；④ 首屏 4 文件改 store 深导入、`useAuthStore` / `useUserPreferencesStore` 的 API 调用改按需 `import()`，切断 `stores/index.ts` 与 `src/api` 聚合桶，把整张 store 图与 axios 移出首屏预加载图；⑤ 新增 `defineResilientAsync`（占位 + 线性退避重试 + 超时兜底 + 内联样式占位，失败态可点击重试），账号中心五分页与图层面板搜索框改用它，修复分片挂起时「整块 UI 空白、无占位无重试」；⑥ `tifUtils.js` 四个顶层重依赖（geotiff 309 kB 等）下沉为函数内按需 import，`olRemoteServiceAdapter.js` 的 `ol/source` 桶导入改子路径，进入 OL 后不再连带下载栅格解码器。详见[完整更新日志](Docs/Guide/CHANGELOG.md) |
-| **V3.6.33** | 2026-10-30 | **非标准瓦片在线纠偏文案回填 + Cesium 浮层与原生控件主题统一**。① 落地页核心功能新增第 11 张卡（与「建筑白模」同为整行宽卡，3 列 / 2 列断点均为 6 行、无孤卡），说明 GCJ-02（高德 / 腾讯 / Google 中国）与 BD-09（百度，跨网格）瓦片经服务端逐瓦片重采样后按标准 XYZ 网格直接使用；② 两份 README 的「核心能力 · 地图内核」各新增一行，写明机制与双引擎零改造；③ 订正「已知限制」中把 `tile-rectify-system.md` 称作「历史设计稿」的失实措辞 —— 该服务仍在生产运行，只是实现不在本仓；④ 新增「OSM代理」底图（图层定义 `osm_Backend_Proxy` + 预设 `osm_Backend_Proxy_preset`，走 `vpn.negiao.cn/proxy` 统一瓦片代理，解决 OSM 官方源境内间歇不可达）；⑤ **三维域并入全站主题体系** —— `--ctp-*` 令牌全族改别名指向 `--brand-*`，高级控制台（展开宽度 380→520px）、lil-gui 参数控件、Cesium 原生工具栏 / 搜索 / 动画 / 时间轴 / 底图选择器、罗盘 / 缩放栏 / 比例尺全部改为「浅玻璃 + 品牌色」，并随绿 / 蓝主题联动；InfoBox 正文在独立 iframe 内，新建 `useCesiumInfoBoxTheme.js` 注入主题样式并跟随 `data-theme` 重注入；⑥ 右下角坐标由只读文本改为可点击复制的按钮（位置 / 姿态 / 相机海拔三组）；⑦ 修复 iOS 图标塌陷、移动端折叠手柄缩小、语言切换激活态扁平、OL 移动端控制条占满底部、图层面板「URL 操作」子菜单指针穿缝即消失等问题。详见[完整更新日志](Docs/Guide/CHANGELOG.md) |
-更早版本（V3.6.31 及以前）请查阅 [完整更新日志 →](Docs/Guide/CHANGELOG.md)。
+更早版本（V3.6.33 及以前）请查阅 [完整更新日志 →](Docs/Guide/CHANGELOG.md)。
 
 ---
 
@@ -632,6 +632,6 @@ tiles.negiao.cc.cd"]
 |:------:|:--------:|:--------:|
 | [GitHub](https://github.com/NEGIAO/WebGIS-Dev) | [webgis.negiao.cn](https://webgis.negiao.cn)（正式域名，GitHub Pages 托管） | [Hugging Face](https://NEGIAO-WebGIS.hf.space) |
 
-<sub>V3.6.35 · 开发中 · 最后更新 2026-10-31</sub>
+<sub>V3.6.36 · 开发中 · 最后更新 2026-10-31</sub>
 
 </div>

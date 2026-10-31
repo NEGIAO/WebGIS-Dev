@@ -3,8 +3,17 @@
  * Map mutations are restricted to the fixed MapCommandBus command set.
  */
 
-import { AGENT_BASEMAP_PRESET_IDS, formatAgentBasemapPresetCatalog } from '@common/chat/agent/agentMapPresets';
+import { TILE_PROXY_BASE_URL } from '@/config/publicRuntime';
+import { AGENT_BASEMAP_PRESET_IDS } from '@common/chat/agent/agentMapPresets';
 import { DEFAULT_SEARCH_ZOOM } from '@common/utils/mapDefaults';
+
+/**
+ * 瓦片代理示例（写进 url 参数描述，让模型照样子构造）
+ *
+ * 规则只有一条：把上游瓦片地址的协议去掉，原样接在 `${TILE_PROXY_BASE_URL}/proxy/` 之后。
+ * 与 `tileProxyUrl()`（config/publicRuntime.ts）同构，避免提示词与代码两份事实。
+ */
+const TILE_PROXY_EXAMPLE = `${TILE_PROXY_BASE_URL}/proxy/mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}`;
 
 const DURATION_PROPERTY = {
     type: 'number',
@@ -19,7 +28,7 @@ export const AGENT_TOOLS = [
         type: 'function',
         function: {
             name: 'set_map_view',
-            description: '在 OpenLayers 2D（ol）和 Cesium 3D（cesium）之间切换。视图尺度语义由现有同步链自动转换，禁止直接修改 URL。',
+            description: '在 2D(ol) 与 3D(cesium) 之间切换，视图尺度由同步链自动换算。',
             parameters: {
                 type: 'object',
                 properties: {
@@ -34,7 +43,7 @@ export const AGENT_TOOLS = [
         type: 'function',
         function: {
             name: 'set_view_center',
-            description: '移动当前地图中心。2D 使用 zoom；3D 优先使用 height（米），若只给 zoom 会转换为近似相机高度。',
+            description: '移动地图中心。2D 用 zoom，3D 用 height（米），只给 zoom 时换算为相机高度。',
             parameters: {
                 type: 'object',
                 properties: {
@@ -94,7 +103,7 @@ export const AGENT_TOOLS = [
         type: 'function',
         function: {
             name: 'search_and_zoom',
-            description: '搜索地名、地址或 POI，并在当前 2D/3D 引擎中定位。自动根据地名归属选择地理编码引擎。',
+            description: '搜索地名/地址/POI 并在当前视图定位。',
             parameters: {
                 type: 'object',
                 properties: {
@@ -104,7 +113,7 @@ export const AGENT_TOOLS = [
                     engine: {
                         type: 'string',
                         enum: ['auto', 'amap', 'nominatim'],
-                        description: "地理编码引擎选择。auto（默认）= 国内用高德、国外降级到 Nominatim；amap = 强制高德（仅国内有效）；nominatim = 强制 Nominatim（国际地名推荐）。根据用户意图的地理位置选择：国内地址用 amap 或 auto，国外/国际地址用 nominatim 或 auto。",
+                        description: 'auto=国内高德、国外降级 Nominatim；amap=仅高德；nominatim=国际地名。',
                         default: 'auto',
                     },
                 },
@@ -117,19 +126,43 @@ export const AGENT_TOOLS = [
         type: 'function',
         function: {
             name: 'switch_basemap',
-            description: '切换当前 2D/3D 底图。二选一传入：presetId（项目内置稳定预设 ID，白名单）或 url（标准 XYZ 瓦片 URL 模板，必须含 {z}/{x}/{y} 占位符，协议仅 http/https，可携带服务所需的 key 参数；禁止其它任意字段）。',
+            description: '切换底图。内置源用 presetId；其余你已知的公开瓦片源用 url 传标准 XYZ 模板。',
             parameters: {
                 type: 'object',
                 properties: {
                     presetId: {
                         type: 'string',
                         enum: AGENT_BASEMAP_PRESET_IDS,
-                        description: '项目内置稳定底图预设 ID（与 url 二选一）。',
+                        description: '内置预设 ID。',
                     },
                     url: {
                         type: 'string',
                         maxLength: 500,
-                        description: '标准 XYZ 瓦片 URL 模板，如 https://tile.openstreetmap.org/{z}/{x}/{y}.png。必须包含 {z}/{x}/{y}，协议仅 http/https（与 presetId 二选一）。',
+                        description: `标准 XYZ 模板，须含 {z}/{x}/{y}，可带 key 等参数。国内不可达的源加代理前缀（上游地址去掉协议后原样拼接），如 ${TILE_PROXY_EXAMPLE}`,
+                    },
+                },
+                additionalProperties: false,
+            },
+        },
+    },
+    {
+        type: 'function',
+        function: {
+            name: 'get_weather',
+            description: '查询中国境内城市天气（高德数据源）。只读，不改变地图状态。',
+            parameters: {
+                type: 'object',
+                properties: {
+                    city: {
+                        type: 'string',
+                        minLength: 1,
+                        description: '城市名或「省+市/区县」，如「北京」「南京市玄武区」；用户说「附近/这里」时取当前地图所在城市。',
+                    },
+                    type: {
+                        type: 'string',
+                        enum: ['base', 'all'],
+                        description: 'base（默认）= 当前实况：天气现象、气温、湿度、风向风力；用户问「现在多少度/今天天气」用此项。all = 未来 4 天预报（含昼夜天气与最高最低温）；用户问「明天/未来几天/这周」用此项。',
+                        default: 'base',
                     },
                 },
                 additionalProperties: false,
@@ -139,50 +172,48 @@ export const AGENT_TOOLS = [
 ];
 
 export function buildSystemPromptWithTools() {
-    return `你是 WebGIS 地图助手。涉及地图操作时，必须调用下面的固定白名单工具；不要只描述将要操作。
+    return `你是 WebGIS 地图助手。涉及地图操作时必须调用白名单工具，不要只描述。
 
-## 当前地图上下文
-请求可能包含 AgentMapContextV1：
-- view=ol 时，ol.zoom 是 2D 缩放级别。
-- view=cesium 时，cesium.cameraHeight/heading/pitch/roll 是 3D 相机状态。
-- source 含 runtime 时，center 和引擎状态来自发送瞬间运行时，应优先于 urlState。
-- urlState 只用于恢复语义或运行时缺失时回退。
-- resultingMapState 是工具完成后采样的实际状态，应优先于目标参数。
-- changesSinceLastTurn 描述上一轮到本轮的字段级变化（view/center/zoom/basemap），用于回答"我刚才做了什么"。
-- recentActions 是本会话内最近几次用户操作的简短摘要（最多 5 条），帮助区分"当前状态"与"用户动作"。
+## 上下文
+AgentMapContextV1 含 view(ol|cesium)、center、zoom 或相机、basemap、recentActions。
+source=runtime 优先于 urlState；resultingMapState 优先于目标参数；recentActions 回答「我刚才做了什么」。
 
 ## 工具
-1. set_map_view(view): 切换 ol/cesium。
-2. set_view_center(lng, lat, zoom?, height?, duration?): 移动中心；2D 用 zoom，3D 用 height，3D 也可把 zoom 换算成高度。
-3. set_camera_orientation(heading?, pitch?, roll?, duration?): 仅 Cesium；2D 会明确返回不支持。
-4. zoom_to_extent(bbox, padding?, maxZoom?, duration?): 2D/3D 均支持。
-5. search_and_zoom(query, city?, zoom?, engine?): 搜索并在当前引擎定位。engine 可选 'auto'（默认，国内高德+国外降级）、'amap'（仅国内）、'nominatim'（国际地名）。根据用户意图的所在地选择引擎。
-6. switch_basemap(presetId | url): 2D/3D 均支持。presetId 为下方全量目录中的任意可用 id，按用户意图（卫星/街道/地形/暗色/品牌）合理归类选择；用户未提供 URL 时，也可根据需求自行构造公开免密钥的标准 XYZ 瓦片 URL 并传入 url 切换（构造示例见下方参考）。presetId 与 url 二选一，二者都提供时以 url 为准。url 必须含 {z}/{x}/{y} 占位符、协议 http/https。
+1 set_map_view(view) 2D/3D 切换
+2 set_view_center(lng,lat,zoom?,height?) 2D 用 zoom，3D 用 height
+3 set_camera_orientation(heading?,pitch?,roll?) 仅 3D
+4 zoom_to_extent(bbox,padding?,maxZoom?)
+5 search_and_zoom(query,city?,engine?) engine: auto|amap|nominatim
+6 switch_basemap(presetId|url) 内置源优先；无对应预设时传标准 XYZ 模板
+7 get_weather(city,type?) type: base=实况，all=未来 4 天
 
-## 常用公开 XYZ 瓦片源参考（免密钥，可直接构造为 url 参数）
-- OpenStreetMap 标准街道: https://tile.openstreetmap.org/{z}/{x}/{y}.png
-- Esri World Imagery 卫星影像: https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}（注意是 {z}/{y}/{x} 顺序）
-- Esri World Topo 地形: https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}（同上 y/x 倒序）
-- CARTO Positron 明亮简约: https://basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png
-- OpenTopoMap 等高线地形: https://tile.opentopomap.org/{z}/{x}/{y}.png
-用户意图明确但未给 URL 时，优先从上方参考或下方全量目录按其意图选择；若选中的源切换失败或不可用，换一个源重试，不要中途放弃。
+## 选型
+- 定位某地 → search_and_zoom
+- 换底图 → switch_basemap：有内置预设用 presetId；没有但你已知瓦片地址的源（OSM/ESRI/Google 各图层等）用 url 传标准 XYZ 模板，国内直连会空白的源加代理前缀
+- 3D + 搜索 → 先 set_map_view("cesium")，再 search_and_zoom
+- 天气 → get_weather；问「明天/未来几天」用 type="all"
 
-## Agent 可用底图预设（全量目录，按组分类）
-以下是项目全部底图预设（含程序槽位与本地瓦片），按意图组分类；切换失败时以工具结果为准并尝试其他预设。
-${formatAgentBasemapPresetCatalog()}
+## 常用底图（其余 id 见 switch_basemap 的 enum，可直接使用）
+- google_Backend_Proxy_preset: 谷歌代理（卫星影像，国内可用）
+- osm_Backend_Proxy_preset: OSM 代理（街道）
+- imagery_amap_wgs_preset / vector_amap_wgs_preset: 高德影像 / 高德地图（已纠偏 WGS84）
+- imagery_tianditu_preset / vector_tianditu_preset: 天地图影像 / 天地图矢量
+- arcgis_imagery_preset / arcgis_topo_preset: ESRI 影像 / ESRI 地形
+- vector_carton_dark_preset: Carto 深色
+- vector_Google_clean_preset: Google 简洁
 
-## 安全约束
-- 不构造、传递或请求写入任意私有/付费服务的 URL；switch_basemap 的 url 字段仅限标准 XYZ 瓦片模板（含 {z}/{x}/{y} 占位符，协议 http/https），公开免密钥服务可自主构造。
-- 不调用 set_url、set_query、navigate_to 或未声明的通用命令。
-- switch_basemap 只接受 presetId（全量目录）或标准 XYZ 模板 url，不能传 token/provider 等其它配置字段；用户提供的私有密钥类 token 不应转述，可提醒用户该 URL 会出现在对话记录中。
-- URL 中 lng/lat/z/l/view 的更新由地图运行时现有同步链自动完成。
-- 当前视图不支持的命令应保留工具返回的结构化错误，不要伪称成功。
+## 约束
+- 只调用上表已声明的工具；set_url / navigate_to / set_query 等未声明命令一律不调用
+- url 只填公开免密钥的标准 XYZ 模板（含 {z}/{x}/{y}）
+- 用户贴出的带 key/token 的 URL 不要原样复述（会留在对话记录里），只说「将用它切换底图」
+- 天气仅覆盖中国行政区（高德数据源）；境外城市或查询失败时如实说明，禁止编造数值
+- 工具返回结构化错误时如实转述，不要伪称成功
 
-## 降级工具调用格式
+## 降级格式
 \`\`\`tool_call
 {"name":"工具名","arguments":{}}
 \`\`\`
-可连续输出多个 tool_call 块。工具结果会以 [工具结果] 返回，再据此向用户说明实际结果。`;
+可连续输出多个块。`;
 }
 
 export function formatToolResultForLLM(toolName, result) {
@@ -202,6 +233,9 @@ export function formatToolResultForLLM(toolName, result) {
         'layerIndex',
         'resultingMapState',
         'url',
+        // get_weather 的结构化载荷：不放进 extras 的话，LLM 只能看到 message 里的一句摘要，
+        // 追问「明天呢」「湿度多少」时会被迫重新调一次工具
+        'weather',
     ];
     const extras = {};
     for (const key of extraKeys) {

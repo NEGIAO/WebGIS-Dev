@@ -186,6 +186,10 @@ export async function addressToLocation(address, city = '', options = {}) {
                 address: normalizedAddress,
                 city: String(city || '').trim(),
             },
+            // silent 同时作用于 axios 拦截器：本函数常作为「先试一次」的前置探测
+            // （如搜索链路的 Amap 优先策略），失败会由调用方降级到其它引擎，
+            // 若仍弹全局红色提示，用户会看到一条与最终结果矛盾的报错。
+            silent,
         };
         // [Fix] 支持 AbortSignal 超时控制
         if (options?.signal) {

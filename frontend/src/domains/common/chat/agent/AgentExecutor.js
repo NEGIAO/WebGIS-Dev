@@ -30,6 +30,8 @@ const TOOL_REGISTRY = {
     zoom_to_extent: 'zoomToExtent',
     search_and_zoom: 'searchAndZoom',
     switch_basemap: 'switchBasemap',
+    // 只读数据查询，不经过 MapCommandBus（见 GISCommander.getWeather 注释）
+    get_weather: 'getWeather',
 };
 
 // ============================================================

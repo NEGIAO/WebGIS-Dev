@@ -6,6 +6,43 @@
 
 ## 版本记录
 
+### V3.6.36 (2026-10-31) — Agent 能力扩展：天气工具 / 底图映射 / 搜索链路修复 / 结果落 TOC
+
+> **背景**：本次把 5 批未提交、版本号互相叠压的改动（原 3.6.36 ~ 3.6.40）整合为单一版本 V3.6.36。各批的原始问题：
+> ① **天气不可用**：`api/weather.js` → 后端 `/api/proxy/amap/weather` 数据层早已存在，但 `AGENT_TOOLS` 白名单只有 6 个地图工具、系统提示词未提天气、`TOOL_REGISTRY` 未注册，模型「不知道自己能查天气」。
+> ② **底图切了却空白**：关键词映射按对象插入顺序首次命中即返回，「谷歌」抢先截胡「谷歌代理卫星」；而国内直连 Google / OSM 会「切换成功但满屏空白」。
+> ③ **ESLint 满屏报红**：ESLint 升级至 10.13 后 `js.configs.recommended` 新增 `preserve-caught-error` / `no-useless-assignment` 且为 `error`，存量代码写于规则之前（基线 55 条 / 26 文件）。
+> ④ **搜索弹 400 且总落北京**：`/v3/geocode/geo` 只做「地址 → 坐标」，传「餐馆」这类类目词必现 `ENGINE_RESPONSE_DATA_ERROR(30001)`；`/v3/place/text` 无位置偏置，搜「餐馆」返回全国首条（实测北京西单火锅店）。
+> ⑤ **搜索不留痕**：命中后地图只是「跳过去」，结果不在地图上留下任何痕迹，图层树里也拿不到。
+
+> **改动**：
+> 1. **天气工具**：`AGENT_TOOLS` 新增只读工具 `get_weather`（`city` 必填，`type` = `base` 实况 / `all` 未来 4 天）；`AgentExecutor.TOOL_REGISTRY` 注册 `get_weather → getWeather`；`GISCommander.getWeather()` 走「城市名 → adcode → 逆地理编码兜底 → `apiWeather` → 归一化」；`formatToolResultForLLM` 的 `extraKeys` 补 `weather` 结构化字段；`getToolDisplayName` / `summarizeAction` 补天气分支。
+> 2. **底图映射**：`chatIntentFallback` 的映射表改为**按关键词长度降序**匹配（最长优先），并把「谷歌 / OSM / 高德」系一律指向代理版（`*_Backend_Proxy_preset` / `*_wgs_preset`）；需要直连原版时用「谷歌原版」「高德原版」等显式关键词。
+> 3. **提示词瘦身**：删掉 91 条全量预设目录（与 `switch_basemap` 的 `enum` 完全重复），改为 10 条常用清单并压缩各节，8.6k → 1.4k 字符（-83%）；`switch_basemap` 的 `url` 通道恢复为一等能力（写明「上游地址去掉协议接在 `/proxy/` 之后」）。
+> 4. **ESLint 存量**：`api/locationSearch.js` 三路搜索的 19 处 `throw new Error(...)` 补 `{ cause: error }`，`parseTiandituResponse` 去掉 `let rawList = []` 无用初始值；`api/backend/client.js` 去掉 `message` 预置文案与恒无读取点的 `isQuotaExceeded` 标记（连带展开恒真的 `if (!isQuotaExceeded)` 包裹）。
+> 5. **搜索修复**：后端新增 `/api/proxy/amap/place/around`（`location` 必填，`radius` ≤ 50000，`offset` ≤ 25，`sortrule` = distance / weight），`/amap/place/text` 补 `citylimit` 透传；前端新增 `searchWithAmapAround()`（入参 WGS-84 → 请求前转 GCJ-02 → 返回再转回）；`GISCommander.searchAndZoom` 改为四级降级并全部锚定当前视图中心：**地理编码 → 周边检索（5km，无结果放宽 50km）→ 城市限定文本 → 全国文本 → Nominatim**，「附近 / 周边」等意图词先剥离再检索。
+> 6. **静默失败**：`backend/client.js` 拦截器支持 `config.silent`，降级链中间失败不再弹全局红框；`geocoding.js` 同步透传。
+> 7. **结果落 TOC**：新增命令 `addSearchResultLayer`（`supportedViews: [ol, cesium]`），由 `searchAndZoom` 定位成功后自动调用。2D 抽出 `createSearchResultLayer()`（复用 `createManagedVectorLayer` + `sourceType='search'`，进「搜索结果图层」分组并沿用 `SEARCH_RESULT_STYLE` 与自动标注）；3D 序列化为单点 GeoJSON 包成 `File` 交给 `importUserData` 导入管线，进「三维数据」分组并沿用导入默认符号；导入链补 `silent`（`loadDataFiles` 跳过 `withImportMask`，`loadDataFile` 透传 `loadGeoJSON`）。
+> 8. **演示建议词**：空状态四条建议词改为各命中一条独立能力路径（定位 / 底图 / 3D+附近餐馆 / 天气），中英双语同步，键名 `changeStyle` → `weather`。
+
+> **本轮复核修复**（整合时逐文件 review 后修掉）：
+> 1. **落图不再乐观上报**：`createSearchResultLayer` 改 `async` 并 `await createManagedVectorLayer`，返回真实 `layerId`（建层被拒时为 null）；`handleSearchJump` 同步改 `await`，建层失败只提示、仍定位。3D 侧 `importUserData` 返回值由恒 `true` 改为 **`loadedDataSources` 差集回读**（`handleDataImport` 内部吞异常，返回 true 只代表「收到载荷」），adapter 据此判断并回传真实建档名。
+> 2. **`cityCache` 提到工厂作用域**：原先声明在 `searchAndZoom` 函数体内，每次调用重建、单次调用内最多命中一次，缓存永不生效。
+> 3. **提示词补回两条安全约束**：瘦身时丢失的「只调用已声明工具，`set_url` / `navigate_to` 等一律不调用」与「用户贴出的带 key/token 的 URL 不要原样复述」。
+> 4. **清理 4 个孤儿方法**：`GISCommander` 的 `listLayers` / `setLayerVisibility` / `setLayerOpacity` / `zoomToLayer` 对应命令从未在 `MapCommandBus` 注册，调用只会返回 `UNKNOWN_COMMAND`，且 `TOOL_REGISTRY` 无映射（LLM 无法触达）；连同 typedef 一并删除。
+> 5. **文案与细节**：`/amap/place/around` 的 docstring 原文称「keywords 留空表示按分类取全部」，但该路由未暴露 `types`，两者皆空时上游报参数错误，已改正；`mapAmapPoiItems` 的 `distance` 由 `|| undefined` 改为 `Number.isFinite` 判定，避免「距离 0 米」被吞成 undefined；`useMapSearchAndCoordinateInput` 的 `let detail = null` 改 `let detail`（`no-useless-assignment`）。
+
+> **为何不自定义符号**：两个引擎的导入链路本就会给点要素套默认样式（2D 圆点 + 标注层，3D billboard），再造一套 POI 图标只会让「搜索结果」与「上传数据」两套视觉并存，反而更难维护。
+
+> **取舍**：本批不引入图层显隐 / 透明度 / 定位工具。它们需要新增命令、双引擎适配与 id 解析，提示词与 schema 成本明显高于当前收益；Agent 能力面收敛在「视角 / 底图 / 搜索（含落图）/ 天气」四条主路径，设计留在 `Docs/TODO/bugfix-optimization-plan.md`。
+
+> **验证**：`eslint` 对全部改动文件 0 告警；`vite build` 通过（`✓ built in 12.29s`）；`python Scripts/CheckStructureTree.py` 522/522；`python Scripts/CheckConfigRegistry.py` 7 项全通过；底图映射 22 个 presetId 全部存在于预设表；平台红线 §11.2 四项自查全绿。**Agent 工具链未做实机联调**（需后端代理 + 高德 Key + 登录态），已列入待用户实机验证。
+
+> **完整记录**：
+> - [`2026-10-31-agent-weather-tool-and-demo-suggestions.md`](../LLM_record/26-10/2026-10-31/2026-10-31-agent-weather-tool-and-demo-suggestions.md)（天气工具 + 建议词）
+> - [`2026-10-31-eslint-locationsearch-caught-error.md`](../LLM_record/26-10/2026-10-31/2026-10-31-eslint-locationsearch-caught-error.md)（ESLint 存量）
+> - [`2026-10-31-v3.6.36-consolidation-and-review.md`](../LLM_record/26-10/2026-10-31/2026-10-31-v3.6.36-consolidation-and-review.md)（版本整合 + 逐文件复核 + 本轮修复）
+
 ### V3.6.35 (2026-10-31) — 首屏 LCP 预加载 + RegisterView 按需加载
 
 > **背景**：Chrome DevTools MCP 对落地页的追踪显示，LCP 元素为环纹背景图 `d-bg2_1.webp`，其 69.8% 的 LCP 时间耗在「资源加载延迟」——该图由 `useRingPatternStyle.ts` 运行时注入为 CSS background，初始 HTML 不可发现，浏览器只能等 JS 执行后才发起请求；同时 `RegisterView` 被静态导入路由，把 2600+ 行组件与 `api/backend`→`axios` 拉入首屏关键链。

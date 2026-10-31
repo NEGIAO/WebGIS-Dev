@@ -1416,6 +1416,8 @@ const agentOlMapCommandAdapter = createOlMapCommandAdapter({
         }
         return mapContainerRef.value.setBaseLayerActive?.(params.presetId);
     },
+    // 搜索结果落图：只建受管图层（进 TOC），视口移动由 setViewCenter 负责
+    addSearchLayer: (payload) => mapContainerRef.value?.addSearchResultLayer?.(payload),
 });
 const agentCesiumMapCommandAdapter = createCesiumMapCommandAdapter({
     getViewer: () => cesiumContainerRef.value?.getViewer?.() || null,
@@ -1430,6 +1432,8 @@ const agentCesiumMapCommandAdapter = createCesiumMapCommandAdapter({
         }
         return cesiumContainerRef.value.setBasemapById?.(params.presetId);
     },
+    // 搜索结果落图：走 3D 既有 GeoJSON 导入管线（silent，不挂遮罩），TOC 自动建档
+    importGeoJson: (payload) => cesiumContainerRef.value?.importUserData?.(payload),
 });
 const agentMapCommandBus = createMapCommandBus({
     getActiveView: () => is3DMode.value ? MAP_VIEW_CESIUM : MAP_VIEW_OL,

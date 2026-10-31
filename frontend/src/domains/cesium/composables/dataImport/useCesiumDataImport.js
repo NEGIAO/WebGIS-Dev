@@ -463,7 +463,7 @@ export function useCesiumDataImport({ getViewer, getCesium, message, heightSampl
                     if (file.name.toLowerCase().includes(TILESET_JSON_INDICATOR)) {
                         return await loadTilesetJSON({ file, ...baseCtx });
                     }
-                    return await loadGeoJSON({ file, overrideCrs, ...baseCtx });
+                    return await loadGeoJSON({ file, overrideCrs, silent: !!options?.silent, ...baseCtx });
                 }
                 case 'kml':
                     return await loadKML({ file, overrideCrs, ...baseCtx });
@@ -512,6 +512,11 @@ export function useCesiumDataImport({ getViewer, getCesium, message, heightSampl
      * 大文件解析期间界面有明确反馈且不冻结）
      */
     async function loadDataFiles(files, options = {}) {
+        // silent：Agent 搜索结果落图这类「不该打断用户」的导入不挂遮罩，
+        // 失败也由调用方以工具结果形式回传，而不是弹红色提示。
+        if (options?.silent) {
+            return importFilesInternal(files, options);
+        }
         return withImportMask('正在导入数据，请稍候…', () => importFilesInternal(files, options));
     }
 
@@ -554,7 +559,7 @@ export function useCesiumDataImport({ getViewer, getCesium, message, heightSampl
 
         for (const file of standalone) {
             try {
-                const result = await loadDataFile(file, { overrideCrs });
+                const result = await loadDataFile(file, { overrideCrs, silent: !!options?.silent });
                 if (result) results.push(result);
             } catch { /* 内部已提示 */ }
         }
