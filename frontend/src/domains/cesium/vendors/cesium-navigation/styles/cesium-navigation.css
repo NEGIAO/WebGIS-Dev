@@ -304,16 +304,16 @@ screen and (max-height: 420px) {
   /* 罗盘 95px → 约 86px，贴右缘、顶部状态区下方 */
   .compass {
     right: 8px;
-    top: 84px;
-    transform: scale(0.9);
+    top: 12%;
+    transform: scale(1);
     transform-origin: top right;
   }
 
   /* 缩放栏整体放大 ×1.2（32px → 约 38px 宽），比桌面端更大、更易于点按 */
   .navigation-controls {
-    right: 30px;
-    top: 191px;
-    transform: scale(1.2);
+    right: 12px;
+    top: 30%;
+    transform: scale(1.4);
     transform-origin: top right;
   }
 

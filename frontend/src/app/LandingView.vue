@@ -718,7 +718,13 @@
                         class="mobile-menu__close"
                         :aria-label="t('landing.menuCloseAria')"
                         @click="closeMenu"
-                    >×</button>
+                    >
+                        <X
+                            :size="18"
+                            :stroke-width="2"
+                            aria-hidden="true"
+                        />
+                    </button>
                 </div>
 
                 <!-- 两级索引，结构照搬南师大 header-con：
@@ -819,7 +825,9 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import { useLocale } from '@common/app/useLocale';
-import { useUserPreferencesStore } from '../stores';
+// 深导入：落地页是首屏路由，禁止经 '../stores' 聚合桶（`export *` 14 个 store）取 store，
+// 否则 OL / chat / data-import 等无关 store 图会被整体拖进入口 chunk。
+import { useUserPreferencesStore } from '@common/user/stores/useUserPreferencesStore';
 import { useRingPatternStyle } from './composables/useRingPatternStyle';
 import { fetchVisitorStats, formatVisitorNumber, formatUpdatedAt } from '@common/app/visitorStats';
 import { ASSET_BASE_URL, GITHUB_STATS_WORKER_URL } from '../config/publicRuntime';
@@ -848,6 +856,7 @@ import {
     Star,
     UserRound,
     Wrench,
+    X,
     Zap,
 } from '@lucide/vue';
 import SectionTitle from './components/SectionTitle.vue';
@@ -1894,6 +1903,12 @@ button:focus-visible {
     display: inline-flex;
     flex-direction: column;
     justify-content: center;
+    /* WebKit（iOS Safari）的 UA 样式表给 <button> 预置了 `align-items: center`，
+       Chromium 没有。本按钮是纵向 flex、三条横线靠「交叉轴拉伸」撑满宽度，
+       一旦 align-items 变成 center，三条 span 的宽度就退化为 0 —— 真机上整个
+       汉堡塌成一个小点。这里显式声明 stretch，压掉 UA 的 center，
+       与 Chromium 的默认表现对齐（横线的显式宽度见下方 span 规则，双保险）。 */
+    align-items: stretch;
     gap: 4px;
     width: 38px;
     height: 34px;
@@ -1928,7 +1943,16 @@ button:focus-visible {
 
 .nav-burger span {
     display: block;
+    /* 显式给宽，不依赖父级 align-items: stretch —— 这是本按钮在 iOS 上塌成
+       一个点的直接原因（三条横线宽度退化为 0）。参照 GitHub 标记的写法：
+       图标能显示靠的是**显式固有尺寸**（`width="15" height="15"` 属性），
+       而不是靠父级布局顺带撑开；这里的 span 同理，宽度必须自己写死。
+       100% 解析为按钮内容宽（38 - 8×2 padding - 1×2 border = 20px）。 */
+    width: 100%;
     height: 2px;
+    /* 纵向不参与 flex 收缩：34px 高度里 3 条 2px 横线 + 2 个 4px 间距本不溢出，
+       但显式 none 可避免任何引擎在缩放/字体放大时把 2px 压到 0 */
+    flex: none;
     border-radius: 1px;
     background: var(--text-secondary);
     transition: transform 0.25s ease, opacity 0.2s ease;
@@ -4572,21 +4596,31 @@ button:focus-visible {
     text-overflow: ellipsis;
 }
 
-/* 关闭钮：与 .nav-burger 同尺寸的圆形按钮，浅底细边 */
+/* 关闭钮：与 .nav-burger 同尺寸的圆形按钮，浅底细边。
+   SVG 采用 GitHub 式设置（块级渲染 + 显式尺寸 + 清除按钮内边距），
+   避免 iOS 上文本字形基线导致的视觉偏移。 */
 .mobile-menu__close {
     flex: none;
     display: grid;
     place-items: center;
     width: 38px;
     height: 38px;
+    padding: 0;
     border: 1px solid var(--border-light);
     border-radius: 50%;
     background: var(--bg-primary);
     color: var(--text-secondary);
-    font-size: 1.5rem;
-    line-height: 1;
+    font-size: 0;
+    line-height: 0;
     cursor: pointer;
     transition: color 0.2s ease, border-color 0.2s ease, transform 0.2s ease;
+}
+
+.mobile-menu__close svg {
+    display: block;
+    width: 18px;
+    height: 18px;
+    flex: none;
 }
 
 .mobile-menu__close:active {
@@ -5236,6 +5270,11 @@ button:focus-visible {
     .mobile-menu__close {
         width: 44px;
         height: 44px;
+    }
+
+    .mobile-menu__close svg {
+        width: 20px;
+        height: 20px;
     }
 
     /* 轨道导航点放大一档（active 胶囊同步 +6px 保持比例）；

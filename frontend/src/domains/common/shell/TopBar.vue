@@ -1137,7 +1137,7 @@ onBeforeUnmount(() => {
     }
 
     .controls {
-        gap: 6px;
+        gap: 3px;
     }
 
     .nav-btn {

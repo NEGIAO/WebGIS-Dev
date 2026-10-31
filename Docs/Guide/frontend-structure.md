@@ -549,6 +549,7 @@ frontend/src/
 │   │   │   ├── browserDownload.ts  # 浏览器下载触发工具（Blob / URL 两种模式）
 │   │   │   ├── clipboard.ts  # 剪贴板工具（复制文本，降级 execCommand）
 │   │   │   ├── datetime.js  # 日期时间格式化单源（parseDateValue/formatDateTime/formatTimeShort/formatDateEpoch）
+│   │   │   ├── defineResilientAsync.ts  # 异步组件韧性工厂（占位 + 线性退避重试 + 超时兜底；内联样式占位不依赖样式分片）
 │   │   │   ├── labelValidator.ts  # 标签校验
 │   │   │   ├── mapDefaults.js  # 跨域地图默认参数单源（DEFAULT_SEARCH_ZOOM/MAX_SEARCH_ZOOM）
 │   │   │   ├── normalize.ts  # 二值标记规范化

@@ -1053,6 +1053,9 @@ export default {
         copyCoordinateFailed: 'Failed to copy coordinates',
         copyCoordinateTitle: 'Click to copy the current coordinates',
         copyCoordinateAria: 'Copy current coordinates',
+        expandCoordHud: 'Show coordinate info',
+        collapseCoordHud: 'Hide coordinate info',
+        homeTip: 'Reset to the default view',
         exported: 'Exported {name}',
         terrainFitDone: '{name} is now fitted to the terrain',
         terrainFitNeedTerrain: 'Terrain is currently the ellipsoid — enable real terrain before fitting',
@@ -2166,5 +2169,6 @@ export default {
         coordCopied: 'Coordinates copied to clipboard',
         copyFailed: 'Unable to copy',
         inputPlaceholder: '114.302E, 34.814N or 114°18\'08.64"E, 34°48\'52.56"N',
+        toggleCoord: 'Show or hide coordinates',
     },
 };

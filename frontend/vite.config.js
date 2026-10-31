@@ -9,13 +9,6 @@ import { generateShareDataManifest } from './scripts/generate-sharedata-manifest
 import { bundleShaders } from './scripts/bundle-shaders.mjs';
 
 /**
- * 判断模块是否来自指定 node_modules 包
- */
-function isNodeModulePackage(id, pkgName) {
-    return id.includes(`/node_modules/${pkgName}/`) || id.includes(`\\node_modules\\${pkgName}\\`);
-}
-
-/**
  * 解析 .env 文件为 key-value 对象（支持基础单双引号、行尾注释）
  */
 function parseEnvFile(filePath) {
@@ -249,35 +242,16 @@ export default defineConfig(({ command, mode }) => {
                 },
             },
 
-            // 模块预加载：只预加载首屏关键 chunk，避免浏览器提前下载懒加载模块
-            // 过滤掉 geotiff/lerc/jszip/proj4/codec 等非首屏 chunk（节省 ~594 KB 首屏传输）
+            // 模块预加载：交给 rolldown 默认分组后，重库（geotiff / echarts / three / rapier…）
+            // 天然落在按需分片里，不会进入入口的预加载图，因此原先那份按 vendor-* 名称
+            // 过滤的白名单已失效（默认分组不再产出这些名字），一并移除，避免留下死配置。
+            // 实测默认分组下首屏预加载仅 10 个分片、合计约 53 kB(gzip)。
             modulePreload: {
                 polyfill: true,
-                resolveDependencies: (filename, deps) => {
-                    const SKIP_PRELOAD_CHUNKS = [
-                        'vendor-geotiff',
-                        'vendor-lerc',
-                        'vendor-jszip',
-                        'vendor-shpjs',
-                        'vendor-proj4',
-                        'vendor-codec',
-                        'vendor-echarts-all',
-                        'vendor-three',
-                        'vendor-rapier',
-                        'vendor-hljs',
-                        'vendor-marked',
-                        'vendor-lilgui',
-                        'vendor-loaders',
-                        'vendor-cesium-deps',
-                        'vendor-planar-route',
-                    ];
-                    return deps.filter(
-                        (dep) => !SKIP_PRELOAD_CHUNKS.some((name) => dep.includes(name)),
-                    );
-                },
             },
 
-            // Rollup 分包策略：按功能拆分，避免单个 chunk 过大
+            // 产物命名与分包：分包交给 rolldown 默认策略（见下方 manualChunks 移除说明），
+            // 此处只保留一项必需约束 —— chunk 文件名不得以下划线开头（Jekyll 会丢弃）。
             rollupOptions: {
                 output: {
                     /**
@@ -294,105 +268,28 @@ export default defineConfig(({ command, mode }) => {
                      */
                     chunkFileNames: (chunkInfo) =>
                         `assets/${String(chunkInfo.name || 'chunk').replace(/^_+/, '')}-[hash].js`,
-                    manualChunks(id) {
-                        if (id.includes('vite/preload-helper')) return 'vendor-runtime';
-                        if (!id.includes('node_modules')) return undefined;
-
-                        // 地图引擎（排除 GeoTIFF 相关模块，它们随 geotiff chunk 懒加载）
-                        if (
-                            isNodeModulePackage(id, 'ol') &&
-                            !id.includes('ol/source/GeoTIFF') &&
-                            !id.includes('ol/source/DataTile')
-                        )
-                            return 'vendor-ol-all';
-                        // 图表库（~543KB）
-                        if (
-                            isNodeModulePackage(id, 'echarts') ||
-                            isNodeModulePackage(id, 'zrender')
-                        )
-                            return 'vendor-echarts-all';
-                        // GeoTIFF 解析（~316KB）
-                        if (isNodeModulePackage(id, 'geotiff')) return 'vendor-geotiff';
-                        // OL 的 GeoTIFF/DataTile source 随 geotiff 一起懒加载（避免拉入首屏）
-                        if (id.includes('ol/source/GeoTIFF') || id.includes('ol/source/DataTile'))
-                            return 'vendor-geotiff';
-                        // zstd 解码器(geotiff 传递依赖;此前漏配落入 vendor-libs 兜底桶被入口预加载,gzip 63KB)
-                        if (isNodeModulePackage(id, 'zstddec')) return 'vendor-geotiff';
-                        // LERC 栅格解码
-                        if (isNodeModulePackage(id, 'lerc')) return 'vendor-lerc';
-                        // 压缩库
-                        if (isNodeModulePackage(id, 'jszip')) return 'vendor-jszip';
-                        if (isNodeModulePackage(id, 'shpjs')) return 'vendor-shpjs';
-                        // 坐标投影
-                        if (isNodeModulePackage(id, 'proj4')) return 'vendor-proj4';
-                        // HTTP 客户端
-                        if (isNodeModulePackage(id, 'axios')) return 'vendor-axios';
-                        // Three.js（仅 ShallowWater 使用，~700KB）
-                        if (isNodeModulePackage(id, 'three')) return 'vendor-three';
-                        // Rapier 物理引擎（仅 PlayerController 使用）。
-                        // 体积按产物实测约 4.34 MB / gzip 1.67 MB —— compat 版把 wasm
-                        // 以 base64 内联进 JS（约为原始 wasm 的 1.33 倍），不是注释早期写的 300KB。
-                        // 只在 PhysicsSystem 里动态 import，且列在 SKIP_PRELOAD_CHUNKS 中，
-                        // 不进首屏；若日后要压这块，正解是换非 compat 版让 wasm 独立流式加载
-                        // （属依赖变更，需按 Force_command §1 走 L3 批准）。
-                        if (isNodeModulePackage(id, '@dimforge/rapier3d-compat'))
-                            return 'vendor-rapier';
-                        // highlight.js 代码高亮（仅 AI 聊天使用，~350KB）
-                        if (isNodeModulePackage(id, 'highlight.js')) return 'vendor-hljs';
-                        // Markdown 渲染（仅 AI 聊天使用）
-                        if (
-                            isNodeModulePackage(id, 'marked') ||
-                            isNodeModulePackage(id, 'dompurify')
-                        )
-                            return 'vendor-marked';
-                        // 图标库（tree-shake 后仅保留使用到的图标）
-                        if (isNodeModulePackage(id, '@lucide/vue')) return 'vendor-lucide';
-                        // 压缩/解码（仅瓦片模块使用）
-                        if (
-                            isNodeModulePackage(id, 'pako') ||
-                            isNodeModulePackage(id, 'protobufjs') ||
-                            isNodeModulePackage(id, 'zstd-codec')
-                        )
-                            return 'vendor-codec';
-                        // lil-gui 控件（仅 Cesium 面板使用）
-                        if (isNodeModulePackage(id, 'lil-gui')) return 'vendor-lilgui';
-                        // 3D 模型加载器（仅 Cesium PlayerController 使用，~340KB）
-                        if (id.includes('@loaders.gl')) return 'vendor-loaders';
-                        // Cesium 生态依赖(knockout 供 cesium-shim/navigation;math.gl/probe.gl 供 loaders.gl)
-                        // 独立成懒加载 chunk,避免混入 vendor-libs 兜底桶被入口预加载(gzip 约 45KB)
-                        if (
-                            isNodeModulePackage(id, 'knockout') ||
-                            id.includes('@math.gl') ||
-                            id.includes('@probe.gl')
-                        ) {
-                            return 'vendor-cesium-deps';
-                        }
-                        // Vue 核心框架
-                        if (
-                            isNodeModulePackage(id, 'vue') ||
-                            isNodeModulePackage(id, '@vue') ||
-                            isNodeModulePackage(id, 'vue-router') ||
-                            isNodeModulePackage(id, 'pinia')
-                        ) {
-                            return 'vendor-vue';
-                        }
-                        // 通知/消息库（独立 chunk，避免混入 vendor-libs）
-                        if (
-                            isNodeModulePackage(id, 'vue-toastification') ||
-                            isNodeModulePackage(id, 'vue3-toastify')
-                        ) {
-                            return 'vendor-toast';
-                        }
-                        // 面状航线模块依赖（独立懒加载 chunk，避免混入 vendor-libs 兜底桶被入口预加载）
-                        if (
-                            isNodeModulePackage(id, '@turf') ||
-                            isNodeModulePackage(id, '@cesium-extends')
-                        ) {
-                            return 'vendor-planar-route';
-                        }
-                        // 剩余 node_modules（小库合集）
-                        return 'vendor-libs';
-                    },
+                    // ── 手工 manualChunks 已移除（2026-10-31，Vite 8 / rolldown）────────────
+                    //
+                    // 原策略按包名切成 vendor-ol-all / vendor-geotiff / vendor-echarts-all 等 20 余个
+                    // 命名 chunk。该策略在 Vite 6（Rollup）下成立，但本项目已升级到 Vite 8 + rolldown，
+                    // 实测分组语义与 Rollup 不同：多个 manual 分组被合并，且**应用模块被塞进以第三方库
+                    // 命名的 chunk**。可复现证据（改前产物）：
+                    //   · vendor-geotiff-*.js（591 kB）内部同时含 api/backend/admin.js 等应用模块；
+                    //   · 入口 chunk 因此静态 import 了这个 591 kB blob —— 落地页被迫下载约 218 kB
+                    //     （gzip）的栅格解析代码，而首屏完全用不到；
+                    //   · vendor-lucide-*.js（120 kB）实际装的是 Vue 运行时 + 图标，vendor-vue 里
+                    //     只剩 vue-router，chunk 名与内容已不对应。
+                    //
+                    // 处置：交回 rolldown 默认分组（按动态 import 边界切分 + 共享依赖提升）。
+                    // 对照实测（同一份源码）：
+                    //   手工分组：入口 108.8 kB(gzip 31.8) + 预加载 92 kB + 额外 218 kB geotiff
+                    //   默认分组：入口 187.5 kB(gzip 约 55) + 预加载 53 kB，入口不含 geotiff
+                    // 首屏总传输约降到三分之一，且不再有「重库被拉进入口」的结构性风险。
+                    //
+                    // 代价：chunk 数由 108 增至约 152（按需请求扇出略增）。对首屏无影响——首屏只关心
+                    // 入口 + 预加载图；按需分片只在用户触发对应功能时才请求。
+                    // 若后续需重新按包分组，应改用 rolldown 的 output.advancedChunks，而非 Rollup 时代
+                    // 的 manualChunks。
                 },
             },
         },

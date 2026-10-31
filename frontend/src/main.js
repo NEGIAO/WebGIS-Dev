@@ -4,7 +4,10 @@ import App from './App.vue';
 import router from './router';
 import { useMessage } from '@common/shell/useMessage';
 import { loadLocaleMessages } from '@common/app/useLocale';
-import { useUserPreferencesStore } from './stores';
+// 深导入：禁止从 './stores' 聚合桶取 store。
+// 该桶以 `export *` 汇总 14 个 store（含 OL / chat / data-import 域），
+// `export *` 对含副作用的模块无法被 tree-shake，会把整张 store 图拖进入口 chunk。
+import { useUserPreferencesStore } from '@common/user/stores/useUserPreferencesStore';
 
 const app = createApp(App);
 const pinia = createPinia();

@@ -1264,6 +1264,9 @@ export default {
         copyCoordinateFailed: '坐标复制失败',
         copyCoordinateTitle: '点击复制当前坐标',
         copyCoordinateAria: '复制当前坐标',
+        expandCoordHud: '展开坐标信息',
+        collapseCoordHud: '收起坐标信息',
+        homeTip: '回到默认视角',
         exported: '已导出 {name}',
         terrainFitDone: '{name} 已贴合地形',
         terrainFitNeedTerrain: '当前为椭球地形，请先开启真实地形再贴合',
@@ -2382,5 +2385,6 @@ export default {
         coordCopied: '坐标已复制到剪贴板',
         copyFailed: '无法执行复制命令',
         inputPlaceholder: '114.302E, 34.814N 或 114°18\'08.64"E, 34°48\'52.56"N',
+        toggleCoord: '显示或隐藏坐标',
     },
 };

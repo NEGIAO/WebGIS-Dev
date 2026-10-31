@@ -56,7 +56,8 @@
 <script setup>
 import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import { storeToRefs } from 'pinia';
-import { useAppStore } from '@/stores';
+// 深导入：GlobalLoading 随 App.vue 常驻首屏，禁止经 '@/stores' 聚合桶取 store
+import { useAppStore } from '@common/app/stores/useAppStore';
 import { useLocale } from '@common/app/useLocale';
 
 const appStore = useAppStore();

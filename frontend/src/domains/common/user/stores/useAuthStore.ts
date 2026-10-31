@@ -1,6 +1,9 @@
 import { computed, ref } from 'vue';
 import { defineStore } from 'pinia';
-import { apiAuthMe } from '@/api/backend';
+// 注意：此处**不得**静态导入 `@/api/backend`。
+// 该路径是 `export *` 聚合桶（13 个 API 模块 + axios 实例 + 拦截器副作用），
+// 静态导入无法被 tree-shake，会把整个 API 层拖进入口 chunk（实测 +37.6 kB gzip）。
+// 改为在 ensureValidSession 内部按需 import（见该函数），无 token 时根本不会触发。
 import { clearAuthSession, getAuthToken, isGuestSession } from '@common/user/services/auth';
 import { EMERGENCY_GUEST_MODE } from '@/config/publicRuntime';
 
@@ -72,6 +75,8 @@ export const useAuthStore = defineStore('authStore', () => {
         }
 
         try {
+            // 按需加载 API 层（见文件头注释）：无 token 时上面已提前 return，不会走到这里
+            const { apiAuthMe } = await import('@/api/backend/auth');
             const result = await withTimeout(apiAuthMe());
             const payload =
                 result && typeof result === 'object' && 'data' in result

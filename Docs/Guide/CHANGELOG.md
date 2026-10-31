@@ -6,6 +6,75 @@
 
 ## 版本记录
 
+### V3.6.34 (2026-10-31) — 整合多次不规范提交为单一版本：首屏打包优化 + TIF 按需加载 + 移动端信息层级收敛
+
+> **整合说明**：同日暂存区曾被逐次记为 V3.6.34 / V3.6.35 / V3.6.36 三个版本，而 HEAD 实际停留在 V3.6.33。按 Force_command §5「同一批次不得拆成多个版本号」，整合为单一版本 V3.6.34。包含三条工作线：① 首屏打包与依赖加载优化（构建链根治 + 异步组件韧性）；② TIF/GeoTIFF 解码依赖按需加载（geotiff 309 kB 不再进入首屏）；③ 移动端信息层级收敛 + Cesium 控制条与 OL 全面对齐。
+
+> **背景**：移动端首屏偏慢，且进入 OL 后出现「数据已到、界面没加载」——地点搜索框整块空白（含 `<search-icon>`）、账号中心总览只有数据没有图标与布局，且不会自愈。排查发现两件事同源：产物被切成 108 个 chunk，且分包边界错误，入口被迫引用巨型 blob，按需组件又没有任何失败兜底。
+> 同一批次中，用户还在 dev 环境观察到进入 OL 后即请求 `geotiff`(~309 kB)，源于 `tifUtils.js` 顶层静态导入与 `ol/source` 桶导入；已按需下沉。
+
+> **A · 构建链：移除失效的手工 `manualChunks`**：该策略（20 余个 `vendor-*` 命名分组）在 Vite 6/Rollup 下成立，但项目已升到 **Vite 8 + rolldown**，分组语义不同——多个 manual 分组被合并，且**应用模块被塞进以第三方库命名的 chunk**。可复现证据：`vendor-geotiff-*.js`（591 kB）内部同时含 `api/backend/admin.js` 等应用模块，`vendor-lucide-*.js`（120 kB）装的其实是 Vue 运行时 + 图标，而 `vendor-vue` 里只剩 vue-router。后果是入口 chunk 静态 `import` 了这个 591 kB blob —— 落地页白下载约 218 kB（gzip）栅格解析代码。改交 rolldown 默认分组后入口不再含该 blob。同时删除已失效的 `modulePreload.resolveDependencies` 白名单（默认分组不再产出 `vendor-*` 名字）与随之无用的 `isNodeModulePackage` 辅助函数。
+
+> **B · 首屏 store 深导入**：`main.js` / `LandingView.vue` / `RegisterView.vue` / `GlobalLoading.vue` 均从 `stores/index.ts` 聚合桶取 store，而该桶以 `export *` 汇总 14 个 store（含 OL / chat / data-import 域）；`export *` 对含副作用的模块无法 tree-shake，整张 store 图被拖进入口。四处改深导入后入口 chunk 由 167.66 kB 降至 111.19 kB（gzip 49.32 → 32.60 kB）。
+
+> **C · API 层移出首屏**：`useAuthStore` / `useUserPreferencesStore` 静态导入 `@/api/backend`，而该路径是 `export *` 桶（13 个 API 模块 + axios 实例与拦截器副作用），整层随入口打包。三处调用点改为在「已登录」分支内 `await import('@/api/backend/auth')`——`ensureValidSession` 无 token 时提前 return、偏好 `bootstrap` 无 token 时同样提前 return，故登录页/注册页首屏根本不会触发，axios 因此退出首屏预加载图。
+
+> **D · 异步组件韧性（修 UI 空白）**：新增 `@common/utils/defineResilientAsync.ts`——包装 `defineAsyncComponent`，补「占位 / 线性退避重试（默认 2 次）/ 超时兜底」，且**占位块用内联样式渲染**，避免样式分片同时失败时兜底 UI 一起消失。应用于账号中心五个分页（`OverviewTab` / `SecurityTab` / `PreferencesTab` / `AdminControlPanel` / `ApiManagementPanel`）与图层面板地点搜索框。裸写法在分片请求挂起时该区域永久空白、无占位无重试，这正是「总览只有数据没有界面」「搜索图标缺失」的直接成因。
+
+> **E · 量化结果**（同一份源码，构建产物实测）：首屏 gzip 传输约 **365 kB → 120 kB**（入口 63.03 kB + 预加载 57 kB；原为入口 49.32 + 预加载 92 + 入口静态引用的 geotiff 218 + planar-route 6）。代价是 chunk 数 108 → 约 152，按需请求扇出略增，对首屏无影响。
+> **验证**：`npx vite build` 成功；`npx tsc --noEmit` 0 错；ESLint 改动 9 个文件 0 problems；`CheckStructureTree` 522/522（漏登记 0、幽灵 0）；`CheckConfigRegistry` B1~B4 / F1~F3 全通过（catalog 130 key）。
+> **未覆盖**：Font Awesome 仍以 `media="print"` 交换方式从 `cdn.bootcdn.net` 异步加载（36 处用法，集中在落地页 / 注册页 / 账号中心），它是首屏唯一的跨域 CSS 依赖，也是账号中心图标丢失的另一条潜在路径，迁移到 lucide 需逐处核对视觉，已记入 TODO；未做浏览器实机验证（本机无 Chromium/Playwright），首屏时序需用户实机复验。
+> 完整记录：[`2026-10-31-bundle-firstscreen-perf.md`](../LLM_record/26-10/2026-10-31/2026-10-31-bundle-firstscreen-perf.md)
+
+> **F · 根因一（模块级静态导入）**：`tifUtils.js` 在模块顶层静态导入 `geotiff`(~309 kB) / `ol/source/DataTile` / `ol/layer/WebGLTile` / `ol/source/GeoTIFF`，但这四个依赖只服务于 `loadTifDirect` / `createTIFWebGLLayer` / `createRemoteGeoTIFFLayer` 三个函数；而该文件的唯一实际使用方 `useLayerDataImport` 只用到 `loadTifInWorker` 与 `isLargeFile` —— 前者把解码丢进 Web Worker（`workers/tiffWorker.js` 自带 geotiff），后者只是比较文件大小，**都不需要上述依赖**。于是「图层显隐」这条完全不碰 TIF 的路径被迫下载整套栅格解码器。
+
+> **G · 根因二（ol 桶导入，dev 暴露）**：修复根因一后 dev 环境仍在 ~680 ms 请求 geotiff。定位到 `olRemoteServiceAdapter.js` 的 `import { XYZ } from 'ol/source'` —— `ol/source` 是桶入口：生产构建能 tree-shake，但 **dev 下 Vite 把整个 `ol/source` 预打包成一个 deps 文件**（`ol_source.js`），其中包含 `ol/source/GeoTIFF` → 静态引入 geotiff。而该适配器由 `MapContainer.vue:235` 静态导入，`MapContainer` 正是进入 OL 即挂载的组件，因此请求出现在首屏 680 ms 处。改为 `import XYZ from 'ol/source/XYZ.js'` 子路径后，dev 预打包不再产出 `ol_source.js` 桶分片，`ol_source_XYZ.js` 中 GeoTIFF 引用为 0。
+
+> **H · 处置**：四个导入全部下沉到函数内 `await import()`。`loadTifDirect` 本为 async；`createTIFWebGLLayer` / `createRemoteGeoTIFFLayer` 随之转 async（仓库内**无调用点**，`getDefaultTifStyle` 亦无外部调用），签名变化不影响现有代码，已在 JSDoc 标注「后续启用需 await」。未删除任何函数 —— 三者属既有能力储备，按 §2.4 保留。
+
+> **I · 验证**：产物中 `geotiff` 仅被 `GeoTIFF-*.js`（OL GeoTIFF source 分片）与各编解码分片静态引用，而 `GeoTIFF-*.js` **无任何静态引用方**，只由 `useLayerDataImport` 内 `createRemoteGeoTIFFLayer` 的动态 import 可达；`index.html` 预加载图不含 geotiff。`useLayerDataImport` 分片静态依赖由「含 geotiff」变为「Feature / HomeView / Source / Text / Vector / compileUtil / crsAware / intersectsextent / preload-helper / proj / shpParser / tilecoord」，无 geotiff。dev 侧另以 `vite optimize --force` 重建预打包验证：`ol_source.js` 桶分片不再产出，`ol_source_GeoTIFF.js` 仅被其 `.js` 后缀变体引用，`ol_source_XYZ.js` 内 GeoTIFF 引用为 0。
+
+> **J · 附带核查**：同步扫描其余重库的静态绑定情况 —— `three` / `lil-gui` 仅 Cesium 模块引用，`shpjs` 仅 Worker 引用，`echarts` / `highlight.js` / `marked` 无静态引用，`proj4` 分片仅 1 kB（薄封装）。**本轮仅 geotiff 属真正的「重库被静态绑定」**。
+> **验证**：`npx vite build` 成功；`npx tsc --noEmit` 0 错；ESLint 改动文件 0 problems。
+> **未覆盖**：dev 环境需用户刷新验证（`node_modules/.vite/deps/` 为 Vite 预打包产物，改动后需重启 dev server 或等待依赖重新优化）；未做真实 TIF 导入回归（本机无法上传文件验证 `loadTifDirect` 路径）。
+> 完整记录：[`2026-10-31-geotiff-lazy-load.md`](../LLM_record/26-10/2026-10-31/2026-10-31-geotiff-lazy-load.md)
+
+> **K · OL 控制条**：`MapControlsBar.vue` 新增坐标显示开关（`Eye`/`EyeOff`）：桌面默认显示、触屏默认收起，桌面 28×28px / 触屏 40×40px，两端均可切换。关闭态隐藏坐标区；触屏隐藏时保持右侧竖列，展开时恢复桌面式横向一行（坐标文本窄屏省略、分隔线转竖向）。格式菜单在触屏下清除固定 `min-width`，改为 `min(280px, calc(100vw - 48px))`，避免窄屏横向溢出。
+
+> **L · Cesium 控制条对齐 OL**：`CesiumContainer.vue` 由「单一坐标 HUD」改为与 `MapControlsBar` 逐项同构的控制条 —— 顺序为 显隐开关 → 坐标胶囊 → 瓦片级别圆牌 → 竖发丝分隔线 → 主页圆钮。开关为同款 `Eye`/`EyeOff`（桌面 28×28px / 触屏 40×40px），桌面默认展开、触屏默认收起，两端均可切换。视觉基线统一到 OL：外壳改浅色玻璃（`rgba(255,255,255,.92)` + `blur(12px)`、`rgba(--brand-primary-rgb,.22)` 描边、`--toc-shadow-md` + 内高光），数据区改为内层品牌色胶囊（`rgba(--brand-primary-rgb,.06)`、`border-radius: 9999px`），数值统一 `JetBrains Mono` 13px/600/`.03em`，并补 `Copy` 提示图标（桌面悬停浮现、触屏常显）。媒体查询由 `max-width: 767px` 改为 `pointer: coarse`。
+
+> **M · Cesium 信息收敛与新增控制项**：触屏只渲染「经度, 纬度, 海拔」单行（新增 `mobileCoordinateText`，复制文本同步分支），桌面仍保留「位置 / 姿态 / 相机海拔」三组。新增瓦片请求级别 `displayTileZoom`：由 `cesiumHeightToOlZoom({ height, viewportHeight, fovY })`（`@common/utils/viewScale` canonical 逆变换）把相机离地高度反解为 OL zoom，取整规则与 OL `displayZoom` 一致（z<4 取 `round`、z≥4 取 `ceil`），在既有 `scene.postRender` 内量化 0.1 级后写回以避免逐帧渲染；新增主页按钮 `handleHomeClick` → `flyToHome(1.2)`（复用 `useCesiumSceneActions`）。触屏收起态为右侧竖列，展开坐标时 `coord-open` 切回横向一行，分隔线随之由横线转竖线。
+
+> **N · 落地页关闭钮**：`LandingView.vue` 将 `×` 文本替换为 lucide `X` SVG，按 GitHub 式设置 `padding: 0; font-size: 0; line-height: 0` + `svg { display: block }`，消除 iOS 文本基线导致的偏移；触屏档图标放大到 20px。
+
+> **O · TOC 逐级展开**：`TOCTreeItem.vue` 新增 `searchActive` prop 与触屏本地展开态 `mobileExpanded`（默认 `false`），点击文件夹行、行标题或箭头逐级展开；桌面端仍写回 store，搜索时沿用 `filterTree` 强制展开的 `node.expanded`，命中项保持可见。`LayerPanel.vue` 透传搜索态。
+
+> **P · i18n**：新增 `mapControls.toggleCoord`、`cesium.expandCoordHud`、`cesium.collapseCoordHud`、`cesium.homeTip` 中英键。
+> **验证**：ESLint 改动文件 0 problems；`vite build` 成功（默认写 `dist/` 被本机 safe-delete 守卫拦截，改用 `--outDir .verify-build-1` 验证后删除）；`CheckStructureTree` 521/521（漏登记 0、幽灵 0）；`CheckConfigRegistry` B1~B4 / F1~F3 全通过（catalog 130 key）；未执行 `tsc --noEmit`（本次未新增 `.ts` 文件）。
+> **未覆盖**：TOC 触屏展开态为组件本地状态，面板常驻导致关闭再打开不重置；未做 iOS 真机验证（沙箱无 WebKit）；未做浏览器截图验证（本机无 Chromium），两套控制条的像素级一致性待用户实机比对；Cesium 主页按钮只实现单击复位，故使用独立文案 `cesium.homeTip` 而非复用 OL 的「单击复位 / 双击定位」。
+> 完整记录：[`2026-10-31-mobile-info-collapse.md`](../LLM_record/26-10/2026-10-31/2026-10-31-mobile-info-collapse.md)
+
+> **验证**：`npx vite build` 成功；`npx tsc --noEmit` 0 错；ESLint 改动 9 个文件 0 problems；`CheckStructureTree` 522/522（漏登记 0、幽灵 0）；`CheckConfigRegistry` B1~B4 / F1~F3 全通过（catalog 130 key）。
+> **未覆盖**：Font Awesome 仍以 `media="print"` 交换方式从 `cdn.bootcdn.net` 异步加载（36 处用法，集中在落地页 / 注册页 / 账号中心），它是首屏唯一的跨域 CSS 依赖，也是账号中心图标丢失的另一条潜在路径，迁移到 lucide 需逐处核对视觉，已记入 TODO；未做浏览器实机验证（本机无 Chromium/Playwright），首屏时序需用户实机复验。
+> 完整记录：[`2026-10-31-bundle-firstscreen-perf.md`](../LLM_record/26-10/2026-10-31/2026-10-31-bundle-firstscreen-perf.md)
+> **验证**：`npx vite build` 成功；`npx tsc --noEmit` 0 错；ESLint 改动文件 0 problems。
+> **未覆盖**：dev 环境需用户刷新验证（`node_modules/.vite/deps/` 为 Vite 预打包产物，改动后需重启 dev server 或等待依赖重新优化）；未做真实 TIF 导入回归（本机无法上传文件验证 `loadTifDirect` 路径）。
+> 完整记录：[`2026-10-31-geotiff-lazy-load.md`](../LLM_record/26-10/2026-10-31/2026-10-31-geotiff-lazy-load.md)
+> **验证**：ESLint 改动文件 0 problems；`vite build` 成功（默认写 `dist/` 被本机 safe-delete 守卫拦截，改用 `--outDir .verify-build-1` 验证后删除）；`CheckStructureTree` 521/521（漏登记 0、幽灵 0）；`CheckConfigRegistry` B1~B4 / F1~F3 全通过（catalog 130 key）；未执行 `tsc --noEmit`（本次未新增 `.ts` 文件）。
+> **未覆盖**：TOC 触屏展开态为组件本地状态，面板常驻导致关闭再打开不重置；未做 iOS 真机验证（沙箱无 WebKit）；未做浏览器截图验证（本机无 Chromium），两套控制条的像素级一致性待用户实机比对；Cesium 主页按钮只实现单击复位，故使用独立文案 `cesium.homeTip` 而非复用 OL 的「单击复位 / 双击定位」。
+> 完整记录：[`2026-10-31-mobile-info-collapse.md`](../LLM_record/26-10/2026-10-31/2026-10-31-mobile-info-collapse.md)
+
+> **未覆盖**：Font Awesome 仍以 `media="print"` 交换方式从 `cdn.bootcdn.net` 异步加载（36 处用法，集中在落地页 / 注册页 / 账号中心），它是首屏唯一的跨域 CSS 依赖，也是账号中心图标丢失的另一条潜在路径，迁移到 lucide 需逐处核对视觉，已记入 TODO；未做浏览器实机验证（本机无 Chromium/Playwright），首屏时序需用户实机复验。
+> 完整记录：[`2026-10-31-bundle-firstscreen-perf.md`](../LLM_record/26-10/2026-10-31/2026-10-31-bundle-firstscreen-perf.md)
+> **未覆盖**：dev 环境需用户刷新验证（`node_modules/.vite/deps/` 为 Vite 预打包产物，改动后需重启 dev server 或等待依赖重新优化）；未做真实 TIF 导入回归（本机无法上传文件验证 `loadTifDirect` 路径）。
+> 完整记录：[`2026-10-31-geotiff-lazy-load.md`](../LLM_record/26-10/2026-10-31/2026-10-31-geotiff-lazy-load.md)
+> **未覆盖**：TOC 触屏展开态为组件本地状态，面板常驻导致关闭再打开不重置；未做 iOS 真机验证（沙箱无 WebKit）；未做浏览器截图验证（本机无 Chromium），两套控制条的像素级一致性待用户实机比对；Cesium 主页按钮只实现单击复位，故使用独立文案 `cesium.homeTip` 而非复用 OL 的「单击复位 / 双击定位」。
+> 完整记录：[`2026-10-31-mobile-info-collapse.md`](../LLM_record/26-10/2026-10-31/2026-10-31-mobile-info-collapse.md)
+
+> 完整记录：[`2026-10-31-bundle-firstscreen-perf.md`](../LLM_record/26-10/2026-10-31/2026-10-31-bundle-firstscreen-perf.md)
+> 完整记录：[`2026-10-31-geotiff-lazy-load.md`](../LLM_record/26-10/2026-10-31/2026-10-31-geotiff-lazy-load.md)
+> 完整记录：[`2026-10-31-mobile-info-collapse.md`](../LLM_record/26-10/2026-10-31/2026-10-31-mobile-info-collapse.md)
+
 ### V3.6.33 (2026-10-30) — 非标准瓦片在线纠偏文案回填 + Cesium 浮层与原生控件主题统一
 
 > **背景**：本版合并同日两条工作线。其一，GCJ-02 / BD-09 瓦片在线纠偏是本项目底图链路的核心能力（国内合规图源无一发布 WGS-84 瓦片，直接贴图会整城错位），但 2026-09-15 该能力整包迁出本仓后，只更新了架构文档与「已知限制」，从未回填对外介绍文案 —— 落地页 10 张功能卡与两份 README 的核心能力表都只有「GCJ-02 纠偏」五个字，BD-09 完全缺席。其二，三维域仍以「独立暗色身份」为设计前提，与全站浅色玻璃语言分裂成两套，且绿/蓝主题切换对 Cesium 侧完全无效。
@@ -15,7 +84,7 @@
 > **D · README_EN 断档回填**：英文版版本表首行为 V3.6.31，缺 V3.6.32。因本次需在同表插入 V3.6.33，为不留可见断档，一并补齐 V3.6.32 英文摘要，表仍保持 3 行。
 > **E · 新增「OSM代理」底图**：为缓解 OSM 官方瓦片在境内间歇不可达（README「已知限制」既有条目），新增 `osm_Backend_Proxy` 走 `vpn.negiao.cn/proxy` 统一瓦片代理，上游 `tile.openstreetmap.org/{z}/{x}/{y}.png`，`maxZoom: 19`（OSM 官方上限，不设会在 z20+ 反复请求 404）。图层定义插在 `google_Backend_Proxy` 之后，预设 `osm_Backend_Proxy_preset` 插在 `google_Backend_Proxy_preset`（后端代理谷歌）之后；Cesium 描述符由 `getDescriptorById` 自动派生，未改。**副作用（已获用户确认）**：预设数组下标即 `?l=` 编号与后台 `default_basemap_index`，插入第 12 项后其后 79 项编号整体 +1，已分享链接与管理员默认底图需重新选定。数量同步 90→91 预设 / 106→107 图层定义（英文版滞后的 96 一并校准为 107）。**⚠️ 上线前实测：该条当前不可用** —— 2026-10-30 实测 `vpn.negiao.cn/proxy/tile.openstreetmap.org/*` 返回 256×256「403 Access blocked」提示图：HTTP 仍为 200（代理不校验内容），响应头 `Age: 16` + `last-modified` 为请求前 16 秒，证明是上游实时拦截而非本地缓存；且代理对其同样下发 `Cache-Control: max-age=604800`，错误图会在边缘留存 7 天。同期 `tile.openstreetmap.de` 经同一代理返回真实瓦片（37512 B / 27989 B）。根因是 OSM 基金会瓦片使用政策拒绝单一出口 IP 的批量转发。用户决定保留官方源，故本条以「已知不可用」状态入库，后续需代理侧按政策修正 UA 与限速，或改用镜像 / 自托管。已记入 `Docs/TODO/bugfix-optimization-plan.md`。
 > **F · Cesium 浮层与原生控件主题统一**：`cesium-tool-theme.css` 升到 v4 —— `--ctp-*` 全族由暗海军蓝 / Catppuccin 青绿改为「浅玻璃 + 品牌主题」，`-rgb` 三元组与实色一律**别名指向 `--brand-*`**，使用处（200+ 个 `rgba(var(--ctp-x-rgb), α)`）零改动即完成换肤。三维面板 `CesiumToolPanel` 展开宽度 380→520px（`.compact` 仍 380px，`compactMode` 默认收起，折叠按钮改 `Maximize2`/`Minimize2` 双态），删除文件后半段约 230 行与前半段同名同值的**重复 CSS**，模块卡 / 选项卡 / overlay 卡全部改白底 + 品牌色，`.module-card-body` 去掉卡片内滚动改由外层统一滚动。Cesium **原生控件**（工具栏、Geocoder、Animation、Timeline、BaseLayerPicker）因 `widgets.css` 运行时注入晚于组件 CSS，统一用 `:global()` + `!important` 覆写为「白底 + 品牌实色」（不用半透明玻璃 —— 层级叠加后发灰失真）；性能胶囊重绘（FPS 固定蓝、MS 用 `--brand-gold-dark`、throttled 用红）。`cesium-navigation.css` 重写比例尺 / 罗盘 / 缩放栏，并删除文件末尾整块「高对比度深色主题覆盖」。**InfoBox** 正文在独立 iframe 内、父页 CSS 无法穿透，故新建 `useCesiumInfoBoxTheme.js`：读取父页计算后的令牌拼成 CSS 写入 iframe `<head>`，监听 `load`（Cesium 每次设置描述都 `document.open/write/close` 整篇重写 iframe 文档）与 `data-theme` 变化（`MutationObserver`）重新注入，使正文随绿/蓝主题联动；`identifyPresentation.js` 同步补 `cesium-identify-*` 类名钩子与深色内联兜底。**坐标显示**由 `pointer-events: none` 的只读文本改为可点击复制的按钮，结构化为「位置 / 姿态 / 相机海拔」三组（桌面横排、移动端纵排）。
-> **G · 移动端与交互修复**：① iOS 图标塌陷 —— lucide 输出的 SVG 作为 flex 子项默认 `flex-shrink: 1`，且部分图标只有 CSS 尺寸没有无单位 `width`/`height` 属性，补固有尺寸并全局 `svg.lucide { flex: none }`，`TOCPanel` 另补 `line-height: 0` 修正 WebKit 行盒基线偏移；② 侧栏折叠手柄在移动端点按缩成 30px —— 桌面 `.toggle-handle:hover { width: 30px }` 特异性高于移动端基准 80px，在媒体查询内补 `:hover/:active` 覆盖；③ 移动端语言切换激活态退化为扁线 —— `.lang-btn` 纵向内边距为 0，改 `align-self: stretch` + 最小宽度 46px + 实心品牌渐变胶囊；④ OL 控制条移动端改右侧竖向图标条并隐藏坐标区，Cesium 导航控件移动端档位由 `scale(0.8)` 改为罗盘 0.9 / 缩放栏 1.2；⑤ 图层面板「URL 操作」子菜单指针穿缝即消失 —— 子菜单改用 `left: 100%` / `right: 100%` 贴父项边缘消灭缝隙，关闭改为 220ms 延迟 + 进入即取消，并在卸载时清理定时器。
+> **G · 移动端与交互修复**：① iOS 图标塌陷 —— lucide 输出的 SVG 作为 flex 子项默认 `flex-shrink: 1`，且部分图标只有 CSS 尺寸没有无单位 `width`/`height` 属性，补固有尺寸并全局 `svg.lucide { flex: none }`，`TOCPanel` 另补 `line-height: 0` 修正 WebKit 行盒基线偏移；② **落地页汉堡按钮在 iOS 上塌成一个小点** —— 该按钮是 `<button>` + 纵向 flex，三条横线（`<span>`）只给了 `height: 2px`、宽度依赖交叉轴 `stretch`，而 **WebKit 的 UA 样式表给 `<button>` 预置了 `align-items: center`**（Chromium 没有），iOS 上三条横线宽度因此退化为 0。按 GitHub 标记「自带显式固有尺寸」的思路，给按钮补 `align-items: stretch`、给横线补 `width: 100%` + `flex: none`（两条互为冗余，任一条生效即可复原）；已脚本排查全仓「`<button>` 内含 ≥2 个空 `<span>`」仅此 1 处，属孤例；③ 侧栏折叠手柄在移动端点按缩成 30px —— 桌面 `.toggle-handle:hover { width: 30px }` 特异性高于移动端基准 80px，在媒体查询内补 `:hover/:active` 覆盖；④ 移动端语言切换激活态退化为扁线 —— `.lang-btn` 纵向内边距为 0，改 `align-self: stretch` + 最小宽度 46px + 实心品牌渐变胶囊；⑤ OL 控制条移动端改右侧竖向图标条并隐藏坐标区，Cesium 导航控件移动端档位由 `scale(0.8)` 改为罗盘 0.9 / 缩放栏 1.2；⑥ 图层面板「URL 操作」子菜单指针穿缝即消失 —— 子菜单改用 `left: 100%` / `right: 100%` 贴父项边缘消灭缝隙，关闭改为 220ms 延迟 + 进入即取消，并在卸载时清理定时器。
 > **验证**：`eslint` 0 problems、`tsc --noEmit` 0 错、`vite build` ✓ 11.28s；`CheckStructureTree` 521/521、`CheckConfigRegistry` 7 项全通过；29 个改动文件行尾全部 CRLF（裸 LF 0）；无后端与配置改动，平台红线四项不适用（未触碰 `backend/`、`deploy/` 中任何代理/中转代码）。新增 `useCesiumInfoBoxTheme.js` 为 `.js` 而非 `.ts` 的动机：所属目录 `composables/core/` 与消费方 `CesiumContainer.vue` 均为 JS，且操作对象是运行时动态加载、类型为 `any` 的 Cesium viewer，转 `.ts` 只得到 `any` 泛化而无类型收益。
 > **未覆盖**：未实机验证 `vpn.negiao.cn/proxy/*` 当前可用性（文案按「能力存在」表述，依据为架构文档与前端既有调用）；未做 iOS 真机验证（沙箱无 WebKit）；坐标 HUD 的可见数据标签与数值仍为中文（需先改结构化坐标），已记入 `Docs/TODO/bugfix-optimization-plan.md`；`Docs/README_EN.md` 技术栈数字（OL 10.5 / Cesium 1.132）仍滞后于中文版，属既有漂移，本次不动。
 > 完整记录：[`2026-10-30-tile-rectify-docs.md`](../LLM_record/26-10/2026-10-30/2026-10-30-tile-rectify-docs.md) · [`2026-10-30-cesium-ui-light-theme.md`](../LLM_record/26-10/2026-10-30/2026-10-30-cesium-ui-light-theme.md)

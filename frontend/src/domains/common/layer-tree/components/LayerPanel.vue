@@ -55,6 +55,7 @@
                     :node="node"
                     :active-layer-id="activeLayerId"
                     :selected-layer-ids="selectedLayerIds"
+                    :search-active="!!searchQuery.trim()"
                     @action="handleTreeAction"
                 />
             </div>

@@ -134,6 +134,7 @@ InfoBox 描述正文在独立 iframe 内，父页 CSS 无法穿透。新建 `use
 | 问题 | 根因 | 修法 |
 |---|---|---|
 | 落地页导航 / 页脚图标在 iPhone 上塌成 0 宽 | lucide 输出的 SVG 作为 flex 子项默认 `flex-shrink: 1`，且部分图标只有 CSS 尺寸没有 `width`/`height` 属性 | 图标补无单位固有尺寸属性；`.navbar / .footer / .cta-method svg` 与全局 `svg.lucide` 统一 `flex: none` |
+| **落地页汉堡按钮整块塌成一个小点** | **不是 SVG 问题**：`.nav-burger` 是 `<button>` + `flex-direction: column`，三条横线（`<span>`）只写了 `height: 2px`、宽度依赖交叉轴 `stretch`。而 **WebKit 的 UA 样式表给 `<button>` 预置了 `align-items: center`**，Chromium 没有 —— 于是 iOS 上三条 span 宽度退化为 0，只剩 2px 高度的一列点。参照 GitHub 标记的做法（能显示靠的是**显式固有尺寸** `width="15" height="15"`，而非父级布局顺带撑开），给按钮显式 `align-items: stretch`、给 span 显式 `width: 100%` + `flex: none`，两条一起写，任一条单独生效即可复原 |
 | 目录树图标同样塌陷 / 在按钮内不居中 | 同上 + WebKit 行盒基线偏移 | `TOCPanel` 补 `svg { flex: none }` 与图标容器 `line-height: 0` |
 | 侧栏折叠手柄在移动端点按后缩成 30px | 桌面 `.toggle-handle:hover { width: 30px }` 特异性高于移动端基准 80px | 移动端媒体查询内补 `:hover/:active` 的 80px 覆盖 |
 | 移动端语言切换激活态像一条扁线 | `.lang-btn` 只给了横向内边距、纵向为 0，且激活态用的是浅底内描边 | 纵向 `align-self: stretch`、最小宽度 46px，激活态改用实心品牌渐变胶囊 |
@@ -145,6 +146,28 @@ InfoBox 描述正文在独立 iframe 内，父页 CSS 无法穿透。新建 `use
 图层面板右键菜单的「URL 操作」子菜单，父项 `@mouseleave` 立即置 `false`，而子菜单 `left` 是**按菜单宽度写死的偏移**（比父项实际宽度多出几像素），指针穿过中间缝隙时 `mouseleave` 已触发，子菜单当场消失。
 
 修法两条：① 子菜单改用 `left: 100%` / `right: 100%` 贴父项边缘，消灭缝隙；② 关闭改为 220ms 延迟 + 进入子菜单即取消。
+
+### 3.8 汉堡按钮塌成一点：第三次复发的根因不在 SVG
+
+同一症状在本轮已出现三次（导航图标 → 主题切换图标 → 汉堡按钮），前两次都归因于「SVG 固有尺寸缺失」，第三次必须换判据 —— 因为 `nav-burger` 里**根本没有 SVG**，只有三个空的 `<span>`。
+
+| 环节 | 事实 |
+|---|---|
+| 标记 | `<button class="nav-burger"><span></span><span></span><span></span></button>` |
+| 样式 | `.nav-burger { display: inline-flex; flex-direction: column }`；`.nav-burger span { height: 2px }`，**无 width** |
+| 预期 | 纵向 flex 的交叉轴默认 `align-items: stretch`，span 的宽度自动撑满按钮内容宽（38 − 16 padding − 2 border = **20px**） |
+| 桌面 Chromium | 实测按预期渲染三条 20×2px 横线 |
+| iOS Safari | 三条 span 宽度为 **0**，只剩 2px 高度 → 视觉上是一个点 |
+| 根因 | **WebKit 的 UA 样式表给 `<button>` 预置了 `align-items: center`**（Chromium 的 UA 表没有）。作者样式只写了 `flex-direction`，没写 `align-items`，于是 iOS 上交叉轴对齐走 UA 的 `center` 而不是默认的 `stretch`，宽度自动值退化为 0 |
+
+**参照 GitHub 标记的做法**（用户提出的判据）：GitHub 的 SVG 能显示，靠的不是父级布局顺带撑开，而是**自带显式固有尺寸** `width="15" height="15"`。同一思路落到本按钮上：
+
+1. `.nav-burger` 显式写 `align-items: stretch` —— 压掉 WebKit 的 UA `center`，与 Chromium 默认表现对齐；
+2. `.nav-burger span` 显式写 `width: 100%` + `flex: none` —— 宽度不再依赖父级对齐方式，任何引擎都成立。
+
+两条一起写：任一条单独生效即可复原，同时保留冗余以防后续有人再动 `align-items`。
+
+**全仓排查**：用脚本枚举所有 `.vue` 中「`<button>` 内含 ≥2 个空 `<span>`」的标记，命中 **1 处**（即本按钮），确认该缺陷是孤例；同时核对全仓 lucide 用法无 `:size="'16px'"` 这类带单位写法（带单位会被 WebKit 判为非法属性并丢弃，正是前两次复发的成因）。
 
 ---
 
@@ -170,7 +193,7 @@ InfoBox 描述正文在独立 iframe 内，父页 CSS 无法穿透。新建 `use
 
 - `theme.css`：新增全局 `svg.lucide { flex: none }`。
 - `TOCPanel.vue`：`svg { flex: none }`，三处图标容器补 `line-height: 0`。
-- `LandingView.vue`：5 处 GitHub 图标补 `width="15" height="15"`；`.navbar / .footer / .cta-method svg` 与 `.btn-primary svg` / `.mobile-menu__contact svg` / `.mobile-menu__arrow` 补 `flex: none` 与固定尺寸；移动端 `.lang-btn` 与激活态重做。
+- `LandingView.vue`：5 处 GitHub 图标补 `width="15" height="15"`；`.navbar / .footer / .cta-method svg` 与 `.btn-primary svg` / `.mobile-menu__contact svg` / `.mobile-menu__arrow` 补 `flex: none` 与固定尺寸；移动端 `.lang-btn` 与激活态重做；**`.nav-burger` 补 `align-items: stretch`，`.nav-burger span` 补 `width: 100%` + `flex: none`**（WebKit 对 `<button>` 的 UA `align-items: center` 导致三条横线宽度归零，见 3.6 表第 2 行）。
 - `SidePanel.vue`：移动端 `.toggle-handle:hover/:active` 锁定 80px。
 - `TopBar.vue`：移动端 `.logo-link` 间距。
 
@@ -255,7 +278,7 @@ InfoBox 描述正文在独立 iframe 内，父页 CSS 无法穿透。新建 `use
 5. 切换主题，确认罗盘 / 缩放栏 / 比例尺 / 工具栏 / 动画控件 / 时间轴 / 底图选择器全部跟随。
 6. 2D 模式窗口宽度拖到 768px 以下：确认控制条变为右侧竖条、坐标区隐藏、比例尺不再被遮挡。
 7. 图层面板右键 → 悬停「URL 操作」→ 指针斜向移入子菜单：确认子菜单不再中途消失。
-8. **iPhone 真机**：落地页导航图标、主题切换图标、目录树图标均不塌陷且在按钮内居中；侧栏折叠手柄点按不缩小。
+8. **iPhone 真机**：落地页导航图标、主题切换图标、目录树图标均不塌陷且在按钮内居中；**汉堡按钮显示为三条完整横线（约 20px 宽）而不是一个点**，点击后三条线交叉成 ×；侧栏折叠手柄点按不缩小。
 
 ---
 
@@ -275,7 +298,7 @@ InfoBox 描述正文在独立 iframe 内，父页 CSS 无法穿透。新建 `use
 | `frontend/src/domains/common/layer-tree/components/TOCPanel.vue` | 图标 `flex: none` 与 `line-height: 0` |
 | `frontend/src/domains/common/shell/SidePanel.vue` | 移动端折叠手柄 hover 宽度锁定 |
 | `frontend/src/domains/common/shell/TopBar.vue` | 移动端 logo 间距 |
-| `frontend/src/app/LandingView.vue` | 图标固有尺寸与 `flex: none`、移动端语言切换胶囊 |
+| `frontend/src/app/LandingView.vue` | 图标固有尺寸与 `flex: none`、汉堡按钮 `align-items: stretch` + 横线显式 `width`、移动端语言切换胶囊 |
 | `frontend/src/domains/ol/components/MapControlsBar.vue` | 移动端右侧竖条 + 隐藏坐标区 |
 | `frontend/src/domains/ol/components/MapContainer.vue` | 移动端比例尺下移 |
 | `frontend/src/domains/ol/composables/useMapState.js` | 经纬网标签字体与偏移 |

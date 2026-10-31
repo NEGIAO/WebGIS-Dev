@@ -409,13 +409,13 @@
 <script setup>
 import {
     computed,
-    defineAsyncComponent,
     nextTick,
     onBeforeUnmount,
     onMounted,
     ref,
     watch,
 } from 'vue';
+import { defineResilientAsync } from '@common/utils/defineResilientAsync';
 import {
     toLonLat,
 } from 'ol/proj';
@@ -443,8 +443,17 @@ import {
 } from '@common/basemap/wmsService';
 
 // ========== 异步导入子组件 ==========
-/** 地名搜索组件，支持多个服务源（天地图、国际、高德） */
-const LocationSearch = defineAsyncComponent(() => import('@ol/search/components/LocationSearch.vue'));
+/**
+ * 地名搜索组件，支持多个服务源（天地图、国际、高德）。
+ *
+ * 用 defineResilientAsync 而非裸 defineAsyncComponent：本组件是图层面板顶部唯一的
+ * 搜索入口，分片请求一旦挂起/中断，裸写法的表现是**整块搜索区空白**（含搜索图标），
+ * 且不会自愈。包装后：180ms 后显示占位 → 失败自动重试 2 次 → 仍失败给出可读失败态。
+ */
+const LocationSearch = defineResilientAsync(
+    () => import('@ol/search/components/LocationSearch.vue'),
+    { label: '搜索框加载失败，请检查网络后重试', minHeight: 38 },
+);
 
 // BASEMAP_OPTIONS 已从 useBasemapManager 导入，无需本地重新定义
 

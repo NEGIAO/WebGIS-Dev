@@ -120,39 +120,94 @@
         <span class="drag-overlay-hint">GeoJSON / KML / SHP / GLB / CZML</span>
     </div>
 
-    <!-- 坐标显示按钮（固定右下角，点击复制当前坐标） -->
-    <button
+    <!-- 坐标控制条（固定右下角，圆角胶囊）：显隐开关 + 坐标数据 + 瓦片级别 + 分隔线 + 主页。
+         与 OL MapControlsBar 逐项对齐；桌面默认展开坐标、触屏默认收起，两端口均可切换。 -->
+    <div
         v-if="bootComplete"
         class="coordinate-display"
-        :class="{ 'is-roaming': coordinateGroups.roaming }"
-        type="button"
-        :title="t('cesium.copyCoordinateTitle')"
-        :aria-label="t('cesium.copyCoordinateAria')"
-        @click="copyActiveCoordinateDisplay"
+        :class="{ 'is-roaming': coordinateGroups.roaming, 'coord-open': hudVisible }"
     >
-        <span class="coordinate-display-lead">
-            <span
-                class="coordinate-display-icon"
-                aria-hidden="true"
+        <button
+            class="coord-toggle-btn"
+            type="button"
+            :title="hudToggleTitle"
+            :aria-label="hudToggleTitle"
+            :aria-pressed="hudVisible"
+            @click.stop="hudVisible = !hudVisible"
+        >
+            <Eye
+                v-if="hudVisible"
+                :size="isTouch ? 20 : 17"
+                :stroke-width="2"
+            />
+            <EyeOff
+                v-else
+                :size="isTouch ? 20 : 17"
+                :stroke-width="2"
+            />
+        </button>
+        <div
+            v-if="hudVisible"
+            class="coordinate-section"
+        >
+            <button
+                class="coordinate-copy-area"
+                type="button"
+                :title="t('cesium.copyCoordinateTitle')"
+                :aria-label="t('cesium.copyCoordinateAria')"
+                @click.stop="copyActiveCoordinateDisplay"
             >
-                <Copy :size="13" stroke-width="2" />
-            </span>
-            <span
-                v-if="coordinateGroups.roaming"
-                class="coordinate-display-badge"
-            >漫游</span>
-        </span>
-        <span class="coordinate-display-groups">
-            <span
-                v-for="group in coordinateGroups.groups"
-                :key="group.key"
-                class="coordinate-group"
-            >
-                <span class="coordinate-group-label">{{ group.label }}</span>
-                <span class="coordinate-group-value">{{ group.value }}</span>
-            </span>
-        </span>
-    </button>
+                <span
+                    v-if="coordinateGroups.roaming"
+                    class="coordinate-display-badge"
+                >漫游</span>
+                <!-- 触屏只显示经纬度+海拔单行；桌面保留位置/姿态/相机海拔三组 -->
+                <span
+                    v-if="isTouch"
+                    class="coordinate-mobile-text"
+                >{{ mobileCoordinateText }}</span>
+                <span
+                    v-else
+                    class="coordinate-display-groups"
+                >
+                    <span
+                        v-for="group in coordinateGroups.groups"
+                        :key="group.key"
+                        class="coordinate-group"
+                    >
+                        <span class="coordinate-group-label">{{ group.label }}</span>
+                        <span class="coordinate-group-value">{{ group.value }}</span>
+                    </span>
+                </span>
+                <!-- 复制提示图标：与 OL 控制条右侧的复制按钮同位同形（悬停浮现 / 触屏常显） -->
+                <Copy
+                    class="coordinate-copy-icon"
+                    :size="14"
+                    :stroke-width="2"
+                    aria-hidden="true"
+                />
+            </button>
+        </div>
+        <!-- 瓦片请求级别（与 OL 缩放级别同义、同取整规则） -->
+        <div
+            class="zoom-level-display"
+            :title="t('mapControls.zoomLevel')"
+        >
+            {{ displayTileZoom }}
+        </div>
+        <div class="divider"></div>
+        <button
+            class="home-btn"
+            :title="t('cesium.homeTip')"
+            type="button"
+            @click.stop="handleHomeClick"
+        >
+            <House
+                :size="isTouch ? 22 : 18"
+                :stroke-width="1.8"
+            />
+        </button>
+    </div>
 
     <!-- 三维矢量图层属性表（TOC 右键「打开属性表」，只读 + 行定位） -->
     <CesiumAttributeTableDialog
@@ -181,7 +236,7 @@ import { resolveRuntimeTokenPoolKey } from '@ol/basemap/constants/basemapConfig'
 import { useMessage } from '@common/shell/useMessage';
 import { showLoading, hideLoading } from '@common/ui/loading';
 import { translate as t } from '@common/app/useLocale';
-import { Copy, Upload } from '@lucide/vue';
+import { Copy, Eye, EyeOff, House, Upload } from '@lucide/vue';
 import CesiumAdvancedEffects from './CesiumAdvancedEffects.vue';
 import CesiumToolPanel from './CesiumToolPanel.vue';
 import CesiumAttributeTableDialog from './CesiumAttributeTableDialog.vue';
@@ -219,6 +274,7 @@ import { useDrawMeasureStore } from '@cesium-domain/stores/useDrawMeasureStore';
 import { registerEngineHandlers, unregisterEngineHandlers } from '@common/layer-tree/actions/unifiedActionRouter';
 import { TOC_LAYER_DRAG_MIME } from '@common/layer-tree/protocol';
 import { getCesiumGroundResolution } from '@common/utils/viewScale/browserAdapter';
+import { cesiumHeightToOlZoom } from '@common/utils/viewScale';
 import { createCesiumDrawMeasureFeature } from '../composables/draw/useCesiumDrawMeasure';
 import { createCesiumRouteFeature } from '../composables/draw/useCesiumRouteRendering';
 import { readCachedPreferredBasemap } from '@common/user/stores/useUserPreferencesStore';
@@ -914,9 +970,18 @@ let cleanupAttitudeListener = null;
 let cleanupGroundAtmosphereFade = null;
 
 /**
+ * 触屏能力判定（pointer: coarse）：触屏默认隐藏坐标 HUD，桌面默认显示
+ */
+const isTouch = ref(
+    typeof window !== 'undefined'
+    && typeof window.matchMedia === 'function'
+    && window.matchMedia('(pointer: coarse)').matches,
+);
+
+/**
  * 坐标显示：漫游模式下显示人物三维坐标+实时速度，否则显示鼠标位置。
  * 结构化为「位置 / 姿态 / 相机海拔」三组（标签与值分离，便于样式分层）：
- * 桌面端横向排布、移动端纵向三行，避免窄屏自动折叠成两行。
+ * 桌面端横向排布；触屏只取经纬度+海拔，单行展示，避免冗余。
  */
 const coordinateGroups = computed(() => {
     const att = cameraAttitude.value;
@@ -949,12 +1014,33 @@ const coordinateGroups = computed(() => {
     };
 });
 
-/** 复制到剪贴板的纯文本：逐行「标签: 值」 */
-const coordinateCopyText = computed(() =>
-    coordinateGroups.value.groups
+/**
+ * 触屏紧凑坐标：只保留经纬度 + 海拔，单行展示（模仿 OL 控制条）
+ */
+const mobileCoordinateText = computed(() => {
+    const pos = playerController.playerPosition.value;
+    if (pos) {
+        return `${pos.lng.toFixed(4)}, ${pos.lat.toFixed(4)}, ${pos.height.toFixed(0)}m`;
+    }
+
+    const coord = coordinateDisplay.value;
+    if (coord.includes('--')) return '移动鼠标取点';
+
+    // 从「经度: x, 纬度: y, 海拔: z米」中提取数值，压缩为「x, y, zm」
+    const nums = coord.match(/-?\d+(?:\.\d+)?/g) || [];
+    if (nums.length >= 3) {
+        return `${Number(nums[0]).toFixed(4)}, ${Number(nums[1]).toFixed(4)}, ${Number(nums[2]).toFixed(0)}m`;
+    }
+    return coord.replace(/:\s*/g, ' ');
+});
+
+/** 复制到剪贴板的纯文本：桌面逐行「标签: 值」，触屏用紧凑单行 */
+const coordinateCopyText = computed(() => {
+    if (isTouch.value) return mobileCoordinateText.value;
+    return coordinateGroups.value.groups
         .map(group => `${group.label}: ${group.value}`)
-        .join('\n'),
-);
+        .join('\n');
+});
 
 async function copyActiveCoordinateDisplay() {
     const ok = await copyTextToClipboard(coordinateCopyText.value);
@@ -963,6 +1049,60 @@ async function copyActiveCoordinateDisplay() {
     } else {
         message.warning(t('cesium.copyCoordinateFailed'));
     }
+}
+
+/** 坐标 HUD 显示开关：桌面默认显示、触屏默认隐藏；桌面与触屏均可切换 */
+const hudVisible = ref(!isTouch.value);
+
+/** 开关按钮标题：随显示状态切换语义 */
+const hudToggleTitle = computed(() => (
+    hudVisible.value ? t('cesium.collapseCoordHud') : t('cesium.expandCoordHud')
+));
+
+// ────────────────────────── 瓦片请求级别（与 OL zoom 同义） ──────────────────────────
+/**
+ * 当前视口的瓦片请求级别原始值（可为小数）。
+ * 由相机离地高度经 viewScale canonical 链路反解为 OL zoom，保证同一视野下
+ * 二维/三维显示同一个级别数；`initViewer` 的 postRender 逐帧刷新，量化后才写回。
+ */
+const tileZoomLevel = ref(null);
+
+/**
+ * 展示用的瓦片请求级别，取整规则与 OL `MapControlsBar.displayZoom` 完全一致：
+ * z < 4 取 round（低层级可显示到 z=1），z ≥ 4 取 ceil（与 HDR 上层瓦片策略对齐）。
+ */
+const displayTileZoom = computed(() => {
+    const z = Number(tileZoomLevel.value);
+    if (!Number.isFinite(z)) return '--';
+    if (z < 4) return String(Math.round(z));
+    return String(Math.ceil(z));
+});
+
+/**
+ * 按当前相机反解瓦片请求级别并写回（仅在整数量化值变化时触发响应式更新，避免逐帧渲染）。
+ * @param {object} cam Cesium Camera
+ * @param {object} viewer Cesium Viewer（取画布高度与视场角）
+ */
+function syncTileZoomLevel(cam, viewer) {
+    const height = cam?.positionCartographic?.height;
+    if (!Number.isFinite(height) || height <= 0) {
+        if (tileZoomLevel.value !== null) tileZoomLevel.value = null;
+        return;
+    }
+    const next = cesiumHeightToOlZoom({
+        height,
+        viewportHeight: viewer?.canvas?.clientHeight || undefined,
+        fovY: Number(cam?.frustum?.fov) || undefined,
+    });
+    if (!Number.isFinite(next)) return;
+    // 量化到 0.1 级：相机连续移动时避免每帧都触发 Vue 更新
+    const quantized = Math.round(next * 10) / 10;
+    if (tileZoomLevel.value !== quantized) tileZoomLevel.value = quantized;
+}
+
+/** 主页按钮：回到与 2D 一致的中国全境默认视角 */
+function handleHomeClick() {
+    flyToHome(1.2);
 }
 
 // 漫游模式启动时：关闭高级控制台 + 显示键位提示面板
@@ -2023,6 +2163,8 @@ function initViewer() {
             roll: Cesium.Math.toDegrees(cam.roll),
             height: carto.height,
         };
+        // 瓦片请求级别（与 OL zoom 同义）：量化写回，仅在整数量化值变化时触发渲染
+        syncTileZoomLevel(cam, viewer);
     });
 
     // 地面大气相机高度渐隐：每帧按相机高度插值（市/建筑尺度自动关闭，省/国家级自动开启）
@@ -2327,80 +2469,130 @@ watch(
     z-index: 1;
 }
 
-/* 坐标显示（右下角 HUD，点击复制当前坐标）
-   结构：左侧复制图标(+漫游徽标) + 右侧「位置 / 姿态 / 相机海拔」三组数据。
-   桌面端三组横排、组间细竖线分隔；移动端自动转为纵向三行（标签左、值右），
-   避免窄屏把内容折成两行。整体实色白底，与 Cesium 控件主题一致。 */
+/* 坐标 HUD（右下角，圆角胶囊）：左侧显隐开关 + 右侧「位置 / 姿态 / 相机海拔」三组数据。
+   桌面端默认显示、触屏默认隐藏；桌面与触屏均可通过开关切换。
+   视觉基线对齐 OL MapControlsBar：同款浅色玻璃外壳 + 内层品牌色胶囊 + 等宽数值字体，
+   两套引擎的坐标面板应看起来几乎无差别。 */
 .coordinate-display {
     position: absolute;
-    bottom: 30px;
-    right: 24px;
+    bottom: 35px;
+    right: 8px;
     z-index: var(--z-panel);
-    appearance: none;
-    -webkit-appearance: none;
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: 8px;
     margin: 0;
-    padding: 7px 12px 7px 8px;
-    border: 1px solid rgba(var(--brand-primary-rgb), 0.28);
-    border-radius: var(--radius-md);
-    background: #fff;
-    color: var(--text-primary);
-    font-family: 'Consolas', 'Courier New', monospace;
-    font-size: 12px;
+    padding: 4px;
+    border: 1px solid rgba(var(--brand-primary-rgb), 0.22);
+    border-radius: 9999px;
+    background: rgba(255, 255, 255, 0.92);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    color: var(--text-brand-dark);
+    font-family: 'JetBrains Mono', 'Fira Code', 'Roboto Mono', monospace;
+    font-size: 13px;
     line-height: 1.5;
-    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.14);
-    cursor: pointer;
-    user-select: none;
-    text-align: left;
-    max-width: calc(100vw - 48px);
-    transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
-}
-
-.coordinate-display:hover,
-.coordinate-display:focus-visible {
-    border-color: var(--brand-primary);
     box-shadow:
-        0 3px 14px rgba(0, 0, 0, 0.16),
-        0 0 10px rgba(var(--brand-primary-rgb), 0.22);
-    outline: none;
+        var(--toc-shadow-md),
+        inset 0 1px 0 rgba(255, 255, 255, 0.6);
+    user-select: none;
+    max-width: calc(100vw - 48px);
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
-.coordinate-display:active {
-    transform: translateY(1px);
-}
-
-/* 左侧复制图标：品牌浅底 + 品牌色图标，hover 时反色为实心品牌色 */
-.coordinate-display-lead {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    flex-shrink: 0;
-}
-
-.coordinate-display-icon {
-    width: 24px;
-    height: 24px;
+/* 显隐开关：与 OL 控制条保持一致的圆形按钮 */
+.coord-toggle-btn {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    border-radius: var(--radius-sm);
-    background: var(--brand-primary-bg);
-    color: var(--brand-primary-dark);
-    transition: background 0.2s ease, color 0.2s ease;
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    border: 1px solid rgba(var(--brand-primary-rgb), 0.22);
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.92);
+    color: var(--brand-accent-dark);
+    cursor: pointer;
+    flex-shrink: 0;
+    transition:
+        transform 0.15s ease,
+        background 0.15s ease,
+        color 0.15s ease;
 }
 
-.coordinate-display:hover .coordinate-display-icon {
-    background: var(--brand-primary);
-    color: #fff;
+.coord-toggle-btn:hover {
+    background: var(--toc-primary-bg-hover);
+}
+
+.coord-toggle-btn:active {
+    transform: scale(0.94);
+}
+
+.coord-toggle-btn svg {
+    width: 17px;
+    height: 17px;
+}
+
+/* 坐标段包裹层：与 OL .coordinate-section 同构，负责关闭态整体让位与触屏收缩 */
+.coordinate-section {
+    position: relative;
+    display: flex;
+    align-items: center;
+    min-width: 0;
+}
+
+/* 数据区：内层品牌色胶囊，点击复制当前坐标（对齐 OL .coordinate-display） */
+.coordinate-copy-area {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+    height: 36px;
+    padding: 0 14px;
+    border: 1px solid transparent;
+    border-radius: 9999px;
+    background: rgba(var(--brand-primary-rgb), 0.06);
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+    transition: background 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.coordinate-copy-area:hover {
+    background: rgba(var(--brand-primary-rgb), 0.1);
+}
+
+/* 复制图标：默认隐去，悬停/聚焦浮现；触屏常显（触屏无 hover 态） */
+.coordinate-copy-icon {
+    flex-shrink: 0;
+    color: var(--toc-text-secondary);
+    opacity: 0;
+    transition: opacity 0.15s ease, color 0.15s ease;
+}
+
+.coordinate-copy-area:hover .coordinate-copy-icon,
+.coordinate-copy-area:focus-visible .coordinate-copy-icon {
+    color: var(--brand-accent-dark);
+    opacity: 1;
+}
+
+/* 触屏紧凑坐标文本：经纬度 + 海拔单行展示 */
+.coordinate-mobile-text {
+    min-width: 0;
+    color: var(--text-brand-dark);
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 0.03em;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
 }
 
 /* 漫游态徽标 */
 .coordinate-display-badge {
     padding: 1px 6px;
     border: 1px solid rgba(var(--brand-primary-rgb), 0.4);
-    border-radius: var(--radius-full);
+    border-radius: 9999px;
     background: var(--brand-primary-bg);
     color: var(--brand-primary-dark);
     font-family: var(--font-zh);
@@ -2410,12 +2602,13 @@ watch(
     white-space: nowrap;
 }
 
-/* 数据组：桌面横排，移动端纵排三行 */
+/* 数据组：桌面横排，组间细竖线分隔；空间不足时收缩并省略，避免撑破胶囊 */
 .coordinate-display-groups {
     display: flex;
     align-items: baseline;
     gap: 10px;
     min-width: 0;
+    overflow: hidden;
 }
 
 .coordinate-group {
@@ -2430,7 +2623,7 @@ watch(
     border-left: 1px solid rgba(var(--brand-primary-rgb), 0.18);
 }
 
-/* 组名用无衬线品牌色，与等宽数值形成主次对比 */
+/* 组名用无衬线品牌色，与等宽数值形成主次对比（字重/字距对齐 OL 坐标文本） */
 .coordinate-group-label {
     flex-shrink: 0;
     color: var(--brand-primary);
@@ -2444,47 +2637,164 @@ watch(
     /* flex 子项默认 min-width:auto 会拒绝收缩到内容宽度以下，
        移动端换行时必须显式置 0，否则长坐标会撑破卡片 */
     min-width: 0;
-    color: var(--text-primary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    color: var(--text-brand-dark);
+    font-size: 13px;
     font-weight: 600;
+    letter-spacing: 0.03em;
+    font-variant-numeric: tabular-nums;
     white-space: nowrap;
 }
 
-@media (max-width: 767px) {
+/* 瓦片请求级别：与 OL .zoom-level-display 同尺寸同配色 */
+.zoom-level-display {
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    background: #ffffff;
+    border: 1px solid rgba(var(--brand-primary-rgb), 0.22);
+    color: var(--brand-accent-dark);
+    font-family: 'JetBrains Mono', 'Roboto Mono', monospace;
+    font-size: 15px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-variant-numeric: tabular-nums;
+    flex-shrink: 0;
+}
+
+/* 竖发丝分隔线：与 OL .divider 同规格 */
+.divider {
+    width: 1px;
+    height: 20px;
+    background-color: rgba(var(--brand-primary-rgb), 0.18);
+    flex-shrink: 0;
+}
+
+/* 主页按钮：与 OL .home-btn 同款品牌渐变圆形按钮 */
+.home-btn {
+    width: 36px;
+    height: 36px;
+    position: relative;
+    overflow: hidden;
+    border-radius: 50%;
+    background: var(--brand-gradient);
+    border: none;
+    color: #ffffff;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    flex-shrink: 0;
+    box-shadow:
+        0 3px 9px rgba(var(--brand-primary-dark-rgb), 0.32),
+        inset 0 1px 0 rgba(255, 255, 255, 0.28);
+    transition:
+        transform 0.2s cubic-bezier(0.4, 0, 0.2, 1),
+        filter 0.2s ease,
+        box-shadow 0.2s ease;
+}
+
+.home-btn:hover {
+    filter: brightness(1.07);
+    transform: scale(1.06);
+    box-shadow:
+        0 5px 14px rgba(var(--brand-primary-dark-rgb), 0.4),
+        inset 0 1px 0 rgba(255, 255, 255, 0.28);
+}
+
+.home-btn:active {
+    transform: scale(0.94);
+}
+
+@media (pointer: coarse) {
+    /* 触屏默认右侧竖列：只保留缩放级别 / 主页 / 坐标开关（对齐 OL 收起态） */
     .coordinate-display {
-        bottom: 30px;
+        bottom: 38px;
         right: 12px;
-        flex-direction: column;
-        align-items: stretch;
-        gap: 6px;
-        padding: 8px 10px;
         max-width: calc(100vw - 24px);
-        font-size: 11.5px;
-    }
-
-    /* 纵向三行：标签靠左、值靠右，超长坐标允许换行而不撑破屏 */
-    .coordinate-display-groups {
+        font-size: 12px;
         flex-direction: column;
-        align-items: stretch;
-        gap: 4px;
-    }
-
-    .coordinate-group {
-        justify-content: space-between;
         gap: 8px;
+        padding: 8px 6px;
+        border-radius: 999px;
     }
 
-    .coordinate-group + .coordinate-group {
-        padding-left: 0;
-        border-left: none;
+    /* 展开坐标时恢复桌面式横向一行；收起时保持竖列 */
+    .coordinate-display.coord-open {
+        flex-direction: row;
+        gap: 8px;
+        padding: 4px;
+        border-radius: 9999px;
     }
 
-    .coordinate-group-value {
-        white-space: normal;
-        /* 允许在窄屏折行（overflow-wrap 参与 flex 最小尺寸计算，
-           配合 min-width:0 才能真正收进卡片内）。中文按排版惯例可逐字断行，
-           这里不做 keep-all 限制，避免长中文串撑破卡片。 */
-        overflow-wrap: anywhere;
-        text-align: right;
+    .coordinate-display.coord-open .coordinate-section,
+    .coordinate-display.coord-open .coordinate-copy-area {
+        min-width: 0;
+        flex: 1 1 auto;
+    }
+
+    /* 触屏开关 ≥40px，图标同步放大 */
+    .coord-toggle-btn {
+        width: 40px;
+        height: 40px;
+    }
+
+    .coord-toggle-btn svg {
+        width: 20px;
+        height: 20px;
+    }
+
+    /* 触屏保持与 OL 一致的横向胶囊；紧凑文本单行，窄屏省略。
+       字号收到 12px：横向展开时固定控件已占 ~123px，需为「经度, 纬度, 海拔」留足宽度 */
+    .coordinate-mobile-text {
+        font-size: 12px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    /* 触屏无 hover 态：复制图标常显（对齐 OL 触屏展开时复制按钮常显） */
+    .coordinate-copy-icon {
+        opacity: 0.55;
+    }
+
+    /* 触屏数据区高度 ≥40px（规范 §3 移动端基线），内边距/间距收紧避免挤占文本宽度 */
+    .coordinate-copy-area {
+        height: 40px;
+        gap: 6px;
+        padding: 0 10px;
+    }
+
+    /* 竖列态分隔线转横线，宽度跟随容器（对齐 OL 触屏竖列） */
+    .divider {
+        width: 60%;
+        height: 1px;
+    }
+
+    /* 横向展开态分隔线改回竖发丝线 */
+    .coordinate-display.coord-open .divider {
+        width: 1px;
+        height: 20px;
+    }
+
+    /* 触屏可点击目标 ≥40px，图标 glyph 同步放大（规范 §3 移动端基线） */
+    .zoom-level-display {
+        width: 40px;
+        height: 40px;
+        font-size: 16px;
+    }
+
+    .home-btn {
+        width: 42px;
+        height: 42px;
+    }
+
+    .home-btn svg {
+        width: 22px;
+        height: 22px;
     }
 }
 

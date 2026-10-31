@@ -1,5 +1,29 @@
 <template>
-    <div class="map-controls-group modern-glass">
+    <div
+        class="map-controls-group modern-glass"
+        :class="{ 'coord-open': coordPanelOpen }"
+    >
+        <!-- 坐标显示开关：桌面默认显示、触屏默认收起，点击切换 -->
+        <button
+            class="coord-toggle-btn"
+            :class="{ open: coordPanelOpen }"
+            type="button"
+            :title="t('mapControls.toggleCoord')"
+            :aria-label="t('mapControls.toggleCoord')"
+            :aria-pressed="coordPanelOpen"
+            @click="coordPanelOpen = !coordPanelOpen"
+        >
+            <Eye
+                v-if="coordPanelOpen"
+                :size="17"
+                :stroke-width="2"
+            />
+            <EyeOff
+                v-else
+                :size="17"
+                :stroke-width="2"
+            />
+        </button>
         <div class="coordinate-section">
             <!-- <svg id="map-marker-icon" viewBox="0 0 24 24" width="20" height="20" fill="currentColor" style="margin: 0 10px;">
                 <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/>
@@ -17,7 +41,7 @@
                     <span class="coordinate-text">{{ displayCoordinateText }}</span>
                     <div class="coordinate-actions">
                         <button
-                            v-if="isCoordinateHover && canCopyCoordinate"
+                            v-if="canCopyCoordinate && (isCoordinateHover || (isTouch && coordPanelOpen))"
                             class="copy-coordinate-btn"
                             type="button"
                             :title="t('mapControls.copyCoord')"
@@ -136,7 +160,7 @@
  */
 
 import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue';
-import { ChevronRight, Copy, House } from '@lucide/vue';
+import { ChevronRight, Copy, Eye, EyeOff, House } from '@lucide/vue';
 import {
     COORDINATE_FORMATS,
     DECIMAL_PLACES,
@@ -203,6 +227,14 @@ const homeButtonRippling = ref(false); // 主页按钮是否显示涟漪效果
 const isFormatMenuVisible = ref(false); // 格式菜单是否显示
 const currentFormatId = ref(DEFAULT_FORMAT_ID); // 当前坐标格式ID
 const currentDecimalPlaces = ref(DEFAULT_DECIMAL_PLACES); // 当前小数位数
+
+/** 触屏设备判定：触屏默认收起坐标，桌面默认显示 */
+const isTouch = typeof window !== 'undefined'
+    && typeof window.matchMedia === 'function'
+    && window.matchMedia('(pointer: coarse)').matches;
+
+/** 坐标显示开关：触屏默认收起、桌面默认显示；点击按钮切换 */
+const coordPanelOpen = ref(!isTouch);
 
 // ========== 计时器变量 ==========
 let homeClickTimer = null; // 主页按钮点击检测计时器（用于双击检测）
@@ -579,6 +611,44 @@ onUnmounted(() => {
     align-items: center;
 }
 
+/* 坐标显示开关：桌面与触屏共用；关闭时隐藏坐标区 */
+.coord-toggle-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    border: 1px solid rgba(var(--brand-primary-rgb), 0.22);
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.92);
+    color: var(--brand-accent-dark);
+    cursor: pointer;
+    flex-shrink: 0;
+    transition:
+        transform 0.15s ease,
+        background 0.15s ease,
+        color 0.15s ease;
+}
+
+.coord-toggle-btn:hover {
+    background: var(--toc-primary-bg-hover);
+}
+
+.coord-toggle-btn:active {
+    transform: scale(0.94);
+}
+
+.coord-toggle-btn svg {
+    width: 17px;
+    height: 17px;
+}
+
+/* 关闭态隐藏坐标区（桌面与触屏通用） */
+.map-controls-group:not(.coord-open) .coordinate-section {
+    display: none;
+}
+
 .coordinate-actions {
     display: flex;
     align-items: center;
@@ -895,8 +965,8 @@ onUnmounted(() => {
     }
 }
 
-@media (max-width: 768px) {
-    /* 移动端改为右侧竖条：只保留缩放 / 主页(定位) 图标，隐藏经纬度文本 */
+@media (pointer: coarse) {
+    /* 触屏默认右侧竖列：只保留缩放 / 主页(定位) / 坐标开关图标 */
     .map-controls-group {
         right: 12px;
         bottom: 10%;
@@ -905,12 +975,51 @@ onUnmounted(() => {
         gap: 8px;
         padding: 8px 6px;
         width: auto;
-        border-radius: 22px;
+        border-radius: 999px;
     }
 
-    /* 移动端不显示坐标文本、复制与格式编辑入口 */
-    .coordinate-section {
-        display: none;
+    /* 展开坐标时恢复为桌面式横向一行；隐藏时保持右侧竖列 */
+    .map-controls-group.coord-open {
+        flex-direction: row;
+        align-items: center;
+        gap: 8px;
+        padding: 4px;
+        border-radius: 9999px;
+        max-width: calc(100vw - 24px);
+    }
+
+    .map-controls-group.coord-open .coordinate-section {
+        min-width: 0;
+        flex: 1 1 auto;
+    }
+
+    .map-controls-group.coord-open .coordinate-display {
+        min-width: 0;
+        flex: 1 1 auto;
+    }
+
+    /* 窄屏下坐标文本允许省略，保证横向一行不溢出 */
+    .map-controls-group.coord-open .coordinate-text {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    /* 横向一行时分隔线改回竖向发丝线 */
+    .map-controls-group.coord-open .divider {
+        width: 1px;
+        height: 20px;
+    }
+
+    /* 触屏坐标开关放大到 ≥40px，图标同步放大（规范 §3 移动端基线） */
+    .coord-toggle-btn {
+        width: 40px;
+        height: 40px;
+    }
+
+    .coord-toggle-btn svg {
+        width: 20px;
+        height: 20px;
     }
 
     .divider {
@@ -921,6 +1030,30 @@ onUnmounted(() => {
 
     .copy-tooltip {
         display: none;
+    }
+
+    /* 触屏下格式菜单不再使用固定 min-width，避免窄屏横向溢出（规范 §3 移动端基线） */
+    .format-menu-content {
+        min-width: 0;
+        width: min(280px, calc(100vw - 48px));
+        max-height: 55vh;
+    }
+
+    /* 触屏可点击目标 ≥40px，图标 glyph 同步放大（规范 §3 移动端基线） */
+    .zoom-level-display {
+        width: 40px;
+        height: 40px;
+        font-size: 16px;
+    }
+
+    .home-btn {
+        width: 42px;
+        height: 42px;
+    }
+
+    .home-btn svg {
+        width: 22px;
+        height: 22px;
     }
 }
 </style>

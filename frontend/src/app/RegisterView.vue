@@ -685,7 +685,8 @@ import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useMessage } from '@common/shell/useMessage';
 import { useLocale } from '@common/app/useLocale';
-import { useUserPreferencesStore } from '../stores';
+// 深导入：注册页与落地页同属首屏入口，禁止经 '../stores' 聚合桶取 store（见 LandingView 注释）
+import { useUserPreferencesStore } from '@common/user/stores/useUserPreferencesStore';
 import AuthDecorBackground from './components/AuthDecorBackground.vue';
 import AuthGlobeStage from './components/AuthGlobeStage.vue';
 import { GOOGLE_OAUTH_CLIENT_ID, GUEST_PASSWORD, ASSET_BASE_URL } from '../config/publicRuntime';

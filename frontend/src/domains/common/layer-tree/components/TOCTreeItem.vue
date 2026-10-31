@@ -1,7 +1,7 @@
 <template>
     <div
         class="toc-item"
-        :class="[`kind-${node.type}`, { expanded: !!node.expanded }]"
+        :class="[`kind-${node.type}`, { expanded: isExpanded }]"
         :style="{ '--node-level': Number(node.level || 0) }"
     >
         <div
@@ -34,17 +34,12 @@
             <button
                 v-if="node.type === 'folder'"
                 class="tree-toggle"
-                :aria-label="node.expanded ? '折叠' : '展开'"
-                @click.stop="
-                    emitAction('toggle-folder-expand', {
-                        nodeId: node.id,
-                        expanded: !node.expanded,
-                    })
-                "
+                :aria-label="isExpanded ? '折叠' : '展开'"
+                @click.stop="handleToggleExpand"
             >
                 <ChevronRight
                     class="chevron"
-                    :class="{ open: !!node.expanded }"
+                    :class="{ open: isExpanded }"
                     :size="13"
                     :stroke-width="2.2"
                 />
@@ -56,7 +51,7 @@
                 :class="{ 'is-folder': node.type === 'folder' }"
             >
                 <FolderOpen
-                    v-if="node.type === 'folder' && node.expanded"
+                    v-if="node.type === 'folder' && isExpanded"
                     :size="14"
                     :stroke-width="1.8"
                 />
@@ -74,7 +69,7 @@
 
             <div
                 class="row-label"
-                @click.stop
+                @click.stop="handleLabelClick"
             >
                 <span
                     v-if="!isRenaming"
@@ -141,7 +136,7 @@
         </div>
 
         <div
-            v-if="node.type === 'folder' && node.expanded"
+            v-if="node.type === 'folder' && isExpanded"
             class="toc-children"
         >
             <TOCTreeItem
@@ -150,6 +145,7 @@
                 :node="child"
                 :active-layer-id="activeLayerId"
                 :selected-layer-ids="selectedLayerIds"
+                :search-active="searchActive"
                 @action="emit('action', $event)"
             />
         </div>
@@ -288,6 +284,8 @@ const props = defineProps({
     node: { type: Object, required: true },
     activeLayerId: { type: String, default: null },
     selectedLayerIds: { type: Array, default: () => [] },
+    /** 搜索态：触屏下搜索命中需强制展开，此时沿用 node.expanded */
+    searchActive: { type: Boolean, default: false },
 });
 
 const emit = defineEmits(['action']);
@@ -299,6 +297,28 @@ const menuRef = ref(null);
 const isRenaming = ref(false);
 const renameValue = ref('');
 const renameInputRef = ref(null);
+
+/**
+ * 触屏设备判定（pointer: coarse）：
+ * 触屏下目录默认只显示一级，点击文件夹再展开二级，避免一屏铺满。
+ */
+const isCoarsePointer = typeof window !== 'undefined'
+    && typeof window.matchMedia === 'function'
+    && window.matchMedia('(pointer: coarse)').matches;
+
+/** 触屏下当前文件夹的展开态（桌面端不生效，仍走 store 的 node.expanded） */
+const mobileExpanded = ref(false);
+
+/**
+ * 实际展开态：
+ * - 桌面端：沿用 store 的 node.expanded
+ * - 触屏搜索中：沿用 filterTree 强制展开的 node.expanded，保证命中项可见
+ * - 触屏常规：仅由本地点按状态控制，默认折叠
+ */
+const isExpanded = computed(() => {
+    if (!isCoarsePointer || props.searchActive) return !!props.node.expanded;
+    return mobileExpanded.value;
+});
 
 const selectedLayerIdSet = computed(() => {
     const ids = Array.isArray(props.selectedLayerIds) ? props.selectedLayerIds : [];
@@ -512,6 +532,30 @@ function handleToggleVisibility() {
 function handlePrimaryClick() {
     if (props.node.type === 'layer') {
         emitAction('layer-selected', { layerId: props.node.id });
+        return;
+    }
+    // 触屏下点击文件夹行即可展开/收起二级（桌面端保持原行为）
+    if (props.node.type === 'folder' && isCoarsePointer && !props.searchActive) {
+        mobileExpanded.value = !mobileExpanded.value;
+    }
+}
+
+/** 文件夹展开按钮：触屏走本地状态，桌面端写回 store */
+function handleToggleExpand() {
+    if (isCoarsePointer && !props.searchActive) {
+        mobileExpanded.value = !mobileExpanded.value;
+        return;
+    }
+    emitAction('toggle-folder-expand', {
+        nodeId: props.node.id,
+        expanded: !props.node.expanded,
+    });
+}
+
+/** 行标题点击：触屏下等同点击文件夹行（桌面端不改变原有行为） */
+function handleLabelClick() {
+    if (props.node.type === 'folder' && isCoarsePointer && !props.searchActive) {
+        mobileExpanded.value = !mobileExpanded.value;
     }
 }
 

@@ -1,6 +1,8 @@
 import { computed, ref } from 'vue';
 import { defineStore } from 'pinia';
-import { apiAuthGetPreferences, apiAuthUpdatePreferences } from '@/api/backend';
+// 注意：此处**不得**静态导入 `@/api/backend`（`export *` 聚合桶 → 13 个 API 模块 + axios
+// 全量进入口 chunk）。三个调用点各自按需 import，且均位于「已登录」分支之后，
+// 登录页/注册页首屏不会触发，axios 因此不进入首屏预加载图。
 import { getAuthToken } from '@common/user/services/auth';
 import { normalizeLocaleLanguage, setLocaleLanguage, loadLocaleMessages, detectSystemLanguage } from '@common/app/useLocale';
 
@@ -192,6 +194,7 @@ export const useUserPreferencesStore = defineStore('userPreferencesStore', () =>
 
         loading.value = true;
         try {
+            const { apiAuthGetPreferences } = await import('@/api/backend/auth');
             const result = await apiAuthGetPreferences();
             const payload =
                 result && typeof result === 'object' && 'data' in result
@@ -210,9 +213,13 @@ export const useUserPreferencesStore = defineStore('userPreferencesStore', () =>
 
             // 登录后把本机语言回写服务端，使账号中心偏好与注册页切换全局一致
             if (merged.language && merged.language !== remote.language) {
-                void apiAuthUpdatePreferences({ language: merged.language }).catch(() => {
-                    /* 静默：UI 已用本机语言；下次 Save 仍可再同步 */
-                });
+                void import('@/api/backend/auth')
+                    .then(({ apiAuthUpdatePreferences }) =>
+                        apiAuthUpdatePreferences({ language: merged.language }),
+                    )
+                    .catch(() => {
+                        /* 静默：UI 已用本机语言；下次 Save 仍可再同步 */
+                    });
             }
             return preferences.value;
         } catch (error) {
@@ -246,6 +253,7 @@ export const useUserPreferencesStore = defineStore('userPreferencesStore', () =>
 
         saving.value = true;
         try {
+            const { apiAuthUpdatePreferences } = await import('@/api/backend/auth');
             const result = await apiAuthUpdatePreferences(normalizedPayload);
             const payload =
                 result && typeof result === 'object' && 'data' in result

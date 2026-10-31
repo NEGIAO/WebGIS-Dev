@@ -11,7 +11,12 @@
  */
 
 import { watch } from 'vue';
-import { XYZ } from 'ol/source';
+// ⚠️ 必须用子路径导入，禁止 `import { XYZ } from 'ol/source'`。
+// `ol/source` 是桶入口：生产构建能 tree-shake，但 **dev 下 Vite 会把整个 ol/source
+// 预打包成一个 deps 文件**，其中包含 `ol/source/GeoTIFF` → 进而静态引入 geotiff(~309 kB)。
+// 后果是进入 OL 约 680ms 时就会请求 geotiff，而这条路径只用到 XYZ 瓦片源。
+// 改为子路径后，dev 只会预打包 ol/source/XYZ，GeoTIFF 源不再进入首屏模块图。
+import XYZ from 'ol/source/XYZ.js';
 import WMTS, { optionsFromCapabilities } from 'ol/source/WMTS';
 import WMTSCapabilities from 'ol/format/WMTSCapabilities';
 import TileLayer from 'ol/layer/Tile';

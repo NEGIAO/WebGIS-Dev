@@ -1,5 +1,5 @@
 <script setup>
-import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { useMessage } from '@common/shell/useMessage';
 import { ASSET_BASE_URL } from '@/config/publicRuntime';
@@ -25,11 +25,32 @@ import { getUserDisplayName } from '@common/user/composables/useAuthIdentity';
 import { useRealtimeStats } from '@common/user/composables/useRealtimeStats';
 import { useLocale, detectSystemLanguage } from '@common/app/useLocale';
 
-const AdminControlPanel = defineAsyncComponent(() => import('./AdminControlPanel.vue'));
-const ApiManagementPanel = defineAsyncComponent(() => import('./ApiManagementPanel.vue'));
-const OverviewTab = defineAsyncComponent(() => import('./tabs/OverviewTab.vue'));
-const SecurityTab = defineAsyncComponent(() => import('./tabs/SecurityTab.vue'));
-const PreferencesTab = defineAsyncComponent(() => import('./tabs/PreferencesTab.vue'));
+// 账号中心各分页均为按需加载的大组件。改用 defineResilientAsync：
+// 移动网络下分片请求偶发超时/中断时，裸 defineAsyncComponent 会让该页签**永久空白**
+// （且没有任何占位或重试入口），表现即「数据在、界面没加载」。
+// 包装后：延迟 180ms 显示占位块 → 失败自动重试 2 次 → 仍失败显示可读的失败态。
+import { defineResilientAsync } from '@common/utils/defineResilientAsync';
+
+const AdminControlPanel = defineResilientAsync(() => import('./AdminControlPanel.vue'), {
+    label: '管理面板加载失败，请检查网络后重试',
+    minHeight: 240,
+});
+const ApiManagementPanel = defineResilientAsync(() => import('./ApiManagementPanel.vue'), {
+    label: 'API 面板加载失败，请检查网络后重试',
+    minHeight: 240,
+});
+const OverviewTab = defineResilientAsync(() => import('./tabs/OverviewTab.vue'), {
+    label: '总览加载失败，请检查网络后重试',
+    minHeight: 260,
+});
+const SecurityTab = defineResilientAsync(() => import('./tabs/SecurityTab.vue'), {
+    label: '安全设置加载失败，请检查网络后重试',
+    minHeight: 260,
+});
+const PreferencesTab = defineResilientAsync(() => import('./tabs/PreferencesTab.vue'), {
+    label: '偏好设置加载失败，请检查网络后重试',
+    minHeight: 260,
+});
 
 const router = useRouter();
 const message = useMessage();

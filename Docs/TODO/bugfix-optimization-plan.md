@@ -344,3 +344,14 @@ Sprint 3（穿插）：P3-1 容器二轮（O1/O2 交替）→ P2-1 bundle 分析
 - [ ] **`--ctp-*` 令牌语义塌缩**（2026-10-30 · V3.6.33 顺带发现，技术债）：
   - [ ] (重构建议) **`cesium-tool-theme.css` v4 把 `--ctp-green` / `--ctp-green-alt` / `--ctp-active-rgb` / `--ctp-submit-rgb` 等语义不同的令牌全部别名到同一个 `--brand-primary`**：当前无功能影响（使用处本就只取色），但「令牌名不再描述用途」，后续新增控件容易选错语义。建议下一轮把仍在使用的 `--ctp-*` 逐步替换为直接引用 `--brand-*`，最终删除该文件，让 Cesium 域与全站共用一套令牌。预估 0.4 人日（含回归）
   - [ ] (一致性) **`--ctp-green-alt` 已成死令牌**：v4 后无任何使用处（仅 `-rgb` 变体在用），可在上述重构中一并删除
+
+- [ ] **Font Awesome 仍是首屏唯一跨域 CSS 依赖**（2026-10-31 · V3.6.35 顺带发现，按 §2.5 只记不改）：
+  - [ ] (优化·已记未修) **`index.html` 以 `media="print"` + `onload` 交换方式从 `cdn.bootcdn.net` 加载 FA 6.4.0**：非阻塞（不拖 FCP），但占用带宽与一次跨域握手，且仓库仍有 36 处 `fa*` 用法（落地页 3 处数据项 + 注册页 GitHub 图标 + 隐私政策/服务条款各 4 处 + 账号中心 `FloatingAccountPanel` 13 处 + `OverviewTab` 7 处 + `PreferencesTab` 7 处 + `SecurityTab` 若干）。**风险面**：该 CSS 一旦慢或不可达，所有 `<i class="fas fa-*">` 静默消失而文字照常渲染 —— 表现正是「只有纯数据、没有界面」，与 V3.6.35 修复的异步分片空白属两条独立成因。修法：逐处迁移到 `@lucide/vue`（已是项目规范与既有依赖，零新增体积），迁完删除 `index.html` 的 FA `<link>` / `<noscript>` / `cdn.bootcdn.net` 的 `preconnect`。难点在视觉核对：`fa-*` 与 lucide 的字形宽度、基线、`vertical-align` 不一致，需逐个确认行内图标与文字的对齐。预估 0.5 人日（含逐页比对）
+  - [ ] (一致性) **`@lucide/vue` 的图标尺寸写法未统一**：仓库同时存在 `:size="14"`、`:size="'16px'"`（带单位会被 WebKit 判为非法属性并丢弃，是 iOS 图标塌陷的历史成因）与无 `size` 依赖 CSS 三种写法。建议加一条 ESLint 规则或构建期检查，禁止 `size` 带单位。预估 0.2 人日
+
+- [ ] **裸 `defineAsyncComponent` 尚未全量替换**（2026-10-31 · V3.6.35 顺带发现）：
+  - [ ] (优化·已记未修) **V3.6.35 只把 6 处关键按需组件换成 `defineResilientAsync`**（账号中心 5 个分页 + 地点搜索框）。仓库仍有约 12 处裸用法：`HomeView.vue`（`LogMonitor` / `SidePanel`）、`CesiumContainer.vue`（`ShallowWaterOverlay`）、`TOCPanel.vue`（`MapDownloader`）、`SidePanel.vue`（`ChatPanelContent` / `ToolboxPanel` / `RoutePlannerPanel` / `CompassControlPanel` / `TencentBuildingPanel` / `WeatherChartPanel`）等。这些同样存在「分片挂起即永久空白」的缺口。建议在第二任务（Cesium 模块分析）中一并处理，或作为独立收尾项批量替换。预估 0.3 人日
+
+- [ ] **ol 桶导入会绕过 tree-shaking（dev 侧）**（2026-10-31 · V3.6.36 顺带发现，按 §2.5 只记不改）：
+  - [ ] (优化·已记未修) **`import { X } from 'ol/source'` 这类桶导入在 dev 下会把整个子目录预打包**：Vite 的依赖预打包按 import 说明符整包处理、**不做 tree-shaking**，因此 `ol/source` 桶会把 `ol/source/GeoTIFF`（→ geotiff 309 kB）一并带进首屏模块图；生产构建能 tree-shake，故只在 dev 暴露，极易被误判为「代码有问题」。V3.6.36 已修掉唯一一处 `ol/source` 桶，但 `ol/geom`（`useMapEventHandlers.js:32`、`useDrawMeasure.js:12`、`drawingGeometryUtils.js:6`、`transitRouteBuilder.js:3`）、`ol/control`（`MapContainer.vue:202`、`mapRuntimeDeps.js:5`）仍为桶导入。修法：① 存量逐处改子路径（`ol/geom/Polygon.js` 等）；② 加 ESLint `no-restricted-imports` 规则禁止 `ol/source`、`ol/layer`、`ol/geom`、`ol/control`、`ol/format`、`ol/interaction` 等桶路径，防止复发。预估 0.3 人日
+  - [ ] (文档) **「dev 预打包不做 tree-shaking」应写入约定**：该认知目前只存在于 `olRemoteServiceAdapter.js` 的就地注释与 V3.6.36 日志中，尚未进入 `Docs/Guide/dev-conventions.md`。建议在「分层边界」后补一节「依赖导入约定」，写明桶导入的 dev/prod 行为差异与禁止清单。预估 0.1 人日
