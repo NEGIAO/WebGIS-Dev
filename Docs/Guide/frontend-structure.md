@@ -75,8 +75,7 @@ frontend/src/
 │   │   ├── index.js  # 路由与守卫
 │   │   ├── components/
 │   │   │   ├── CesiumAdvancedEffects.vue  # 高级视觉效果（高度雾/HBAO/移轴/大气）
-│   │   │   ├── CesiumContainer.vue  # Cesium 容器（底图/地形 + URL 追踪 + 工具面板 + 拖拽导入；场景 Loading i18n）
-│   │   │   ├── CesiumAttributeTableDialog.vue  # 三维矢量属性表（只读表格 + 搜索 + 分页 + 行点击 flyTo；5000 行上限，触屏档按钮≥40px）
+│   │   │   ├── CesiumContainer.vue  # Cesium 容器（底图/地形 + URL 追踪 + 工具面板 + 拖拽导入；场景 Loading i18n；属性表改为注入 attrStore 复用 2D 组件）
 │   │   │   ├── CesiumDataImportDialog.vue  # GLTF/GLB 模型放置坐标输入弹窗
 │   │   │   ├── CesiumDrawMeasurePanel.vue  # 3D 绘制/测量面板（引擎感知：variant=draw 绘制工具+样式 / measure 测量工具；测量项开关、结果读数、记录、GeoJSON 导出；触屏档 pointer:coarse 目标≥40px）
 │   │   │   ├── CesiumToolPanel.vue  # 统一控制面板（场景/数据/特效/风场/流体/漫游）
@@ -157,7 +156,8 @@ frontend/src/
 │   │   │   └── basemapProviderFactory.ts  # Cesium ImageryProvider 工厂
 │   │   ├── layers/
 │   │   │   └── toc-adapters/
-│   │   │       └── cesiumTocActions.js  # cesium: 前缀动作直调元数据店（solo/label/copy/export 全支持；未识别动作 return false 交回通用分发器——历史上 default:true 会吞掉样式页签等新动作）
+│   │   │       ├── cesiumAttrDataset.js  # Cesium 实体集合 → attrStore 数据集（复用 2D AttributeTable；列取并集、字段类型采样推断、逐实体 extent 供视图筛选，5000 行上限）
+│   │   │       └── cesiumTocActions.js  # cesium: 前缀动作直调元数据店（solo/label/copy/export/批量 全支持；未识别动作 return false 交回通用分发器——历史上 default:true 会吞掉样式页签等新动作）
 │   │   ├── services/
 │   │   │   └── cesiumRemoteServiceAdapter.js  # 在线服务注册表 → Cesium ImageryLayer 渲染适配器（WMS/WMTS/XYZ/ArcGIS Provider 构建 + 显隐/叠放同步）
 │   │   ├── modules/
@@ -640,7 +640,7 @@ frontend/src/
 │       │   ├── layerManager.js
 │       │   ├── zIndexBands.js  # zIndex 显示带 SSOT（夹心：数据几何 DATA < 瓦片标注 LABEL < 数据标注 DATA_LABEL；托管层 geometry+label 双层）
 │       │   ├── components/
-│       │   │   ├── AttributeTable.vue
+│       │   │   ├── AttributeTable.vue  # 属性表（引擎无关，挂在 HomeView 唯一实例；排序/字段配置/统计/导出/列宽拖拽；readonly 供 3D 无回写通道时禁改值删要素）
 │       │   │   └── LayerControlPanel.vue
 │       │   ├── composables/
 │       │   │   ├── useCreateManagedVectorLayer.js

@@ -27,12 +27,61 @@ function readPayloadField(evt, key) {
 }
 
 /**
+ * 批量动作（显隐 / 移除 / 导出）的三维分支。
+ *
+ * 为什么单独处理：批量事件的节点 id 是空的，目标集在 `layerIds` 里，
+ * 而下面的单节点分流首行就按 `nodeId` 前缀判定，会先一步 return false。
+ * 路由层（useTreeActionDispatcher）已把 2D / 3D 目标按前缀拆开，
+ * 进来的 `layerIds` 保证全是 `cesium:` 前缀。
+ *
+ * @param {object} evt 批量事件 { type:'batch-layer-operation', payload:{ operation, layerIds, visible?, format? } }
+ * @param {object} cesiumStore useCesiumLayersStore() 实例
+ * @returns {boolean} true = 已消费
+ */
+function handleCesiumBatchOperation(evt, cesiumStore) {
+    const pick = (key) => (evt && evt[key] !== undefined ? evt[key] : evt?.payload?.[key]);
+    const rawIds = pick('layerIds');
+    const ids = (Array.isArray(rawIds) ? rawIds : [])
+        .map((raw) => String(raw || '').trim())
+        .filter((raw) => raw.startsWith(CESIUM_NODE_PREFIX))
+        .map((raw) => raw.slice(CESIUM_NODE_PREFIX.length));
+    if (!ids.length) return false;
+
+    const operation = String(pick('operation') || '')
+        .trim()
+        .toLowerCase();
+
+    if (operation === 'set-visible') {
+        const visible = !!pick('visible');
+        ids.forEach((id) => cesiumStore.setVisible(id, visible));
+        return true;
+    }
+    if (operation === 'remove') {
+        ids.forEach((id) => cesiumStore.remove(id));
+        return true;
+    }
+    if (operation === 'export') {
+        const format = String(pick('format') || 'geojson');
+        ids.forEach((id) => cesiumStore.exportData?.(id, format));
+        return true;
+    }
+    return false;
+}
+
+/**
  * 处理 Cesium 节点动作
  * @param {object} evt - TOCTreeItem 冒泡的动作事件 { type, layerId?, nodeId?, payload?, ... }
  * @param {object} cesiumStore - useCesiumLayersStore() 实例
  * @returns {boolean} true = 已消费（调用方直接 return）；false = 交回通用分发器
  */
 export function handleCesiumLayerTreeAction(evt, cesiumStore) {
+    const type = String(evt?.type || '');
+
+    // 批量动作先于单节点前缀判定：它没有节点 id，靠 layerIds 寻址
+    if (type === 'batch-layer-operation') {
+        return handleCesiumBatchOperation(evt, cesiumStore);
+    }
+
     const nodeId = extractLayerId(evt);
     const isGroupNode = nodeId === CESIUM_GROUP_NODE_ID;
     if (!isGroupNode && !nodeId.startsWith(CESIUM_NODE_PREFIX)) return false;
@@ -40,7 +89,6 @@ export function handleCesiumLayerTreeAction(evt, cesiumStore) {
     const id = nodeId.startsWith(CESIUM_NODE_PREFIX)
         ? nodeId.slice(CESIUM_NODE_PREFIX.length)
         : '';
-    const type = String(evt?.type || '');
 
     switch (type) {
         case 'folder-clear-layers':

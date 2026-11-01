@@ -410,7 +410,7 @@ function parseJsonObject(text, hint) {
         return parsed;
     } catch (error) {
         const detail = String(error?.message || '').trim();
-        throw new Error(`${fallbackHint}${detail ? `：${detail}` : ''}`);
+        throw new Error(`${fallbackHint}${detail ? `：${detail}` : ''}`, { cause: error });
     }
 }
 
@@ -528,7 +528,7 @@ async function saveEditRow(row) {
         return;
     }
 
-    let nextValues = null;
+    let nextValues;
     try {
         nextValues = parseJsonObject(editingJsonText.value, t('admin.editParseFailed'));
     } catch (error) {
@@ -1652,6 +1652,13 @@ onMounted(async () => {
     color: var(--text-primary);
     font-family: var(--font-base);
     overflow: hidden;
+    /* 容器查询基准（V3.6.38）：
+       本组件恒挂在 FloatingAccountPanel 内，宽度被宿主锁死为 min(430px, 96vw)，
+       与视口宽度无关。原适配规则用 @media (max-width: 768px)，在 1920px 桌面视口下
+       永不触发，导致 .db-toolbar 按桌面宽度排版后被 .card 的 overflow:hidden 裁掉。
+       改为以自身宽度为断点：悬浮态内容宽 ≈394px，全屏态 = 视口宽。 */
+    container-type: inline-size;
+    container-name: admin-panel;
 }
 
 /* ==========================================================================
@@ -2370,58 +2377,137 @@ onMounted(async () => {
 @keyframes spin { to { transform: rotate(360deg); } }
 
 /* ==========================================================================
-   Responsive Adaptations
+   Responsive Adaptations — 容器查询（V3.6.38）
+   ==========================================================================
+   为什么不是 @media：面板宽度恒为 min(430px, 96vw)，桌面端 1920px 视口下面板
+   内容宽仍只有 ~394px。用视口断点会出现「视口很宽、容器很窄」的错配——正是数据
+   管理页工具栏被裁切的成因。以下断点一律以 .admin-layout 自身宽度为准：
+     ≤640px：卡片头部竖排 / 双列网格降单列 / 工具栏三组竖排（覆盖悬浮态与平板全屏）
+     ≤440px：页签 2×2 / 内边距压缩 / 数据表加密度（仅悬浮态与手机全屏）
    ========================================================================== */
-@media (max-width: 768px) {
-    .tabs-nav { gap: 6px; padding: 8px; }
-    .tab-btn { min-height: 48px; min-width: 150px; padding: 8px 10px; }
-    .tab-btn__desc { display: none; }
-
-    /* ── 数据管理子页移动端适配 ── */
-    #admin-panel-database .card-header {
+@container admin-panel (max-width: 640px) {
+    /* 卡片头部：标题块在上、操作按钮右对齐在下，避免按钮被标题挤成窄条 */
+    .card-header {
         flex-direction: column;
         align-items: stretch;
         gap: 8px;
     }
-    #admin-panel-database .header-actions {
+    .header-actions {
         display: flex;
         justify-content: flex-end;
     }
-    /* 工具栏三组（表选择 / 统计 / 分页）竖排堆叠，避免窄屏横向截断 */
+
+    /* 双列网格降单列：minmax(340px, 1fr) 的 340px 下限 > 卡片内容宽 332px，
+       必然横向溢出并被 .card 的 overflow:hidden 裁掉右侧 */
+    .grid-layout-2col {
+        grid-template-columns: 1fr;
+    }
+
+    /* 工具栏三组（表选择 / 统计 / 分页）竖排堆叠，组内再按需换行 */
     .db-toolbar {
         flex-direction: column;
         align-items: stretch;
+        gap: 8px;
+        padding: 10px;
     }
     .select-wrapper {
-        flex-wrap: wrap;
+        gap: 6px;
     }
+    /* 下拉框吃掉标签之外的剩余宽度，不再依赖 min-width:180px 撑开 */
     .select-wrapper .inline-select {
         flex: 1 1 auto;
+        width: auto;
         min-width: 0;
     }
     .toolbar-stats {
         flex-wrap: wrap;
+        gap: 6px;
     }
+    /* 搜索框独占一行：与两个徽标 + 刷新按钮同行时会被压到 120px 以下 */
     .toolbar-search {
         flex: 1 1 100%;
         width: auto;
+        min-width: 0;
     }
     .toolbar-pager {
         flex-wrap: wrap;
+        gap: 6px;
+    }
+    /* 导出按钮先于页码信息换行（order 5 < 10），页码信息独占末行居中 */
+    .toolbar-pager .btn:last-child {
+        order: 5;
+        margin-left: auto;
     }
     .toolbar-pager .pager-info {
-        flex: 1 1 100%;
         order: 10;
+        flex: 1 1 100%;
         display: flex;
         justify-content: center;
     }
-    /* 导出按钮独占一行靠右，与上一页/下一页分开 */
-    .toolbar-pager .btn:last-child {
-        order: 20;
-        margin-left: auto;
-    }
+
+    /* 行区高度封顶：避免内层滚动区吃掉整块可视高度，把工具栏挤出视野 */
     .rows-container {
-        max-height: 60vh;
+        max-height: min(420px, 45vh);
     }
 }
+
+@container admin-panel (max-width: 440px) {
+    /* 页签降为 2×2 网格：4×180px 在 394px 面板内需横向滚动才能点到「数据管理」，
+       且滚动条仅 4px 高、无视觉提示。两行排布换取零滚动。 */
+    .tabs-nav {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 8px;
+        padding: 8px;
+        overflow: hidden;
+    }
+    .tab-btn {
+        min-width: 0;
+        min-height: 46px;
+        padding: 6px 8px;
+        gap: 8px;
+    }
+    .tab-btn__icon {
+        flex: 0 0 26px;
+        width: 26px;
+        height: 26px;
+    }
+    .tab-btn__label {
+        font-size: 12px;
+    }
+    .tab-btn__desc {
+        font-size: 10px;
+    }
+
+    /* 内边距压缩：把宽度还给数据表（18+12+18 → 14+10+14，净得 10px） */
+    .admin-body {
+        padding: 10px;
+    }
+    .card {
+        padding: 14px;
+        gap: 12px;
+    }
+    .card-subtitle {
+        font-size: 11px;
+    }
+
+    /* 数据表加密度：行号列 46→30px，单元格左右留白 10→6px */
+    .row-index-th,
+    .row-index-td {
+        width: 30px;
+    }
+    .data-table th,
+    .data-table td {
+        padding-left: 6px;
+        padding-right: 6px;
+    }
+    .cell-value {
+        max-width: 130px;
+    }
+
+    .rows-container {
+        max-height: min(340px, 40vh);
+    }
+}
+
 </style>

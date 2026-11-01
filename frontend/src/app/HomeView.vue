@@ -86,6 +86,9 @@ import ResizeHandle from '@common/shell/ResizeHandle.vue';
 import { useRealtimeStats } from '@common/user/composables/useRealtimeStats';
 // LogMonitor 按需懒加载（仅开发者打开时才加载）
 const LogMonitor = defineAsyncComponent(() => import('@ol/components/LogMonitor.vue'));
+// 属性表：引擎无关（只读 attrStore），上移到本层做唯一实例。
+// 异步加载保留 —— 约 2500 行虚拟表格，打开前不必进首屏 chunk。
+const AttributeTable = defineAsyncComponent(() => import('@ol/layer/components/AttributeTable.vue'));
 
 // Cesium 组件按点击事件懒加载：避免首屏产生 3D 相关请求
 const CesiumContainer = ref(null);
@@ -1684,6 +1687,35 @@ function handleUpdateCesiumLayerStyle(payload) {
     if (applied === false) message.warning(t('cesium.styleNotApplicable'));
 }
 
+/**
+ * 属性表行点击 → 定位要素（§2.1 引擎裁决单点）。
+ *
+ * 属性表本身引擎无关：数据统一走 attrStore，组件只渲染不关心来源。
+ * 但「飞到该要素」必须落到当前引擎 —— 2D 由 MapContainer 用 OL 视图，
+ * 3D 由 CesiumContainer 用 entity 句柄，二者不可互调。
+ * 3D 侧 dataset.layerId 是去掉 `cesium:` 前缀的元数据店 id，实体 id 走 featureId。
+ */
+function handleAttributeTableFocusFeature(payload) {
+    if (is3DMode.value) {
+        cesiumContainerRef.value?.focusAttributeFeature?.(payload?.featureId);
+        return;
+    }
+    mapContainerRef.value?.handleAttributeTableFocusFeature?.(payload);
+}
+
+/** 高亮 / 单元格编辑 / 删除要素：3D 侧无属性写回通道，只转发 2D（未命中即静默降级） */
+function handleAttributeTableHighlightFeature(payload) {
+    mapContainerRef.value?.handleAttributeTableHighlightFeature?.(payload);
+}
+
+function handleAttributeTableCellEdit(payload) {
+    mapContainerRef.value?.handleAttributeTableCellEdit?.(payload);
+}
+
+function handleAttributeTableDeleteFeature(payload) {
+    mapContainerRef.value?.handleAttributeTableDeleteFeature?.(payload);
+}
+
 function handleHighlightAttributeFeature(payload) {
     mapContainerRef.value?.highlightManagedFeature?.(payload);
 }
@@ -2177,6 +2209,21 @@ onMounted(async () => {
                         @drop-ol-layer="handleImportOlLayerTo3D"
                     />
                 </div>
+
+                <!-- 属性表：引擎无关，唯一实例（数据来自 attrStore，2D/3D 共用同一套渲染）。
+                     必须留在 .map-wrapper 内：该容器是 position:relative 的定位基准，
+                     面板以它为坐标系铺「地图左半屏」。若上提到 content-section，
+                     x/y 会以「侧栏 + 地图」整体为基准，表现为面板压住左侧图层栏、
+                     宽度取到整体的一半而与地图不对齐。 -->
+                <!-- readonly 跟随引擎：3D 的 entity.properties 无回写通道，禁改值/删要素，
+                     避免表格乐观改值却写不回地图的假成功 -->
+                <AttributeTable
+                    :readonly="is3DMode"
+                    @focus-feature="handleAttributeTableFocusFeature"
+                    @highlight-feature="handleAttributeTableHighlightFeature"
+                    @cell-edit="handleAttributeTableCellEdit"
+                    @delete-feature="handleAttributeTableDeleteFeature"
+                />
             </div>
 
             <!-- 日志监控面板 -->
@@ -2405,7 +2452,8 @@ onMounted(async () => {
     width: 100% !important;
     height: 100% !important;
     z-index: 5001 !important;
-    border-radius: 12px !important;
+    /* 与面板自身 20px 大容器圆角档对齐（原 12px 是第三档，与 16/20 混排） */
+    border-radius: 20px !important;
     clip-path: none !important;
 }
 

@@ -159,7 +159,14 @@ export function dispatchContextMenuCommand({ key, node, selectedLayerIds = [] } 
     }
 
     if (commandKey === TOC_MENU_COMMANDS.COPY) {
-        events.push({ type: 'copy-layer-coordinates', payload: { layer: node?.raw } });
+        // layerId 供 cesium 分流器寻址（三维句柄按元数据店 id 查实体）；
+        // layer 供 2D 的 copyLayerCoordinates 直读要素属性。两者缺一不可——
+        // 早期只传 layer，三维节点取不到 id 会被分流器判为非 cesium 节点而落到 2D 分支，
+        // 表现为「右键复制坐标没反应」。
+        events.push({
+            type: 'copy-layer-coordinates',
+            payload: { layerId: nodeId, layer: node?.raw },
+        });
         return events;
     }
 

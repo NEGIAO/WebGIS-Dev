@@ -17,7 +17,8 @@ import { defineStore } from 'pinia';
 /**
  * 支持透明度调节的类型（二期已放开矢量类：per-entity 原色快照缩放，
  * 实现见 dataSourceDisplay.js applyVectorDataSourceOpacity）
- * 注：draw（绘制）支持 per-handle 回放；route（路线）材质透明度基线在创建时固化，暂不开放
+ * 注：draw 支持 per-handle 回放；route 自 V3.6.40 起按「原始色快照 × 系数」整体缩放
+ * （此前留空实现并以 supportsOpacity=false 关闭滑杆，导致菜单里滑杆在路线图层上无效）。
  */
 const OPACITY_SUPPORTED_TYPES = new Set([
     'tif',
@@ -31,6 +32,8 @@ const OPACITY_SUPPORTED_TYPES = new Set([
     'shp',
     'wayline',
     'draw',
+    // 路线：句柄持有 entities 数组，与矢量类同构（快照原始色后整体缩放）
+    'route',
     // Ion 等外部影像图层：ImageryLayer.alpha 原生支持透明度调节
     'imagery',
 ]);
@@ -65,6 +68,12 @@ export interface CesiumLayerRecord {
     labelVisible?: boolean;
     /** 最近一次应用的样式补丁（仅元数据留痕，供审计与后续回填；样式页签当前不自动回填表单） */
     style?: CesiumLayerStylePatch;
+    /**
+     * 要素数量（矢量 DataSource 的实体数）。
+     * 由 CesiumContainer 同步时回填；tif / 3dtiles / gltf 无实体语义，保持 undefined，
+     * 属性面板显示「—」而不是谎报 0。
+     */
+    featureCount?: number;
     /** GLTF 相对地形的高度偏移（米，TOC 高程滑杆值源；正值抬升，用于修正原点在几何中心的模型） */
     modelHeightOffset?: number;
 }
@@ -160,7 +169,7 @@ export const useCesiumLayersStore = defineStore('cesiumLayers', () => {
     /**
      * 与 loadedDataSources 差量同步（CesiumContainer watch 调用）：
      * 新增建档（默认可见/不透明），消失删档，已有记录保留用户改过的元数据。
-     * @param sources 导入层记录投影 [{ id, name, type, baseHeight?, heightRange?, materialMode? }]
+     * @param sources 导入层记录投影 [{ id, name, type, baseHeight?, heightRange?, materialMode?, featureCount? }]
      */
     function syncFromImport(
         sources: Array<{
@@ -170,6 +179,7 @@ export const useCesiumLayersStore = defineStore('cesiumLayers', () => {
             baseHeight?: number;
             heightRange?: { min: number; max: number };
             materialMode?: string;
+            featureCount?: number;
         }> = [],
     ): void {
         const now = Date.now();
@@ -180,6 +190,19 @@ export const useCesiumLayersStore = defineStore('cesiumLayers', () => {
             (item) => nextIds.has(item.id) || MANAGED_CATEGORIES.has(item.category || 'data'),
         );
         const keptIds = new Set(kept.map((item) => item.id));
+
+        // 要素数量回填：数据源内容可能变化（重载/编辑后），已有记录也要刷新，
+        // 否则属性面板会一直停在首次建档时的数字
+        const featureCountById = new Map<string, number>();
+        for (const item of sources) {
+            if (Number.isFinite(item.featureCount)) {
+                featureCountById.set(String(item.id), Number(item.featureCount));
+            }
+        }
+        for (const record of kept) {
+            const next = featureCountById.get(record.id);
+            if (next !== undefined && record.featureCount !== next) record.featureCount = next;
+        }
 
         const added: CesiumLayerRecord[] = sources
             .filter((item) => !keptIds.has(String(item.id)))
@@ -194,6 +217,9 @@ export const useCesiumLayersStore = defineStore('cesiumLayers', () => {
                     opacity: 1,
                     supportsOpacity: OPACITY_SUPPORTED_TYPES.has(type),
                     createdAt: now,
+                    featureCount: Number.isFinite(item.featureCount)
+                        ? Number(item.featureCount)
+                        : undefined,
                     baseHeight:
                         type === '3dtiles' && Number.isFinite(item.baseHeight)
                             ? item.baseHeight
@@ -237,8 +263,13 @@ export const useCesiumLayersStore = defineStore('cesiumLayers', () => {
             return;
         }
         const clamped = Math.min(1, Math.max(0, Number(opacity) || 0));
+        if (record.opacity === clamped) return;
+        // 只改字段，**不要**再 `records.value = [...records.value]`。
+        // records 是 ref 深响应式，改 record.opacity 已经能触发订阅；
+        // 而整体换数组会让 buildCesiumDataGroup 重建全部节点、整棵 TOC 重渲染、
+        // availableLayerIds / layerActionMap 全量重算——滑杆每跳一格就跑一遍，
+        // 大图层下直接卡死（V3.6.41 修复）。
         record.opacity = clamped;
-        records.value = [...records.value];
         if (!adapter) {
             console.warn('[cesiumLayers] setOpacity 仅更新元数据：adapter 未注册（场景未挂载）', { id });
             return;
@@ -297,7 +328,8 @@ export const useCesiumLayersStore = defineStore('cesiumLayers', () => {
                 engine: 'cesium' as const,
                 visible: true,
                 opacity: 1,
-                supportsOpacity: category === 'draw',
+                // draw 与 route 都走「per-handle 实体颜色缩放」，故均为 true
+                supportsOpacity: true,
                 createdAt: Date.now(),
             },
         ];

@@ -71,7 +71,9 @@ function toCesiumLayerNode(record: CesiumLayerRecord): any {
         children: [],
         expanded: false,
         level: 1,
-        featureCount: 0,
+        // 要素数量取元数据记录的回填值；tif / 3dtiles / gltf 无实体语义时为 undefined，
+        // 属性面板据此显示「—」（此前硬编码 0，任何图层都显示「要素数量 0」，是谎报）
+        featureCount: Number.isFinite(record.featureCount) ? Number(record.featureCount) : undefined,
         labelVisible: record.labelVisible === true,
         showCheckbox: true,
         engine: 'cesium',

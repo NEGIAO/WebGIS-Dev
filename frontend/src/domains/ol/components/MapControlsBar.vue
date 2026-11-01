@@ -978,6 +978,12 @@ onUnmounted(() => {
         border-radius: 999px;
     }
 
+    .map-controls-group {
+        right: 10px;
+        bottom: 30px;
+        transform: scale(0.8);
+    }
+
     /* 展开坐标时恢复为桌面式横向一行；隐藏时保持右侧竖列 */
     .map-controls-group.coord-open {
         flex-direction: row;

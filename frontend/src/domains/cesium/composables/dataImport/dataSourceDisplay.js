@@ -131,23 +131,44 @@ export function setRecordOpacity(Cesium, record, opacity, onApplied) {
     }
 }
 
-/** rAF 合并：滑杆高频拖动时同一 DataSource 一帧只重算一次 */
+/**
+ * 矢量透明度最小重算间隔（ms）。
+ *
+ * 单次重算要对「实体数 × 10 个颜色目标」逐个写 Cesium 属性，大 GeoJSON 下是
+ * 数百毫秒级的主线程占用。仅用 rAF 合并等于允许 60 次/秒，拖动滑杆时主线程被
+ * 连续占满 → 界面卡死。此处再叠一层时间节流：拖动过程中约 11 次/秒，且**保证
+ * 末值一定落地**（拖拽松手后不会停在中间值）。
+ */
+const VECTOR_OPACITY_MIN_INTERVAL_MS = 90;
+
+/** rAF + 时间节流合并：滑杆高频拖动时限制重算频率，但最终值必达 */
 function scheduleVectorOpacity(Cesium, dataSource, alpha, onApplied) {
     let pending = vectorOpacityPending.get(dataSource);
     if (!pending) {
-        pending = { alpha, scheduled: false, onApplied: null };
+        pending = { alpha, scheduled: false, onApplied: null, timer: null, lastRun: 0 };
         vectorOpacityPending.set(dataSource, pending);
     }
     pending.alpha = alpha;
     pending.onApplied = typeof onApplied === 'function' ? onApplied : null;
+    // 已有排队（rAF 或定时器）时只更新目标值，不重复排队
     if (pending.scheduled) return;
     pending.scheduled = true;
 
-    requestAnimationFrame(() => {
+    const run = () => {
         pending.scheduled = false;
+        pending.timer = null;
+        pending.lastRun = performance.now();
         applyVectorDataSourceOpacity(Cesium, dataSource, pending.alpha);
         pending.onApplied?.();
-    });
+    };
+
+    const elapsed = performance.now() - pending.lastRun;
+    if (elapsed >= VECTOR_OPACITY_MIN_INTERVAL_MS) {
+        requestAnimationFrame(run);
+        return;
+    }
+    // 节流窗口内：延后一次执行（读取的是最新的 pending.alpha，故末值必达）
+    pending.timer = setTimeout(run, VECTOR_OPACITY_MIN_INTERVAL_MS - elapsed);
 }
 
 /** 需要参与透明度缩放的 (图元, 颜色属性) 清单 */
@@ -165,23 +186,58 @@ const VECTOR_COLOR_TARGETS = [
 ];
 
 /**
+ * 各 (图元, 颜色属性) 在 Cesium 中的**隐式默认色**（未显式赋值时 Cesium 实际使用的颜色）。
+ *
+ * 为什么需要这张表：`GeoJsonDataSource` / `KmlDataSource` 造点要素时生成的是
+ * **BillboardGraphics**（见 Cesium `createPoint`，只设 verticalOrigin /
+ * heightReference / image / position 四项），**从不设置 billboard.color**；
+ * `label` 同理只设 text 不设 fillColor。于是这些实体的 `color` / `fillColor`
+ * 读出来是 `undefined`。
+ *
+ * 旧实现在 `applyColorScale` 里对 `undefined` 直接 `return`，结果就是
+ * **POI / 标注类图层拖动透明度滑杆毫无反应**——记录里的 opacity 变了、
+ * 属性面板显示 75%，但画面上什么都没发生。
+ *
+ * 取值依据 Cesium 各 Graphics 的文档化默认值：
+ * BillboardGraphics.color=WHITE、LabelGraphics.fillColor=WHITE /
+ * outlineColor=BLACK / backgroundColor=TRANSPARENT、
+ * PointGraphics.color=WHITE / outlineColor=BLACK、PolygonGraphics.outlineColor=BLACK。
+ * 注意 backgroundColor 默认全透明，按默认值缩放仍是全透明（视觉无变化，符合预期）。
+ */
+const VECTOR_COLOR_DEFAULTS = {
+    'billboard.color': 'WHITE',
+    'label.fillColor': 'WHITE',
+    'label.outlineColor': 'BLACK',
+    'label.backgroundColor': 'TRANSPARENT',
+    'point.color': 'WHITE',
+    'point.outlineColor': 'BLACK',
+    'polygon.outlineColor': 'BLACK',
+};
+
+/**
  * 对 DataSource 全部实体应用透明度（基于原始颜色快照，可反复调节不衰减）
  * @param {object} Cesium - Cesium 命名空间
  * @param {object} dataSource - Cesium.DataSource
  * @param {number} alpha - 0~1 系数
  */
-function applyVectorDataSourceOpacity(Cesium, dataSource, alpha) {
-    const entities = dataSource?.entities?.values;
-    if (!Cesium || !Array.isArray(entities)) return;
-
-    let snapshots = vectorColorSnapshots.get(dataSource);
-    if (!snapshots) {
-        snapshots = new Map();
-        vectorColorSnapshots.set(dataSource, snapshots);
-    }
+/**
+ * 对任意实体列表应用透明度缩放（基于原始颜色快照，可反复调节不衰减）。
+ *
+ * 从 `applyVectorDataSourceOpacity` 抽出：路线句柄持有的是 `Entity[]` 而非 DataSource，
+ * 但透明度语义完全一致（快照原始色 → 写入 原始alpha×系数）。
+ * 快照表由调用方按「图层」维度自持，互不串扰。
+ *
+ * @param {object} Cesium - Cesium 命名空间
+ * @param {Array} entities - Cesium.Entity 数组
+ * @param {number} alpha - 0~1 系数
+ * @param {Map} snapshots - entityId → 原始色快照（首次调用时自动填充）
+ */
+export function applyEntityListOpacity(Cesium, entities, alpha, snapshots) {
+    if (!Cesium || !Array.isArray(entities) || !(snapshots instanceof Map)) return;
     const now = Cesium.JulianDate.now();
 
     for (const entity of entities) {
+        if (!entity) continue;
         let snapshot = snapshots.get(entity.id);
         if (!snapshot) {
             snapshot = {};
@@ -195,6 +251,19 @@ function applyVectorDataSourceOpacity(Cesium, dataSource, alpha) {
     }
 }
 
+function applyVectorDataSourceOpacity(Cesium, dataSource, alpha) {
+    const entities = dataSource?.entities?.values;
+    if (!Cesium || !Array.isArray(entities)) return;
+
+    let snapshots = vectorColorSnapshots.get(dataSource);
+    if (!snapshots) {
+        snapshots = new Map();
+        vectorColorSnapshots.set(dataSource, snapshots);
+    }
+
+    applyEntityListOpacity(Cesium, entities, alpha, snapshots);
+}
+
 /**
  * 缩放单个颜色属性：快照原始色 → 写入 原始alpha×系数 的新常量色。
  * 时间动态属性（isConstant=false）不再跳过——包装为缩放 CallbackProperty，
@@ -203,7 +272,27 @@ function applyVectorDataSourceOpacity(Cesium, dataSource, alpha) {
  */
 function applyColorScale(Cesium, graphics, graphicsKey, propKey, snapshot, alpha, now) {
 	const isMaterial = propKey === 'materialColor' || propKey === 'materialOutlineColor';
+	const cacheKey = `${graphicsKey}.${propKey}`;
 	const property = isMaterial ? graphics.material : graphics[propKey];
+
+	// ── 属性缺失但有隐式默认色：按默认色建基准后照常缩放 ──
+	// 覆盖 GeoJSON/KML 的 Point → billboard（只有 image 没有 color）、label（只有 text）
+	// 这类「Cesium 自己生成、我们从未赋色」的图元。快照同样入表，保证反复拖动不衰减。
+	if (!property && !isMaterial) {
+		let fallbackEntry = snapshot[cacheKey];
+		if (!fallbackEntry) {
+			const fallbackName = VECTOR_COLOR_DEFAULTS[cacheKey];
+			const baseColor = fallbackName ? Cesium.Color?.[fallbackName] : null;
+			if (!baseColor) return;              // 无默认色语义（如线材质）→ 不处理
+			fallbackEntry = { constantOriginal: Cesium.Color.clone(baseColor, new Cesium.Color()) };
+			snapshot[cacheKey] = fallbackEntry;
+		}
+		const base = fallbackEntry.constantOriginal;
+		if (!base) return;
+		graphics[propKey] = base.withAlpha(base.alpha * alpha);
+		return;
+	}
+
 	if (!property) return;
 
 	// 材质类型白名单：纯色 / 描边线；贴图与特效材质不触碰
@@ -222,7 +311,6 @@ function applyColorScale(Cesium, graphics, graphicsKey, propKey, snapshot, alpha
 		: property;
 	if (!colorProperty || typeof colorProperty.getValue !== 'function') return;
 
-	const cacheKey = `${graphicsKey}.${propKey}`;
 	let entry = snapshot[cacheKey];
 
 	if (!entry) {
@@ -374,9 +462,38 @@ export function applyVectorDataSourceStyle(Cesium, dataSource, patch = {}, onApp
         }
     }
 
-    if (touched) vectorColorSnapshots.delete(dataSource);
+    if (touched) invalidateVectorColorSnapshots(dataSource);
     onApplied?.();
     return touched > 0;
+}
+
+/**
+ * 样式补丁后失效受影响的透明度基准快照。
+ *
+ * 只清「样式确实改写过的图元」（面/线/点/标注），**保留 billboard 的基准**：
+ * GeoJSON/KML 的 POI 图标是 Cesium 自动生成的 billboard，其 color 由透明度
+ * 的「隐式默认色」分支首次写入。若这里整表清空，下次拖滑杆会以「已经缩放过
+ * alpha 的颜色」当作原始色，表现为越拖越淡（衰减）。样式补丁从不改 billboard
+ * 颜色，故它的基准必须留着。
+ *
+ * @param {object} dataSource Cesium.DataSource
+ */
+function invalidateVectorColorSnapshots(dataSource) {
+    const snapshots = vectorColorSnapshots.get(dataSource);
+    if (!snapshots) return;
+    // 与 applyVectorDataSourceStyle 实际写入的颜色属性严格一一对应
+    const invalidatedKeys = new Set([
+        'polygon.materialColor',
+        'polygon.outlineColor',
+        'polyline.materialColor',
+        'point.color',
+        'label.fillColor',
+    ]);
+    for (const entry of snapshots.values()) {
+        for (const key of Object.keys(entry)) {
+            if (invalidatedKeys.has(key)) delete entry[key];
+        }
+    }
 }
 
 /**

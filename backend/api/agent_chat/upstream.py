@@ -311,7 +311,36 @@ def _coerce_content_text(raw: Any) -> str:
     return ""
 
 
+# 常见网关包装层：真正的 OpenAI 响应可能被包在 data / result / response / output 里
+_CHAT_ENVELOPE_KEYS = ("data", "result", "response", "output")
+
+
+def _unwrap_chat_envelope(payload: Dict[str, Any], depth: int = 0) -> Dict[str, Any]:
+    """
+    剥离网关包装层，返回真正含 choices 的那一层。
+
+    第三方代理 / 自建网关常把上游响应再包一层（如 {"status":"success","data":{...}}）。
+    此时顶层没有 choices，直接提取会得到空串，并被误报成「upstream returned empty content」——
+    用户看到的是「模型明明回答了，前端却说空内容」。
+    """
+    if not isinstance(payload, dict):
+        return {}
+    if isinstance(payload.get("choices"), list):
+        return payload
+    if depth >= 3:
+        return payload
+
+    for key in _CHAT_ENVELOPE_KEYS:
+        inner = payload.get(key)
+        if isinstance(inner, dict):
+            unwrapped = _unwrap_chat_envelope(inner, depth + 1)
+            if isinstance(unwrapped.get("choices"), list):
+                return unwrapped
+    return payload
+
+
 def _extract_assistant_reply(payload: Dict[str, Any]) -> str:
+    payload = _unwrap_chat_envelope(payload)
     choices = payload.get("choices")
     if isinstance(choices, list) and choices:
         first = choices[0] if isinstance(choices[0], dict) else {}
@@ -350,6 +379,7 @@ def _extract_tool_calls(payload: Dict[str, Any]) -> Optional[List[Dict[str, Any]
     返回格式：[{"id": "...", "type": "function", "function": {"name": "...", "arguments": "..."}}, ...]
     若无 tool_calls 则返回 None。
     """
+    payload = _unwrap_chat_envelope(payload)
     choices = payload.get("choices")
     if not isinstance(choices, list) or not choices:
         return None
@@ -399,6 +429,136 @@ def _extract_reply_and_tools(payload: Dict[str, Any]) -> Tuple[str, Optional[Lis
     return reply, tool_calls
 
 
+def describe_empty_upstream(payload: Any) -> str:
+    """
+    上游返回 200 但取不到内容时，生成可自诊断的原因摘要。
+
+    历史问题：此处原本只回一句 "Agent upstream returned empty content."，
+    用户既不知道上游到底返回了什么，也无从判断该改配置还是该换模型。
+    成因按实际出现频率：
+      ① finish_reason=length        —— 推理模型把 max_tokens 用在思维链上，正文还没开始就被截断
+      ② finish_reason=content_filter —— 被上游内容安全策略拦截
+      ③ choices 为空数组             —— 部分网关内部错误时返回 200 + 空 choices
+      ④ 只有 reasoning_content       —— 推理模型未产出正文
+      ⑤ 顶层无 choices               —— 非 OpenAI 兼容结构（已尝试剥离 data/result/response/output 包装）
+    """
+    if not isinstance(payload, dict):
+        return f"上游响应不是 JSON 对象（实际类型 {type(payload).__name__}）。"
+
+    inner = _unwrap_chat_envelope(payload)
+    choices = inner.get("choices")
+    choice_count = len(choices) if isinstance(choices, list) else 0
+
+    finish_reason = ""
+    content_repr = "缺失"
+    reasoning_len = 0
+    if choice_count:
+        first = choices[0] if isinstance(choices[0], dict) else {}
+        finish_reason = str(first.get("finish_reason") or "")
+        message = first.get("message") if isinstance(first.get("message"), dict) else {}
+        raw_content = message.get("content")
+        if raw_content is None:
+            content_repr = "null"
+        elif isinstance(raw_content, str):
+            content_repr = f"空字符串(len=0)" if not raw_content else f"len={len(raw_content)}"
+        else:
+            content_repr = type(raw_content).__name__
+        reasoning = message.get("reasoning_content") or message.get("reasoning")
+        if isinstance(reasoning, str):
+            reasoning_len = len(reasoning)
+
+    usage = inner.get("usage") if isinstance(inner.get("usage"), dict) else {}
+    completion_tokens = usage.get("completion_tokens", "?")
+
+    facts = (
+        f"choices={choice_count}；finish_reason={finish_reason or '-'}；"
+        f"content={content_repr}；reasoning_len={reasoning_len}；"
+        f"completion_tokens={completion_tokens}；顶层键={sorted(payload.keys())[:8]}"
+    )
+
+    if finish_reason == "length":
+        hint = "推理过程耗尽了 max_tokens，正文未产出。请调大 max_tokens，或改用非推理模型。"
+    elif finish_reason == "content_filter":
+        hint = "上游内容安全策略拦截了本次回复，请调整提问内容。"
+    elif choice_count == 0:
+        hint = "上游未返回任何 choices：通常是 base_url / model 与上游不匹配，或网关内部报错。"
+    elif reasoning_len > 0 and content_repr in ("null", "空字符串(len=0)"):
+        hint = "上游只返回了 reasoning_content（推理过程），没有正文：请换用非推理模型或调大 max_tokens。"
+    elif content_repr == "缺失":
+        hint = "上游响应缺少 message.content，可能不是 OpenAI 兼容的 chat/completions 结构。"
+    else:
+        hint = "上游返回了空内容，请检查模型是否支持 chat/completions 以及 extra_body 是否被上游忽略。"
+
+    return f"上游响应诊断：{facts}。{hint}"
+
+
+def _safe_json(response: httpx.Response) -> Any:
+    """尽力把响应体解析成 JSON；解析失败返回 None（错误分支不应因解析再抛一次）。"""
+    try:
+        return response.json()
+    except Exception:
+        return None
+
+
+# 这些原文等于没说：FastAPI 的默认 404 体就是 {"detail": "Not Found"}，
+# 直接回显给用户只会得到「上游未找到（HTTP 404）：Not Found」这种同义反复，
+# 反而把真正有用的「检查 base_url」提示挤掉。
+_GENERIC_NOT_FOUND_MESSAGES = {
+    "not found",
+    "404 not found",
+    "the requested url was not found on the server.",
+    "the requested resource was not found.",
+}
+
+
+def _extract_error_message(payload: Any, limit: int = 120) -> str:
+    """从上游错误响应里取出「一句人话」。
+
+    各家错误结构差异极大，实测至少四种形状：
+
+        OpenAI    {"error": {"message": "..."}}
+        NVIDIA    {"title": "Not Found", "status": 404, "detail": "Function '...' not found"}
+        FastAPI   {"detail": "..."}
+        部分网关  {"message": "..."} / {"error": "..."} / {"errors": ["..."]}
+
+    原实现只看 `error.message` 与 `message`，NVIDIA / FastAPI 两种形状都取不到，
+    于是 404 一律落进「请检查 /v1 后缀」的兜底提示——把「模型名不存在」误报成
+    「接口路径写错」，用户照着提示去改 base_url 只会越改越错。
+
+    `limit` 默认 120：错误原文通常一句话就够，超长正文（HTML 报错页）会挤爆聊天气泡。
+    """
+    if isinstance(payload, str):
+        text = payload.strip()
+        return text[:limit] if text else ""
+    if not isinstance(payload, dict):
+        return ""
+
+    candidates: List[Any] = []
+    err = payload.get("error")
+    if isinstance(err, dict):
+        candidates.extend([err.get("message"), err.get("detail")])
+    elif isinstance(err, str):
+        candidates.append(err)
+
+    # detail 必须排在 title 之前：NVIDIA 的 title 恒为 "Not Found"，
+    # 真正说明原因的是 detail（"Function 'xxx' not found"）。
+    candidates.extend([payload.get("message"), payload.get("detail"), payload.get("title")])
+
+    errors = payload.get("errors")
+    if isinstance(errors, list):
+        for item in errors[:2]:
+            if isinstance(item, dict):
+                candidates.extend([item.get("message"), item.get("detail")])
+            elif isinstance(item, str):
+                candidates.append(item)
+
+    for candidate in candidates:
+        text = str(candidate or "").strip()
+        if text:
+            return text[:limit]
+    return ""
+
+
 async def _call_upstream_chat(
     request: Request,
     *,
@@ -414,7 +574,14 @@ async def _call_upstream_chat(
     tools: Optional[List[Dict[str, Any]]] = None,
     tool_choice: Optional[str] = None,
 ) -> Dict[str, Any]:
-    endpoint = f"{base_url.rstrip('/')}/chat/completions"
+    # 端点候选：与 get_models 的 /models 兜底保持同一策略（见本文件下方 endpoints 构建）。
+    # base_url 少写 /v1 是最常见的配置错误（如把 https://api.deepseek.com/v1 写成
+    # https://api.deepseek.com），此时 {base}/chat/completions 必然 404。历史上这里只拼
+    # 单一端点、并把 404 直接包装成 502 抛给前端，用户只能看到「HTTP 404」而不知道该改哪里。
+    normalized_base = str(base_url or "").strip().rstrip("/")
+    endpoints = [f"{normalized_base}/chat/completions"]
+    if not normalized_base.endswith("/v1"):
+        endpoints.append(f"{normalized_base}/v1/chat/completions")
 
     payload: Dict[str, Any] = {
         "model": model,
@@ -467,21 +634,44 @@ async def _call_upstream_chat(
         should_close = True
 
     try:
-        response = await client.post(
-            endpoint,
-            json=payload,
-            headers=headers,
-            timeout=max(5, min(180, int(timeout_seconds))),
-        )
+        response = None
+        for endpoint in endpoints:
+            response = await client.post(
+                endpoint,
+                json=payload,
+                headers=headers,
+                timeout=max(5, min(180, int(timeout_seconds))),
+            )
+            # 404/405 说明「路径猜错」，换下一个候选重试；其余状态交给下方统一分支。
+            # 仅当还有候选时才重试，末位候选的 404 会原样落到错误分支并附带排查提示。
+            if response.status_code not in (404, 405):
+                break
+            # 上游原文已明确指向 model 不存在时，换路径不可能救回来；而且若继续试下一个
+            # 候选，末位候选的错误体（常是 FastAPI 的 {"detail":"Not Found"}）会覆盖掉
+            # 这句真正有用的原因。此处提前收口。
+            if "model" in _extract_error_message(_safe_json(response)).lower():
+                break
+            if endpoint != endpoints[-1]:
+                logger.info("Agent chat endpoint not found (HTTP %s), trying fallback", response.status_code)
+                continue
+            break
     except httpx.TimeoutException as exc:
         raise HTTPException(
             status_code=status.HTTP_504_GATEWAY_TIMEOUT,
             detail="Agent service timeout. Please try again later.",
         ) from exc
     except httpx.RequestError as exc:
+        # 网络层失败（DNS / TLS / 连接拒绝 / 代理）统一走这里。历史上只回一句
+        # "request failed."，管理员无法区分是配置错还是网络不通，故带上异常类型与
+        # 首行原因。API Key 只存在于 header，异常文本里不会出现，可安全回显。
+        reason = str(exc).strip().splitlines()[0][:200] if str(exc).strip() else ""
+        detail = "Agent service request failed."
+        if reason:
+            detail = f"{detail} ({exc.__class__.__name__}: {reason})"
+        logger.warning("Agent upstream request error: %s", reason or exc.__class__.__name__)
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="Agent service request failed.",
+            detail=detail,
         ) from exc
     finally:
         if should_close:
@@ -489,19 +679,9 @@ async def _call_upstream_chat(
 
     if response.status_code == 401 or response.status_code == 403:
         detail = "Agent service key is invalid or expired. Please contact admin."
-        try:
-            err_payload = response.json()
-            err_message = str(
-                err_payload.get("error", {}).get("message")
-                if isinstance(err_payload.get("error"), dict)
-                else err_payload.get("message")
-                or err_payload.get("detail")
-                or ""
-            ).strip()
-            if err_message:
-                detail = f"Agent upstream auth error: {err_message}"
-        except Exception:
-            pass
+        err_message = _extract_error_message(_safe_json(response))
+        if err_message:
+            detail = f"上游鉴权失败（HTTP {response.status_code}）：{err_message}"
 
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -515,19 +695,31 @@ async def _call_upstream_chat(
         )
 
     if response.status_code < 200 or response.status_code >= 300:
-        detail = f"Agent upstream error (HTTP {response.status_code})."
-        try:
-            err_payload = response.json()
-            err_message = str(
-                err_payload.get("error", {}).get("message")
-                if isinstance(err_payload.get("error"), dict)
-                else err_payload.get("message")
-                or ""
-            ).strip()
+        err_message = _extract_error_message(_safe_json(response))
+
+        if response.status_code in (404, 405):
+            # 404/405 有两种截然不同的成因，必须分开判断：
+            #   ① 路径猜错（base_url 漏了 /v1）——上游通常回 HTML 或空 body，取不到 message
+            #   ② 路径正确但 model 不存在 —— 上游会在 body 里明确说 model / function not found
+            # 旧实现无条件追加「请检查 AGENT_BASE_URL 是否包含 /v1」，把 ② 误报成 ①。
+            # 现在：只要上游给了原文就以上游原文为准，只有完全取不到时才怀疑路径。
+            if err_message.strip().lower() in _GENERIC_NOT_FOUND_MESSAGES:
+                err_message = ""
             if err_message:
-                detail = f"Agent upstream error: {err_message}"
-        except Exception:
-            pass
+                detail = f"上游未找到（HTTP {response.status_code}）：{err_message}"
+                lowered = err_message.lower()
+                # NVIDIA 的原文是 "Function 'xxx' not found for account"，OpenAI 系是
+                # "The model 'xxx' does not exist"——两种都指向模型名，统一给一句提示。
+                if "model" in lowered or ("function" in lowered and "not found" in lowered):
+                    detail = f"{detail}。请检查模型名称"
+            else:
+                detail = f"上游未找到 chat/completions（HTTP {response.status_code}）。请检查 AGENT_BASE_URL"
+                if len(endpoints) > 1:
+                    detail = f"{detail} 是否缺少 /v1 后缀"
+        elif err_message:
+            detail = f"上游返回错误（HTTP {response.status_code}）：{err_message}"
+        else:
+            detail = f"上游返回错误（HTTP {response.status_code}）"
 
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=detail)
 

@@ -3,7 +3,7 @@
  * GeoJSON/JSON 格式加载器
  */
 
-import { flyToEntity, applyGroundStackingZIndex } from './utils.js';
+import { flyToEntity, applyGroundStackingZIndex, raiseClampedBillboards } from './utils.js';
 import { VECTOR_GROUND_LOAD_OPTIONS } from '../../terrain/groundPlacementCapabilities';
 import {
     detectGeoJSONProjectionDetailed,
@@ -221,6 +221,8 @@ export async function loadGeoJSON({
     applyGroundStackingZIndex(dataSource);
     // 白模拔高（须在贴地兜底之后）：有高度属性的面按米拉伸，无高度保持贴地
     const extrudedCount = extrudePolygonsByHeight(dataSource, Cesium);
+    // 点要素被 Cesium 造成贴地 billboard（不是 point），斜视时下半截会被地形深度裁掉
+    raiseClampedBillboards(dataSource, Cesium);
     // 面/线走 GroundPrimitive，点自动 heightReference=CLAMP；地形切换由 Cesium 自动跟随
     // 静默模式由调用方负责定位（重设坐标系重建时，位置要等句柄换完才有意义）
     if (!silent) flyToEntity(viewer, Cesium, dataSource, 'geojson');

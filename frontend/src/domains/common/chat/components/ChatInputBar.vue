@@ -1,6 +1,9 @@
 <template>
     <div class="chat-footer">
-        <div class="input-shell">
+        <div
+            class="input-shell"
+            :class="{ 'is-busy': isLoading }"
+        >
             <textarea
                 ref="textareaRef"
                 v-model="text"
@@ -42,7 +45,8 @@
  *   - 一体化输入壳（textarea + 内嵌圆形发送钮），聚焦时品牌色描边
  *   - 输入框随内容自适应高度（1~6 行）
  *   - Enter 发送 / Shift+Enter 换行（输入法组合键期间不触发发送）
- *   - 生成中切换为方块「停止」圆钮
+ *   - 生成中切换为方块「停止」圆钮，输入壳描边同步转危险色
+ *   - 快捷键提示默认淡出、聚焦/悬停淡入（高度常驻，避免输入区跳动）
  */
 import { computed, nextTick, ref } from 'vue';
 import { SendHorizontal, Square } from '@lucide/vue';
@@ -98,27 +102,43 @@ function submit() {
 
 <style scoped>
 .chat-footer {
-    padding: 10px 14px 8px;
+    flex: 0 0 auto;
+    padding: 8px 14px 6px;
     border-top: 1px solid #eef2ef;
     background: white;
+    /* 极轻的向上投影，让输入区与消息区形成层次而不靠重描边 */
+    box-shadow: 0 -3px 10px rgba(0, 0, 0, 0.02);
 }
 
 /* 一体化输入壳：textarea + 内嵌发送钮 */
 .input-shell {
     display: flex;
     align-items: flex-end;
-    gap: 8px;
-    border: 1px solid #d7e5dc;
-    border-radius: 14px;
+    gap: 6px;
+    border: 1px solid #dbe7df;
+    border-radius: 16px;
     background: #fbfdfb;
-    padding: 6px 6px 6px 12px;
-    transition: border-color 0.2s, box-shadow 0.2s, background 0.2s;
+    padding: 4px 4px 4px 12px;
+    transition: border-color 0.18s, box-shadow 0.18s, background 0.18s;
+}
+
+.input-shell:hover {
+    border-color: #c6dccd;
 }
 
 .input-shell:focus-within {
     border-color: var(--brand-primary);
     background: #fff;
     box-shadow: 0 0 0 3px rgba(var(--brand-primary-rgb), 0.1);
+}
+
+/* 生成中：描边转危险色，与停止钮呼应 */
+.input-shell.is-busy {
+    border-color: rgba(var(--danger-rgb), 0.34);
+}
+
+.input-shell.is-busy:focus-within {
+    box-shadow: 0 0 0 3px rgba(var(--danger-rgb), 0.1);
 }
 
 textarea {
@@ -129,12 +149,23 @@ textarea {
     background: transparent;
     font-family: inherit;
     font-size: 0.95em;
-    line-height: 1.5;
-    padding: 6px 0;
-    min-height: 24px;
+    line-height: 1.55;
+    padding: 7px 0;
+    min-height: 26px;
     max-height: 132px;
     box-sizing: border-box;
     color: var(--text-primary);
+    scrollbar-width: thin;
+    scrollbar-color: rgba(0, 0, 0, 0.14) transparent;
+}
+
+textarea::-webkit-scrollbar {
+    width: 5px;
+}
+
+textarea::-webkit-scrollbar-thumb {
+    background-color: rgba(0, 0, 0, 0.14);
+    border-radius: 3px;
 }
 
 textarea::placeholder {
@@ -189,12 +220,43 @@ textarea::placeholder {
     50% { box-shadow: 0 2px 12px rgba(var(--danger-rgb), 0.55); }
 }
 
-/* 快捷键提示 */
+/* 快捷键提示：常驻高度保留（避免出现/消失时输入区跳动），
+   默认淡出，聚焦或悬停时淡入 —— 熟悉后不再长期占用视觉注意力 */
 .footer-hint {
-    margin-top: 5px;
+    margin-top: 4px;
+    height: 13px;
+    line-height: 13px;
     text-align: center;
     font-size: 10.5px;
     color: var(--text-muted);
     user-select: none;
+    opacity: 0;
+    transition: opacity 0.18s ease;
+}
+
+.chat-footer:hover .footer-hint,
+.chat-footer:focus-within .footer-hint {
+    opacity: 1;
+}
+
+/* 移动端：按钮放宽到 38（触控），输入字号 16 规避 iOS 聚焦自动缩放 */
+@media (max-width: 700px) {
+    .chat-footer {
+        padding: 8px 12px 6px;
+    }
+
+    .round-btn {
+        width: 38px;
+        height: 38px;
+    }
+
+    textarea {
+        font-size: 16px;
+    }
+
+    /* 触屏无 hover，提示常显 */
+    .footer-hint {
+        opacity: 1;
+    }
 }
 </style>

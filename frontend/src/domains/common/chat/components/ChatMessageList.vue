@@ -1,5 +1,8 @@
 <template>
-    <div class="chat-body-wrap">
+    <div
+        class="chat-body-wrap"
+        :class="{ 'is-hero': heroMode }"
+    >
         <div
             ref="chatBody"
             class="chat-body"
@@ -208,6 +211,13 @@
             </div>
         </div>
 
+        <!-- 顶部滚动阴影：内容滚出可视区时才出现，替代硬边分隔线 -->
+        <div
+            v-show="scrolledFromTop"
+            class="scroll-shadow-top"
+            aria-hidden="true"
+        />
+
         <!-- 回到底部悬浮按钮（带未读徽标） -->
         <Transition name="fab">
             <button
@@ -272,6 +282,8 @@ const { renderAnswerHtml, renderThinkHtml, hasThinkContent, ready } = useMarkdow
 
 const chatBody = ref(null);
 const showScrollFab = ref(false);
+/** 内容是否已滚出顶部（用于顶部渐隐阴影） */
+const scrolledFromTop = ref(false);
 const copiedIndex = ref(-1);
 const unseenCount = ref(0);
 let copiedTimer = null;
@@ -339,6 +351,9 @@ function onScroll() {
     const near = isNearBottom();
     showScrollFab.value = !near;
     if (near) unseenCount.value = 0;
+    // 顶部阴影：仅当内容确实滚出可视区时出现（4px 容差，规避亚像素抖动）
+    const el = chatBody.value;
+    scrolledFromTop.value = !!el && el.scrollTop > 4;
 }
 
 // 消息变化时智能粘底（用户上翻阅读历史时不打断）；上翻期间累计未读徽标
@@ -425,15 +440,29 @@ defineExpose({ scrollToBottom });
     min-height: 0;
     display: flex;
     flex-direction: column;
+    /* 统一底色：与 ChatPanelContent 的 #f9fbf9 收敛到同一档，避免消息区与头部/输入栏出现色块接缝 */
+    background: #f7faf8;
 }
 
 /* ========== 滚动区域 ========== */
 .chat-body {
     flex: 1;
-    padding: 18px 14px 14px;
+    /* 底部留白加厚：给「回到底部」悬浮钮让位，避免遮住最后一条消息的操作条 */
+    padding: 16px 14px 32px;
     overflow-y: auto;
-    background: #f4f7f5;
+    background: transparent;
     scroll-behavior: smooth;
+    /* 滚动条常驻占位，出现/消失时不再抖动内容宽度 */
+    scrollbar-gutter: stable;
+    /* 阻止滚动链传导到外层侧栏 */
+    overscroll-behavior: contain;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(0, 0, 0, 0.14) transparent;
+}
+
+/* Hero 首屏不存在悬浮钮（只有欢迎语），收掉为悬浮钮预留的底部留白 */
+.chat-body-wrap.is-hero .chat-body {
+    padding-bottom: 16px;
 }
 
 .chat-body::-webkit-scrollbar {
@@ -443,8 +472,23 @@ defineExpose({ scrollToBottom });
     background-color: rgba(0, 0, 0, 0.1);
     border-radius: 4px;
 }
+.chat-body::-webkit-scrollbar-thumb:hover {
+    background-color: rgba(0, 0, 0, 0.2);
+}
 .chat-body::-webkit-scrollbar-track {
     background-color: transparent;
+}
+
+/* 顶部渐隐阴影：替代消息区与服务状态条之间的硬边 */
+.scroll-shadow-top {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 14px;
+    pointer-events: none;
+    background: linear-gradient(to bottom, rgba(23, 42, 33, 0.055), rgba(23, 42, 33, 0));
+    z-index: 1;
 }
 
 /* ========== 日期分隔线 ========== */
@@ -743,7 +787,7 @@ defineExpose({ scrollToBottom });
     flex-direction: column;
     align-items: center;
     text-align: center;
-    padding: 44px 18px 20px;
+    padding: 5px 18px 20px;
     animation: msgIn 0.3s ease-out;
 }
 
@@ -812,10 +856,10 @@ defineExpose({ scrollToBottom });
 /* ========== 回到底部悬浮按钮 ========== */
 .scroll-fab {
     position: absolute;
-    right: 14px;
-    bottom: 12px;
-    width: 32px;
-    height: 32px;
+    right: 10px;
+    bottom: 10px;
+    width: 34px;
+    height: 34px;
     border-radius: 50%;
     border: 1px solid var(--border-light);
     background: rgba(255, 255, 255, 0.96);
@@ -826,6 +870,8 @@ defineExpose({ scrollToBottom });
     display: flex;
     align-items: center;
     justify-content: center;
+    z-index: 2;
+    backdrop-filter: blur(2px);
 }
 
 .scroll-fab:hover {
@@ -1237,6 +1283,19 @@ defineExpose({ scrollToBottom });
         min-height: 30px;
         min-width: 30px;
         padding: 4px 8px;
+    }
+
+    /* 回到底部钮：触控目标放宽到 38，贴边距收紧 */
+    .scroll-fab {
+        width: 38px;
+        height: 38px;
+        right: 8px;
+        bottom: 10px;
+    }
+
+    /* 消息区底部留白同步加大，保证悬浮钮不压最后一条操作条 */
+    .chat-body {
+        padding-bottom: 40px;
     }
 }
 </style>

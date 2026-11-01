@@ -93,6 +93,10 @@
     /* ===== 功能色（不随主题变化） ===== */
     --danger: #ef4444;
     --danger-rgb: 239, 68, 68;
+    /* --danger-dark：浅底上的危险色文字专用档。
+       #ef4444 对白仅 3.75:1、压在 7% 红底上约 3.5:1，14px 正文不达 WCAG AA；
+       本档约 6.0:1。--danger 保留给图标、描边、色块等非文字场合。 */
+    --danger-dark: #b91c1c;
     --danger-light: #fecaca;
     --warning: #f8b600;
     --warning-rgb: 248, 182, 0;
@@ -126,9 +130,24 @@
     --font-mono: 'SF Mono', 'JetBrains Mono', 'Fira Code', 'Consolas', 'Menlo', monospace;
 
     /* ===== 阴影 ===== */
+    /* --shadow-rgb：投影基色。带品牌冷调而非中性黑——卡片/按钮的「接触阴影 +
+       大扩散」一律用它，切主题时随 [data-theme] 换调；否则绿色调阴影压在
+       蓝色界面上会显「脏」。取值与用法见 dev-conventions「视觉层次规范」。 */
+    --shadow-rgb: 20, 45, 25;
     --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.08);
     --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.12);
     --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.15);
+
+    /* 浮层标准投影（合成令牌）：接触层定边界 + 大扩散负扩散只负责「浮起」。
+       卡片 / 弹层 / 菜单**直接用这两个变量**，不要各自手写一份双层投影 ——
+       手写必然产生 0.03/0.04/0.05 各不相同的漂移值。
+       取值与验收标准见 dev-conventions「视觉层次规范」第七节。 */
+    --shadow-float:
+        0 1px 2px rgba(var(--shadow-rgb), 0.05),
+        0 12px 28px -24px rgba(var(--shadow-rgb), 0.5);
+    --shadow-float-hover:
+        0 1px 2px rgba(var(--shadow-rgb), 0.06),
+        0 22px 40px -26px rgba(var(--shadow-rgb), 0.55);
 
     /* ===== 层级（z-index 统一分层，禁止新增魔数） ===== */
     /* 约定：组件内部局部堆叠（1~10）不使用令牌；跨组件浮层必须使用以下令牌 */
@@ -188,6 +207,9 @@
 
     --border-brand: #64b5f6;
     --border-brand-light: #bbdefb;
+
+    /* 蓝色主题的投影基色：冷蓝灰，避免绿调阴影在蓝界面发「脏」 */
+    --shadow-rgb: 12, 35, 64;
 
     /* 暖金点缀：主题无关（见 :root 注释），在此显式声明以保证
        [data-theme] 作用域内变量解析完整 */

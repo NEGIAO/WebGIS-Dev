@@ -208,14 +208,6 @@
             />
         </button>
     </div>
-
-    <!-- 三维矢量图层属性表（TOC 右键「打开属性表」，只读 + 行定位） -->
-    <CesiumAttributeTableDialog
-        :visible="attrTableVisible"
-        :data="attrTableData"
-        @close="attrTableVisible = false"
-        @locate="locateAttributeEntity"
-    />
 </template>
 
 <script setup>
@@ -239,7 +231,6 @@ import { translate as t } from '@common/app/useLocale';
 import { Copy, Eye, EyeOff, House, Upload } from '@lucide/vue';
 import CesiumAdvancedEffects from './CesiumAdvancedEffects.vue';
 import CesiumToolPanel from './CesiumToolPanel.vue';
-import CesiumAttributeTableDialog from './CesiumAttributeTableDialog.vue';
 import CesiumDataImportDialog from './CesiumDataImportDialog.vue';
 import FluidSimulationPanel from '@cesium-domain/modules/fluid-simulation/FluidSimulationPanel.vue';
 const ShallowWaterOverlay = defineAsyncComponent(() =>
@@ -284,10 +275,11 @@ import {
     setVectorLabelVisible,
 } from '../composables/dataImport/dataSourceDisplay';
 import {
-    collectEntityProperties,
     collectEntityShapes,
     serializeShapes,
 } from '../utils/cesiumLayerSerialization';
+import { buildCesiumAttrDataset, CESIUM_ATTR_DATASET_PREFIX } from '../layers/toc-adapters/cesiumAttrDataset';
+import { useAttrStore } from '@ol/stores/useAttrStore';
 import {
     assertGroundPlacementRegistry,
     fitGroundPlacement,
@@ -550,16 +542,37 @@ function collectLayerShapes(id) {
     return Array.isArray(entities) ? collectEntityShapes(getCesium(), entities) : [];
 }
 
-// ────────────────────────── 属性表（只读） ──────────────────────────
-const attrTableVisible = ref(false);
-const attrTableData = ref(null);
-/** 当前属性表对应的图层 id（行定位时回查实体） */
+// ────────────────────────── 属性表（复用 2D 组件） ──────────────────────────
+/**
+ * 属性表不再是 3D 私有弹窗：把实体转成 `AttrLayerDataset` 注入 attrStore，
+ * 由 HomeView 挂载的同一个 `AttributeTable` 渲染（排序 / 字段配置 / 统计 /
+ * 导出 / 列宽拖拽全部与 2D 一致）。此处只负责「造数据 + 定位」。
+ */
+const attrStore = useAttrStore();
+/** 当前打开属性表的图层 id（行定位时回查实体） */
 const attrTableRecordId = ref('');
+/** 本容器注入过的外部数据集 key：图层销毁 / 容器卸载时按此回收，避免残留幽灵表 */
+const openedAttrDatasetIds = new Set();
+
+/**
+ * 回收某图层注入的属性表数据集。
+ * 不回收的话，图层删掉后 attrStore 里仍留着整份行数据：
+ * 属性表会停在「数据还在、地图上已没有」的错位状态。
+ * @param {string} layerId 图层 id（不含 cesium: 前缀）
+ */
+function dropAttrDataset(layerId) {
+    const key = `${CESIUM_ATTR_DATASET_PREFIX}${String(layerId || '').trim()}`;
+    if (!openedAttrDatasetIds.has(key)) return;
+    openedAttrDatasetIds.delete(key);
+    attrStore.dropExternalDataset(key);
+}
 
 /**
  * 打开某图层的属性表。
- * 3D 侧属性来自 `entity.properties`，只读——没有可回写的属性存储，
- * 提供编辑态会造成「改了但没保存」的静默丢失。
+ *
+ * 3D 侧属性来自 `entity.properties`，**只读**——没有可回写的属性存储，
+ * 因此不挂 cell-edit / delete-feature，组件按「事件未监听」自然降级为只读。
+ *
  * @param {string} id 图层 id（不含 cesium: 前缀）
  * @returns {boolean} 是否成功打开
  */
@@ -570,17 +583,32 @@ function showAttributeTable(id) {
         message.warning(t('cesium.attributeTable.empty'));
         return false;
     }
-    const { columns, rows, truncated } = collectEntityProperties(getCesium(), entities);
+    const { dataset, truncated, rowCount } = buildCesiumAttrDataset({
+        Cesium: getCesium(),
+        entities,
+        layerId: id,
+        layerName: record.name,
+    });
+    if (!dataset || !rowCount) {
+        message.warning(t('cesium.attributeTable.empty'));
+        return false;
+    }
+    attrStore.setExternalDataset(dataset);
+    attrStore.openTable(dataset.id, dataset.layerName);
+    openedAttrDatasetIds.add(dataset.id);
     attrTableRecordId.value = id;
-    attrTableData.value = { title: record.name, columns, rows, truncated };
-    attrTableVisible.value = true;
+    if (truncated) message.info(t('cesium.attributeTable.truncated'));
     return true;
 }
 
-/** 属性表行点击 → 相机飞到该要素 */
-function locateAttributeEntity(entityId) {
+/**
+ * 属性表行点击 → 相机飞到该要素。
+ * 由 HomeView 在 3D 模式下转发 `focus-feature` 调用（entityId 为 Cesium 实体 id）。
+ * @param {string} entityId
+ */
+function focusAttributeFeature(entityId) {
     const record = findImportRecord(attrTableRecordId.value);
-    const entity = toRaw(record?.entity)?.entities?.getById?.(entityId);
+    const entity = toRaw(record?.entity)?.entities?.getById?.(String(entityId || ''));
     if (!entity) return;
     getViewer()?.flyTo(entity, { duration: 0.8 });
 }
@@ -592,6 +620,10 @@ watch(
         cesiumLayersStore.syncFromImport(
             (list || []).map((item) => {
                 const base = { id: item.id, name: item.name, type: item.type };
+                // 要素数量：只有 DataSource 有实体集合；tif / 3dtiles / gltf 无实体语义，
+                // 保持 undefined，属性面板显示「—」（此前节点构建器硬编码 0）
+                const entityValues = toRaw(item.entity)?.entities?.values;
+                if (Array.isArray(entityValues)) base.featureCount = entityValues.length;
                 if (item.type === '3dtiles') {
                     // 建档初值：高程滑杆范围以当前基座高 ±100m（对齐原 data tab 逻辑）
                     const rawInitial = Number.isFinite(item.currentBaseHeight)
@@ -611,6 +643,14 @@ watch(
                 return base;
             }),
         );
+
+        // 数据集随数据源销毁回收：导入面板删除 / 重载数据源不经过 adapter.remove，
+        // 只靠 adapter 那条路径会漏（表还开着但图层已不在）。
+        const aliveIds = new Set((list || []).map((item) => String(item.id)));
+        [...openedAttrDatasetIds].forEach((key) => {
+            const layerId = key.slice(CESIUM_ATTR_DATASET_PREFIX.length);
+            if (!aliveIds.has(layerId)) dropAttrDataset(layerId);
+        });
     },
     { immediate: true, deep: false },
 );
@@ -705,6 +745,12 @@ const routeFeature = createCesiumRouteFeature({
             drawMeasureFeature.setOpacity(id, opacity);
             return;
         }
+        // 路线与绘制同为「受管句柄」：实体不落在 loadedDataSources 里，
+        // 只走下方 findImportRecord 会取不到句柄而静默失败（路线滑杆无效的根因）
+        if (routeFeature.isManaged(id)) {
+            routeFeature.setOpacity(id, opacity);
+            return;
+        }
         const record = findImportRecord(id);
         if (!record) {
             console.warn('[CesiumContainer] setOpacity 找不到句柄记录', { id, opacity });
@@ -733,6 +779,8 @@ const routeFeature = createCesiumRouteFeature({
         dataImport.flyToDataSource(id);
     },
     remove(id) {
+        // 属性表数据集随图层一并回收（先于句柄销毁，避免组件读到已释放的实体）
+        dropAttrDataset(id);
         // 绘制 / 路线句柄优先分流（store 已同步删档，无需 loadedDataSources 回声）
         if (drawMeasureFeature.isManaged(id)) {
             drawMeasureFeature.removeHandle(id);
@@ -1527,6 +1575,11 @@ defineExpose({
     toggleReverseGeocodePick,
     zoomToRemoteService,
     importUserData,
+    /**
+     * 属性表行定位（HomeView 在 3D 模式下转发 `focus-feature` 时调用）。
+     * 与 2D 的 `zoomToManagedFeature` 同语义：飞到该要素，不改选中态。
+     */
+    focusAttributeFeature,
     /** 三维「重设源坐标系」：按导入期快照把原始数值重新解释为指定 CRS（仅 GeoJSON） */
     redeclareLayerCrs,
     /** ── 引擎感知迁移 P0/P2：绘制/测量 + 路线能力接口（HomeView 按引擎路由） ── */
@@ -2242,6 +2295,12 @@ onUnmounted(() => {
 
     // 统一图层管理：注销 adapter 并清档（TOC「三维数据」分组随之消失）
     try { cesiumLayersStore.unregisterAdapter(); } catch { /* ignore */ }
+    // 属性表数据集一并回收：容器卸载后 3D 实体已随 viewer.destroy 释放，
+    // 留着数据集会让表格停在「有数据但无法定位」的孤儿态
+    [...openedAttrDatasetIds].forEach((key) => {
+        openedAttrDatasetIds.delete(key);
+        try { attrStore.dropExternalDataset(key); } catch { /* ignore */ }
+    });
 
     // 清理人物漫游控制器（移除 scene.preRender / selectedEntityChanged 监听）
     try { playerController.stopPlayer(); } catch { /* ignore */ }
@@ -2723,14 +2782,15 @@ watch(
 @media (pointer: coarse) {
     /* 触屏默认右侧竖列：只保留缩放级别 / 主页 / 坐标开关（对齐 OL 收起态） */
     .coordinate-display {
-        bottom: 38px;
-        right: 12px;
+        bottom: 30px;
+        right: 10px;
         max-width: calc(100vw - 24px);
         font-size: 12px;
         flex-direction: column;
         gap: 8px;
         padding: 8px 6px;
         border-radius: 999px;
+        transform: scale(0.8);
     }
 
     /* 展开坐标时恢复桌面式横向一行；收起时保持竖列 */

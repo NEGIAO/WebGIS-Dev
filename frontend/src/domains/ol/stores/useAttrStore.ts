@@ -457,6 +457,39 @@ export const useAttrStore = defineStore('attrStore', () => {
         datasets.value[layerId] = snapshot;
     }
 
+    /**
+     * 外部注入的数据集 id（三维实体 / 在线服务查询）。
+     *
+     * `syncLayers` 的「幽灵图层」清理以 userLayers 为准，而这些数据集的 id 永远
+     * 不会出现在 userLayers 里——不豁免的话，任意一次图层广播都会把正在查看的
+     * 三维属性表删掉（表现为「表突然变空」）。
+     */
+    const externalDatasetIds = new Set<string>();
+
+    /**
+     * 注入由引擎侧构建好的数据集（不参与 userLayers 同步）。
+     * @param dataset 需已符合 AttrLayerDataset 形状
+     */
+    function setExternalDataset(dataset: AttrLayerDataset): void {
+        const id = String(dataset?.id || '').trim();
+        if (!id) return;
+        externalDatasetIds.add(id);
+        datasets.value[id] = dataset;
+    }
+
+    /** 移除外部数据集（图层被删 / 容器卸载时调用，避免残留可打开的幽灵表） */
+    function dropExternalDataset(id: string): void {
+        const key = String(id || '').trim();
+        if (!key) return;
+        externalDatasetIds.delete(key);
+        delete datasets.value[key];
+        if (activeLayerId.value === key) {
+            activeLayerId.value = '';
+            selectedFeatureId.value = '';
+            visible.value = false;
+        }
+    }
+
     function syncLayers(layers: any[] = []): void {
         const incomingIds = new Set(
             (layers || [])
@@ -468,6 +501,7 @@ export const useAttrStore = defineStore('attrStore', () => {
 
         // 清理已删除图层的数据集、签名与修订号，避免属性表继续展示"幽灵图层"
         Object.keys(datasets.value).forEach((layerId) => {
+            if (externalDatasetIds.has(layerId)) return;
             if (!incomingIds.has(layerId)) {
                 delete datasets.value[layerId];
                 delete datasetSignatures[layerId];
@@ -662,6 +696,8 @@ export const useAttrStore = defineStore('attrStore', () => {
         filteredRows,
         displayRows,
         syncLayers,
+        setExternalDataset,
+        dropExternalDataset,
         openTable,
         setActiveLayer,
         closeTable,

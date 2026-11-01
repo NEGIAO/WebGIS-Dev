@@ -33,6 +33,7 @@ import {
     revokeBlobUrl,
     applyGroundStackingZIndex,
     parseKmlPolygonStackingRanks,
+    raiseClampedBillboards,
 } from './utils.js';
 import { VECTOR_GROUND_LOAD_OPTIONS } from '../../terrain/groundPlacementCapabilities';
 
@@ -228,6 +229,8 @@ export async function loadKML({
     // 地面叠放定序（对标 QGIS 图例：文档在前的 Folder 在上）：线/面同体系递进 zIndex，
     // 文档首 Folder 最高在顶、末 Folder 最低垫底，避免末尾大面覆盖顶部图层
     applyGroundStackingZIndex(dataSource, 64, parseKmlPolygonStackingRanks(preparedText));
+    // 点要素图标（贴地 billboard）斜视时下半截会被地形深度裁掉，关闭其深度测试
+    raiseClampedBillboards(dataSource, Cesium);
     flyToEntity(viewer, Cesium, dataSource, 'kml');
 
     const record = { id, name: file.name, type: 'kml', entity: dataSource };
@@ -282,6 +285,8 @@ export async function loadKMZ({
         // 贴地双保险：同 loadKML，加载后实体级强制钳制
         // 地面叠放定序：同 loadKML（文档在前者在上，线/面同体系）
         applyGroundStackingZIndex(dataSource, 64, parseKmlPolygonStackingRanks(preparedText));
+        // 同 loadKML：贴地图标关闭深度测试，避免斜视被地形裁掉下半截
+        raiseClampedBillboards(dataSource, Cesium);
         flyToEntity(viewer, Cesium, dataSource, 'kmz');
 
         const record = {

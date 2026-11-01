@@ -465,6 +465,7 @@
                                             </svg>
                                         </button>
                                         <button
+                                            v-if="!readonly"
                                             class="row-act danger"
                                             type="button"
                                             :title="t('attrTable.deleteFeatureTip')"
@@ -601,6 +602,17 @@ type ResizeDirection =
     | 'bottom-left'
     | 'bottom-right';
 
+/**
+ * readonly：仅渲染、禁止改值 / 删要素。
+ *
+ * 属性表已引擎无关（数据来自 attrStore，2D 上传图层与 3D Cesium 实体共用本组件），
+ * 但**写回能力**不对称：2D 有 OL 要素可回写，3D 的 entity.properties 没有回写通道。
+ * 若不区分，三维侧双击单元格会乐观改掉 `row.properties` 并 emit 一个无人接收的事件——
+ * 表里看着改了、地图上没变，属于假成功。由宿主按引擎传 true 让 UI 如实降级。
+ */
+const props = defineProps({
+    readonly: { type: Boolean, default: false },
+});
 const emit = defineEmits(['focus-feature', 'highlight-feature', 'cell-edit', 'delete-feature']);
 const store = useAttrStore();
 const { t } = useLocale();
@@ -734,6 +746,8 @@ function isEditing(rowId: string, field: string): boolean {
 }
 
 function startCellEdit(row: AttrRow, field: { key: string }) {
+    // 只读模式（3D 实体）下不进入编辑态：无回写通道，改了也留不住
+    if (props.readonly) return;
     // 防重入：正在编辑同一格时（如点击输入框本身）不重置草稿
     if (isEditing(row.id, field.key)) return;
     editingCell.value = { rowId: row.id, field: field.key };
@@ -772,6 +786,7 @@ function commitCellEdit(row: AttrRow, field: { key: string; type?: string }): vo
 }
 
 function deleteFeatureRow(row: AttrRow): void {
+    if (props.readonly) return;
     if (!window.confirm(t('attrTable.confirmDeleteFeature'))) return;
     emit('delete-feature', {
         layerId: store.activeDataset?.layerId || '',

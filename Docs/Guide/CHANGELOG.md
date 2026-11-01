@@ -6,6 +6,51 @@
 
 ## 版本记录
 
+### V3.6.38 (2026-11-01) — 整合发布：V3.6.38–V3.6.50 十三项改动合并为单一版本
+
+> **一句话**：将 2026-11-01 当天零散提交的 13 个版本（V3.6.38–V3.6.50）整合为单一发布版本 V3.6.38，消除「一次小改动升一个版本号」带来的版本号通胀与日志碎片；功能与修复内容完全保留，仅统一版本号与发布叙事。原 12 份独立 `LLM_record` 日志合并为本文件 `Docs/LLM_record/26-11/2026-11-01/2026-11-01-v3.6.38-consolidated.md`。
+
+#### ① 用户中心「数据管理」页容器查询适配（原 V3.6.38）
+修复断点维度错配：`.account-panel` 宽度恒为 `min(430px, 96vw)` 与视口无关，适配规则却写在 `@media (max-width: 768px)` 里，桌面 1920px 下永不触发，导致导出 CSV / 下一页按钮被 `.card{overflow:hidden}` 裁掉且不可滚动。改为 `.admin-layout` 加 `container-type: inline-size` + `container-name: admin-panel`，换两级容器查询（≤640px 卡片头部竖排/双列降单列/工具栏三组竖排/页码独占末行；≤440px 页签 2×2 网格零滚动/内边距与行号列压缩/表格加密度），并用真实编译 CSS 三态截图验证 before→after。
+
+#### ② Cesium TOC 动作补全 + 属性表复用 2D 组件（原 V3.6.39）
+打通三维右键菜单「列得出、点了没反应」的三条寻址链路最后一跳：补 `commandDispatcher` 的 `layerId`（17 个 adapter 方法全部可达）、把 `cesium:*` 记录 id 补入 `availableLayerIds`（多选/批量菜单出现）、批量分支先于单节点前缀判定并按前缀拆分 2D/3D 下发。属性表面向：删除私有 `CesiumAttributeTableDialog.vue`，三维实体经新增 `cesiumAttrDataset.js` 转 `AttrLayerDataset` 注入统一 `attrStore`（列取并集、字段类型采样推断、逐实体 extent、5000 行上限），`useAttrStore` 新增 `externalDatasetIds` 豁免剪枝 + `setExternalDataset`/`dropExternalDataset` 生命周期回收；3D 下经 `readonly` prop 自然降级为只读（禁改值/删要素）。
+
+#### ③ 透明度全类型覆盖 + 属性表定位回归 + Agent 404/502 可诊断（原 V3.6.40）
+`OPACITY_SUPPORTED_TYPES` 补 `route`，受管记录 `supportsOpacity` 恒 true，适配器加路线分流，复用矢量类「原始色快照 × 系数」机制（路线基线不同直接赋值会逐次衰减），至此 12 种图层全可调透明度；属性表面板回归 `.map-wrapper` 内修正定位偏移（原压住左侧图层栏）；`/chat/completions` 改双候选端点兜底（404/405 自动重试 `/v1` 前缀）并带实际路径与 `AGENT_BASE_URL` 指引，网络层失败补异常类型与首行原因。
+
+#### ④ Cesium 透明度滑杆「一动就卡死」根治（原 V3.6.41）
+三处性能缺陷并发修复：3D Tiles 着色器重编译（主因，改 `u_alpha` uniform 零编译，仅跨半透明边界/换材质才重建并用 `WeakMap` 记录状态）+ store 整体换数组冗余（删 `records.value=[...records.value]` 并加 `if (record.opacity===clamped) return` 短路）+ 矢量类每帧全量遍历（叠 90ms 节流且定时器保证末值必达）。
+
+#### ⑤ Agent「upstream returned empty content」自诊断 + 网关包装层解包（原 V3.6.42）
+新增 `_unwrap_chat_envelope` 按 `data`/`result`/`response`/`output` 递归剥离最多 3 层网关包装（含 tool_calls 路径，否则工具调用也被误判为空）；新增 `describe_empty_upstream` 回显 `choices` 数、`finish_reason`、`content` 类型/长度、`reasoning_content` 长度、`completion_tokens`、顶层键，并给五种典型成因（`length`/`content_filter`/空 choices/仅 reasoning/缺 message.content）可执行提示。三处调用点接入，6 组真实样本验证。
+
+#### ⑥ AI 对话面板三处 UI 重排（原 V3.6.43）
+状态条由 3~5 行「标签:值」纵向堆叠改为一行横向 pill 组（`flex-wrap`，信息项一一对应，长文案降级为 `title`）；消息区 `.chat-body-wrap` 统一底色、加顶部渐隐（仅 `scrollTop>4`）、稳住 `scrollbar-gutter`、留白 14→32px、Hero 首屏收回留白；输入栏 `footer-hint` 改常驻 13px + 默认透明、hover/聚焦淡入、移动端按钮 34→38px、字号 16px 规避 iOS 聚焦缩放。新增 `chat.readyShort`/`chat.notReadyShort` i18n 键。
+
+#### ⑦ 状态条固定 3+2 分组 + 上游错误文案精简与 404 归因修正（原 V3.6.44）
+状态条改显式两行 DOM（就绪/模式/模型 + 消耗/额度），分组由结构决定非排版巧合；404 误报修复：新增 `_extract_error_message` 兼容 OpenAI/NVIDIA/FastAPI/`errors[]`/纯字符串五形态（`detail` 优先于 `title`），且上游给了原文即以原文为准、仅取不到才疑路径；`{"detail":"Not Found"}` 同义反复识别为非回答回落路径提示；文案按场景 16~84 字符；404 已指向 model 时不再重试下一候选避免覆盖真因。
+
+#### ⑧ POI 透明度失效 + 贴地图标被地形裁切 + 要素数量谎报 0（原 V3.6.45）
+新增 `VECTOR_COLOR_DEFAULTS` 在属性缺失时按 Cesium 隐式默认色建快照后照常缩放（改「只失效改写的 5 个颜色键」避免越拖越淡）；新增 `raiseClampedBillboards` 仅对 `CLAMP_TO_GROUND` 广告牌设 `disableDepthTestDistance=Infinity` 解决斜视裁切；`featureCount` 由 `CesiumContainer` 从 `entities.values.length` 回填（无实体语义留 `undefined`、面板显示「—」）。
+
+#### ⑨ 落地页「去边框化」重设计 + iOS 旋转遮罩黑块修复（原 V3.6.46）
+导航栏重做（全条仅一颗实心登录钮，余无边框幽灵态，圆角统一 6px，首屏透明滚动后浮出玻璃底与发丝线）；中部锚点改 `grid-template-columns: minmax(0,1fr) auto minmax(0,1fr)` 真居中；品牌区去挤压、移动端收 Star 钮进全屏菜单；整页 `border:1px solid` 由 20→2 处；iOS 旋转遮罩黑块：`-webkit-mask` 图层禁参与 transform（徽牌改染色、光晕停自转）。
+
+#### ⑩ 视觉设计纪律入宪（原 V3.6.47）
+从落地页重设计提炼为项目级设计纪律：`Force_command.md` §3 新增 8 条视觉约束（去边框化三件套/单一强调源/一种强调手段/圆角 6·999 两档/有形状者不描边/次级按钮浮实对比/控件尺寸字重恒定/过渡禁 all）与 4 条布局渲染硬约束（精确居中 grid 模板、断点由内容实测、`-webkit-mask` 禁 transform、去描边后复查对比度），并明确表单/语义态描边为例外；细则落 `dev-conventions.md`。
+
+#### ⑪ RegisterView 视觉语言重构（原 V3.6.48）
+首个按 V3.6.47 纪律落地的页面：新增 `--shadow-rgb` 令牌；主卡片去描边改三层投影；`.mode-btn.active` 由实心绿块改 iOS 分段控件（全页只留提交钮一处实心绿）；次级按钮统一「白面+轻投影」；头像选中态改环状外扩阴影（几何零位移）；`transition:all` 7 处清零；保留表单/语义态描边例外。
+
+#### ⑫ SidePanel 视觉重构 + 跨主题硬编码色板归位（原 V3.6.49）
+修三类实质缺陷：主题色污染（蓝底/青色藏在绿主题、5 处硬编码绿、暖粉灰渐变起点全收敛 `--brand-*`）、对比度不达标（绿底绿字/手柄悬停/金银铜序号/小字 `--text-muted`→`--text-secondary`）、层级误用（折叠手柄 `z-index` 由 `--z-toast` 改回 `--z-float`）；样式侧 `.info-panel` 改双层冷调投影、`.news-logo` 去渐变文字、平台胶囊去描边、过渡清零。
+
+#### ⑬ 视觉纪律 Phase 0 门禁 + 令牌 + TopBar 菜单重组织（原 V3.6.50）
+量化 73 个 SFC 存量（`border:1px solid` 296 / `transition:all` 104 / 中性黑投影 137 / 渐变文字 7 / 硬编码 hex 993）；新增 `Scripts/CheckVisualDiscipline.py` 棘轮门禁（R1 `transition:all`、R2 `background-clip:text`、R3 `box-shadow` 裸 `rgba(0,0,0)`），基线存 `visual-discipline-baseline.json`；新增 `--shadow-float`/`--shadow-float-hover` 合成投影令牌；TopBar 菜单重组织为六分区（主操作/分析工具/路线规划/视图调试/常用地点/彩蛋），移除 `menu-divider`，新增 `sectionTools`/`sectionRoute`/`sectionView` i18n 键（顶栏导航/标题/账号按钮未动）。
+
+> 整合说明：上述 ⑬ 项原为 13 个独立版本（V3.6.38–V3.6.50，同日 2026-11-01 零散提交）。本次整合仅统一版本号与发布叙事，功能/修复内容与各文件改动完全保留；逐版本原始记录见合并前的 12 份 `Docs/LLM_record/26-11/2026-11-01/2026-11-01-*.md`（已合并入 `2026-11-01-v3.6.38-consolidated.md`）。
+
 ### V3.6.37 (2026-11-01) — 单版本整合：HF 推送 LFS 字体修复 + 规范 §12 机器人 PR 处置 + 文档组织治理
 
 > **整合说明**：本条由原三个独立编号（V3.6.37 / V3.6.38 / V3.6.39）合并而来。三段工作同属**一次未发布**的改动批次，按「每个 L2/L3 任务 +1 修订号」拆成三个只差数十分钟、且都未单独发布的版本，反而降低版本历史的可读性。合并后本条为 **V3.6.37**，下一版本自 V3.6.38 起。

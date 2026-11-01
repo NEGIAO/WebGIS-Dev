@@ -1300,9 +1300,9 @@ onBeforeUnmount(() => {
 }
 
 .profile-avatar.large {
-    width: 56px;
-    height: 56px;
-    border-radius: 14px;
+    width: 60px;
+    height: 60px;
+    border-radius: 50%;
     background: rgba(255, 255, 255, 0.16);
     border: 2px solid rgba(255, 255, 255, 0.45);
     display: flex;
@@ -1316,7 +1316,7 @@ onBeforeUnmount(() => {
 .profile-avatar.large img {
     width: 100%;
     height: 100%;
-    border-radius: 12px;
+    border-radius: 50%;
     object-fit: cover;
 }
 
@@ -1420,11 +1420,11 @@ onBeforeUnmount(() => {
 .account-panel:not(.is-fullscreen) .profile-avatar.large {
     width: 44px;
     height: 44px;
-    border-radius: 12px;
+    border-radius: 50%;
 }
 
 .account-panel:not(.is-fullscreen) .profile-avatar.large img {
-    border-radius: 10px; /* 外框 12px − 2px 边框 */
+    border-radius: 50%;
 }
 
 .account-panel:not(.is-fullscreen) .profile-name {
@@ -1627,11 +1627,11 @@ onBeforeUnmount(() => {
 .account-panel.is-fullscreen .profile-avatar.large {
     width: 44px;
     height: 44px;
-    border-radius: 12px;
+    border-radius: 50%;
 }
 
 .account-panel.is-fullscreen .profile-avatar.large img {
-    border-radius: 10px;
+    border-radius: 50%;
 }
 
 .account-panel.is-fullscreen    .profile-name {

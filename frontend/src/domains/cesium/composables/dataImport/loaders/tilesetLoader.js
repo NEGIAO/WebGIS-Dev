@@ -1087,7 +1087,17 @@ export const MATERIAL_MODES = {
 };
 
 /**
+ * 每个 tileset 上一次应用的材质状态。
+ * 用途：区分「必须重建（换模式 / 跨半透明边界）」与「只改 alpha（更新 uniform）」。
+ */
+const tilesetMaterialState = new WeakMap();
+
+/**
  * 对 tileset 应用「材质模式 × 透明度」合成外观（P1-2 单点合成，互不覆盖）。
+ *
+ * 性能约定：同模式且未跨半透明边界时，只 setUniform('u_alpha') 不重建 shader。
+ * 给 tileset.customShader 赋值会让 Cesium 为每个瓦片重新编译着色器，大瓦片集
+ * 单次可达数秒——历史上透明度滑杆「一动就卡死」即源于此。
  *
  * @param {Cesium.Cesium3DTileset} tileset
  * @param {string} mode - MATERIAL_MODES 的 key
@@ -1095,7 +1105,32 @@ export const MATERIAL_MODES = {
  * @param {number} [alpha=1] - 透明度 0~1（统一图层管理注入；1 = 完全不透明）
  */
 export function applyTilesetMaterial(tileset, mode, Cesium, alpha = 1) {
+    if (!tileset) return;
     const safeAlpha = Math.min(1, Math.max(0, Number.isFinite(alpha) ? alpha : 1));
+    const needsTranslucent = safeAlpha < 1;
+    const prev = tilesetMaterialState.get(tileset);
+
+    // ── 快路径：同模式 + 半透明通道未变 + 已有 shader → 只更新 u_alpha ──
+    // 这是「拖透明度滑杆卡死」的根治点：给 tileset.customShader 赋值会让 Cesium
+    // 为每个瓦片重新编译着色器（大瓦片集单次可达数秒），而 setUniform 零编译。
+    // translucencyMode 是编译期参数，故仅在跨 1.0 边界时才允许走重建。
+    if (
+        prev
+        && prev.mode === mode
+        && prev.translucent === needsTranslucent
+        && mode !== 'none'
+        && mode !== 'heightStyle'
+        && tileset.customShader
+        && typeof tileset.customShader.setUniform === 'function'
+    ) {
+        try {
+            tileset.customShader.setUniform('u_alpha', safeAlpha);
+            prev.alpha = safeAlpha;
+            return;
+        } catch {
+            // 旧 shader 无 u_alpha uniform：落到下面的完整重建
+        }
+    }
 
     // 清空之前的状态（style 与 customShader 均由本函数统一重建）
     tileset.customShader = null;
@@ -1118,6 +1153,8 @@ export function applyTilesetMaterial(tileset, mode, Cesium, alpha = 1) {
         });
     }
     // 'none' 且 alpha=1：保持无 shader + 无 style
+
+    tilesetMaterialState.set(tileset, { mode, alpha: safeAlpha, translucent: needsTranslucent });
 }
 
 /** 高度分层样式（alpha 融入各分层颜色，避免与透明度互写 style） */
@@ -1140,22 +1177,33 @@ function buildHeightStyle(Cesium, alpha = 1) {
     });
 }
 
-/** 构建 CustomShader（纯白膜 / 白膜贴图 / 高度渐变；alpha 注入 shader 并按需切半透明渲染通道） */
+/** 构建 CustomShader（纯白膜 / 白膜贴图 / 高度渐变；alpha 走 uniform，拖动滑杆不重编译） */
 function buildCustomShader(mode, Cesium, alpha = 1, bsInfo = null) {
-    const a = Math.min(1, Math.max(0, alpha)).toFixed(3);
-    // alpha<1 必须显式声明 TRANSLUCENT，否则不透明通道下 material.alpha 不生效
-    const translucencyMode = alpha < 1
+    const alphaValue = Math.min(1, Math.max(0, Number(alpha) || 0));
+    // alpha<1 必须显式声明 TRANSLUCENT，否则不透明通道下 material.alpha 不生效。
+    // 注意：translucencyMode 是编译期参数，跨 1.0 边界时必须重建（见 applyTilesetMaterial）；
+    // 区间内（0,1) 的连续变化只更新 u_alpha，不触发重编译。
+    const translucencyMode = alphaValue < 1
         ? Cesium.CustomShaderTranslucencyMode.TRANSLUCENT
         : Cesium.CustomShaderTranslucencyMode.INHERIT;
+
+    /** alpha uniform 声明（三个模式共用，value 为初始值） */
+    const alphaUniform = {
+        u_alpha: {
+            type: Cesium.UniformType.FLOAT,
+            value: alphaValue,
+        },
+    };
 
     if (mode === 'pureWhite') {
         return new Cesium.CustomShader({
             lightingModel: Cesium.LightingModel.UNLIT,
             translucencyMode,
+            uniforms: { ...alphaUniform },
             fragmentShaderText: `
                 void fragmentMain(FragmentInput fsInput, inout czm_modelMaterial material) {
                     material.diffuse = vec3(0.95, 0.95, 0.95);
-                    material.alpha = ${a};
+                    material.alpha = u_alpha;
                 }`,
         });
     }
@@ -1172,6 +1220,7 @@ function buildCustomShader(mode, Cesium, alpha = 1, bsInfo = null) {
                     }),
                     type: Cesium.UniformType.SAMPLER_2D,
                 },
+                ...alphaUniform,
             },
             vertexShaderText: `
                 void vertexMain(VertexInput vsInput, inout czm_modelVertexOutput vsOutput) {
@@ -1191,7 +1240,7 @@ function buildCustomShader(mode, Cesium, alpha = 1, bsInfo = null) {
                         float textureY = mod(positionMC.z, height) / height;
                         material.diffuse = texture(u_texture, vec2(textureX, textureY)).rgb;
                     }
-                    material.alpha = ${a};
+                    material.alpha = u_alpha;
                 }`,
         });
     }
@@ -1211,6 +1260,7 @@ function buildCustomShader(mode, Cesium, alpha = 1, bsInfo = null) {
         return new Cesium.CustomShader({
             lightingModel: Cesium.LightingModel.UNLIT,
             translucencyMode,
+            uniforms: { ...alphaUniform },
             fragmentShaderText: `
                 void fragmentMain(FragmentInput fsInput, inout czm_modelMaterial material) {
                     float bottomHeight = ${bottomZ};
@@ -1220,7 +1270,7 @@ function buildCustomShader(mode, Cesium, alpha = 1, bsInfo = null) {
                         0.0, 1.0);
                     // 绿(低) → 红(高) 渐变
                     material.diffuse = mix(vec3(0.0, 0.8, 0.0), vec3(0.8, 0.0, 0.0), heightRatio);
-                    material.alpha = ${a};
+                    material.alpha = u_alpha;
                 }`,
         });
     }

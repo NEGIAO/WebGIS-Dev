@@ -68,6 +68,7 @@ from .upstream import (
     _record_agent_call_safe,
     _sanitize_history,
     _try_get_location_from_ip_async,
+    describe_empty_upstream,
 )
 from .utils import (
     _model_dump_compat,
@@ -258,7 +259,7 @@ async def agent_chat_completions(
         if not reply and not tool_calls:
             raise HTTPException(
                 status_code=status.HTTP_502_BAD_GATEWAY,
-                detail="Agent upstream returned empty content.",
+                detail=f"Agent upstream returned empty content. {describe_empty_upstream(upstream_data)}",
             )
 
         # 按 token 消耗折算 API 配额（tokens_per_unit tokens = 1 额度，单次至少扣 1）。
@@ -520,7 +521,7 @@ async def agent_chat_default_proxy(
         if not reply and not tool_calls:
             raise HTTPException(
                 status_code=status.HTTP_502_BAD_GATEWAY,
-                detail="Agent upstream returned empty content.",
+                detail=f"Agent upstream returned empty content. {describe_empty_upstream(upstream_data)}",
             )
 
         # 默认 AI 模式：免费服务，不扣减额度，仅记录 usage 供展示
@@ -944,7 +945,7 @@ async def agent_chat_proxy(
         if not reply and not tool_calls:
             raise HTTPException(
                 status_code=status.HTTP_502_BAD_GATEWAY,
-                detail="Agent upstream returned empty content.",
+                detail=f"Agent upstream returned empty content. {describe_empty_upstream(upstream_data)}",
             )
 
         data = {

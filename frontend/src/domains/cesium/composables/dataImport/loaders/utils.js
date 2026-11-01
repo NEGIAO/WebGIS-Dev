@@ -192,6 +192,46 @@ export function forceDataSourceClampToGround(dataSource, Cesium) {
 }
 
 /**
+ * 贴地广告牌防裁切：关掉 CLAMP_TO_GROUND 广告牌的深度测试。
+ *
+ * 背景：`GeoJsonDataSource` / `KmlDataSource` 造点要素时生成的是
+ * `BillboardGraphics`（见 Cesium `createPoint`：只设 verticalOrigin=BOTTOM、
+ * heightReference=CLAMP_TO_GROUND、image、position 四项，**没有 point**），
+ * 图标底部锚在地形上。斜视时更靠近相机的地形面在深度缓冲里压过图标下半部分，
+ * 表现为「图标下半截被裁掉」；俯视/平视时又完好——正是「某些缩放层级显示不全」。
+ *
+ * Cesium 官方对贴地广告牌的处理是 `disableDepthTestDistance = Infinity`
+ * （Sandcastle Billboards 示例同做法），使图标不再参与深度测试。
+ * 只处理 `heightReference === CLAMP_TO_GROUND` 的广告牌：非贴地广告牌被山体遮挡
+ * 是正确行为，不应一并关掉。
+ *
+ * @param {Cesium.CustomDataSource|Cesium.GeoJsonDataSource|Cesium.KmlDataSource} dataSource
+ * @param {Cesium} Cesium - Cesium 命名空间
+ * @returns {number} 被处理的广告牌数量
+ */
+export function raiseClampedBillboards(dataSource, Cesium) {
+    const entities = dataSource?.entities?.values;
+    if (!Cesium?.HeightReference || !Array.isArray(entities)) return 0;
+    const clampRef = Cesium.HeightReference.CLAMP_TO_GROUND;
+    const now = Cesium.JulianDate.now();
+    let count = 0;
+    for (const entity of entities) {
+        const billboard = entity?.billboard;
+        if (!billboard) continue;
+        try {
+            const raw = billboard.heightReference;
+            const value = raw && typeof raw.getValue === 'function' ? raw.getValue(now) : raw;
+            if (value !== clampRef) continue;
+            billboard.disableDepthTestDistance = Number.POSITIVE_INFINITY;
+            count += 1;
+        } catch {
+            /* 单个实体失败不影响其余 */
+        }
+    }
+    return count;
+}
+
+/**
  * 解析 KML 文本中地面几何要素的「Folder run」叠放序号。
  *
  * 背景：一个 KML/KMZ 内常按 Folder 组织多个面数据图层（如 HENU.kmz：

@@ -17,6 +17,8 @@
  */
 
 import { pickEarthPoint, cartesianToLngLat } from './scenePicker.js';
+// 透明度缩放与矢量类共用同一实现（快照原始色 × 系数，可反复调节不衰减）
+import { applyEntityListOpacity } from '../dataImport/dataSourceDisplay.js';
 
 /** 与 OL useRouteStepStyles 色板一致（域边界禁止反向 import @ol，本地常量化） */
 const BUS_PALETTE = ['#3B82F6', '#10B981', '#8B5CF6', '#F59E0B', '#EC4899', '#06B6D4'];
@@ -85,6 +87,8 @@ function parseLonLatText(text) {
 export function createCesiumRouteFeature({ getCesium, getViewer, cesiumLayersStore }) {
     /** 已成图的路线句柄：mode('bus'|'drive') → { id, entities, stepPositions, positions } */
     const routeHandles = new Map();
+    /** 透明度原始色快照：routeId → Map<entityId, snapshot>（删档/复位时同步清理） */
+    const routeOpacitySnapshots = new Map();
     /** 当前步骤预览临时实体 */
     let previewEntities = [];
     /** 进行中的选点：{ type, resolve, handler } */
@@ -175,6 +179,8 @@ export function createCesiumRouteFeature({ getCesium, getViewer, cesiumLayersSto
         const handle = routeHandles.get(mode);
         if (!handle) return;
         handle.entities.forEach(removeEntitySafe);
+        // 快照与句柄同生命周期：不清理会让同一 id 重建后沿用旧快照（颜色基线错位）
+        routeOpacitySnapshots.delete(String(handle.id));
         routeHandles.delete(mode);
     }
 
@@ -452,10 +458,23 @@ export function createCesiumRouteFeature({ getCesium, getViewer, cesiumLayersSto
     }
 
     function setOpacity(id, opacity) {
-        // 路线实体颜色在创建时已带透明度基线，此处整体乘系数需逐实体回放；
-        // 方案 P2 简化：TOC 对 route 类关闭 supportsOpacity（见 store OPACITY_SUPPORTED_TYPES），本方法留作接口对齐
-        void id;
-        void opacity;
+        // 路线实体颜色在创建时已带透明度基线（如主干 0.9、步行段更低），
+        // 因此不能直接写 alpha，必须「快照原始色 × 系数」——否则反复拖动滑杆会逐次衰减。
+        // 与矢量类共用 applyEntityListOpacity；快照按路线 id 隔离，互不串扰。
+        const key = String(id || '');
+        const handle = [...routeHandles.values()].find((h) => h.id === key);
+        if (!handle?.entities?.length) return;
+        const Cesium = getC();
+        if (!Cesium) return;
+
+        let snapshots = routeOpacitySnapshots.get(key);
+        if (!snapshots) {
+            snapshots = new Map();
+            routeOpacitySnapshots.set(key, snapshots);
+        }
+        const alpha = Math.min(1, Math.max(0, Number(opacity) || 0));
+        applyEntityListOpacity(Cesium, handle.entities, alpha, snapshots);
+        safeViewer()?.scene?.requestRender?.();
     }
 
     function flyTo(id) {
@@ -470,6 +489,7 @@ export function createCesiumRouteFeature({ getCesium, getViewer, cesiumLayersSto
             try { cesiumLayersStore.purgeRecord(handle.id); } catch { /* store 未就绪时忽略 */ }
         }
         routeHandles.clear();
+        routeOpacitySnapshots.clear();
         settlePendingPick(null);
     }
 

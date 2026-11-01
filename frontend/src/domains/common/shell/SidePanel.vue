@@ -821,9 +821,14 @@ onUnmounted(() => {
     flex: 1;
     min-width: 0;
     height: 100%;
-    background: #fff;
+    background: var(--bg-primary);
     overflow: hidden;
-    box-shadow: 2px 0 8px rgba(0, 0, 0, 0.1);
+    /* 去「单层中性黑」：接触层贴边定界，负扩散层只向右溢出，
+       读作「浮在地图之上」而不是「一块被投影糊过的白板」。
+       色调走 --shadow-rgb，切蓝主题自动换调（原 2px 0 8px rgba(0,0,0,.1)） */
+    box-shadow:
+        1px 0 2px rgba(var(--shadow-rgb), 0.05),
+        10px 0 28px -16px rgba(var(--shadow-rgb), 0.4);
     transition: width 0.3s ease;
     /* 简写顺序：左上 右上 右下 左下 */
     border-radius: 16px 0 0 16px;
@@ -831,18 +836,24 @@ onUnmounted(() => {
 
 /* 折叠手柄 */
 .toggle-handle {
-    background-color: transparent;
     width: 30px;
     height: 60px;
     align-self: center;
-    background: #ffffff;
+    background: var(--bg-primary);
     display: flex;
     align-items: center;
     justify-content: center;
     cursor: pointer;
     border-radius: 12px 0 0 12px;
-    transition: all 0.2s ease;
-    z-index: var(--z-toast);
+    /* 手柄是从面板「长出来」的一截，不是独立贴纸：给它向左溢出的轻投影，
+       视觉上与面板连成一体。过渡只列实际变化的属性（原 all 会把尺寸也纳入过渡） */
+    box-shadow:
+        -1px 0 2px rgba(var(--shadow-rgb), 0.05),
+        -6px 0 16px -12px rgba(var(--shadow-rgb), 0.45);
+    transition: background-color 0.2s ease, box-shadow 0.2s ease;
+    /* 原为 --z-toast(9999)：折叠手柄会压在所有模态/弹层之上，属层级误用。
+       按 theme.css 的分层约定，地图浮层用 --z-float */
+    z-index: var(--z-float);
 
     /* 相对 shell 定位，伸出面板左侧 */
     position: absolute;
@@ -853,7 +864,11 @@ onUnmounted(() => {
 
 .toggle-handle:hover {
     background: var(--brand-accent-dark);
-    width: 30px;
+    /* 原 hover 里还写着 width: 30px —— 与常态同值，是条无效规则，已删。
+       悬停时投影同步加深，读作「被按住而非被染色」 */
+    box-shadow:
+        -1px 0 2px rgba(var(--shadow-rgb), 0.08),
+        -8px 0 20px -12px rgba(var(--shadow-rgb), 0.55);
 }
 
 .handle-icon {
@@ -863,7 +878,13 @@ onUnmounted(() => {
     width: 20px;
     height: 20px;
     /* 增加平滑的过渡动画 */
-    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), color 0.2s ease;
+}
+
+/* 悬停时底色换成深绿，绿图标压深绿仅约 2.9:1（低于 UI 组件 3:1 下限），
+   故图标同步转白；这是「状态承载可读性」而非装饰 */
+.toggle-handle:hover .handle-icon {
+    color: #fff;
 }
 
 .handle-icon.is-flipped {
@@ -882,18 +903,22 @@ onUnmounted(() => {
     overflow: hidden;
 }
 
+/* 原为 linear-gradient(30deg, rgba(235,222,222,0) → --brand-accent)：
+   起点带一截暖粉灰（与绿色主题无关），终点是品牌绿，而文字用深绿 ——
+   绿底绿字对比仅约 2:1，属可读性缺陷。改为淡品牌底 + 深绿字（约 4.9:1），
+   同时落实「纯装饰性色带一律移除」的纪律 */
 .active-feature-banner {
     padding: 8px 14px;
-    background: linear-gradient(30deg, rgba(235, 222, 222, 0), var(--brand-accent));
+    background: rgba(var(--brand-primary-rgb), 0.08);
     color: var(--brand-primary-dark);
-    font-size: 12px;
+    font-size: var(--fs-sm);
     font-weight: 600;
 }
 
 .toolbox-content {
     flex: 1;
     overflow-y: auto;
-    background: #fff;
+    background: var(--bg-primary);
 }
 
 .panel-content.no-padding {
@@ -981,32 +1006,33 @@ onUnmounted(() => {
     height: 100%;
     gap: 0;
     padding: 0 !important;
-    background: #fff;
+    background: var(--bg-primary);
     border-radius: 16px 0 0 16px;
 }
 
 .news-header-bar {
     padding: 8px;
     flex-shrink: 0;
-    border-bottom: 1px solid #f0f0f0;
+    /* 结构性分隔线：规范例外，保留；但改用令牌色，不再硬编码 #f0f0f0 */
+    border-bottom: 1px solid rgba(var(--shadow-rgb), 0.07);
 }
 
 .news-logo {
-    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    font-family: var(--font-en);
     font-size: 24px;
     font-weight: 700;
-    background: linear-gradient(135deg, var(--brand-primary), var(--brand-primary-dark));
-    background-clip: text;
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
+    /* 原为 background-clip: text 的渐变文字：24px/700 下渐变走向根本看不出，
+       只剩「颜色不匀」；且渐变文字在高对比模式与打印场景常整块消失 */
+    color: var(--brand-primary-dark);
     display: block;
     line-height: 1.2;
 }
 
 .news-subtitle {
-    font-family: 'Courier New', Courier, monospace;
+    font-family: var(--font-mono);
     font-size: 12px;
-    color: var(--text-muted);
+    /* 12px 用 --text-muted(#999) 仅约 2.8:1，不达 WCAG AA；降一档到 --text-secondary(约 5.7:1) */
+    color: var(--text-secondary);
     text-transform: uppercase;
     letter-spacing: 0.1em;
 }
@@ -1017,30 +1043,33 @@ onUnmounted(() => {
     gap: 6px;
     padding: 8px 16px;
     flex-shrink: 0;
-    border-bottom: 1px solid #f0f0f0;
+    border-bottom: 1px solid rgba(var(--shadow-rgb), 0.07);
 }
 
+/* 平台胶囊：去 #ddd 描边，改淡底；
+   原版散落 5 处硬编码绿（#13c64f / #268c0a / #0ea342 / #15883d），
+   且 active 底色是 rgba(0,153,204,.12) —— 一个蓝色跑在绿色主题里，全部收敛到品牌令牌 */
 .platform-chip {
     padding: 5px 12px;
-    border: 1px solid #ddd;
+    border: 0;
     border-radius: 20px;
-    background: transparent;
-    color: var(--text-muted);
-    font-family: 'Courier New', Courier, monospace;
+    background: rgba(var(--shadow-rgb), 0.05);
+    color: var(--text-secondary);
+    font-family: var(--font-mono);
     font-size: 12px;
     cursor: pointer;
-    transition: all 0.2s ease;
+    transition: background-color 0.2s ease, color 0.2s ease;
 }
 
 .platform-chip:hover {
-    border-color: #13c64f;
-    color: #268c0a;
+    background: rgba(var(--brand-primary-rgb), 0.1);
+    color: var(--brand-primary-dark);
 }
 
 .platform-chip.active {
-    background: rgba(0, 153, 204, 0.12);
-    border-color: #0ea342;
-    color: #15883d;
+    background: rgba(var(--brand-primary-rgb), 0.16);
+    color: var(--brand-primary-dark);
+    font-weight: 600;
 }
 
 .news-loading {
@@ -1050,8 +1079,8 @@ onUnmounted(() => {
     justify-content: center;
     gap: 12px;
     padding: 40px 16px;
-    color: var(--text-muted);
-    font-family: 'Courier New', Courier, monospace;
+    color: var(--text-secondary);
+    font-family: var(--font-mono);
     font-size: 12px;
 }
 
@@ -1059,17 +1088,19 @@ onUnmounted(() => {
     width: 6px;
     height: 6px;
     border-radius: 50%;
-    background: #0dcd4a;
+    background: var(--brand-primary);
     animation: dotPulse 1.2s ease-out infinite;
 }
 
+/* 波纹改用品牌色：原起点 #0dcd4a / rgba(5,165,59,.6) 是硬编码绿，
+   终点 rgba(0,212,255,0) 更是一枚青色——只因 alpha=0 才没被看出来 */
 @keyframes dotPulse {
     0%,
     100% {
-        box-shadow: 0 0 0 0 rgba(5, 165, 59, 0.6);
+        box-shadow: 0 0 0 0 rgba(var(--brand-primary-rgb), 0.55);
     }
     50% {
-        box-shadow: 0 0 0 12px rgba(0, 212, 255, 0);
+        box-shadow: 0 0 0 12px rgba(var(--brand-primary-rgb), 0);
     }
 }
 
@@ -1090,11 +1121,12 @@ onUnmounted(() => {
     border-radius: 6px;
     text-decoration: none;
     color: inherit;
-    transition: background 0.2s ease;
+    transition: background-color 0.2s ease;
 }
 
 .news-card:hover {
-    background: #f5f5f5;
+    /* 原 #f5f5f5 中性灰：与整页绿色调脱节，改用极淡品牌底 */
+    background: rgba(var(--brand-primary-rgb), 0.055);
 }
 
 .news-rank {
@@ -1104,27 +1136,31 @@ onUnmounted(() => {
     display: flex;
     align-items: center;
     justify-content: center;
-    font-family: 'Courier New', Courier, monospace;
+    font-family: var(--font-mono);
     font-size: 12px;
     font-weight: 600;
-    color: var(--text-muted);
+    color: var(--text-secondary);
     border-radius: 4px;
-    background: rgba(0, 0, 0, 0.08);
+    /* 原 rgba(0,0,0,.08) 中性黑：与全站冷调阴影语汇脱节 */
+    background: rgba(var(--shadow-rgb), 0.06);
 }
 
+/* 前三名的金/银/铜属「语义色」而非装饰——各自对应名次，不能统一成品牌绿。
+   但原取值 #f0b35a / #a0b8c8 / #c89070 在 10% 淡底上对比不足 2.5:1，
+   这里整体压深一档，既保住奖牌观感，又把文字拉到可读 */
 .rank-top1 {
-    color: #f0b35a;
-    background: rgba(240, 179, 90, 0.12);
+    color: var(--brand-gold-dark);
+    background: rgba(var(--brand-gold-rgb), 0.14);
 }
 
 .rank-top2 {
-    color: #a0b8c8;
-    background: rgba(160, 184, 200, 0.1);
+    color: #6b7f8c;
+    background: rgba(160, 184, 200, 0.16);
 }
 
 .rank-top3 {
-    color: #c89070;
-    background: rgba(200, 144, 112, 0.1);
+    color: #9c6644;
+    background: rgba(200, 144, 112, 0.16);
 }
 
 .news-body {
@@ -1133,7 +1169,7 @@ onUnmounted(() => {
 }
 
 .news-title {
-    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    font-family: var(--font-en);
     font-size: 14px;
     font-weight: 500;
     color: var(--text-primary);
@@ -1147,7 +1183,8 @@ onUnmounted(() => {
 }
 
 .news-card:hover .news-title {
-    color: #15ac3a;
+    /* 原 #15ac3a 硬编码绿，与 --brand-primary-dark 仅差几个色阶，统一回令牌 */
+    color: var(--brand-primary-dark);
 }
 
 .news-meta {
@@ -1155,9 +1192,10 @@ onUnmounted(() => {
 }
 
 .news-desc {
-    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    font-family: var(--font-en);
     font-size: 12px;
-    color: var(--text-muted);
+    /* 12px 用 --text-muted(#999) 仅约 2.8:1，不达 WCAG AA；降一档到 --text-secondary */
+    color: var(--text-secondary);
     line-height: 1.4;
     display: -webkit-box;
     -webkit-line-clamp: 2;
@@ -1171,10 +1209,11 @@ onUnmounted(() => {
 }
 
 .score-value {
-    font-family: 'Courier New', Courier, monospace;
+    font-family: var(--font-mono);
     font-size: 10px;
-    color: var(--text-muted);
-    background: rgba(0, 0, 0, 0.08);
+    /* 10px 小字用 #999 基本不可读；这类时长/热度属弱信息，给 --text-secondary 已足够 */
+    color: var(--text-secondary);
+    background: rgba(var(--shadow-rgb), 0.06);
     padding: 2px 8px;
     border-radius: 10px;
     white-space: nowrap;
@@ -1183,14 +1222,15 @@ onUnmounted(() => {
 .news-empty {
     padding: 40px 16px;
     text-align: center;
-    color: var(--text-muted);
-    font-family: 'Courier New', Courier, monospace;
+    color: var(--text-secondary);
+    font-family: var(--font-mono);
     font-size: 12px;
 }
 
 .news-footer {
     padding: 12px 16px;
-    border-top: 1px solid #f0f0f0;
+    /* 结构性分隔线：规范例外，保留但改用令牌色 */
+    border-top: 1px solid rgba(var(--shadow-rgb), 0.07);
     flex-shrink: 0;
 }
 
@@ -1198,9 +1238,9 @@ onUnmounted(() => {
     display: flex;
     align-items: center;
     gap: 6px;
-    font-family: 'Courier New', Courier, monospace;
+    font-family: var(--font-mono);
     font-size: 10px;
-    color: var(--text-muted);
+    color: var(--text-secondary);
 }
 
 .footer-status.live {

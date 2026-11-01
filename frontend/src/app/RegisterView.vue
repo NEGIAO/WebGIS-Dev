@@ -1675,15 +1675,17 @@ onUnmounted(() => {
 .container {
     position: relative;
     z-index: 1;
-    /* 框体规格对齐 LayerPropertiesDialog 模板：
-       通主题令牌（--panel-radius / --panel-shadow），中性发丝描边；
-       box-shadow 首层为 ≈1px 白色外缘（发丝线之外、任何背景下可见） */
+    /* 去描边（V3.6.47 视觉纪律）：原来的中性发丝描边由「白色外缘 + 接触阴影 + 大扩散」
+       三层承担。白色外缘保留 —— 本页底色是经纬网/光斑装饰层，卡片需要一圈亮边把边缘
+       从纹样里「切」出来；这是与背景的对比边界，不是装饰性描边（同 .ui-panel 的
+       0 0 0 1px #fff 手法）。大扩散取负扩散值，只在静态留一层几乎不可见的「浮起」 */
     background: var(--bg-primary);
-    border: var(--panel-border, 1px solid rgba(0, 0, 0, 0.06));
+    border: 0;
     border-radius: var(--panel-radius, 12px);
     box-shadow:
-        0 0 0 1px #fff,
-        var(--panel-shadow, 0 8px 32px rgba(0, 0, 0, 0.15));
+        0 0 0 1px rgba(255, 255, 255, 0.9),
+        0 1px 2px rgba(var(--shadow-rgb), 0.04),
+        0 30px 60px -40px rgba(var(--shadow-rgb), 0.55);
     width: 100%;
     max-width: 440px;
     /* 扣除容器上下 padding（与 .register-container 同式），保证居中时头尾不被裁切 */
@@ -1756,8 +1758,10 @@ onUnmounted(() => {
     gap: 2px;
     padding: 2px;
     border-radius: 999px;
+    /* 去描边：胶囊形状 + 14% 白底已经在渐变头上界定出轮廓，
+       再描一圈 28% 白边属重复强调（V3.6.47 视觉纪律 5「有形状者不再描边」） */
     background: rgba(255, 255, 255, 0.14);
-    border: 1px solid rgba(255, 255, 255, 0.28);
+    border: 0;
     flex-shrink: 0;
 }
 
@@ -1770,10 +1774,10 @@ onUnmounted(() => {
     height: 34px;
     border-radius: 999px;
     background: rgba(255, 255, 255, 0.14);
-    border: 1px solid rgba(255, 255, 255, 0.28);
+    border: 0;
     color: rgba(255, 255, 255, 0.92);
     flex-shrink: 0;
-    transition: background 0.15s ease, color 0.15s ease;
+    transition: background-color 0.15s ease, color 0.15s ease;
 }
 
 .back-home-icon:hover {
@@ -1908,27 +1912,30 @@ onUnmounted(() => {
     border-radius: 3px;
 }
 
+/* 分段控件：轨道去描边，改用淡品牌底与白卡拉开明度差 ——
+   此处的描边既不是形状也不是状态，纯属「三件套」残留 */
 .mode-switch {
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 4px;
     padding: 4px;
-    background: var(--bg-secondary);
-    border: 1px solid var(--border-light);
+    background: rgba(var(--brand-primary-rgb), 0.055);
+    border: 0;
     border-radius: 12px;
     margin-bottom: 18px;
 }
 
 .mode-btn {
-    border: none;
+    border: 0;
     background: transparent;
     color: var(--text-secondary);
     padding: 9px 12px;
     font-size: 14px;
     font-weight: 600;
+    /* 同心圆角：轨道 12px − 内边距 4px + 1，滑块贴边时不露缝 */
     border-radius: 9px;
     cursor: pointer;
-    transition: all 0.2s ease;
+    transition: background-color 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
 }
 
 .mode-btn:hover:not(.active) {
@@ -1936,10 +1943,15 @@ onUnmounted(() => {
     background: rgba(var(--brand-primary-rgb), 0.08);
 }
 
+/* 当前态不再用品牌实心块：原来它与下方提交按钮同时发绿，视线不知道主操作在哪。
+   改为「白色滑块 + 品牌深色文字 + 极轻投影」—— iOS 分段控件的经典手法，
+   全页只保留提交按钮一处实心绿（V3.6.47 纪律 2「单一强调源」） */
 .mode-btn.active {
     background: var(--brand-primary);
     color: #fff;
-    box-shadow: 0 2px 8px rgba(var(--brand-primary-rgb), 0.35);
+    box-shadow:
+        0 1px 2px rgba(var(--shadow-rgb), 0.05),
+        0 8px 18px -14px rgba(var(--shadow-rgb), 0.5);
 }
 
 .oauth-section {
@@ -1950,7 +1962,9 @@ onUnmounted(() => {
 
 .oauth-btn {
     width: 100%;
-    border: 1px solid var(--border-light);
+    /* 去描边：白面 + 双层轻投影已足够「像个按钮」，
+       与下方实心主按钮构成「浮 / 实」对比，而非「框 / 实」对比（V3.6.47 纪律 6） */
+    border: 0;
     border-radius: 10px;
     padding: 11px 14px;
     background: var(--bg-primary);
@@ -1962,7 +1976,10 @@ onUnmounted(() => {
     align-items: center;
     justify-content: center;
     gap: 10px;
-    transition: all 0.2s ease;
+    box-shadow:
+        0 1px 2px rgba(var(--shadow-rgb), 0.05),
+        0 10px 22px -18px rgba(var(--shadow-rgb), 0.55);
+    transition: background-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
 }
 
 .oauth-btn i {
@@ -1985,10 +2002,12 @@ onUnmounted(() => {
 }
 
 .oauth-btn:hover {
-    border-color: rgba(var(--brand-primary-rgb), 0.55);
+    /* 无描边可换：hover 全靠「底色微染 + 抬高 + 投影加深」三件事 */
     background: rgba(var(--brand-primary-rgb), 0.04);
     transform: translateY(-1px);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.07);
+    box-shadow:
+        0 1px 2px rgba(var(--shadow-rgb), 0.06),
+        0 18px 30px -20px rgba(var(--shadow-rgb), 0.6);
 }
 
 .oauth-divider {
@@ -2140,14 +2159,15 @@ input:disabled {
 .verify-code-btn {
     white-space: nowrap;
     padding: 10px 14px;
-    border: 1px solid rgba(var(--brand-primary-rgb), 0.35);
+    /* 去描边：品牌色淡底本身已界出色块，0.35 的描边属重复强调 */
+    border: 0;
     border-radius: 10px;
     background: rgba(var(--brand-primary-rgb), 0.08);
     color: var(--brand-primary-dark);
     font-size: 13px;
     font-weight: 600;
     cursor: pointer;
-    transition: all 0.2s ease;
+    transition: background-color 0.2s ease, color 0.2s ease;
     display: flex;
     align-items: center;
     gap: 5px;
@@ -2155,8 +2175,8 @@ input:disabled {
 
 .send-code-btn:hover:not(:disabled),
 .verify-code-btn:hover:not(:disabled) {
+    /* 无边框可加深，改为底色提一档表达 hover */
     background: rgba(var(--brand-primary-rgb), 0.15);
-    border-color: var(--brand-primary);
 }
 
 .send-code-btn:disabled,
@@ -2168,7 +2188,8 @@ input:disabled {
 .verified-badge {
     color: var(--brand-primary-dark);
     background: rgba(var(--brand-primary-rgb), 0.1);
-    border: 1px solid rgba(var(--brand-primary-rgb), 0.3);
+    /* 淡品牌底已界定形状，去掉描边 */
+    border: 0;
     border-radius: 10px;
     padding: 0 12px;
     font-weight: 600;
@@ -2187,29 +2208,33 @@ input:disabled {
 }
 
 .avatar-item {
-    border: 1px solid var(--border-light);
+    /* 去描边：改用极淡中性底界定色块；未选中态不需要被「框」住 */
+    border: 0;
     border-radius: 12px;
-    background: var(--bg-secondary);
+    background: rgba(var(--shadow-rgb), 0.04);
     color: var(--text-secondary);
     padding: 8px 4px;
     display: grid;
     justify-items: center;
     gap: 5px;
     cursor: pointer;
-    transition: all 0.2s ease;
+    transition: background-color 0.2s ease, color 0.2s ease, box-shadow 0.2s ease,
+        transform 0.2s ease;
 }
 
 .avatar-item:hover {
     transform: translateY(-1px);
-    border-color: rgba(var(--brand-primary-rgb), 0.5);
     background: rgba(var(--brand-primary-rgb), 0.06);
 }
 
+/* 选中态：描边承载「已选择」这一语义，属规范明列的例外；
+   但不再用 border（占布局宽度），改为外扩环状阴影，几何更稳 */
 .avatar-item.active {
-    border-color: var(--brand-primary);
     background: rgba(var(--brand-primary-rgb), 0.08);
     color: var(--brand-primary-dark);
-    box-shadow: 0 0 0 2px rgba(var(--brand-primary-rgb), 0.18);
+    box-shadow:
+        0 0 0 1px var(--brand-primary),
+        0 0 0 4px rgba(var(--brand-primary-rgb), 0.16);
 }
 
 .avatar-item img {
@@ -2262,7 +2287,7 @@ input:disabled {
     font-size: 14px;
     cursor: pointer;
     font-weight: 600;
-    transition: all 0.2s ease;
+    transition: background-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -2274,15 +2299,21 @@ input:disabled {
 }
 
 .quick-btn.guest-login {
+    /* 白面次级按钮：双层轻投影取代描边（V3.6.47 纪律 6） */
     background: var(--bg-primary);
-    border: 1px solid rgba(var(--brand-primary-rgb), 0.4);
+    border: 0;
     color: var(--brand-primary-dark);
+    box-shadow:
+        0 1px 2px rgba(var(--shadow-rgb), 0.05),
+        0 10px 22px -18px rgba(var(--shadow-rgb), 0.55);
 }
 
 .quick-btn.guest-login:hover:not(:disabled) {
     background: rgba(var(--brand-primary-rgb), 0.06);
-    border-color: var(--brand-primary);
     transform: translateY(-1px);
+    box-shadow:
+        0 1px 2px rgba(var(--shadow-rgb), 0.06),
+        0 18px 30px -20px rgba(var(--shadow-rgb), 0.6);
 }
 
 .quick-btn.confirm-login {
@@ -2319,9 +2350,12 @@ input:disabled {
     font-size: 15px;
     font-weight: 600;
     letter-spacing: 0.3px;
-    transition: all 0.2s ease;
+    transition: transform 0.2s ease, box-shadow 0.2s ease, filter 0.2s ease;
     margin-top: 18px;
-    box-shadow: 0 4px 12px rgba(var(--brand-primary-rgb), 0.3);
+    /* 双层品牌调投影：接触层定边界，负扩散层只做「微微抬起」 */
+    box-shadow:
+        0 1px 2px rgba(var(--brand-primary-rgb), 0.2),
+        0 10px 22px -16px rgba(var(--brand-primary-rgb), 0.75);
 }
 
 .btn:hover:not(:disabled) {
@@ -2394,7 +2428,8 @@ input:disabled {
     align-items: flex-start;
     padding: 13px 14px;
     margin-bottom: 18px;
-    border: 1px solid rgba(var(--brand-primary-rgb), 0.3);
+    /* 提示块：淡品牌底已界定范围，描边属重复强调（同 .verified-badge 处理） */
+    border: 0;
     border-radius: 12px;
     background: rgba(var(--brand-primary-rgb), 0.07);
     color: var(--text-brand-dark);
@@ -2436,7 +2471,11 @@ input:disabled {
     border-radius: 16px;
     width: 90%;
     max-width: 400px;
-    box-shadow: 0 24px 48px rgba(0, 0, 0, 0.22);
+    /* 弹层浮在 45% 深色遮罩上，接触层定边界、大扩散负责「悬浮」；
+       中性黑改为品牌冷调，与全站阴影语汇统一 */
+    box-shadow:
+        0 1px 2px rgba(var(--shadow-rgb), 0.1),
+        0 30px 60px -30px rgba(var(--shadow-rgb), 0.6);
     overflow: hidden;
     animation: fadeIn 0.3s ease;
 }
@@ -2501,13 +2540,15 @@ input:disabled {
     display: block;
     width: 100%;
     background: none;
+    /* 虚线描边保留：它表达「此处可重试」的动作语义，不是装饰层级
+       （规范例外：语义态承载可用性信息，不受去描边约束） */
     border: 1px dashed var(--border-light);
     padding: 10px;
     border-radius: 10px;
     font-size: 13px;
     color: var(--text-secondary);
     cursor: pointer;
-    transition: all 0.2s;
+    transition: border-color 0.2s ease, color 0.2s ease;
 }
 
 .resend-btn:hover {

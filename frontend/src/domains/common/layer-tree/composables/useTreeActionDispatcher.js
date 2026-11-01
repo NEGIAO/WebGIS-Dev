@@ -15,6 +15,8 @@ import {
     handleLayerTreeContextAction,
 } from '@common/layer-tree';
 import { handleCesiumLayerTreeAction } from '@cesium-domain/layers/toc-adapters/cesiumTocActions';
+import { CESIUM_NODE_PREFIX } from '@cesium-domain/stores/cesiumLayerNodeBuilder';
+import { normalizeTocLayerIdList } from '../protocol';
 import { handleRemoteServiceTreeAction } from '@common/basemap/remoteServiceTocActions';
 import { RSVC_NODE_PREFIX } from '@common/basemap/remoteServices';
 
@@ -44,9 +46,23 @@ export function useTreeActionDispatcher({
     const multiSelectedLayerIds = ref([]);
     let recursiveSelectionToken = 0;
 
-    const availableLayerIds = computed(() =>
-        (props.userLayers || []).map((layer) => String(layer?.id || '').trim()).filter(Boolean),
-    );
+    /**
+     * 可参与多选的图层 id 全集。
+     *
+     * 必须包含三维记录：`applyRecursiveSelection` / `pruneSelectedLayerIds` 都会用本集合
+     * 过滤候选 id，早先只收 `userLayers`（纯 2D）→ `cesium:*` 节点被静默剔除，
+     * 表现为「右键加入多选没反应、批量菜单永远不出现」。
+     */
+    const availableLayerIds = computed(() => {
+        const twoDIds = (props.userLayers || [])
+            .map((layer) => String(layer?.id || '').trim())
+            .filter(Boolean);
+        const cesiumIds = (cesiumLayersStore.records || [])
+            .map((record) => String(record?.id || '').trim())
+            .filter(Boolean)
+            .map((id) => `${CESIUM_NODE_PREFIX}${id}`);
+        return [...twoDIds, ...cesiumIds];
+    });
 
     const layerActionMap = computed(() => {
         const map = new Map();
@@ -131,9 +147,38 @@ export function useTreeActionDispatcher({
         layerStore.onDrop(targetLayerId);
     }
 
-    function handleLayerTreeAction(evt) {
+    function handleLayerTreeAction(rawEvt) {
+        let evt = rawEvt;
         const type = evt?.type;
         if (!type) return;
+
+        /**
+         * 批量操作可能同时勾选 2D 与 3D 图层：按前缀拆成两批分别下发。
+         * 不拆的话，通用链路会把 `cesium:*` 目标当成 2D 图层 id 去 emit，
+         * HomeView 侧找不到对应托管图层 → 整批静默失败。
+         */
+        if (type === 'batch-layer-operation') {
+            const allIds = normalizeTocLayerIdList(evt.layerIds);
+            const cesiumIds = allIds.filter((id) => id.startsWith(CESIUM_NODE_PREFIX));
+            if (cesiumIds.length) {
+                const consumed = handleCesiumLayerTreeAction(
+                    { ...evt, layerIds: cesiumIds },
+                    cesiumLayersStore,
+                );
+                const restIds = allIds.filter((id) => !id.startsWith(CESIUM_NODE_PREFIX));
+                // 三维侧未识别该操作类型时整批放弃，避免「只处理了一半还报成功」
+                if (!consumed) return;
+                // 三维批量走元数据店，不经过 contextActionManager 的提示链路，此处补齐反馈
+                const op = String(evt.operation || '')
+                    .trim()
+                    .toLowerCase();
+                const label =
+                    op === 'set-visible' ? (evt.visible ? '显示' : '隐藏') : op === 'remove' ? '移除' : '导出';
+                message?.success?.(`已批量${label} ${cesiumIds.length} 个三维图层`);
+                if (!restIds.length) return;
+                evt = { ...evt, layerIds: restIds };
+            }
+        }
 
         // Cesium 三维数据节点（id 前缀 cesium:）：直调元数据店，2D 链零参与
         if (handleCesiumLayerTreeAction(evt, cesiumLayersStore)) return;

@@ -41,18 +41,21 @@
                         <span class="menu-header-title">{{ t('topbar.featureMenu') }}</span>
                     </div>
                     <div class="menu-body">
-                        <!-- 核心功能引入 2x2 现代网格排版 -->
+                        <!-- 主操作：全面板唯一的实底块 -->
+                        <button
+                            class="menu-item menu-primary"
+                            @click="handleOpenToolbox"
+                        >
+                            <layers-icon
+                                :size="16"
+                                class="m-icon"
+                            />
+                            {{ t('topbar.layerManage') }}
+                        </button>
+
+                        <!-- 分析工具 -->
+                        <div class="menu-section-title">{{ t('topbar.sectionTools') }}</div>
                         <div class="menu-grid-layout">
-                            <button
-                                class="menu-item"
-                                @click="handleOpenToolbox"
-                            >
-                                <layers-icon
-                                    :size="16"
-                                    class="m-icon"
-                                />
-                                {{ t('topbar.layerManage') }}
-                            </button>
                             <button
                                 class="menu-item"
                                 @click="handleOpenCompass"
@@ -63,6 +66,21 @@
                                 />
                                 {{ t('topbar.compass') }}
                             </button>
+                            <button
+                                class="menu-item"
+                                @click="handleOpenBuildings"
+                            >
+                                <building2-icon
+                                    :size="16"
+                                    class="m-icon"
+                                />
+                                {{ t('topbar.buildings') }}
+                            </button>
+                        </div>
+
+                        <!-- 路线规划 -->
+                        <div class="menu-section-title">{{ t('topbar.sectionRoute') }}</div>
+                        <div class="menu-grid-layout">
                             <button
                                 class="menu-item"
                                 @click="handleOpenBusPlanner"
@@ -83,48 +101,44 @@
                                 />
                                 {{ t('topbar.drivePlanner') }}
                             </button>
+                        </div>
+
+                        <!-- 视图与调试：开关项，状态点表达开/关 -->
+                        <div class="menu-section-title">{{ t('topbar.sectionView') }}</div>
+                        <div class="menu-toggle-row">
                             <button
-                                class="menu-item"
-                                @click="handleOpenBuildings"
+                                class="menu-toggle"
+                                :class="{ 'is-on': isWeatherBoardMode }"
+                                @click="handleToggleWeatherBoard"
                             >
-                                <building2-icon
-                                    :size="16"
+                                <span class="toggle-dot"></span>
+                                <component
+                                    :is="isWeatherBoardMode ? MapIcon : CloudSunIcon"
+                                    :size="15"
                                     class="m-icon"
                                 />
-                                {{ t('topbar.buildings') }}
+                                <span class="menu-toggle-label">{{
+                                    isWeatherBoardMode ? t('topbar.backToMap') : t('topbar.weatherBoard')
+                                }}</span>
+                            </button>
+                            <button
+                                class="menu-toggle"
+                                :class="{ 'is-on': logMonitorVisible }"
+                                @click="handleToggleLogMonitor"
+                            >
+                                <span class="toggle-dot"></span>
+                                <activity-icon
+                                    :size="15"
+                                    class="m-icon"
+                                />
+                                <span class="menu-toggle-label">{{
+                                    logMonitorVisible ? t('topbar.closeLogMonitor') : t('topbar.logMonitor')
+                                }}</span>
                             </button>
                         </div>
 
-                        <div class="menu-divider"></div>
-
-                        <!-- 状态控制全宽项 -->
-                        <button
-                            class="menu-item status-item"
-                            @click="handleToggleWeatherBoard"
-                        >
-                            <component
-                                :is="isWeatherBoardMode ? MapIcon : CloudSunIcon"
-                                :size="16"
-                                class="m-icon"
-                            />
-                            {{ isWeatherBoardMode ? t('topbar.backToMap') : t('topbar.weatherBoard') }}
-                        </button>
-
-                        <button
-                            class="menu-item status-item"
-                            @click="handleToggleLogMonitor"
-                        >
-                            <activity-icon
-                                :size="16"
-                                class="m-icon"
-                            />
-                            {{ logMonitorVisible ? t('topbar.closeLogMonitor') : t('topbar.logMonitor') }}
-                        </button>
-
-                        <div class="menu-divider"></div>
-                        <div class="menu-group-title">{{ t('topbar.quickLocations') }}</div>
-
-                        <!-- 常用地点流式标签包裹 -->
+                        <!-- 常用地点 -->
+                        <div class="menu-section-title">{{ t('topbar.quickLocations') }}</div>
                         <div class="quick-loc-container">
                             <button
                                 v-for="loc in quickLocations"
@@ -139,16 +153,13 @@
                             </button>
                         </div>
 
-                        <div class="menu-divider"></div>
+                        <!-- 彩蛋：与业务功能分开，只做趣味入口 -->
                         <button
-                            class="menu-item soup-item"
+                            class="menu-soup"
                             :title="t('topbar.soupTitle')"
                             @click="handleSoup"
                         >
-                            <smile-icon
-                                :size="16"
-                                class="m-icon"
-                            />
+                            <smile-icon :size="14" />
                             {{ t('topbar.soup') }}
                         </button>
                     </div>
@@ -1006,65 +1017,156 @@ onBeforeUnmount(() => {
     gap: 8px;
 }
 
-/* ---- 菜单单项：白卡片 + 浅绿边框（与 DrawPanel tool-btn 一致） ---- */
+/* ---- 菜单项 ----
+   结构：主操作（实底宽块）→ 分组标题 + 2 列功能格 → 开关行 → 地点胶囊 → 彩蛋。
+   层次靠「底色浓度 + 字重 + 宽度」三轴拉开，不靠描边。 */
 .menu-item {
     width: 100%;
-    border: 2px solid var(--border-brand-light);
+    border: none;
     text-align: left;
-    background: white;
+    background: transparent;
     border-radius: 8px;
-    padding: 10px 12px;
-    color: var(--brand-accent-muted);
+    padding: 9px 10px;
+    color: var(--text-secondary);
     cursor: pointer;
     font-size: 13px;
     font-weight: 500;
     display: flex;
     align-items: center;
     box-sizing: border-box;
-    transition: all 0.2s;
+    transition: background 0.2s, color 0.2s;
 }
 
 .menu-item:hover {
-    border-color: var(--brand-accent);
-    background: var(--bg-hover);
+    background: rgba(var(--brand-primary-rgb), 0.08);
     color: var(--text-brand-dark);
-    box-shadow: 0 2px 8px color-mix(in srgb, var(--brand-accent) 25%, transparent);
+}
+
+/* 主操作：全宽实底块 —— 面板唯一的视觉重心 */
+.menu-primary {
+    padding: 12px;
+    background: rgba(var(--brand-primary-rgb), 0.14);
+    color: var(--brand-primary-dark);
+    font-weight: 600;
+}
+
+.menu-primary:hover {
+    background: rgba(var(--brand-primary-rgb), 0.2);
+    color: var(--brand-primary-dark);
+}
+
+/* 分组标题：只负责归类和节奏，不参与竞争 */
+.menu-section-title {
+    padding: 12px 2px 5px;
+    color: var(--text-muted);
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
 }
 
 .menu-item:hover :deep(svg) {
     transform: scale(1.08);
 }
 
-/* ---- 全宽状态项 ---- */
-.status-item, .soup-item {
-    grid-column: span 2;
-    background: white;
-    border: 2px solid var(--border-brand-light);
-    color: var(--brand-accent-muted);
+/* 开关行：与功能格换一个色系（中性灰），读作「另一组东西」。
+   状态点常驻：关闭是空心环，开启是实心 + 外环光晕 —— 不必靠文字反推当前状态 */
+.menu-toggle-row {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 4px;
 }
 
-.status-item:hover, .soup-item:hover {
-    border-color: var(--brand-accent);
-    background: var(--bg-hover);
+.menu-toggle {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    padding: 9px 10px;
+    border: none;
+    border-radius: 8px;
+    background: rgba(var(--shadow-rgb), 0.05);
+    color: var(--text-secondary);
+    font-family: inherit;
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background 0.2s, color 0.2s;
+}
+
+.menu-toggle:hover {
+    background: rgba(var(--shadow-rgb), 0.09);
     color: var(--text-brand-dark);
 }
 
-/* ---- 常用地点标签 ---- */
+.menu-toggle-label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.menu-toggle :deep(svg) {
+    flex: none;
+    margin-right: 0;
+}
+
+.toggle-dot {
+    width: 6px;
+    height: 6px;
+    flex: none;
+    border-radius: 50%;
+    background: transparent;
+    box-shadow: inset 0 0 0 1.5px var(--text-muted);
+    transition: background 0.2s, box-shadow 0.2s;
+}
+
+.menu-toggle.is-on {
+    background: rgba(var(--brand-primary-rgb), 0.1);
+    color: var(--brand-primary-dark);
+}
+
+.menu-toggle.is-on .toggle-dot {
+    background: var(--brand-primary);
+    box-shadow: 0 0 0 3px rgba(var(--brand-primary-rgb), 0.18);
+}
+
+/* 彩蛋：与业务功能隔开，弱化成一条次要文字入口 */
+.menu-soup {
+    width: 100%;
+    margin-top: 10px;
+    padding: 8px;
+    border: none;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--text-muted);
+    font-family: inherit;
+    font-size: 12px;
+    cursor: pointer;
+    transition: background 0.2s, color 0.2s;
+}
+
+.menu-soup:hover {
+    background: rgba(var(--shadow-rgb), 0.06);
+    color: var(--text-secondary);
+}
+
+/* ---- 常用地点 ---- */
 .quick-loc-container {
     display: flex;
     flex-wrap: wrap;
-    gap: 6px;
+    gap: 5px;
     padding: 2px;
 }
 
+/* 最弱一级：最小号 + 最淡底，只作快捷入口，不与功能格争重量 */
 .menu-item-quick {
     width: auto;
-    padding: 5px 10px;
-    background: white;
-    border: 2px solid var(--border-brand-light);
-    border-radius: 8px;
+    padding: 4px 9px;
+    background: rgba(var(--brand-primary-rgb), 0.06);
+    border: none;
+    border-radius: 6px;
     font-size: 12px;
-    color: var(--brand-accent-muted);
+    font-weight: 400;
+    color: var(--text-secondary);
 }
 
 .menu-item-quick :deep(svg) {
@@ -1072,24 +1174,15 @@ onBeforeUnmount(() => {
 }
 
 .menu-item-quick:hover {
-    border-color: var(--brand-accent);
-    background: var(--bg-hover);
+    background: rgba(var(--brand-primary-rgb), 0.14);
     color: var(--text-brand-dark);
 }
 
-/* ---- 分割线 & 分组标题 ---- */
+/* ---- 分割线（魔法菜单仍在用） ---- */
 .menu-divider {
     height: 1px;
     margin: 8px 2px;
     background: var(--border-brand-light);
-}
-
-.menu-group-title {
-    padding: 4px 10px 6px;
-    color: var(--text-muted);
-    font-size: 11px;
-    font-weight: 600;
-    letter-spacing: 0.4px;
 }
 
 /* ---- 特效高亮项 ---- */
@@ -1113,7 +1206,7 @@ onBeforeUnmount(() => {
     justify-content: center;
     color: var(--danger);
     background: #fff0f0;
-    border: 2px solid #ffd0d0;
+    border: none;
 }
 
 .magic-close-btn:hover {

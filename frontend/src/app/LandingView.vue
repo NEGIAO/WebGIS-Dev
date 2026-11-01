@@ -4,7 +4,13 @@
         class="landing-container"
     >
         <!-- ============ 顶部导航 ============ -->
-        <header class="navbar">
+        <!-- is-scrolled：首屏时导航完全透明（不做白色板子），滚过 6px 才浮出玻璃底。
+             现代官网（Vercel / Stripe / Linear）都用这一手，目的是让导航"融进"首屏，
+             而不是在内容上方压一条实心横条 —— 后者正是"方块感"的最大来源 -->
+        <header
+            class="navbar"
+            :class="{ 'is-scrolled': navScrolled }"
+        >
             <div class="navbar-inner">
                 <div class="brand">
                     <!-- 方案A「无底牌单色 logo」：不做色块底衬。
@@ -744,7 +750,10 @@
                             <button
                                 type="button"
                                 class="mobile-menu__head"
-                                @click="closeMenu(); scrollToSection(group.id)"
+                                :class="{ 'is-expanded': group.children.length > 0 && expandedMobileMenuGroups.has(group.id) }"
+                                :aria-expanded="group.children.length > 0 ? expandedMobileMenuGroups.has(group.id) : undefined"
+                                :aria-controls="group.children.length > 0 ? `mobile-menu-sub-${group.id}` : undefined"
+                                @click="handleMobileMenuHead(group)"
                             >
                                 <span
                                     class="mobile-menu__no"
@@ -759,7 +768,8 @@
                             </button>
 
                             <ul
-                                v-if="group.children.length"
+                                v-if="group.children.length && expandedMobileMenuGroups.has(group.id)"
+                                :id="`mobile-menu-sub-${group.id}`"
                                 class="mobile-menu__sub"
                             >
                                 <li
@@ -1375,8 +1385,10 @@ const NAV_ANCHORS = Object.freeze([
 ]);
 const navAnchors = NAV_ANCHORS;
 const activeAnchor = ref('');
-/** 与 CSS scroll-margin-top 派生值保持一致：导航栏定高 + 12px 呼吸位 */
-const NAV_SCROLL_OFFSET = 84;
+/** 与 CSS scroll-margin-top 派生值保持一致：导航栏定高 + 12px 呼吸位
+ *  （导航 72→64 后同步由 84 收到 76；改高度时这里必须一起改，
+ *   否则 scroll spy 的判定带会比真实导航栏高 8px，当前小节的切换时机错位） */
+const NAV_SCROLL_OFFSET = 76;
 
 function scrollToSection(id) {
     const target = document.getElementById(id);
@@ -1387,18 +1399,53 @@ function scrollToSection(id) {
 // 滚动容器 ref：供移动端菜单锁定滚动、以及锚点定位使用
 const landingEl = ref(null);
 
+// ============ 导航栏「滚动后浮出」状态 ============
+// 首屏导航透明（不压白色横条），滚过 6px 才补玻璃底 + 发丝线。
+// 6px 而非 0：触控板/移动端的亚像素回弹会让 scrollTop 在 0/1 之间抖动，
+// 0 阈值会让导航反复闪；6px 一次性越过抖动区间。
+const navScrolled = ref(false);
+
+function onLandingScroll() {
+    const el = landingEl.value;
+    navScrolled.value = !!el && el.scrollTop > 6;
+}
+
 // ============ 移动端全屏菜单（P2#10） ============
 const menuOpen = ref(false);
+const expandedMobileMenuGroups = ref(new Set());
 
 function toggleMenu() {
     menuOpen.value = !menuOpen.value;
+    if (menuOpen.value) {
+        expandedMobileMenuGroups.value = new Set();
+    }
     syncMenuScrollLock();
 }
 
 function closeMenu() {
     if (!menuOpen.value) return;
     menuOpen.value = false;
+    expandedMobileMenuGroups.value = new Set();
     syncMenuScrollLock();
+}
+
+function toggleMobileMenuGroup(groupId) {
+    const expandedGroups = new Set(expandedMobileMenuGroups.value);
+    if (expandedGroups.has(groupId)) {
+        expandedGroups.delete(groupId);
+    } else {
+        expandedGroups.add(groupId);
+    }
+    expandedMobileMenuGroups.value = expandedGroups;
+}
+
+function handleMobileMenuHead(group) {
+    if (group.children.length > 0) {
+        toggleMobileMenuGroup(group.id);
+        return;
+    }
+    closeMenu();
+    scrollToSection(group.id);
 }
 
 // 打开菜单时锁定滚动容器，避免背景穿透滚动
@@ -1611,6 +1658,9 @@ onMounted(() => {
     observeReveal(); // 统一入场动效（节标题 / 技术栈 / CTA，once）
     observeViewportQuery(); // 页脚两字断行的窄屏判定（跨断点自动重渲染）
     window.addEventListener('keydown', onMenuKeydown);
+    // 导航透明/玻璃底的滚动判定：passive，不参与滚动主流程
+    landingEl.value?.addEventListener('scroll', onLandingScroll, { passive: true });
+    onLandingScroll(); // 首帧同步（带 hash 直接落在锚点时，初值不能是"未滚动"）
     void (async () => {
         if (await fetchViaWorker()) return; // Worker 命中则不再打扰 GitHub
         void fetchGithubStats(); // 直连兜底（同样缓存先行）
@@ -1627,6 +1677,7 @@ onBeforeUnmount(() => {
     disconnectFeatures(); // 取消核心功能入场观察器
     disconnectReveal(); // 取消统一入场观察器
     window.removeEventListener('keydown', onMenuKeydown);
+    landingEl.value?.removeEventListener('scroll', onLandingScroll);
     disconnectViewportQuery(); // 取消页脚断行的视口断点监听
     if (landingEl.value) landingEl.value.style.overflowY = '';
 });
@@ -1644,8 +1695,10 @@ button:focus-visible {
 /* 全局 html/body 为 overflow:hidden 的全屏地图布局（App.vue），
    本页必须自持滚动容器：固定视口高度 + 内部纵向滚动 */
 .landing-container {
-    /* 导航真实定高，Hero 的 100dvh 偏移由此派生，避免魔数不同步 */
-    --landing-navbar-h: 72px;
+    /* 导航真实定高，Hero 的 100dvh 偏移由此派生，避免魔数不同步。
+       72 → 64：无框控件不需要 72px 的托盘，收窄后页面更"贴顶"，
+       也把首屏内容整体上提 8px */
+    --landing-navbar-h: 64px;
     /* 旧版 iOS（<16.4）不识别 dvh，先给 vh 兜底再覆盖；
        否则内部滚动容器高度失效，整页退化成无滚动 */
     height: 100vh;
@@ -1712,50 +1765,62 @@ button:focus-visible {
     background-color: var(--brand-primary-dark);
 }
 
-/* ============ 顶部导航 ============ */
+/* ============ 顶部导航 ============
+   设计基线（参考 Vercel / Stripe / Linear 的官网导航）：
+   · 首屏不压白色板子 —— 导航透明，滚过 6px 才浮出玻璃底与发丝线；
+   · 控件一律「无边框」：文字链 + 幽灵钮，边框只在 hover 时以极淡底色的形式出现；
+   · 全条只有一颗实心按钮（登录/注册），避免两处绿色同时发光；
+   · 圆角统一（6px 幽灵态 / 999px 主按钮），不再出现 8/9/10/999 四种混排。
+   旧版把每个控件都做成带边框的胶囊/方块，颜色、圆角、高度三套并存，
+   远看是一排"贴纸"——这是"方块感"的直接来源。 */
 .navbar {
     position: sticky;
     top: 0;
     z-index: var(--z-float, 100);
-    background: rgba(255, 255, 255, 0.92);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
-    border-bottom: 1px solid var(--border-light);
-    box-shadow: 0 2px 10px rgba(20, 45, 25, 0.04);
+    background: transparent;
+    border-bottom: 1px solid transparent;
+    /* 只过渡颜色/阴影/边框：backdrop-filter 参与过渡在 Safari 上会掉帧，单独给时长 */
+    transition:
+        background-color 0.28s ease,
+        border-color 0.28s ease,
+        box-shadow 0.28s ease;
 }
 
-/* 顶部品牌渐变封边线（P1#5）：呼应南师大 header 顶部橙黄渐变线，
-   并与本页 .nav-link.active 的金下划线同源。品牌绿 → 暖金，绿/蓝主题自动联动 */
-.navbar::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    height: 3px;
-    background: linear-gradient(90deg, var(--brand-primary), var(--brand-gold));
-    pointer-events: none;
+/* 滚过首屏：玻璃底 + 发丝线 + 一层极轻的投影（不是那种"卡片浮起"的重阴影） */
+.navbar.is-scrolled {
+    background: rgba(252, 253, 252, 0.82);
+    border-bottom-color: rgba(20, 45, 25, 0.07);
+    box-shadow: 0 10px 30px -22px rgba(20, 45, 25, 0.45);
+    -webkit-backdrop-filter: saturate(1.5) blur(14px);
+    backdrop-filter: saturate(1.5) blur(14px);
 }
+
+/* 原 P1#5 的「品牌绿→暖金 3px 封边线」已移除：
+   ① 金色端在浅底上几乎不可见，视觉上像一条"断掉"的线；
+   ② 全站已有渐变主按钮，再来一条彩条属重复强调；
+   ③ 正是用户所指的"装饰感"来源。品牌色改由 logo + 主按钮承担。 */
 
 .navbar-inner {
     max-width: 1200px;
     margin: 0 auto;
     height: var(--landing-navbar-h);
-    padding: 0 2rem;
-    display: flex;
-    justify-content: space-between;
+    padding: 0 clamp(1rem, 3vw, 2rem);
+    /* grid 而非 flex：三列 minmax(0,1fr) auto minmax(0,1fr) 让中列
+       在任何两侧内容宽度下都**精确居中**。旧版靠两侧 flex:1 平分剩余空间，
+       一旦品牌区或操作区内容宽度不等，中列就会偏心（实测 1440 下右偏约 180px） */
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
     align-items: center;
-    gap: 1rem;
+    column-gap: 1.5rem;
 }
 
 .brand {
     display: flex;
     align-items: center;
-    gap: 12px;
+    gap: 10px;
     min-width: 0;
-    /* 与 .nav-actions 对半分配剩余空间：中部锚点组随之精确居中
-       （space-between 在两侧宽度不等的实际内容下会偏心） */
-    flex: 1;
+    /* grid 第一列已由 minmax(0,1fr) 定宽，此处不再需要 flex:1 参与分配；
+       min-width:0 让品牌名在极窄屏可省略号收尾而不是把整条撑破 */
 }
 
 /* 品牌徽牌：纯白复杂线稿（icon.webp，RGBA / 65.7% 透明 / 512×409 横版）的承托底。
@@ -1771,8 +1836,8 @@ button:focus-visible {
    目录解析成 /assets/images/... 而 404，线上实测），
    Safari 需 -webkit- 前缀，标准 mask 置后覆盖；绿/蓝主题随令牌联动。 */
 .brand-badge {
-    width: 42px;
-    height: 42px;
+    width: 34px;
+    height: 34px;
     flex-shrink: 0;
     background-color: var(--brand-primary-dark);
     /* mask-image 由行内样式 brandBadgeStyle 注入（见 script 注释），此处只配定位/重复/尺寸 */
@@ -1782,23 +1847,27 @@ button:focus-visible {
     mask-repeat: no-repeat;
     -webkit-mask-size: contain;
     mask-size: contain;
-    /* hover 效果与 TopBar `.logo-link:hover .logo-icon` 同一套手法：
-       轻微倾斜 -10° + 放大 1.1，0.3s —— 不做整圈旋转（试过 360°/Y 轴翻转，
-       对一个小徽牌都太闹） */
-    transition: transform 0.3s;
+    /* hover 效果改为「染色」而非「旋转」——
+       见下方 :active / :hover 的说明，这里只保留颜色过渡 */
+    transition: background-color 0.25s ease;
 }
 
-/* will-change 只在交互期间挂上，避免常驻图层的开销 */
+/* ⚠️ 这里原先是 transform: rotate(-10deg) scale(1.1)，在 iOS Safari 上会闪成黑块：
+   WebKit 的合成缺陷 —— 被 mask 的图层一旦参与 transform（旋转或缩放），
+   遮罩层会被整块栅格化成**纯黑**，于是徽牌变成一块黑方块。
+   本项目在轨道环纹样上已踩过同一个坑并留下结论（见 composables/useRingPatternStyle.ts
+   的注释：被遮罩图层处于持续 transform 中 → 遮罩整块栅格化成黑色）。
+   结论：**mask 图层永不参与 transform**。交互反馈改用背景色深浅，
+   视觉上等价（logo 由深绿提亮为品牌绿），但完全不碰合成路径。 */
 .brand-badge:active {
-    transform: rotate(-10deg) scale(1.1);
+    background-color: var(--brand-primary);
 }
 
 /* 悬停高亮只授给真正支持悬停的设备：触屏上点一下徽牌，:hover 会粘住
-   （logo 一直保持倾斜放大态，像卡在了交互中），按压反馈交给 :active */
+   （logo 一直保持高亮态，像卡在了交互中），按压反馈交给 :active */
 @media (hover: hover) and (pointer: fine) {
     .brand-badge:hover {
-        transform: rotate(-10deg) scale(1.1);
-        will-change: transform;
+        background-color: var(--brand-primary);
     }
 }
 
@@ -1807,36 +1876,52 @@ button:focus-visible {
 }
 
 .brand-title {
+    font-family: 'Cinzel', 'Times New Roman', serif;
     margin: 0;
-    font-size: 1.25rem;
-    font-weight: 700;
-    /* 与徽牌（mask 染成的品牌深绿单色 logo）同色呼应，品牌区形成一条绿色主线；
-       20px/700 属 WCAG 大字号，--brand-primary-dark 在白/近白导航上约 4.9:1，
-       满足大文本 AA（3:1）且余量充足 */
-    color: var(--brand-primary-dark);
-    letter-spacing: 0.3px;
+    font-size: 1.2625rem;
+    font-weight: 650;
+    /* 字色由品牌深绿改为正文色：徽牌（已染成品牌绿）与文字同为绿色是重复强调，
+       全站只保留一处品牌绿 —— 主按钮。这也是 Vercel / Stripe / Linear 的共同做法：
+       logo 带色、wordmark 用近黑，视觉更"稳"，不会一眼全是绿 */
+    color: var(--text-primary);
+    letter-spacing: -0.01em;
+    line-height: 1.25;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
 }
 
 .brand-subtitle {
-    margin: 2px 0 0;
-    font-size: 0.75rem;
-    /* 原 --text-muted(#999) 在 12px 下仅 2.8:1，不达 WCAG AA(4.5:1)；
-       提一档到 --text-secondary(#666) ≈ 5.7:1，可读性达标且仍是次要层级 */
+    margin: 1px 0 0;
+    font-size: 0.6875rem;
+    /* 副标题长达 48 字符（约 290px），是 1024~1200 下品牌名被压成
+       "…Online WebGIS Platf…" 的直接原因。改为「宽屏专属」：
+       默认隐藏，仅在 ≥1200px（导航容器满宽）时出现 */
+    display: none;
+    /* 不用 --text-muted(#999)：11px 下仅约 2.6:1，达不到 WCAG AA(4.5:1)；
+       --text-secondary(#666) 约 5.7:1，仍是次要层级但可读 */
     color: var(--text-secondary);
+    letter-spacing: 0.01em;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
 }
 
-/* 中部锚点导航：填补品牌区与操作区之间的中部空白 */
+@media (min-width: 1200px) {
+    .brand-subtitle {
+        display: block;
+    }
+}
+
+/* 中部锚点导航：纯文字链，不做胶囊底色。
+   Vercel / Stripe / Linear 的中部导航都是"一行字"：默认次级灰、hover 提亮、
+   当前项加一条细下划线。底色胶囊会让三个词变成三个方块，是"贴纸感"的主因 */
 .nav-links {
     display: flex;
     align-items: center;
-    gap: 4px;
+    gap: 2px;
     min-width: 0;
+    justify-self: center;
 }
 
 .nav-link {
@@ -1845,57 +1930,66 @@ button:focus-visible {
     background: transparent;
     color: var(--text-secondary);
     font-size: 0.875rem;
+    /* 字重全程固定 500：旧版 active 切到 600 会改变字宽，
+       切换小节时整组导航会左右抖一下（三个词的宽度同时变化） */
     font-weight: 500;
-    line-height: 1;
-    padding: 0.55rem 0.85rem;
-    border-radius: 8px;
+    line-height: 1.4;
+    padding: 0.5rem 0.75rem;
+    border-radius: 6px;
     cursor: pointer;
     white-space: nowrap;
-    /* 供 .nav-link.active::after 的金色下划线做定位基准、
-       以及激活态 scale「长大」变换 */
+    /* 供 .nav-link::after 下划线定位 */
     position: relative;
-    transform-origin: center;
-    transition: background 0.15s ease, color 0.15s ease, transform 0.18s ease;
+    transition: color 0.16s ease, background-color 0.16s ease;
 }
 
 @media (hover: hover) and (pointer: fine) {
     .nav-link:hover {
-        background: rgba(var(--brand-primary-rgb), 0.08);
-        color: var(--brand-primary-dark);
+        /* 只有极淡的底色，不描边、不变成胶囊 */
+        background: rgba(20, 45, 25, 0.045);
+        color: var(--text-primary);
     }
 }
 
-/* 激活态「长大」而非「变色」（借鉴门户 tab 选中项是长出来的）：
-   在保留底色胶囊 + 金下划线的基础上，再叠加 scale 放大，让当前节
-   在扫视时以"尺寸"被先读到，而不只靠颜色。scale 用 transform 不触发回流 */
-.nav-link.active {
-    background: rgba(var(--brand-primary-rgb), 0.12);
-    color: var(--brand-primary-dark);
-    font-weight: 600;
-    transform: scale(1.08);
+.nav-link:active {
+    background: rgba(20, 45, 25, 0.07);
 }
 
-/* 激活态补一道暖金下划线：借鉴门户"选中项是长出来的，不是变色的"。
-   底色胶囊保留（信息量不减），下划线做金色呼吸点，
-   让"当前在哪一节"在扫视时先于读字被捕捉到 */
-.nav-link.active::after {
+/* 当前小节：只靠「颜色 + 下划线」两件事，取消旧版的底色胶囊、
+   scale(1.08) 与金色短横线三重叠加 —— 一个元素同时用三种手段强调，
+   是典型的"过度设计"，扫视时反而不知道看哪里 */
+.nav-link.active {
+    color: var(--brand-primary-dark);
+}
+
+.nav-link::after {
     content: '';
     position: absolute;
-    left: 50%;
-    bottom: 2px;
-    width: 18px;
+    left: 0.75rem;
+    right: 0.75rem;
+    bottom: 1px;
     height: 2px;
-    border-radius: 1px;
+    border-radius: 2px;
     background: var(--brand-gold);
-    transform: translateX(-50%);
+    /* 用 transform 而非 width 做展开：不触发回流，且与文字等宽 */
+    transform: scaleX(0);
+    transform-origin: center;
+    transition: transform 0.24s cubic-bezier(0.22, 0.7, 0.3, 1);
+    pointer-events: none;
+}
+
+.nav-link.active::after {
+    transform: scaleX(1);
 }
 
 .nav-actions {
-    flex: 1;
-    justify-content: flex-end;
     display: flex;
     align-items: center;
-    gap: 12px;
+    /* 幽灵控件之间只需 4px：它们没有边框，视觉分隔靠字形留白而非间距；
+       旧版 12px 是为"带框胶囊"之间留的空，无框后反而显得散 */
+    gap: 4px;
+    justify-self: end;
+    min-width: 0;
 }
 
 /* 移动端汉堡（P2#10 触发钮）：移动优先——默认即显示，仅 >1024px 桌面隐藏。
@@ -1915,18 +2009,25 @@ button:focus-visible {
        与 Chromium 的默认表现对齐（横线的显式宽度见下方 span 规则，双保险）。 */
     align-items: stretch;
     gap: 4px;
-    width: 38px;
-    height: 34px;
-    padding: 0 8px;
-    border: 1px solid var(--border-light);
-    border-radius: 9px;
-    background: var(--bg-secondary);
+    width: 36px;
+    height: 36px;
+    padding: 0 9px;
+    /* 去掉边框与底色：汉堡是一个"图标"，不是一颗按钮方块。
+       三条线本身就是形状，再套一层框是纯多余的装饰 */
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
     cursor: pointer;
     flex-shrink: 0;
+    transition: background-color 0.16s ease;
 }
 
-/* 桌面端才隐藏：与下方 ≤1024 块的锚点组让位互补（1025 起不重叠、无缝隙） */
-@media (min-width: 1025px) {
+/* 桌面端才隐藏：与下方 ≤900 块的锚点组让位互补（901 起不重叠、无缝隙）。
+   断点由 1025 下调到 901 的原因：品牌区去掉副标题后只剩约 194px，
+   三条锚点 247px + 右簇 283px，合计 826px —— 900px 宽就放得下。
+   旧版一律在 1024 收成汉堡，导致 1024 上中部空出一大片，
+   品牌挤左、按钮挤右，看着像"没做完" */
+@media (min-width: 901px) {
     .nav-burger {
         display: none;
     }
@@ -1935,14 +2036,12 @@ button:focus-visible {
 /* 按压反馈：触屏上没有真 hover，且 :hover 点完会粘住，所以悬停高亮只授给
    真正支持悬停的设备（见下方媒体查询），触屏用 :active 给出按下即应的反馈 */
 .nav-burger:active {
-    border-color: rgba(var(--brand-primary-rgb), 0.35);
-    background: rgba(var(--brand-primary-rgb), 0.08);
+    background: rgba(20, 45, 25, 0.08);
 }
 
 @media (hover: hover) and (pointer: fine) {
     .nav-burger:hover {
-        border-color: rgba(var(--brand-primary-rgb), 0.35);
-        background: rgba(var(--brand-primary-rgb), 0.06);
+        background: rgba(20, 45, 25, 0.05);
     }
 }
 
@@ -1959,7 +2058,9 @@ button:focus-visible {
        但显式 none 可避免任何引擎在缩放/字体放大时把 2px 压到 0 */
     flex: none;
     border-radius: 1px;
-    background: var(--text-secondary);
+    /* 无框后横线是唯一形状，用正文色保证对比（旧版 --text-secondary 在
+       去掉边框后显得发灰、像禁用态） */
+    background: var(--text-primary);
     transition: transform 0.25s ease, opacity 0.2s ease;
 }
 
@@ -1975,38 +2076,38 @@ button:focus-visible {
     transform: translateY(-6px) rotate(-45deg);
 }
 
-/* GitHub Star 快捷入口：紧凑胶囊，置于语言切换器之前 */
+/* GitHub Star 快捷入口：无边框幽灵钮，只在 hover 时浮出极淡底。
+   旧版是一颗带 1px 边框的 999px 胶囊，与旁边的语言胶囊、登录按钮
+   形成"三个贴纸并排"，是右簇显乱的主因 */
 .nav-github {
     display: inline-flex;
     align-items: center;
-    gap: 7px;
-    height: 34px;
-    padding: 0 12px;
-    border-radius: 999px;
-    border: 1px solid var(--border-light);
-    background: var(--bg-secondary);
+    gap: 6px;
+    height: 32px;
+    padding: 0 8px;
+    border-radius: 6px;
+    border: 0;
+    background: transparent;
     color: var(--text-secondary);
     text-decoration: none;
-    font-size: 0.8rem;
+    font-size: 0.8125rem;
     font-weight: 600;
     line-height: 1;
     flex-shrink: 0;
-    transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+    transition: background-color 0.16s ease, color 0.16s ease;
 }
 
 .nav-github:active {
-    border-color: rgba(var(--brand-primary-rgb), 0.45);
-    background: rgba(var(--brand-primary-rgb), 0.06);
-    color: var(--brand-primary-dark);
+    background: rgba(20, 45, 25, 0.08);
+    color: var(--text-primary);
 }
 
 /* 悬停高亮只授给真正支持悬停的设备：触屏上点开 Star 链接后 :hover 会粘住
    （从新标签页返回时按钮仍保持高亮态），按压反馈交给 :active */
 @media (hover: hover) and (pointer: fine) {
     .nav-github:hover {
-        border-color: rgba(var(--brand-primary-rgb), 0.45);
-        background: rgba(var(--brand-primary-rgb), 0.06);
-        color: var(--brand-primary-dark);
+        background: rgba(20, 45, 25, 0.05);
+        color: var(--text-primary);
     }
 }
 
@@ -2034,15 +2135,18 @@ button:focus-visible {
     font-variant-numeric: tabular-nums;
 }
 
-/* 语言切换器（浅色导航适配版，注册页为深绿头版） */
+/* 语言切换：一对纯文字，不做分段控件（segmented pill）。
+   旧版是"外框胶囊 + 内部绿色实心块"，与右侧登录按钮形成**两颗绿色相邻**，
+   视线不知道该落在哪个是主操作。改成文字后，当前语言只用品牌色 + 字重区分，
+   整条导航只剩登录按钮一处实心色 */
 .lang-toggle {
     display: inline-flex;
     align-items: center;
-    gap: 2px;
-    padding: 3px;
-    border-radius: 999px;
-    background: var(--bg-secondary);
-    border: 1px solid var(--border-light);
+    gap: 0;
+    padding: 0;
+    border-radius: 0;
+    background: transparent;
+    border: 0;
     flex-shrink: 0;
 }
 
@@ -2051,34 +2155,36 @@ button:focus-visible {
     border: 0;
     background: transparent;
     color: var(--text-secondary);
-    font-size: 11px;
+    font-size: 0.75rem;
     font-weight: 600;
     line-height: 1;
-    padding: 6px 9px;
-    border-radius: 999px;
+    /* 纵向给足 30px 触达区，横向 7px：两个词之间靠留白分隔，不用竖线 */
+    padding: 9px 7px;
+    border-radius: 6px;
     cursor: pointer;
     white-space: nowrap;
-    transition: background 0.15s ease, color 0.15s ease;
+    transition: background-color 0.16s ease, color 0.16s ease;
 }
 
 .lang-btn:active {
-    background: rgba(var(--brand-primary-rgb), 0.1);
-    color: var(--brand-primary-dark);
+    background: rgba(20, 45, 25, 0.08);
+    color: var(--text-primary);
 }
 
 /* 悬停高亮只授给真正支持悬停的设备：触屏上点完语言钮，:hover 会粘在刚点的
    钮上，与 .active 的渐变态并存、看着像"两个都选中"；按压反馈交给 :active */
 @media (hover: hover) and (pointer: fine) {
     .lang-btn:hover {
-        background: rgba(var(--brand-primary-rgb), 0.1);
-        color: var(--brand-primary-dark);
+        background: rgba(20, 45, 25, 0.05);
+        color: var(--text-primary);
     }
 }
 
 .lang-btn.active {
-    background: linear-gradient(135deg, var(--brand-primary), var(--brand-primary-dark));
-    color: #fff;
-    box-shadow: 0 2px 6px rgba(var(--brand-primary-rgb), 0.3);
+    /* 无底色、无渐变、无投影：只剩品牌色文字 */
+    background: transparent;
+    color: var(--brand-primary-dark);
+    box-shadow: none;
 }
 
 .lang-btn:focus-visible {
@@ -2089,16 +2195,25 @@ button:focus-visible {
 .btn-primary {
     display: inline-flex;
     align-items: center;
-    gap: 8px;
-    background: linear-gradient(135deg, var(--brand-primary), var(--brand-primary-dark));
+    justify-content: center;
+    gap: 7px;
+    /* 实心纯色，不用渐变：渐变在 36px 高度上根本看不出走向，只剩「颜色不匀」；
+       也不加投影 —— 导航条上的按钮不需要「浮起来」 */
+    background: var(--brand-primary);
     color: #fff;
-    padding: 0.6rem 1.4rem;
-    border-radius: 10px;
+    height: 36px;
+    padding: 0 1.125rem;
+    /* 全条唯一的胶囊：与幽灵态的 6px 圆角形成明确的主/次区分。
+       旧版此处 10px、导航项 8px、汉堡 9px、胶囊 999px，四种圆角并存，
+       属于「每个控件各写各的」 */
+    border-radius: 999px;
     text-decoration: none;
     font-weight: 600;
-    font-size: 0.9rem;
-    box-shadow: 0 4px 12px rgba(var(--brand-primary-rgb), 0.3);
-    transition: all 0.2s ease;
+    font-size: 0.8125rem;
+    letter-spacing: 0.01em;
+    /* 与左侧幽灵控件留一道视觉分组，避免主按钮「粘」在语言切换上 */
+    margin-left: 6px;
+    transition: background-color 0.18s ease, transform 0.18s ease;
     /* 窄屏上 .nav-actions 是 flex、按钮又是唯一可压缩项：不锁 nowrap +
        shrink:0，它会被压到 min-content，"登录 / 注册" 在按钮里折成两三行，
        比 64px 的导航条还高 —— 这是移动端"按钮没适配"的直接原因 */
@@ -2112,18 +2227,15 @@ button:focus-visible {
 }
 
 .btn-primary:active {
-    filter: brightness(0.97);
-    transform: translateY(0);
-    box-shadow: 0 2px 8px rgba(var(--brand-primary-rgb), 0.3);
+    background: var(--brand-primary-dark);
+    transform: translateY(1px);
 }
 
 /* 悬停高亮只授给真正支持悬停的设备：触屏上点完登录钮 :hover 会粘住
    （按钮一直保持上浮态），按压反馈交给 :active */
 @media (hover: hover) and (pointer: fine) {
     .btn-primary:hover {
-        filter: brightness(1.06);
-        transform: translateY(-1px);
-        box-shadow: 0 6px 16px rgba(var(--brand-primary-rgb), 0.38);
+        background: var(--brand-primary-dark);
     }
 }
 
@@ -2230,19 +2342,11 @@ button:focus-visible {
     opacity: 0.85;
 }
 
-/* 光晕极缓自转：光芒如日轮般扫过，强化"天光"的纵深感。
-   30s 起、周期不同步于其它装饰，避免整体像同一个动画 */
-@media (prefers-reduced-motion: no-preference) {
-    .hero-bg__sun {
-        animation: sun-spin 96s linear infinite;
-    }
-}
-
-@keyframes sun-spin {
-    to {
-        transform: rotate(360deg);
-    }
-}
+/* 光晕自转已停用（原先 96s 一圈）。
+   ⚠️ 原因与徽牌同源：本层带 -webkit-mask-image 径向遮罩，
+   被遮罩图层一旦持续 transform 旋转，iOS Safari 会把遮罩整块栅格化成**黑色**，
+   首屏就出现一个黑圆盘。视觉代价极小（96s 转一圈的 6% 透明度条纹，
+   肉眼几乎无法察觉），换来的是 iOS 上不再有黑块。 */
 
 /* 经纬网极慢漂移：42px 一个网格步长，60s 走完一格再无缝循环。
    慢到"看不清在动"但盯一会儿能感知到位移 —— 这是高校门户那种
@@ -2704,7 +2808,8 @@ button:focus-visible {
     padding: 0.45rem 1.1rem;
     border-radius: 999px;
     background: rgba(var(--brand-primary-rgb), 0.1);
-    border: 1px solid rgba(var(--brand-primary-rgb), 0.25);
+    /* 淡底已足够界定形状，再描一圈边就变成"贴纸" */
+    border: 0;
     color: var(--brand-primary-dark);
     font-size: 0.85rem;
     font-weight: 600;
@@ -2789,13 +2894,14 @@ button:focus-visible {
     gap: 7px;
     padding: 0.45rem 1rem;
     border-radius: 999px;
-    background: var(--bg-primary);
-    border: 1px solid var(--border-light);
+    background: rgba(var(--brand-primary-rgb), 0.055);
+    /* 同上：淡品牌底 + 无描边 */
+    border: 0;
     color: var(--text-primary);
     font-size: 0.85rem;
     font-weight: 600;
     text-decoration: none;
-    transition: all 0.2s ease;
+    transition: background-color 0.2s ease, color 0.2s ease;
 }
 
 .github-pill svg {
@@ -2803,9 +2909,8 @@ button:focus-visible {
 }
 
 .github-pill:hover {
-    border-color: rgba(var(--brand-primary-rgb), 0.45);
-    transform: translateY(-1px);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.07);
+    background: rgba(var(--brand-primary-rgb), 0.1);
+    color: var(--brand-primary-dark);
 }
 
 .github-pill-value {
@@ -2851,14 +2956,9 @@ button:focus-visible {
         transition: none;
     }
 
-    /* 徽牌 hover 旋转停用（mask 单色静态显示不受影响） */
+    /* 徽牌只做染色过渡，减动效下直接取消即可（已无 transform 需要复位） */
     .brand-badge {
         transition: none;
-    }
-
-    .brand-badge:hover {
-        transform: none;
-        will-change: auto;
     }
 }
 
@@ -2896,14 +2996,20 @@ button:focus-visible {
 .btn-outline {
     background: var(--bg-primary);
     color: var(--text-primary);
-    border: 1px solid var(--border-light);
+    /* 次级按钮不再描边：白面 + 双层轻投影已经足够"像个按钮"，
+       与旁边实心主按钮形成"实/浮"对比，而不是"实/框"对比 */
+    border: 0;
+    box-shadow:
+        0 1px 2px rgba(20, 45, 25, 0.05),
+        0 10px 22px -18px rgba(20, 45, 25, 0.55);
 }
 
 .btn-outline:hover {
-    border-color: var(--brand-primary);
     color: var(--brand-primary-dark);
     transform: translateY(-2px);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+    box-shadow:
+        0 2px 4px rgba(20, 45, 25, 0.06),
+        0 18px 30px -20px rgba(20, 45, 25, 0.6);
 }
 
 /* ============ Hero 统计条 · 四枚圆形数据卡 ============
@@ -2957,9 +3063,10 @@ button:focus-visible {
     height: 92px;
     border-radius: 50%;
     background: var(--bg-primary);
-    border: 1px solid rgba(var(--brand-primary-rgb), 0.16);
+    /* 圆币本身就是形状，描边是多余的；靠投影与底色区分 */
+    border: 0;
     box-shadow: 0 4px 14px rgba(20, 45, 25, 0.07);
-    transition: border-color 0.25s ease, box-shadow 0.25s ease;
+    transition: box-shadow 0.25s ease;
 }
 
 /* 内圈虚线：同心圆语汇的第三处复用（Hero 外环 / 节区印章 / 此处） */
@@ -3385,11 +3492,19 @@ button:focus-visible {
 }
 
 .feature-card {
+    /* 去描边：改由「白色面 + 极轻投影」与浅绿页面底拉开层次。
+       白底 + 1px 灰边 + 统一圆角是"AI 生成卡片"最典型的三件套 ——
+       页面里 11 张卡同时套这一层，整页就像一排同款贴纸。
+       投影分两层：1px 接触阴影定边界，28px 大扩散只负责"浮起"，
+       静态时几乎看不见，hover 才明显 —— 层次靠动效建立，不靠常驻描边 */
     background: var(--bg-primary);
-    border: 1px solid var(--border-light);
+    border: 0;
     border-radius: 16px;
     padding: 1.8rem 1.6rem;
-    transition: all 0.25s ease;
+    box-shadow:
+        0 1px 2px rgba(20, 45, 25, 0.03),
+        0 12px 28px -24px rgba(20, 45, 25, 0.5);
+    transition: box-shadow 0.25s ease, transform 0.25s ease, background-color 0.25s ease;
     position: relative;
     overflow: hidden;
 }
@@ -3449,9 +3564,12 @@ button:focus-visible {
    的清理，恢复 lift + 投影（卡片本身无跳转目标，属纯视觉反馈）。
    本页特性卡无逐卡配图，故不做南师式图片 scale(1.08)，仅保留卡片上浮。 */
 .feature-card:hover {
-    border-color: rgba(var(--brand-primary-rgb), 0.3);
-    transform: translateY(-4px);
-    box-shadow: 0 12px 28px rgba(20, 45, 25, 0.1);
+    /* 无描边可改，hover 全靠"抬起 + 投影加深"表达；位移从 4px 收到 3px，
+       配合更柔的阴影，读起来是"浮起"而不是"跳一下" */
+    transform: translateY(-3px);
+    box-shadow:
+        0 1px 2px rgba(20, 45, 25, 0.04),
+        0 22px 40px -26px rgba(20, 45, 25, 0.55);
 }
 
 .feature-card:hover::before {
@@ -3467,7 +3585,8 @@ button:focus-visible {
     height: 48px;
     border-radius: 50%;
     background: rgba(var(--brand-primary-rgb), 0.1);
-    border: 1px solid rgba(var(--brand-primary-rgb), 0.2);
+    /* 淡品牌底已界定圆形，去掉 1px 描边 */
+    border: 0;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -3560,9 +3679,13 @@ button:focus-visible {
     padding: 1.75rem 1.5rem 1.4rem;
     border-radius: 16px;
     background: var(--bg-primary);
-    border: 1px solid var(--border-light);
+    /* 与 .feature-card 同一套"无描边 + 双层轻投影"的表面语汇 */
+    border: 0;
+    box-shadow:
+        0 1px 2px rgba(20, 45, 25, 0.03),
+        0 12px 28px -24px rgba(20, 45, 25, 0.5);
     overflow: hidden;
-    transition: border-color 0.25s ease, box-shadow 0.25s ease, transform 0.25s ease;
+    transition: box-shadow 0.25s ease, transform 0.25s ease;
 }
 
 /* 顶部渐显细线 + hover 抬升：与 .feature-card 同一套交互语言，
@@ -3608,9 +3731,10 @@ button:focus-visible {
 }
 
 .tech-layer:hover {
-    border-color: rgba(var(--brand-primary-rgb), 0.3);
-    transform: translateY(-4px);
-    box-shadow: 0 12px 28px rgba(20, 45, 25, 0.1);
+    transform: translateY(-3px);
+    box-shadow:
+        0 1px 2px rgba(20, 45, 25, 0.04),
+        0 22px 40px -26px rgba(20, 45, 25, 0.55);
 }
 
 .tech-layer:hover::before {
@@ -3706,7 +3830,7 @@ button:focus-visible {
     place-items: center;
     border-radius: 50%;
     background: rgba(var(--brand-primary-rgb), 0.08);
-    border: 1px solid rgba(var(--brand-primary-rgb), 0.16);
+    border: 0;
     color: var(--brand-primary-dark);
     font-size: 13px;
     /* 与右侧两行文字的基线对齐（首行文字约 1.2em） */
@@ -3781,12 +3905,14 @@ button:focus-visible {
     gap: 8px;
     padding: 0.55rem 1.2rem;
     border-radius: 999px;
-    background: var(--bg-primary);
-    border: 1px solid var(--border-light);
+    /* 淡品牌底代替"白底 + 灰边"：徽标本身是弱信息，用一层很浅的色块
+       就能标出"这是一个可扫读的词条"，再描边就变成一颗贴纸 */
+    background: rgba(var(--brand-primary-rgb), 0.055);
+    border: 0;
     color: var(--text-secondary);
     font-size: 0.85rem;
     font-weight: 600;
-    transition: all 0.2s ease;
+    transition: background-color 0.2s ease, color 0.2s ease;
 }
 
 .tech-badge svg,
@@ -3795,10 +3921,8 @@ button:focus-visible {
 }
 
 .tech-badge:hover {
-    border-color: rgba(var(--brand-primary-rgb), 0.4);
+    background: rgba(var(--brand-primary-rgb), 0.1);
     color: var(--brand-primary-dark);
-    transform: translateY(-2px);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
 }
 
 /* 南师 hover 换金色手法：徽标 hover 时图标转为深金，
@@ -3830,14 +3954,15 @@ button:focus-visible {
     text-decoration: none;
     padding: 0.5rem 1rem;
     border-radius: 999px;
-    border: 1px solid var(--border-light);
+    /* 已有淡品牌底，边框属重复强调，去掉 */
+    border: 0;
     background: rgba(var(--brand-primary-rgb), 0.05);
-    transition: all 0.2s ease;
+    transition: background-color 0.2s ease, color 0.2s ease;
 }
 
 .oss-repo-link:hover {
     color: var(--brand-primary-dark);
-    border-color: rgba(var(--brand-primary-rgb), 0.45);
+    background: rgba(var(--brand-primary-rgb), 0.1);
 }
 
 /* 南师 .ani_right 的精神：外链图标 hover 向右轻推 2px，
@@ -3894,14 +4019,20 @@ button:focus-visible {
     text-decoration: none;
     border-radius: 14px;
     overflow: hidden;
-    border: 1px solid var(--border-light);
+    /* 图表本身自带白底，去掉描边只留投影 */
+    border: 0;
     background: #fff;
+    box-shadow:
+        0 1px 2px rgba(20, 45, 25, 0.03),
+        0 16px 32px -26px rgba(20, 45, 25, 0.5);
     transition: box-shadow 0.25s ease, transform 0.25s ease;
 }
 
 .oss-chart-link:hover {
     transform: translateY(-2px);
-    box-shadow: 0 10px 28px rgba(0, 0, 0, 0.1);
+    box-shadow:
+        0 1px 2px rgba(20, 45, 25, 0.04),
+        0 24px 40px -26px rgba(20, 45, 25, 0.55);
 }
 
 .oss-chart-link picture,
@@ -3921,7 +4052,8 @@ button:focus-visible {
     font-size: 0.82rem;
     color: var(--text-muted);
     background: var(--bg-primary);
-    border-top: 1px solid var(--border-light);
+    /* 图片与说明同属一张卡，去掉中间那条分隔线 —— 卡本身已无描边，
+       内部再画一条横线只会把一张卡切成两个方块 */
 }
 
 .oss-chart-link:hover .oss-chart-caption {
@@ -4002,7 +4134,7 @@ button:focus-visible {
 
 .oss-support-btn--fork .oss-support-btn-value {
     background: var(--bg-secondary);
-    border: 1px solid var(--border-light);
+    border: 0;
     color: var(--text-secondary);
 }
 
@@ -4021,14 +4153,19 @@ button:focus-visible {
 .oss-support-btn--fork {
     background: var(--bg-primary);
     color: var(--text-primary);
-    border: 1px solid var(--border-light);
+    /* 与 .btn-outline 同款次级按钮：白面 + 轻投影，不描边 */
+    border: 0;
+    box-shadow:
+        0 1px 2px rgba(20, 45, 25, 0.05),
+        0 10px 22px -18px rgba(20, 45, 25, 0.55);
 }
 
 .oss-support-btn--fork:hover {
-    border-color: var(--brand-primary);
     color: var(--brand-primary-dark);
     transform: translateY(-2px);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+    box-shadow:
+        0 2px 4px rgba(20, 45, 25, 0.06),
+        0 18px 30px -20px rgba(20, 45, 25, 0.6);
 }
 
 /* 项目渊源说明：弱化处理，不抢图表风头 */
@@ -4058,10 +4195,14 @@ button:focus-visible {
     background:
         radial-gradient(ellipse 60% 90% at 50% -10%, rgba(var(--brand-primary-rgb), 0.14), transparent 65%),
         var(--bg-primary);
-    border: 1px solid rgba(var(--brand-primary-rgb), 0.22);
+    /* 20px 大圆角 + 大扩散投影，去描边 —— 这是全页唯一的"大面板"，
+       靠体量和投影与内容卡区分，不需要再画一圈边 */
+    border: 0;
     color: var(--text-primary);
     overflow: hidden;
-    box-shadow: 0 12px 40px rgba(20, 45, 25, 0.08);
+    box-shadow:
+        0 1px 2px rgba(20, 45, 25, 0.03),
+        0 30px 60px -40px rgba(20, 45, 25, 0.5);
 }
 
 .cta-bg {
@@ -4207,8 +4348,8 @@ button:focus-visible {
     gap: 6px;
     padding: 0.35rem 0.85rem;
     border-radius: 999px;
-    border: 1px solid var(--border-light);
-    background: rgba(var(--brand-primary-rgb), 0.05);
+    border: 0;
+    background: rgba(var(--brand-primary-rgb), 0.055);
     color: var(--text-primary);
     white-space: nowrap;
 }
@@ -4304,8 +4445,9 @@ button:focus-visible {
     align-items: center;
     justify-content: center;
     color: var(--brand-primary-dark);
-    border: 1px solid rgba(var(--brand-primary-rgb), 0.24);
-    background: rgba(255, 255, 255, 0.55);
+    /* 页脚社交圆钮：圆形本身已有形状，去掉描边改用淡品牌底 */
+    border: 0;
+    background: rgba(var(--brand-primary-rgb), 0.07);
     transition:
         border-color 0.2s ease,
         background 0.2s ease,
@@ -4320,8 +4462,7 @@ button:focus-visible {
 }
 
 .footer-entry:hover {
-    border-color: rgba(var(--brand-gold-rgb), 0.55);
-    background: rgba(255, 255, 255, 0.9);
+    background: rgba(var(--brand-gold-rgb), 0.14);
     color: var(--brand-gold-dark);
     transform: translateY(-3px);
     box-shadow: 0 8px 18px rgba(20, 45, 25, 0.1);
@@ -4354,8 +4495,9 @@ button:focus-visible {
     display: inline-flex;
     align-items: baseline;
     gap: 6px;
+    /* 去掉竖分隔线：同排数据靠 padding 的 28px 间距已足够分组，
+       竖线属"表格化"装饰，与全页去边框一致 */
     padding: 0 14px;
-    border-left: 1px solid var(--border-light);
 }
 
 .footer-visitor__value {
@@ -4367,7 +4509,6 @@ button:focus-visible {
    靠同一道竖线前缀维持「一行数据」的读法；数字用等宽数字避免宽度跳动 */
 .footer-visitor__stamp {
     padding: 0 0 0 14px;
-    border-left: 1px solid var(--border-light);
     color: var(--text-muted);
     font-variant-numeric: tabular-nums;
 }
@@ -4452,7 +4593,8 @@ button:focus-visible {
     padding: 0.4rem 0.7rem;
     border-radius: 8px;
     background: var(--bg-primary);
-    border: 1px solid var(--border-light);
+    /* 气泡靠投影与白底浮在页面之上，不描边 */
+    border: 0;
     box-shadow: 0 8px 20px rgba(20, 45, 25, 0.12);
     color: var(--text-secondary);
     font-size: 0.72rem;
@@ -4546,9 +4688,10 @@ button:focus-visible {
     background-color: rgba(249, 249, 249, 0.8);
     backdrop-filter: blur(20px) saturate(150%);
     -webkit-backdrop-filter: blur(20px) saturate(150%);
-    /* 五层背景按顺序：① 顶部 3px 品牌封边 ② 顶部绿光 ③ 右下金光 ④⑤ 细网格 */
+    /* 四层背景按顺序：① 顶部绿光 ② 右下金光 ③④ 细网格。
+       原先还有一层「绿→金 3px 封边」，与已删除的 .navbar::before 同款；
+       导航条不再有这条彩带后，覆层若还留着就成了全站唯一的装饰横条 */
     background-image:
-        linear-gradient(90deg, var(--brand-primary), var(--brand-gold)),
         radial-gradient(
             ellipse 90% 52% at 50% -8%,
             rgba(var(--brand-primary-rgb), 0.13),
@@ -4561,9 +4704,9 @@ button:focus-visible {
         ),
         linear-gradient(rgba(var(--brand-primary-rgb), 0.035) 1px, transparent 1px),
         linear-gradient(90deg, rgba(var(--brand-primary-rgb), 0.035) 1px, transparent 1px);
-    background-size: 100% 3px, auto, auto, 32px 32px, 32px 32px;
-    background-position: 0 0, 0 0, 0 0, 0 0, 0 0;
-    background-repeat: no-repeat, no-repeat, no-repeat, repeat, repeat;
+    background-size: auto, auto, 32px 32px, 32px 32px;
+    background-position: 0 0, 0 0, 0 0, 0 0;
+    background-repeat: no-repeat, no-repeat, repeat, repeat;
 }
 
 /* 不支持 backdrop-filter 时退回近实心：否则 0.8 的底直接透上来，
@@ -4611,14 +4754,14 @@ button:focus-visible {
     width: 38px;
     height: 38px;
     padding: 0;
-    border: 1px solid var(--border-light);
+    border: 0;
     border-radius: 50%;
-    background: var(--bg-primary);
+    background: rgba(20, 45, 25, 0.05);
     color: var(--text-secondary);
     font-size: 0;
     line-height: 0;
     cursor: pointer;
-    transition: color 0.2s ease, border-color 0.2s ease, transform 0.2s ease;
+    transition: color 0.2s ease, background-color 0.2s ease, transform 0.2s ease;
 }
 
 .mobile-menu__close svg {
@@ -4630,7 +4773,7 @@ button:focus-visible {
 
 .mobile-menu__close:active {
     color: var(--brand-primary-dark);
-    border-color: rgba(var(--brand-primary-rgb), 0.4);
+    background: rgba(var(--brand-primary-rgb), 0.12);
 }
 
 /* 悬停高亮只授给真正支持悬停的设备：菜单覆层只在触屏出现，:hover 粘住会让
@@ -4638,7 +4781,7 @@ button:focus-visible {
 @media (hover: hover) and (pointer: fine) {
     .mobile-menu__close:hover {
         color: var(--brand-primary-dark);
-        border-color: rgba(var(--brand-primary-rgb), 0.4);
+        background: rgba(var(--brand-primary-rgb), 0.09);
         transform: rotate(90deg);
     }
 }
@@ -4654,6 +4797,9 @@ button:focus-visible {
      "中间一坨、四周一圈空白"或"三块各据一方"的极端。 */
 .mobile-menu__nav {
     flex: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: safe center;
     /* flex 子项要能滚动，必须允许它缩到内容高度以下 */
     min-height: 0;
     overflow-y: auto;
@@ -4661,6 +4807,7 @@ button:focus-visible {
     width: 100%;
     max-width: 24rem;
     margin: 0 auto;
+    padding: 0.75rem 0;
     /* 浅色纸面上别横插一道深槽 */
     scrollbar-width: thin;
 }
@@ -4669,6 +4816,12 @@ button:focus-visible {
     margin: 0;
     padding: 0;
     list-style: none;
+    width: 100%;
+}
+
+/* 分隔线去掉后，组与组之间靠这条间距建立节奏（原来靠 13 条 1px 横线） */
+.mobile-menu__list > li + li {
+    margin-top: 0.35rem;
 }
 
 /* 栏目行：序号 + 标题 + 箭头，箭头靠 margin-left: auto 推到最右，
@@ -4677,20 +4830,22 @@ button:focus-visible {
     appearance: none;
     display: flex;
     align-items: center;
-    gap: 12px;
+    gap: 10px;
     width: 100%;
-    padding: 0.92rem 0.25rem;
+    padding: 0.72rem 0.5rem;
     border: 0;
-    border-bottom: 1px solid var(--border-light);
+    /* 去掉「每行一条 1px 分隔线」：13 行叠起来就是一张表格，
+       这是移动端最明显的"边框方块感"。分组改由「行距 + 序号 + 子项缩进」表达 */
     background: transparent;
     color: var(--text-primary);
+    border-radius: 10px;
     font-family: var(--font-serif);
     font-size: 1.08rem;
     font-weight: 700;
     text-align: left;
     text-decoration: none;
     cursor: pointer;
-    transition: color 0.2s ease, border-color 0.2s ease;
+    transition: color 0.2s ease, background-color 0.2s ease;
 }
 
 .mobile-menu__label {
@@ -4709,11 +4864,17 @@ button:focus-visible {
 
 .mobile-menu__head:focus-visible {
     color: var(--brand-primary-dark);
-    border-bottom-color: rgba(var(--brand-primary-rgb), 0.45);
+    background: rgba(var(--brand-primary-rgb), 0.06);
 }
 
 .mobile-menu__head:active {
     color: var(--brand-primary-dark);
+    background: rgba(var(--brand-primary-rgb), 0.08);
+}
+
+.mobile-menu__head.is-expanded .mobile-menu__arrow {
+    color: var(--brand-primary-dark);
+    transform: rotate(90deg);
 }
 
 /* 悬停高亮只授给真正支持悬停的设备：触屏上点开/收起栏目后 :hover 会粘在
@@ -4721,7 +4882,7 @@ button:focus-visible {
 @media (hover: hover) and (pointer: fine) {
     .mobile-menu__head:hover {
         color: var(--brand-primary-dark);
-        border-bottom-color: rgba(var(--brand-primary-rgb), 0.45);
+        background: rgba(var(--brand-primary-rgb), 0.05);
     }
 }
 
@@ -4742,16 +4903,17 @@ button:focus-visible {
    左缩进 38px = 序号槽 26px + 间距 12px，与栏目标题落在同一条竖线上 */
 .mobile-menu__sub {
     margin: 0;
-    padding: 0.3rem 0 0.6rem 38px;
+    padding: 0.2rem 0 0.55rem 38px;
     list-style: none;
-    border-bottom: 1px solid var(--border-light);
+    /* 无分隔线：子项与所属标题同属一组，靠左缩进与留白区分，
+       不再在每组底部画一条横线 */
 }
 
 .mobile-menu__sub-link {
     appearance: none;
     display: block;
     width: 100%;
-    padding: 0.3rem 0;
+    padding: 0.24rem 0;
     border: 0;
     background: transparent;
     color: var(--text-secondary);
@@ -4812,27 +4974,32 @@ button:focus-visible {
     max-width: 24rem;
     margin-top: 0.75rem;
     padding: 0.78rem 1.5rem;
-    border-radius: 12px;
-    background: linear-gradient(135deg, var(--brand-primary), var(--brand-primary-dark));
+    /* 与导航栏主按钮同一套：999px 胶囊 + 纯色，不用渐变。
+       旧版这里是 12px 圆角 + 135° 渐变 + 投影，是全页最后一处「渐变方块」，
+       在手机上尤其突兀（移动端只看到它和列表，对比更强） */
+    border-radius: 999px;
+    background: var(--brand-primary);
     color: #fff;
     font-size: 1rem;
     font-weight: 700;
     text-decoration: none;
-    box-shadow: 0 8px 20px rgba(var(--brand-primary-rgb), 0.28);
-    transition: transform 0.2s ease, box-shadow 0.2s ease;
+    box-shadow: 0 8px 20px -14px rgba(var(--brand-primary-rgb), 0.7);
+    transition: background-color 0.2s ease, transform 0.2s ease;
 }
 
 .mobile-menu__cta:active {
-    transform: translateY(0);
-    box-shadow: 0 6px 14px rgba(var(--brand-primary-rgb), 0.28);
+    background: var(--brand-primary-dark);
+    transform: translateY(1px);
+    box-shadow: 0 4px 12px -10px rgba(var(--brand-primary-rgb), 0.7);
 }
 
 /* 悬停高亮只授给真正支持悬停的设备：触屏上点完 CTA :hover 会粘住
    （按钮一直保持上浮态），按压反馈交给 :active */
 @media (hover: hover) and (pointer: fine) {
     .mobile-menu__cta:hover {
+        background: var(--brand-primary-dark);
         transform: translateY(-2px);
-        box-shadow: 0 12px 26px rgba(var(--brand-primary-rgb), 0.34);
+        box-shadow: 0 12px 26px -16px rgba(var(--brand-primary-rgb), 0.75);
     }
 }
 
@@ -4918,29 +5085,37 @@ button:focus-visible {
 }
 
 /* ============ 响应式适配 ============ */
-@media (max-width: 1024px) {
-    /* 平板起中部放不下锚点组：隐藏（区块仍可正常滚动到达） */
+/* 901~1024 保留中部锚点组（实测合计 826px，放得下）；≤900 收成汉堡。
+   ⚠️ 隐藏锚点组时必须同步把 grid 从三列收成两列：中列是 auto，
+   导航项 display:none 后该列宽度归零，但 .nav-actions 会被自动排进第 2 列
+   （中间），右侧控件就会跑到导航条正中 —— 三列模板与两列内容必须配套改 */
+@media (max-width: 900px) {
     .nav-links {
         display: none;
     }
 
-    /* 右簇四件套（汉堡 / Star / 语言 / 登录）各自 flex-shrink:0，
-       在 375px 上合计已约 220px。原 .nav-actions 带 flex:1（可压缩），
-       与 .brand 对半分配后品牌标题只剩几十像素；320px 下右簇甚至整体
-       超出导航条，被 .landing-container 的 overflow-x:hidden 直接裁掉
-       登录钮 —— 这是移动端"导航没适配"的直接原因。
-       改为右簇不伸缩：剩余空间全归品牌区，标题以省略号收尾，
-       四个控件在任何窄屏下都完整可见 */
+    .navbar-inner {
+        grid-template-columns: minmax(0, 1fr) auto;
+    }
+
     .nav-actions {
-        flex: 0 0 auto;
+        min-width: 0;
     }
 
-    .brand {
-        flex: 1 1 auto;
+    /* 顺序：语言 → 登录 → 汉堡。主操作靠右但不贴边，汉堡居末是移动端通行做法
+       （拇指回退成本最低）。汉堡在 DOM 里排第一，这里用 order 把它挪到最后，
+       避免为了排序去改模板结构 */
+    .btn-primary {
+        order: 1;
     }
 
-    /* 汉堡已是移动优先（默认显示，仅 >1024px 隐藏），此处无需再授 display；
-       右侧轨道导航让位 */
+    .nav-burger {
+        order: 2;
+    }
+}
+
+@media (max-width: 1024px) {
+    /* 右侧轨道导航让位（纯辅助，主导航已由锚点组/汉堡承接） */
     .section-orbit {
         display: none;
     }
@@ -5015,57 +5190,47 @@ button:focus-visible {
 
 @media (max-width: 768px) {
     .landing-container {
-        --landing-navbar-h: 64px;
+        /* 56px：无框控件本身不需要 64px 的托盘高度，收窄后首屏内容上移，
+           导航也不再像一条"横梁"压在页面上 */
+        --landing-navbar-h: 56px;
     }
 
     .navbar-inner {
         padding: 0 1rem;
-    }
-
-    .brand-subtitle {
-        display: none;
+        column-gap: 0.75rem;
     }
 
     .nav-actions {
-        gap: 8px;
+        gap: 2px;
     }
 
-    /* 窄屏导航控件整体降一档，给右簇让出空间：
-       徽牌 42→34（导航条本身也降到 64px，42 在里面偏挤）；
-       品牌名 1.25→1.05rem；Star 胶囊内边距收到与 ≤480 一致的 10px；
-       语言钮内边距从 6px 9px 收到 8px（触屏档的 40px 高度不变） */
+    /* 窄屏只保留「语言 / 登录 / 汉堡」三件，Star 钮收进全屏菜单
+       （菜单里已有 GitHub 入口）。旧版把汉堡+Star+语言+登录四件全塞进
+       390px，品牌名被压成 "NEG…"，这是移动端最刺眼的一处 */
+    .nav-github {
+        display: none;
+    }
+
     .brand-badge {
-        width: 34px;
-        height: 34px;
+        width: 30px;
+        height: 30px;
     }
 
     .brand-title {
-        font-size: 1.05rem;
-    }
-
-    .nav-github {
-        padding: 0 10px;
+        font-size: 1rem;
     }
 
     .lang-btn {
-        padding: 0 8px;
+        padding: 9px 6px;
+        font-size: 0.6875rem;
     }
 
-    /* 登录/注册：从"0.9rem + 0.6rem 内边距"的桌面尺寸收到与
-       .nav-github / .nav-burger 同高的 34px 胶囊，字号降一档。
-       高度锁 34px 是为了让右侧四个控件（汉堡 / Star / 语言 / 登录）
-       在同一条基线上，否则 36.5px 的按钮会比旁边的胶囊高出一截 */
+    /* 主按钮降到 34px 与其余控件同高；仍是全条唯一实心色块 */
     .btn-primary {
         height: 34px;
-        padding: 0 0.85rem;
+        padding: 0 0.9rem;
         gap: 6px;
-        font-size: 0.8rem;
-        border-radius: 9px;
-    }
-
-    .lang-btn {
-        padding: 5px 7px;
-        font-size: 10px;
+        font-size: 0.8125rem;
     }
 
     .hero-section {
@@ -5164,10 +5329,10 @@ button:focus-visible {
 }
 
 @media (max-width: 480px) {
-    /* 极窄屏导航条要同时塞下 汉堡 / Star / 语言 / 登录 四件套：
-       "登录 / 注册" 连同图标约 105px，品牌名会被挤成一个省略号。
-       这里退成与 .nav-github 同款的纯图标方钮（34×34），文案交给
-       .btn-primary 上的 aria-label，读屏不受影响 */
+    /* 极窄屏（≤480）主按钮退成 34×34 圆形图标钮：
+       文案 "Sign in / Register" 约 105px，留着会把品牌名挤成一个省略号。
+       圆形（999px）而非方钮 —— 全站唯一实心色块保持"胶囊家族"的形状，
+       不在这里破例出现一个方块。文案交给 aria-label，读屏不受影响 */
     .btn-primary {
         width: 34px;
         padding: 0;
@@ -5176,15 +5341,6 @@ button:focus-visible {
     }
 
     .btn-primary-label {
-        display: none;
-    }
-
-    /* 窄屏 Star 胶囊仅留图标，数字在 Hero/OSS 区已有展示位 */
-    .nav-github {
-        padding: 0 9px;
-    }
-
-    .nav-github-count {
         display: none;
     }
 
@@ -5203,63 +5359,56 @@ button:focus-visible {
 }
 
 /* ============ 超窄屏（≤380px：iPhone SE 一代 / 旧款安卓） ============
-   320~380px 上右簇四件套 + 徽牌已占去 2/3 宽度，品牌名再缩一档、
-   语言钮继续收紧，保证四件套完整可见 + 品牌名可读（超出以省略号收尾） */
+   无框控件本身占位小，320~380px 下品牌名仍可完整显示；
+   这里只把字再收一档，不再需要靠压缩控件内边距来腾地方 */
 @media (max-width: 380px) {
     .brand-title {
-        font-size: 0.95rem;
-        letter-spacing: 0;
-    }
-
-    .lang-btn {
-        padding: 0 6px;
-        font-size: 9.5px;
+        font-size: 1.1375rem;
+        letter-spacing: -0.015em;
     }
 
     .navbar-inner {
-        gap: 8px;
+        column-gap: 8px;
+        padding: 0 0.75rem;
     }
 }
 
 /* ============ 触屏档（pointer: coarse，移动端基线） ============
  * 可点击目标 ≥40px，判据用触屏能力而非宽度断点（F12 拉窄 ≠ 真机）。
- * 窄屏媒体查询里同排四件套（汉堡 / Star / 语言 / 登录）为对齐基线锁了
- * 34px 高——那是视觉对齐的选择，不是触屏可达性的选择；本档把四件
- * 一起提到 40px，保持同高对齐不破坏基线设计。置于全部宽度断点之后，
- * 靠源序覆盖 ≤768px 的 34px 规则。 */
+ * 无框控件靠"内边距"而不是"边框"撑出触达区，所以这里只调尺寸，不补边框。 */
 @media (pointer: coarse) {
     .nav-burger {
-        width: 44px;
+        width: 40px;
         height: 40px;
+        padding: 0 10px;
     }
 
     .nav-github {
         height: 40px;
+        padding: 0 10px;
     }
 
     .btn-primary {
-        height: 40px;
+        height: 38px;
+        padding: 0 1rem;
     }
 
-    /* 语言切换器整组 40px，内部按钮随 inline-flex 默认 stretch 拉满。
-       内边距收到 8px：触屏档位于所有宽度断点之后，会覆盖 ≤768 的收紧值；
-       10px 时「中文 / EN」两组在 375px 上要多占约 12px，直接挤压品牌名 */
+    /* 语言切换：文字对只需保证 40px 触达高度。
+       旧的 min-width:46 是为"绿色实心胶囊"留的宽度，文字态用不上，
+       在 375px 上两个词会多占约 20px，直接挤压品牌名 */
     .lang-toggle {
         height: 40px;
-        padding: 3px;
+        padding: 0;
     }
 
     .lang-btn {
-        /* 纵向必须撑满槽内区：原来这里只给了横向内边距（纵向为 0），
-           按钮高度塌到只剩一行文字（约 10px），激活态看着像一条扁线。
-           纵向用 align-self 拉满，横向留白给足并设最小宽度 —— 保证激活块
-           "宽 > 高"，读起来是桌面端那颗胶囊，而不是一个圆点。 */
         align-self: stretch;
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        min-width: 46px;
-        padding: 0 12px;
+        min-width: 34px;
+        padding: 0 8px;
+        font-size: 0.75rem;
     }
 
     /* 桌面宽度触屏设备（横屏平板 ≥1025px）才显示的锚点组 */
@@ -5299,25 +5448,24 @@ button:focus-visible {
     }
 }
 
-/* 极窄触屏：登录钮在 ≤480px 是 34px 方形图标钮，此处放大到 40px 保持方形 */
+/* 极窄触屏：登录钮在 ≤480px 是 34px 圆形图标钮，触屏档放大到 40px 保持正圆 */
 @media (pointer: coarse) and (max-width: 480px) {
     .btn-primary {
         width: 40px;
+        height: 40px;
+        padding: 0;
     }
 
-    .nav-github {
-        padding: 0 11px;
-    }
-
-    /* 超窄触屏：只横向再收一档；font-size 不再往下压到 9.5px
-       （真机上几乎看不清，且会让高亮块显得更扁） */
+    /* 超窄触屏语言钮：横向收到 7px（无边框后不需要 15px 的"胶囊内衬"），
+       字号不再往下压到 9.5px（真机上几乎看不清） */
     .lang-btn {
         align-self: stretch;
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        padding: 0 15px;
-        font-size: 11px;
+        min-width: 30px;
+        padding: 0 7px;
+        font-size: 0.6875rem;
     }
 }
 
@@ -5359,21 +5507,8 @@ button:focus-visible {
     }
 }
 
-/* 移动端同样用桌面端那套实心渐变胶囊：原来这里压成了"浅色底 + 内描边"，
-   iOS 触屏又不满足 hover/pointer:fine，渐变那套样式压根没生效，
-   于是选中态只剩一块扁平色斑，既不好看也看不出"选中"。
-   外阴影把块面抬起来，触屏档的 40px 高度保持不变。 */
-@media (max-width: 1024px) {
-    .lang-btn.active {
-        background: linear-gradient(135deg, var(--brand-primary), var(--brand-primary-dark));
-        color: #fff;
-        box-shadow: 0 2px 8px rgba(var(--brand-primary-rgb), 0.35);
-    }
-
-    .nav-link.active {
-        background: rgba(var(--brand-primary-rgb), 0.1);
-        color: var(--brand-primary-dark);
-        transform: none;
-    }
-}
+/* 原「≤1024px 语言钮改回实心渐变胶囊 / 导航项补底色胶囊」的覆盖块已删除：
+   那是为旧版"胶囊 + 渐变"体系打的补丁，在无框文字体系下会把语言钮变回
+   一颗绿色实心块，与右侧登录按钮形成两颗绿色相邻 —— 正是本次要消除的问题。
+   现在 .lang-btn.active 全宽度统一为"品牌色文字"，不再按断点分叉。 */
 </style>

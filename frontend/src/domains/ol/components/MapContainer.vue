@@ -110,13 +110,6 @@
             @layer-context-action="handleLayerContextAction"
         />
 
-        <AttributeTable
-            @focus-feature="handleAttributeTableFocusFeature"
-            @highlight-feature="handleAttributeTableHighlightFeature"
-            @cell-edit="handleAttributeTableCellEdit"
-            @delete-feature="handleAttributeTableDeleteFeature"
-        />
-
         <div
             v-if="compassStore.hudVisible"
             class="compass-hud-wrapper"
@@ -161,7 +154,7 @@
    便于进行项目的维护和升级
    避免臃肿和职责混乱 
 */
-import { ref, onMounted, onUnmounted, shallowRef, watch, defineAsyncComponent } from 'vue';
+import { ref, onMounted, onUnmounted, shallowRef, watch } from 'vue';
 
 // 父组件持有跨引擎共享的 custom URL；本组件用本地 ref 镜像，避免可写
 // computed 在 emit 后、父级下一次渲染前仍读到旧 prop。
@@ -322,8 +315,8 @@ import { getCurrentQuerySnapshot } from '@common/url-state/urlQueryReader';
 import LayerControlPanel from '@ol/layer/components/LayerControlPanel.vue';
 import MapSwipeController from './MapSwipeController.vue';
 import MapControlsBar from './MapControlsBar.vue';
-// 异步加载：属性表（约 1400 行含虚拟表格）仅打开时才需要，不进首屏 chunk
-const AttributeTable = defineAsyncComponent(() => import('@ol/layer/components/AttributeTable.vue'));
+// 属性表已上移到 HomeView（单一实例，2D/3D 共用同一份 attrStore 数据）：
+// 原先挂在这里会被 `v-show="!is3DMode"` 一并隐藏，导致三维模式打不开表。
 import FengShuiCompassSvg from '@common/compass/svg/feng-shui-compass-svg.vue';
 import PalaceExplanationPanel from '@common/compass/components/PalaceExplanationPanel.vue';
 
@@ -2108,6 +2101,15 @@ defineExpose({
     zoomToManagedFeature,
     removeUserLayer,
     reorderUserLayers,
+    /**
+     * 属性表事件转发（V3.6.39 属性表上移到 HomeView 后，2D 侧仍需本容器实现）：
+     * HomeView 按 activeEngine 分派 —— 2D 调这四个，3D 调 CesiumContainer 的
+     * focusAttributeFeature。属性表组件本身与引擎无关，只负责渲染 attrStore。
+     */
+    handleAttributeTableFocusFeature,
+    handleAttributeTableHighlightFeature,
+    handleAttributeTableCellEdit,
+    handleAttributeTableDeleteFeature,
     soloUserLayer,
     renameUserLayer,
     viewUserLayer,
