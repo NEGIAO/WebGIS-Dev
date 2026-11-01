@@ -26,7 +26,7 @@ DEFAULT_AGENT_TEMPERATURE = get_float("AGENT_TEMPERATURE", 1.0, minimum=0.0, max
 DEFAULT_AGENT_TOP_P = get_float("AGENT_TOP_P", 0.95, minimum=0.0, maximum=1.0)
 DEFAULT_AGENT_EXTRA_BODY = {}
 
-# 调用方 override_base_url 安全护栏（详见 Docs/TODO/agent-override-key-leak-plan.md）：
+# 调用方 override_base_url 安全护栏（详见 Docs/TODO/archive/agent-override-key-leak-plan.md）：
 # 白名单留空 = 不限制服务商域名（保留「个人 Key 接任意 OpenAI 兼容服务商」能力），
 # 但成对 Key 校验与私网/回环拒绝恒生效，二者不受本开关影响。
 AGENT_ALLOWED_BASE_URL_HOSTS: List[str] = [

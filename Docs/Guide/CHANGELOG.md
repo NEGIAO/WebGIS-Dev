@@ -6,6 +6,100 @@
 
 ## 版本记录
 
+### V3.6.37 (2026-11-01) — 单版本整合：HF 推送 LFS 字体修复 + 规范 §12 机器人 PR 处置 + 文档组织治理
+
+> **整合说明**：本条由原三个独立编号（V3.6.37 / V3.6.38 / V3.6.39）合并而来。三段工作同属**一次未发布**的改动批次，按「每个 L2/L3 任务 +1 修订号」拆成三个只差数十分钟、且都未单独发布的版本，反而降低版本历史的可读性。合并后本条为 **V3.6.37**，下一版本自 V3.6.38 起。
+
+> **为何不是三个号**：`Force_command.md` §5 的「+1 修订号」服务于「一次发布一个语义单元」。本次三段改动在同一天、同一批未推送改动内完成，对外只构成一次发布，拆号会让 CHANGELOG 出现三个无法对应任何线上版本的条目。
+
+#### ① 修复 Hugging Face 推送被拒：字体二进制未走 LFS
+
+> **背景**：V3.6.36 提交后，`deploy-frontend-to-hf` 在最后一步被 HF 拒收：
+> `Your push was rejected because it contains binary files`，指名
+> `fontawesome/webfonts/fa-brands-400.woff2` 与 `fa-solid-900.woff2`。
+> 排查确认不是「这两个文件有问题」，而是**整类字体文件从未被 LFS 覆盖**：两个 HF 推送任务
+> （`deploy-frontend-to-hf` → Space `NEGIAO/Web`；`sync-to-huggingface` → Space `NEGIAO/WebGIS`）
+> 的 `git lfs track` 白名单是逐次踩坑补出来的（`.wasm`、`.gif` 均为事后追加），始终没有字体扩展名。
+
+> **量化影响**：
+> - 静态站任务：`frontend/dist` 内共 671 个二进制文件，其中 **64 个字体文件未被追踪**（24 `woff2` + 20 `woff` + 20 `ttf`，合计 1.3 MB）。
+> - 全栈任务：`git archive` 出的 `deploy/backend/frontend` 中 **5 个 `woff2` 未被追踪**（`public/fontawesome/webfonts/` 4 个 + `src/assets/fonts/noto-serif-sc-700.woff2`）。
+> - 远端只列出 2 个文件，是因为 HF 的 `Offending files` 只展示超阈值（约 100 KB）的样本；`fa-regular-400.woff2`（24 KB）与 KaTeX 字体（≤ 62 KB）同样不合规，只是未被列出——**按远端列表逐个补文件会漏**。
+
+> **改动**：
+> 1. `deploy-frontend-to-hf` 的 LFS 白名单补 `*.woff2` / `*.woff` / `*.ttf` / `*.otf` / `*.eot`，并注释说明「漏配会让整次 push 被拒，且远端只列样本文件」。
+> 2. `sync-to-huggingface` 的 `Track large binaries with LFS` 同步补同一组扩展名。
+> 3. 两个任务在 `git add` 之后、`git commit` 之前新增**二进制兜底校验**：`git diff --cached --numstat` 中仍为 `-` 的条目即「未经 LFS 转换的裸 blob」，打印文件名并以 `::error::` 失败。
+>    判定依据是 LFS 的工作原理——`git add` 时 clean filter 会把匹配文件替换成 ASCII 指针，因此**仍被 git 判为二进制的必然没被 LFS 接管**。
+
+> **为何不用 `git lfs migrate` / 改写历史**：两个 HF 仓库都是 CI 每次 `git init` 新建、`--force` 推送的临时仓库，不存在历史包袱；只需在源头补全追踪规则，下一次推送即全量覆盖。
+
+> **验证**：
+> - `yaml.safe_load` 解析通过，5 个 job 结构完整，两个任务内 `git lfs track` 与校验片段均已就位。
+> - 用本机 `git-lfs 3.7.0` 在临时仓库做双场景回归：不加字体规则 → 校验命中并列出 2 个 `woff2`；加规则后 → 校验通过，索引内文件变为 `version https://git-lfs.github.com/spec/v1` 指针（`size 150124`）。
+> - 覆盖率静态复核：job1 未覆盖二进制 **64 → 0**，job2 **5 → 0**。
+> - 门禁：`CheckStructureTree.py` / `CheckConfigRegistry.py` 均通过（本次不涉及 `frontend/src` 与配置 key）。
+
+> **完整记录**：[`2026-11-01-hf-binary-lfs-fonts.md`](../LLM_record/26-11/2026-11-01/2026-11-01-hf-binary-lfs-fonts.md)
+
+#### ② 新增规范 §12：线上机器人 PR 处置（本地 GitHub CLI）
+
+> **背景**：仓库的依赖升级由 Dependabot 自动开 PR（`.github/dependabot.yml` 仅保留 major，weekly；安全更新不受 schedule 约束，随时可能新增）。但 `Force_command.md` 全文只写了 §2.1「禁止 Git 写操作」，禁止清单是枚举式的（`commit` / `push` / `stash` / `reset` / `checkout --` / `rebase` / 改分支），**未显式覆盖 PR 合并**，也未定义「什么情况下可以合、由谁授权、合并后要不要升版本」。
+
+> **问题（三处空白）**：
+> 1. **权限灰区**：`gh pr merge` 会写远端 `main`，按字面不在 §2.1 枚举内，按精神应受管辖。Agent 可能各自解释，一次误操作即污染主干。
+> 2. **判定标准缺失**：无客观准入条件，major 破坏性升级可能被当作补丁直接合并。
+> 3. **版本/日志归属不明**：为一次依赖合并升版本号会污染版本历史语义（版本号应对应「本项目做了什么」），但不升又怕违规。
+>
+> **方案**：新增 §12「线上机器人 PR 处置（GitHub CLI）」，含 8 个小节——事实基线 / 权限三分 / 五步只读核查 / 合并准入六条件 / 授权与执行 / 版本号与日志归属 / 本节禁止事项 / 常见故障对照。
+
+> **关键决策（均有实测依据，非推断）**：
+> - **权限三分**：只读（`pr list` / `pr view` / `pr checks` / `pr diff` / `gh repo view` / `gh api` GET）随时可做；合并须**逐次显式授权**（用户说出「合并 #n」），授权不跨会话、不跨 PR 继承；`--auto` / `--admin` / `pr checkout` / `pr review` / `pr close` / `pr comment` / `gh api` 写方法**一律禁止**。
+> - **`gh pr checkout` 判为禁止**的依据：它切换本地工作区分支，直接落在 §2.1「改分支」的禁止范围内。这一条是原规范未覆盖的缝隙。
+> - **`--delete-branch` 必须显式给出**：实测 `gh repo view --json deleteBranchOnMerge` 返回 `false`，不带该旗标会导致 `dependabot/*` 远端分支残留。
+> - **合并不升版本、不写独立日志**：机器人 PR 内容非 Agent 产出；仅当合并后需改代码适配（如 major 致构建失败）时，适配部分按 L2 走全流程。§1 分级表下补注记说明此例外不计入 L0–L3 代码任务。
+> - **锁文件风险单列**：`uv.lock` 的 `revision` 变动代表生成它的 uv 版本漂移，会连带重解析 marker 与依赖树，diff 远超版本号本身；明令禁止在本地跑 `uv lock` 重生成（会再改一次并制造二次冲突）。该结论来自实测 PR #46（`revision 3 → 5`，且 `click-plugins` 等 marker 被改写）。
+
+> **同步范围**：§2.1 第 1 条补交叉引用（PR 合并同属禁止，唯一出口为 §12.5）；§1 补分级注记；`Docs/Guide/dev-conventions.md`「强制规范（摘要）」补第 14 条（§10 要求摘要必须与权威版同步）。
+
+> **验证**：`gh` 2.95.0 实测通过——`--author "app/dependabot"` 过滤有效、`pr checks --required/--watch/--fail-fast` 旗标存在、`pr merge --squash --delete-branch` 旗标存在、`repo view --json squashMergeAllowed,deleteBranchOnMerge` 返回有效。未对 #45 / #46 执行任何合并（本次未获授权）。
+
+#### ③ 文档组织治理：按生命周期分区 + TODO 索引化 + Force_command 精炼
+
+> **背景**：仓库代码组织健康（前端 domain-first + barrel、后端五层分离），但**文档组织失序**：`Docs/TODO/` 23 个文件平铺无索引、13 个无状态字段、4 套命名并存；`Docs/Architecture/` 把「现行架构」「历史重构记录」「未实施方案」三类混放；`Docs/Guide/` 内含一份 plan；`Force_command.md` 虽规定了全部行为边界，却**不含项目全貌**，与其「单文件交付给 Agent 即可了解项目」的定位不符。
+
+> **量化诊断（实测，非估计）**：
+> - `Docs/Demo/` 占 **260 MB / 701 文件**（381 `.b3dm` + 285 `.json` + 13 `.glb`），实为演示样例而非文档；其中 `data/`、`textures/` 已被 `.gitignore` 排除。
+> - `Scripts/UpdateReadmeTree.py` 为**孤儿脚本**：默认输出 `FileTree.md`，该文件早已不存在，README 也已改为纯链接（§4 SSOT 要求「README 不放树」）。误用会重新生成第二棵树，制造 SSOT 冲突。
+> - `Docs/Guide/project-structure.md` 的 TODO 段**只列了 7/23 个文件**，且其中 2 个已实施、1 个已自我声明归档 —— 结构树本身先于被描述对象漂移。
+> - `Force_command.md` 各节行数：§3 40 行（含 30 行技术细节）、§11.2 33 行、§12 112 行（占全文 28%）。
+
+> **方案（L3，用户四项决策全部按推荐项批准）**：
+> 1. **文档按生命周期分区**：新建 `Docs/Architecture/decisions/`，收 3 篇日期命名历史重构记录（`2026-08-02-basemap-ssot-refactor` / `2026-08-20-unified-basemap-selection` / `2026-08-22-clamp-to-ground-strategy`）；`Architecture/` 顶层只留现行态。未实施的 `tencent-building-import-plan.md`、`2026-10-25-tileset-large-area-terrain-fit-plan.md` 从 Architecture 迁回 `TODO/`（方案属待办，不属架构）。
+> 2. **TODO 索引化**：新建 `Docs/TODO/README.md`，定义六态状态机（活跃 / 待批准 / 实施中 / 搁置 / 已完成 / 待人工确认）+ 全量状态表 + 归档规则。8 篇经**代码存在性核验**确认已落地的方案迁 `archive/`，连同本次两篇方案共 10 篇。`ol2cesium.md`（2113 行《双引擎坐标转换实现规范》）迁 `Architecture/ol-cesium-coordinate-transform-spec.md` —— 它是规范，不是待办。
+> 3. **Force_command 精炼**：新增 **§0.5 项目速览**（是什么 / 六层技术栈表 / 三个必须先建立的概念 / 必读四件套）；§3 的移动端基线 5 条 + Cesium 标准契约 4 条 + OL 对齐 + 验收合计约 30 行迁入 `dev-conventions.md` 新增「场景数据与移动端契约」节；§11.2 四条 `rg` 合并为一条（模式串本就重复 §11.1 的禁项枚举）；§12 的 12.3 命令清单与 12.8 故障表拆至 `Guide/bot-pr-playbook.md`。
+> 4. **语义声明**：新建 `Docs/Demo/README.md`，声明该目录为演示样例而非文档、`data/`+`textures/` 需本地自备、以及**为何不迁移**（20 个 HTML 以相对路径引用数据，迁移必断链；且数据已 gitignore，迁移对仓库体积零收益）。
+> 5. **孤儿脚本归档**：`Scripts/UpdateReadmeTree.py` → `Scripts/archive/`，文件头加废弃说明（§2.4 只迁移不删除）。
+
+> **两个反直觉的核查结论（写入 `TODO/README.md` 备查）**：
+> - **`✅` 标记不可作归档依据**：`2026-10-31-turnstile-auth-hardening-plan.md` 有 4 处 `✅`，但 `grep -ril turnstile frontend/src backend` 返回 **0 个文件** —— 那些 `✅` 是**设计决策标记**（「选定」「排除游客」），方案实际未实施。故改用「代码存在性」为最高权重判据，`✅` 仅作辅助。
+> - **不改 TODO 文件名**：4 套命名虽乱，但 23 个文件被 CHANGELOG、结构树、各期日志引用 40+ 处，改名会让历史引用全部失效（历史日志按 §6 不可改写）。用索引解决「找不到」，成本远低于改名。
+
+> **修正的既有缺陷**：
+> - `Force_command.md` §3 中「Cesium 标准契约」「OL 侧」「验收」三条被**错误缩进在「移动端基线」之下**（语义上应属「数据源注册前置」），本次重排。
+> - §4 SSOT 表写明「技术分层约定 → `dev-conventions.md`｜**本文件不复制**」，但 §3 内联了 30 行技术约定 —— 规范**自相矛盾**。本次以 §4 为准迁出，并在 `dev-conventions.md` 头部改为「技术约定的权威版本是本文件」，解除两文件互相指认的循环。
+> - 全库引用修复 **30 处**：`README.md` 5 处、`README_EN.md` 5 处、`CHANGELOG.md` 10 处、`project-structure.md` 全量重写、`handover.md` / `configuration.md` / `configuration-three-tier.md` 各 1 处、`bugfix-optimization-plan.md` 4 处、其余 TODO 2 处，以及 **2 处后端代码注释**（`backend/api/agent_chat/constants.py`、`utils.py`，纯注释路径，无逻辑改动）。
+
+> **关于「更精炼」的诚实说明**：`Force_command.md` 行数 **399 → 402**，并未减少。§0.5 新增约 35 行（补齐缺失的项目全貌），§3 / §11.2 / §12 合计压缩约 32 行。方案原定「≤340 行」目标**未达成**，原因是「补全貌」与「减行数」方向相反 —— 本次选择优先补全貌。实际收益不在行数，而在**职责纯度**：规范不再承载技术细节与操作手册，两类内容各归其位（`dev-conventions.md` / `bot-pr-playbook.md`），后续修改不再需要同步两个文件。
+
+> **验证**：`CheckStructureTree.py` 通过（522 条目 / 0 漏登记 / 0 幽灵）—— 但该门禁**仅覆盖 `frontend-structure.md` ⇄ `frontend/src`**，本次对 `project-structure.md` 的重写属人工核对，覆盖缺口已记入 TODO；`CheckConfigRegistry.py` 通过（未新增配置 key）；红线自查 §11.2 四项全绿。`gh` / 代码逻辑未改动，无运行时验证需求。
+
+> **本次整合复核（code review）追加验证**：
+> - **unborn HEAD 前提成立**：两个 HF 推送任务均为 `git init` 后无提交，兜底校验在其上执行 `git diff --cached`。已在临时空仓库实测——文本返回 `1	0	a.txt`、二进制返回 `-	-	b.bin`，awk 过滤准确，`git diff --cached` 不会因 HEAD 未诞生而报错。
+> - **兜底校验不会误报**：`git ls-files deploy backend frontend` 的二进制扩展名（png / jpg / webp / b3dm / bin / wasm / woff2 / kmz / kml）全部落在 LFS 规则内，全栈包无未覆盖二进制。
+> - **文档链接完整性**：对 14 个改动文档做 Markdown 内链扫描，修复 1 处断链（`handover.md` 指向已迁移的旧平铺日志目录 `26-07-26/`），另修正 2 处架构文档中的同类失效路径；5 个跨文档锚点全部命中。
+> - **门禁**：`CheckStructureTree.py` / `CheckConfigRegistry.py` 均通过。
+
 ### V3.6.36 (2026-10-31) — Agent 能力扩展：天气工具 / 底图映射 / 搜索链路修复 / 结果落 TOC
 
 > **背景**：本次把 5 批未提交、版本号互相叠压的改动（原 3.6.36 ~ 3.6.40）整合为单一版本 V3.6.36。各批的原始问题：
@@ -332,7 +426,7 @@
 
 #### ③ 大面积 / 大起伏贴地优化（P0 + P1）
 
-> 方案见 `Docs/Architecture/2026-10-25-tileset-large-area-terrain-fit-plan.md`；过程见 `Docs/LLM_record/26-10/2026-10-25/2026-10-25-tileset-large-area-fit.md`。
+> 方案见 `Docs/TODO/2026-10-25-tileset-large-area-terrain-fit-plan.md`；过程见 `Docs/LLM_record/26-10/2026-10-25/2026-10-25-tileset-large-area-fit.md`。
 > **问题**：大面积（城市级）且地形起伏大的区域，3D Tiles 贴地后局部悬空、局部埋入。
 > **根因**：不是算法写错，而是**目标函数选错**。当前取 `d = 地形 − 基底` 的**中位数**作为整块刚性平移量。单一平移在数学上无法同时满足「不嵌入」与「不悬空」——二者下界由 `d` 的跨度决定；中位数最小化平均绝对误差，把误差均分两侧，于是**一半基底埋在坡里**。模拟（10 km²、高差约 400 m、256 采样点，`d` 跨度 343 m）：p50 → 嵌入率 **50%**、最大埋深 **147.8 m**；p75 → 25% / 83.7 m；p90 → 10.2% / 64.8 m；`max`（零嵌入）→ 0% 但最大悬空 343 m（观感更差）。
 > **P0 目标函数修正**：`estimateTerrainOffset` 改为**面积加权分位数**，默认 **p75**（人眼对「被埋」远比对「略悬空」敏感）；`bvToBaseSample` 为 region / box / sphere 三路采样补充**水平足迹面积**权重，避免高密度小瓦片拉偏分位；新增**残余高差画像** `fitResidual`（跨度 / 嵌入率 / 最大埋深 / 最大悬空 / 是否区域化），跨度 > 50 m 时主动 toast 告知「单一平移无法完全贴合，可用『贴合到当前视野』分区校正」——把算法固有局限显式告知，而不是让用户误以为「没贴好」。残余画像随记录持久化（导入期 7 处 + record 字段）。
@@ -405,7 +499,7 @@
 > - `Docs/LLM_record/26-10/2026-10-25/2026-10-25-cesium-draw-measure-full-migration.md`（绘制/测量迁移、样式编辑、地形贴合、贴地统一化）
 > - `Docs/LLM_record/26-10/2026-10-25/2026-10-25-ts-first-dod-gate.md`（TS 优先纳入 DoD）
 > - `Docs/LLM_record/26-10/2026-10-25/2026-10-25-v3.6.24-staged-consolidation.md`（本次归并 + 审查修复 + TS 迁移）
-> - 方案：`Docs/TODO/cesium-ground-placement-unification-plan.md`
+> - 方案：`Docs/TODO/archive/cesium-ground-placement-unification-plan.md`
 
 #### 一、绘制 / 测量完整化（三维侧对齐 Demo 全能力）
 
@@ -721,7 +815,7 @@
 > **入库与拔高**：结果包 `.geojson` File 走既有 `upload-data` 通道，2D/3D 自动进 TOC 对应分组（零新 type、零配置 key）；打包剥离非标准顶层 `crs`（Cesium 否则抛 `crs.properties is undefined`，源码为据）；Cesium 按高度属性置 `height=0 + extrudedHeight`，无高度保持贴地。
 > **文案与首页**：`topbar.buildings` + `shell.buildings` 中英（含重键修复）；落地页核心功能 +1 卡。
 >
-> 方案：[`tencent-building-import-plan.md`](../Architecture/tencent-building-import-plan.md) ·
+> 方案：[`tencent-building-import-plan.md`](../TODO/tencent-building-import-plan.md) ·
 > 日志：[`2026-10-10-staged-review-v3611.md`](../LLM_record/26-10/2026-10-10/2026-10-10-staged-review-v3611.md)
 
 ### V3.6.10 (2026-10-10) — 图层触摸拖拽排序真实现
@@ -962,7 +1056,7 @@
 
 ### V3.5.31 (2026-08-26) — 统一图层管理 P0~P2 全链落地 + OL↔Cesium 视图尺度系统
 
-> 本版本整合原多批次中间提交（曾临时编号 V3.5.31~V3.5.34）为单一版本。计划文档：Docs/TODO/unified-layer-management-refactor-plan.md（L3，用户批准执行）、Docs/TODO/ol2cesium.md。
+> 本版本整合原多批次中间提交（曾临时编号 V3.5.31~V3.5.34）为单一版本。计划文档：Docs/TODO/archive/unified-layer-management-refactor-plan.md（L3，用户批准执行）、Docs/Architecture/ol-cesium-coordinate-transform-spec.md。
 
 ### V3.5.32 (2026-08-27) — 统一图层管理 P0~P2 全链落地与 OL↔Cesium 视图尺度系统（引擎感知迁移）
 
@@ -1251,7 +1345,7 @@
 - **危险兜底移除**：GLTF 数据导入采样失败不再「关闭全局地形」。
 - **glTF/模型 Entity 化**：数据导入与模型管理器两条模型路径统一改用 Entity ModelGraphics + `heightReference`（语义高度 > 0 → RELATIVE_TO_GROUND 保留离地意图，否则 CLAMP_TO_GROUND 贴合地表），姿态统一 ENU 四元数；重定位/移除/清空/flyTo/透明度五条链路同步适配 Entity 句柄；非均匀缩放 {x,y,z} 退化等比并告警。方案文档中「维持采样抬升 + Entity 化立项 TODO」的中期裁决被第四轮迭代取代，以本条为准。
 - **采样网关收敛**：新建 `terrain/terrainSampling.js` 合并三套并存实现（availability 首选 mostDetailed，层级阶梯仅作未知 provider 兜底），移除 `_bottomLevel` 私有字段依赖；`terrainClampService.js` 收敛为 CZML 实体贴地唯一入口（原 loaders/clampToGround.js 删除）。
-- 方案文档：[Architecture/2026-08-22-clamp-to-ground-strategy.md](Architecture/2026-08-22-clamp-to-ground-strategy.md)，详见[维护日志](../LLM_record/26-08/2026-08-22/2026-08-22-clamp-to-ground-strategy.md)。
+- 方案文档：[Architecture/decisions/2026-08-22-clamp-to-ground-strategy.md](Architecture/decisions/2026-08-22-clamp-to-ground-strategy.md)，详见[维护日志](../LLM_record/26-08/2026-08-22/2026-08-22-clamp-to-ground-strategy.md)。
 
 #### 四、暂存区终审修复（本次合并会话）
 
@@ -1274,7 +1368,7 @@
 - **热更新闭环**：共享 URL 变化时，当前处于 custom 的 OL 会重建 source，Cesium 会强制重建 imagery provider；重复提交同一 Cesium URL 仍可主动强制刷新。
 - **卷帘对比**：移除 custom 拒绝硬编码；左右比较项可分别携带独立 custom URL 并持久化恢复，支持对比两张动态影像。
 - **历史影像 UI**：Sentinel/Wayback 按年份折叠，Wayback 条目只显示 `YYYY-MM-DD`，不再将每个快照加入底图注册表。
-- 详见[维护日志](../LLM_record/26-08/2026-08-20/2026-08-20-shared-custom-basemap.md)与[架构说明](../Architecture/2026-08-20-unified-basemap-selection.md)。
+- 详见[维护日志](../LLM_record/26-08/2026-08-20/2026-08-20-shared-custom-basemap.md)与[架构说明](../Architecture/decisions/2026-08-20-unified-basemap-selection.md)。
 
 #### 二、实时在线统计零轮询重构（原 V3.5.25 主题二；后端全权统计 + 事件驱动广播）
 
@@ -2653,7 +2747,7 @@
 
 ### V3.4.64 (2026-07-27) — requestRenderMode P2+P3 收官：按需渲染正式生效（总开关置 true）
 
-L3 延续（同方案 [`Docs/TODO/requestrendermode-plan.md`](../TODO/requestrendermode-plan.md)；用户明示「不用请求批准，直接全部执行」授权 P2/P3）。**按需渲染自本版起真实生效**：「3D 静止 + 四特效全关」渲染频率降至 ~0.2Hz（5s 时钟兜底重渲）、GPU 满载→近零；体积云/风场/流体/漫游任一开启即自动回连续渲染，关闭后回降载。
+L3 延续（同方案 [`Docs/TODO/archive/requestrendermode-plan.md`](../TODO/archive/requestrendermode-plan.md)；用户明示「不用请求批准，直接全部执行」授权 P2/P3）。**按需渲染自本版起真实生效**：「3D 静止 + 四特效全关」渲染频率降至 ~0.2Hz（5s 时钟兜底重渲）、GPU 满载→近零；体积云/风场/流体/漫游任一开启即自动回连续渲染，关闭后回降载。
 
 - ⚡ `useCesiumRenderMode.js` 总开关 `ENABLE_REQUEST_RENDER_MODE` false→**true**（回退方式不变：改回 false 一行恢复恒连续渲染）。
 - 🔍 **全库高危写点静态普查**（沙盒无 GPU，以逐类读码核对替代实机冒烟）：大气/光照/美化/数据源显隐透明度/OSM 与谷歌 3D Tiles 开关/地形切换/太阳光照/高级特效/分析工具等 11 类直改点——除一处外均已带显式 `requestRender`（前几轮铺垫，全库约 50 处/15 文件）或走 Entity API 自动触发通道；**唯一缺口**：3D Tiles 材质模式切换直写 `tileset.style`（`useCesiumDataOpsHandlers`）→ 补 requestRender，配套 `useCesiumDataImport` 透出既有 `getViewer` 访问器。
@@ -2662,7 +2756,7 @@ L3 延续（同方案 [`Docs/TODO/requestrendermode-plan.md`](../TODO/requestren
 
 ### V3.4.63 (2026-07-27) — Agent `override_base_url` 平台 Key 外泄修复（规划 P1-4 [P0 安全]，L3）+ 07-26 版本账目对账
 
-> L3 任务，方案文档 [`Docs/TODO/agent-override-key-leak-plan.md`](../TODO/agent-override-key-leak-plan.md)，用户批准口径「a+c，白名单默认关」。
+> L3 任务，方案文档 [`Docs/TODO/archive/agent-override-key-leak-plan.md`](../TODO/archive/agent-override-key-leak-plan.md)，用户批准口径「a+c，白名单默认关」。
 
 - 🔐 **[P0] 平台 Key 外泄面切断**：任意**游客或登录用户**发一个带 `override_base_url` 但不带 `override_api_key` 的请求，后端即把平台 Key 以 `Authorization: Bearer` 发往调用方指定地址（`/chat/completions` 与 `/models` 两处 key/base_url 回退各自独立、无耦合校验）；更严重的是无 override key 时 candidates = 平台主 Key + **全部备用 Key**，上游返 401 触发 `_is_agent_key_retryable_error` 逐个换 Key 重发 → 攻击者恒返 401 即可**单次请求收割整个 Key 池**；`/models` 还是 GET query 形式且不耗配额，利用成本极低。新增 `utils._validate_override_base_url` 单点护栏：**成对校验**（无 key 即 400 fail-closed）+ 协议仅 https + 私网/回环/链路本地/保留段拒绝 + 可选 host 白名单，两端点接入。
 - 🕳️ **IP 字面量绕过一并堵死**：新增 `_coerce_ip_literal` 按 C 库 `inet_aton` 语义归一——`2130706433` / `0x7f000001` / `127.1` / `0177.0.0.1` 全部还原为 `127.0.0.1`（P1-4 点名的绕过手法），另拒 `.local`/`.internal`/`.home.arpa`/`.localhost` 后缀与 `[::1]`。
@@ -2687,7 +2781,7 @@ L3 延续（同方案 [`Docs/TODO/requestrendermode-plan.md`](../TODO/requestren
 
 ### V3.4.61 (2026-07-27) — requestRenderMode 按需渲染 P1：计数器管理器 + 四特效接入（总开关默认关）
 
-L3 任务（方案 [`Docs/TODO/requestrendermode-plan.md`](../TODO/requestrendermode-plan.md) 用户批准 P1；渲染/性能流水路线图 2.2）。应用此前恒连续渲染，静止无特效时 GPU 满负荷；本版铺好按需渲染接线，**总开关默认 false、零行为变化**，P2 置 true 后「3D 静止+四特效全关」GPU 满载→近零。
+L3 任务（方案 [`Docs/TODO/archive/requestrendermode-plan.md`](../TODO/archive/requestrendermode-plan.md) 用户批准 P1；渲染/性能流水路线图 2.2）。应用此前恒连续渲染，静止无特效时 GPU 满负荷；本版铺好按需渲染接线，**总开关默认 false、零行为变化**，P2 置 true 后「3D 静止+四特效全关」GPU 满载→近零。
 
 - ⚡ 新增 `frontend/src/components/Cesium/composables/interaction/useCesiumRenderMode.js`：连续渲染引用计数管理器——`acquireContinuous(viewer, tag)`/`releaseContinuous(viewer, tag)` 计数 >0 保持连续渲染，归零切 `requestRenderMode=true` + `maximumRenderTimeChange=5`（秒，时钟推进超阈值自动重渲：太阳光照 ~0.2Hz 低频刷新、时间轴拖动/播放跟手）+ 切换补渲一帧；保险四件套：总开关 `ENABLE_REQUEST_RENDER_MODE` 默认 false（一行回退）、异常 fail-open 回退连续、release 容忍未配对（失败清理路径安全）、WeakMap 按 viewer 隔离（token 重试重建无残留）。
 - 🔗 四逐帧特效生命周期成对接入：体积云 `setupCloudIntegration`（管线就绪 acquire / teardown 与 init 失败 catch 双路 release）、风场 `useCesiumWind`（实例就绪 / clearWind2D）、流体 `FluidSimulationPanel`（FluidRenderer 构造后 / `destroyFluidOnly`——挂点自方案的 cleanup(true) 微调，因重建水体路径不经 cleanup 会泄漏计数）、人物漫游 `usePlayerController`（init 成功 / stopPlayer 实例分支）。
@@ -2804,7 +2898,7 @@ L3 任务（方案文档 [`Docs/TODO/loading-performance-optimization-plan.md`](
 
 ### V3.4.46 (2026-07-26) — 并行会话规划/交接文档合流（消除双套并存）
 
-- 📋 **TODO 规划合一**：原并行会话 `Docs/TODO/next-sprint-bugfix-and-optimization.md` 全量并入 `Docs/TODO/bugfix-optimization-plan.md`（Force_command §2.5 指定正典）——属性表 B1–B6 落为 P0-4 簇（B2/B5/B6 标注 ✅V3.4.40，B1/B3/B4 待办）、容器二轮路线图（V3.4.29 日志）并入 P3-1、T2 分域/门禁 CI 落为 P3-3/P3-4、属性表性能项（searchText 惰性化/列宽持久化/列虚拟化）落为 P2-4；执行顺序更新并标注已完成项；确立「B 簇全清打 V3.5.0 里程碑」与「冒烟回归自动升最高优先级」口径。
+- 📋 **TODO 规划合一**：原并行会话 `Docs/TODO/archive/next-sprint-bugfix-and-optimization.md` 全量并入 `Docs/TODO/bugfix-optimization-plan.md`（Force_command §2.5 指定正典）——属性表 B1–B6 落为 P0-4 簇（B2/B5/B6 标注 ✅V3.4.40，B1/B3/B4 待办）、容器二轮路线图（V3.4.29 日志）并入 P3-1、T2 分域/门禁 CI 落为 P3-3/P3-4、属性表性能项（searchText 惰性化/列宽持久化/列虚拟化）落为 P2-4；执行顺序更新并标注已完成项；确立「B 簇全清打 V3.5.0 里程碑」与「冒烟回归自动升最高优先级」口径。
 - 📘 **交接文档合一**：`Docs/Guide/handover.md`（SSOT 接手导航）§7 并入并行线 6 条独有契约——Cowork 挂载盘禁 rm/mv 与 index.lock 处置、沙盒 ESLint 跑法（node 直呼 bin）、barrel 两层化单点登记与 `export *` 重名静默丢弃、属性表 revision 整体重赋值不变式、容器 factory 抽离 TDZ 核对模式、版本撞号 grep 复核；基线版本行更新。
 - 🗑️ **冗余清理**：`2026-07-26-session-handover.md` 文头加「已合并」横幅转历史快照（保留防断链）；`next-sprint-bugfix-and-optimization.md` 与 `next-session-prompt.md` 删除（用户执行 git rm）。
 - 📝 详见 `Docs/LLM_record/26-07/2026-07-26/2026-07-26-merge-parallel-planning-docs.md`。

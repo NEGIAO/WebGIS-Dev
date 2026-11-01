@@ -212,6 +212,15 @@ jobs:
             git lfs track "*.wasm"
             # GIF 动图（Cesium Widgets 内置 loading 动画等）
             git lfs track "*.gif"
+            # 字体（Font Awesome 自托管 webfonts + KaTeX 数学字体）
+            # ⚠️ 字体是二进制，漏配扩展名会让**整次 push** 被 HF pre-receive 以
+            #    「contains binary files」拒收，且只列前几个超阈值文件，极易误判为
+            #    「只有那两个文件有问题」。实测 dist 内共 64 个字体文件（woff2/woff/ttf）。
+            git lfs track "*.woff2"
+            git lfs track "*.woff"
+            git lfs track "*.ttf"
+            git lfs track "*.otf"
+            git lfs track "*.eot"
 
             # 必须添加 .gitattributes 否则追踪不生效
             git add .gitattributes
@@ -230,6 +239,17 @@ jobs:
 
             # 5. 提交并推送
             git add .
+
+            # 兜底校验：LFS 生效后二进制文件在索引里会被替换成 ASCII 指针（文本），
+            # 仍被 git 判定为二进制的，就是漏配扩展名的裸 blob —— HF 必然拒收。
+            # 在这里提前失败并打印文件名，比等远端 pre-receive 报错少一轮往返。
+            UNTRACKED_BIN=$(git diff --cached --numstat | awk -F'\t' '$1=="-" && $2=="-" {print $3}')
+            if [ -n "$UNTRACKED_BIN" ]; then
+              echo "::error::以下二进制文件未走 LFS，HF 会拒收，请补 git lfs track 规则："
+              echo "$UNTRACKED_BIN"
+              exit 1
+            fi
+
             git commit -m "Update WebGIS frontend dist to Hugging Face: ${GITHUB_SHA::7}"
             
             echo "Pushing to Hugging Face..."
@@ -289,6 +309,9 @@ jobs:
             git lfs track "*.webp" "*.png" "*.jpg" "*.jpeg" "*.gif" "*.ico"
             git lfs track "*.glb" "*.gltf" "*.b3dm" "*.i3dm" "*.pnts" "*.cmpt"
             git lfs track "*.bin" "*.wasm" "*.geojson" "*.kmz" "*.kml"
+            # 字体：frontend/public/fontawesome/webfonts/*.woff2 会随 git archive 一起进包，
+            # 另有 frontend/src/assets/fonts/noto-serif-sc-700.woff2；漏配同样整次拒收
+            git lfs track "*.woff2" "*.woff" "*.ttf" "*.otf" "*.eot"
             git lfs track "ShareData/**"
 
         - name: Push Fullstack to Hugging Face Space
@@ -304,6 +327,16 @@ jobs:
               echo "No changes detected. Skipping push."
               exit 0
             fi
+
+            # 兜底校验：LFS 生效后二进制在索引里会变成 ASCII 指针；仍被判为二进制的
+            # 就是漏配扩展名的裸 blob，HF pre-receive 必然拒收，提前失败并指名道姓
+            UNTRACKED_BIN=$(git diff --cached --numstat | awk -F'\t' '$1=="-" && $2=="-" {print $3}')
+            if [ -n "$UNTRACKED_BIN" ]; then
+              echo "::error::以下二进制文件未走 LFS，HF 会拒收，请补 git lfs track 规则："
+              echo "$UNTRACKED_BIN"
+              exit 1
+            fi
+
             git commit -qm "deploy fullstack: ${GITHUB_SHA::7}"
             echo "Pushing fullstack to Hugging Face Spaces..."
             git push --force "https://NEGIAO:${HF_TOKEN}@huggingface.co/spaces/NEGIAO/WebGIS" HEAD:main

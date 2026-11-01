@@ -53,7 +53,7 @@ def _normalize_model(value: str) -> str:
     return str(value or "").strip()
 
 
-# --- override_base_url 安全护栏（方案文档：Docs/TODO/agent-override-key-leak-plan.md） ---
+# --- override_base_url 安全护栏（方案文档：Docs/TODO/archive/agent-override-key-leak-plan.md） ---
 # V3.4.64（P1-4 SSRF S1）：IP 字面量归一与内网判定迁入 core/net_guard.py 单点共用，
 # SSRF 主机判定（agent override_base_url）；本仓无公开 /proxy 中转
 

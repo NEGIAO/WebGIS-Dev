@@ -27,6 +27,39 @@
 
 ---
 
+## 0.5 项目速览（单文件交付时的心智模型）
+
+> 本节存在的唯一理由：让只拿到本文件的 Agent 在 30 秒内知道「这是什么项目」，而不必先读 README。
+> 详细架构见 [`Docs/Architecture/`](Architecture/)，接手导航见 [`Guide/handover.md`](Guide/handover.md)。
+
+**是什么**：**NEGIAO's WebGIS** —— 前后端分离的**双引擎**三维地理信息平台。同一份业务数据可在 **OpenLayers 2D** 与 **Cesium 3D** 之间切换与联动，含多格式数据导入、空间分析、路线规划、AI 对话式地图操作、账号与配额体系。
+
+| 层 | 选型 | 位置 |
+|---|---|---|
+| 前端框架 | Vue 3.5 + Vite + Pinia + Vue Router | `frontend/src/` |
+| 二维引擎 | OpenLayers 10 | `frontend/src/domains/ol/` |
+| 三维引擎 | Cesium 1.146 + Three.js（特效辅助） | `frontend/src/domains/cesium/` |
+| 双引擎共享 | 图层树 / 数据导入 / 用户 / 聊天 | `frontend/src/domains/common/` |
+| 后端 | FastAPI（Python 3.12）+ SQLite 缓存 + SSE | `backend/`（`api` / `core` / `services` / `config`） |
+| 部署 | 前端 GitHub Pages；后端 HF Spaces（Docker） | `deploy/`、`.github/workflows/` |
+
+**动手前必须建立的三个概念**：
+
+1. **引擎域（domain）是第一分层维度**，不是 `components` / `views`。写代码前先判定：这是 OL 专有、Cesium 专有，还是两者共用？共用逻辑一律落 `domains/common/`。
+2. **场景对象必须进 TOC**。任何能加进地图的东西都要登记进 `loadedDataSources`（Cesium）或 layer-tree（OL），否则用户看不见、管不了 —— 见 §3。
+3. **SSOT 是硬约束**。版本号只在根 `README.md`、目录树只在 `*-structure.md`、配置 key 只在 `.env.example` + `catalog.py` —— 见 §4。
+
+**必读四件套（按序）**：
+
+| 文档 | 解决什么 |
+|---|---|
+| 本文件 | 边界、约束、SOP、DoD、交接块 |
+| [`Guide/handover.md`](Guide/handover.md) | 项目认知、历史决策、踩坑记录 |
+| [`Guide/dev-conventions.md`](Guide/dev-conventions.md) | 分层边界、技术约定、门禁 |
+| [`Guide/project-structure.md`](Guide/project-structure.md) | 目录树唯一权威 |
+
+---
+
 ## 1. 任务分级（先定级，再定流程）
 
 不是所有改动都需要全套仪式。**每次任务开始时，Agent 必须先声明本次任务等级**，用户可当场改判。
@@ -40,13 +73,15 @@
 
 > 拿不准等级时**向上取一级**。把 L2 当 L1 处理属于违规。
 
+> **机器人 PR 例外**：依赖机器人（Dependabot）PR 的**查看与合并**不计入 L0–L3 代码任务（不升版本、不写日志），规则见 [§12](#12-线上机器人-pr-处置本地-github-cli)；仅当需为升级**改代码适配**时，适配部分按 L2 计级并走全流程。
+
 ---
 
 ## 2. 硬边界（禁止清单）
 
 以下行为**任何情况下都不得自行执行**，触碰即视为违规，必须停下来请求用户决策：
 
-1. **禁止 Git 写操作** —— `git commit` / `push` / `stash` / `reset` / `checkout -- ` / `rebase` / 改分支。版本控制决策权 100% 归用户。Agent 只负责把改动准备好并说明清楚。
+1. **禁止 Git 写操作** —— `git commit` / `push` / `stash` / `reset` / `checkout -- ` / `rebase` / 改分支。版本控制决策权 100% 归用户。Agent 只负责把改动准备好并说明清楚。**PR 合并同样属禁止范围**（含 `gh pr merge` 与网页端合并）；唯一例外是 [§12.5](#125-授权与执行) 的 Dependabot PR 逐次显式授权，授权不跨会话、不跨 PR 继承。
 2. **禁止在 `/Docs` 之外新建说明类文档** —— 不得在根目录或任意子目录新建临时 README、SUMMARY、NOTES、`*_说明.md`。所有说明统一进 `Docs/LLM_record/` 日志或 `Docs/Guide/`。
 3. **密钥与部署面分级** —— **L3 绝密**（`SUPER_USER`、OAuth secret、SMTP 密码、HF Secrets、生产私钥）禁止写入仓库、禁止在会话中扩散明文。**L1 非密** `deploy/.env`（公开 URL、超时、非密默认值）和 `deploy/.env.local`（本地开发覆盖值，git 追踪）可改，但必须与 `deploy/.env.example` + `backend/config/catalog.py` 同步，并跑 `Scripts/CheckConfigRegistry.py`。`.github/workflows/`、Dockerfile、HF Space 部署清单仍须谨慎：能只提建议则先提建议；确需改动须在日志写明动机。`.env.example` 属登记表，按第 5 节流程可改。
 4. **禁止删除或重写非本次任务范围的文件** —— 包括历史日志、他人代码、注释掉的备用逻辑。确需清理时先列清单请求批准。
@@ -82,26 +117,16 @@
 
 遵循 [`Guide/dev-conventions.md`](Guide/dev-conventions.md) 的分层边界（`components` / `composables` / `stores` / `utils` / `services`），并满足：
 
-- **单一职责封装**：独立功能必须落成独立 `.js` / `.ts` 文件。**禁止继续在 `MapContainer.vue` 等既有巨型文件内堆叠业务逻辑**（该文件已 2000+ 行，只出不进）。
+- **单一职责封装**：独立功能必须落成独立 `.ts` / `.js` 文件。**禁止在既有巨型文件内堆叠业务逻辑** —— `LandingView.vue`、`CesiumContainer.vue`、`MapContainer.vue` 均已超 2500 行，**只出不进**（拆分由 `Docs/TODO/bugfix-optimization-plan.md` P3-1 跟踪，不在功能任务中顺手做）。
 - **UI 图标规范**：Vue 模板中的图标统一使用 `@lucide/vue` 组件（`import { IconName } from '@lucide/vue'`），**禁止使用 emoji 作为图标**（如 📊、🤖、🗄️ 等）。原因：① Lucide 图标支持 currentColor，自动适配主题色与悬停态；② emoji 跨平台渲染不一致（Windows/macOS/移动端字形差异）；③ Lucide 图标可通过 `:size`、`:stroke-width` 等属性精确控制，emoji 无法做到。
 - **类型零报错**：新增 `.ts` 文件必须通过 `tsc --noEmit`，不得引入新的类型错误。
 - **注释义务**：新增函数必须有简洁注释说明「功能 / 参数 / 返回 / 核心逻辑」；同类逻辑函数组织在一起维护。
 - **配置 key 登记前置**：新增任何配置项，顺序恒为 **① 登记 `deploy/.env.example` + `backend/config/catalog.py` → ② 再写读取代码 → ③ 跑 `Scripts/CheckConfigRegistry.py`**。后端业务代码禁止裸读 `os.getenv`；前端业务代码禁止散落 `import.meta.env.VITE_*`（唯一入口 `src/config/publicRuntime.ts`）。
   - **例外：底图源 URL**。底图源 URL（如 Mapbox、MapTiler、GeovisEarth 等第三方瓦片服务）属于**静态资源地址**，非密钥类配置，允许在 `basemapConfig.ts` 等 constants 文件中直接硬编码。原因：① URL 与 token 耦合，拆分到环境变量反而增加维护复杂度；② 底图源变更属于功能变更而非配置变更，需走代码审查流程；③ 这些 URL 是公开可获取的资源地址，无保密需求。
-- **数据源注册前置（TOC / 统一图层管理）**：任何「能把可交互对象加进三维/二维场景」的功能（远程服务、URL 模型、文件导入、模块工作集…）**必须先走数据源注册**，再谈业务交互。禁止只 `entities.add` / `primitives.add` 却不入 `loadedDataSources`（或等价 TOC 元数据店）。
-- **移动端基线（F12 模拟≠真机，高频复发区）**：
-  1. `index.html` viewport 恒带 `shrink-to-fit=no, viewport-fit=cover`（禁 iOS 溢出整页缩小；F12 不复现该行为）。
-  2. 全局 `html { text-size-adjust: 100% }` + `html,body { overflow-x: clip }`（禁 iOS 自动调字与溢出链）。
-  3. 新增 icon / 按钮默认给桌面尺寸，**必须同步写 `@media (pointer: coarse)` 一档**：可点击目标 ≥40px、图标 glyph 同步放大、悬停浮现元素在触屏隐藏或常显。判据用触屏能力、**不用宽度断点**。
-  4. 抽屉/面板类容器在移动端媒体查询内 `min-width` 必须清零（`min-width: 300px` 类基准值是窄屏溢出的典型元凶）。
-  5. 验证要求：触屏目标可用 F12 设备模式（选具体机型，`pointer: coarse` 生效）验证；整页缩小类问题**必须真机复验**，F12 通过不算通过。
-  - **Cesium 标准契约**（权威：`stores/cesiumLayers.ts` + `composables/dataImport/`）：
-    1. 写入 `loadedDataSources` 记录：至少 `{ id, name, type, entity, ...业务字段 }`；远程 URL 模型另存 `sourceUrl`（禁止只留 `blobUrl`）。
-    2. `type` 必须落在 TOC 已知集合（`geojson|kml|kmz|czml|shp|tif|gltf|3dtiles|wayline|imagery…`）；新类型同步 `TYPE_LABELS` / `OPACITY_SUPPORTED_TYPES` / `cesiumLayerNodeBuilder` 动作位。
-    3. 场景操作经 adapter 闭环：**显隐 / 透明度 / flyTo / remove** 必须可用；gltf 另需 **reposition**（`sourceUrl || blobUrl`）；3dtiles 需 **setBaseHeight / setMaterialMode**。
-    4. 优先复用 `dataImport.load*` / `loadRemoteGlb` / `registerExternalDataSource`，禁止在 layers/components 里手写第二套 id 与入列逻辑。
-  - **OL 侧**对齐 `layer-tree` / layer store 注册，不得只加 map 却不进图层树。
-  - **验收**：新增加载路径后，在 TOC 里对新条目实测上述能力；缺一项即视为未完成。
+- **数据源注册前置（TOC / 统一图层管理）**：任何「能把可交互对象加进三维/二维场景」的功能（远程服务、URL 模型、文件导入、模块工作集…）**必须先走数据源注册**，再谈业务交互。禁止只 `entities.add` / `primitives.add` 却不入 `loadedDataSources`（或等价 TOC 元数据店）；OL 侧须对齐 `layer-tree` 注册，不得只加 map 却不进图层树。
+  **Cesium 标准契约**（写入字段 / `type` 已知集合 / adapter 的显隐·透明度·flyTo·remove 闭环 / 复用 `dataImport.load*`）与**验收清单**见 [`dev-conventions.md`](Guide/dev-conventions.md#场景数据与移动端契约)，本文件不复制。
+- **移动端基线**：新增 icon / 按钮默认给桌面尺寸，**必须同步写 `@media (pointer: coarse)` 一档**（可点击目标 ≥40px、图标 glyph 同步放大、悬停浮现元素在触屏隐藏或常显），判据用**触屏能力、不用宽度断点**；抽屉/面板类容器移动端 `min-width` 必须清零。
+  **整页缩小类问题必须真机复验，F12 通过不算通过。** 完整五条（viewport 参数 / `text-size-adjust` / `overflow-x: clip` 等）见 [`dev-conventions.md`](Guide/dev-conventions.md#场景数据与移动端契约)。
 
 ### 阶段四：收尾（见第 7 节 DoD，逐项勾选）
 
@@ -268,18 +293,109 @@ summary:
 
 ### 11.2 推送前自查（必执行，结果写入日志）
 
-每次任务涉及后端或部署面改动、且用户即将 push 到 HF 前，Agent 必须运行以下四条，**全绿才允许提示用户 push**，任一条命中即停工修复：
+涉及后端或部署面改动、且用户即将 push 到 HF 前，运行下列两条，**全绿才允许提示 push**，任一命中即停工修复：
 
 ```bash
-rg -i "playwright|patchright|selenium|puppeteer|2captcha|stealth|xvfb|x11vnc|tigervnc|novnc" backend/ deploy/ frontend/src/ || echo REDLINE-1-CLEAN
-rg -i "xray|v2ray|wireproxy|hysteria|shadowsocks|cloudflared|ngrok|socat|openvpn|wireguard|hermes|autogpt" backend/ deploy/ frontend/src/ || echo REDLINE-2-CLEAN
-rg -i "telegram|telebot|autossh|UptimeRobot|keepalive\.py|start_keepalive|/api/keepalive" backend/ deploy/ frontend/src/ .github/ || echo REDLINE-3-CLEAN
+# 红线 1–8：模式串即 §11.1 禁项枚举（合并为一次扫描，避免同一清单维护两遍）
+rg -i "playwright|patchright|selenium|puppeteer|2captcha|stealth|xvfb|x11vnc|tigervnc|novnc|xray|v2ray|wireproxy|hysteria|shadowsocks|cloudflared|ngrok|socat|openvpn|wireguard|hermes|autogpt|autossh|telegram|telebot|UptimeRobot|keepalive\.py|start_keepalive|/api/keepalive" backend/ deploy/ frontend/src/ .github/ || echo REDLINE-CLEAN
+
+# 红线 9：生产基线不得被破坏
 rg "ALLOW_PRIVATE_HOSTS=true|ALLOWED_HOSTS=\*|RATE_LIMIT=0" deploy/.env && echo "生产基线被破坏，拒绝推送"
 ```
+
+> **已知假阳性（实测）**：`xray` 会命中 `maxRayDistance`（体积云 raymarch 参数），`hermes` 可能命中 Cesium 内部标识。命中后**逐条核对来源**，确认属误报方可放行；不得因噎废食跳过检查。
 
 ### 11.3 违反处置
 
 触碰本节 = §9 最重一档违规：**立即停止一切实施、回滚相关改动、在交接块中如实报告**，未恢复合规前不得开始新任务。
+
+---
+
+## 12. 线上机器人 PR 处置（本地 GitHub CLI）
+
+> **定位**：规定 Agent 如何用本机 `gh` CLI 查看与处置**依赖机器人（Dependabot）**开出的 PR。本节**不改变** §2.1 的决策权归属——合并不是新增授权，而是**逐次借用的权限**。
+>
+> **适用对象**：仅限 `author.login = app/dependabot` 的 PR。人类 PR 与 Copilot coding agent PR **不适用**本节，仍按 §2.1 一律禁止写操作。
+
+### 12.1 事实基线（勿凭记忆改写）
+
+| 项 | 事实 |
+|---|---|
+| 机器人身份 | Dependabot，`author.login = app/dependabot`、`is_bot = true` |
+| 分支形态 | `dependabot/npm_and_yarn/<path>/<pkg>-<ver>`、`dependabot/uv/<path>/<pkg>-<ver>` |
+| 机器人是否自行合并 | **否**。`allow_auto_merge=false`、无 rulesets、无 auto-merge workflow，历史合并 actor 均为账号本人 |
+| 更新策略 | 仅跟 major（`ignore` 掉 semver-minor / semver-patch），weekly 检查；**安全更新不受 schedule 约束**，随时可能冒出新 PR |
+| 仓库合并策略 | `squashMergeAllowed=true`、**`deleteBranchOnMerge=false`** |
+| 本地 CLI 前提 | `gh` ≥ 2.95，且 token 具备 `repo` scope |
+
+> `deleteBranchOnMerge=false` 是关键事实：合并时**必须显式带 `--delete-branch`**，否则 `dependabot/*` 远端分支残留。
+
+### 12.2 权限三分
+
+| 档位 | 动作 | 命令 | 授权要求 |
+|:---:|---|---|---|
+| ✅ **只读·随时可做** | 列清单 / 看详情 / 看检查 / 看 diff / 查仓库策略 / `gh api` **GET** | `gh pr list`、`gh pr view`、`gh pr checks`、`gh pr diff`、`gh repo view` | 无需 |
+| ⚠️ **逐次显式授权** | 合并**单一** PR | `gh pr merge <n> --squash --delete-branch` | 用户须说出「合并 #<n>」类明确指令；授权**仅对该 PR、该一次**有效，不跨会话、不跨 PR 继承 |
+| ⛔ **一律禁止** | 自动合并 / 切分支 / 自评审 / 关闭 / 评论 / 编辑 / `gh api` 写方法 / 绕过保护 | `pr merge --auto`、`pr checkout`、`pr review`、`pr close`、`pr comment`、`pr edit`、`gh api -X POST\|PATCH\|DELETE`、`pr merge --admin` | 无出口；即使用户要求，也须先说明风险再二次确认 |
+
+**为何 `gh pr checkout` 禁止**：它切换本地工作区分支，直接落在 §2.1「改分支」的禁止范围内。需要本地复验时，改由用户在本地自行执行，Agent 只读远端状态。
+
+### 12.3 五步只读核查（顺序固定，禁止跳步）
+
+`list → view → checks --required → diff --name-only → diff --patch`。
+
+**未执行第 4 步（看变更范围）就下「可以合并」结论，等同未核查。** 完整命令与参数见 [`Guide/bot-pr-playbook.md`](Guide/bot-pr-playbook.md#五步只读核查)。
+
+### 12.4 合并准入条件（六条全满足，缺一即暂缓）
+
+| # | 条件 | 判定依据 |
+|:---:|---|---|
+| 1 | 无冲突 | `mergeable=MERGEABLE` 且 `mergeStateStatus=CLEAN` |
+| 2 | 检查全绿 | `gh pr checks <n> --required` 无 fail / pending |
+| 3 | 变更面收敛 | `--name-only` 仅含 `package-lock.json` / `uv.lock` / `package.json` / `pyproject.toml` / `requirements*.txt`；**出现任何业务代码即转人工** |
+| 4 | 版本跨越已判定 | major：须列出 breaking change 核对结论；minor / patch：可直接放行 |
+| 5 | 不触部署面 | 触及 `deploy/.env.example`、`backend/config/catalog.py`、`.github/workflows/` 时**立即转人工**，不走本节 |
+| 6 | 已获授权 | 用户就该 PR 的明确指令（见 §12.5） |
+
+**锁文件专用风险（高频误判点）**：
+
+- `uv.lock` 的 `revision = N` 变动代表**生成它的 uv 版本漂移**，会连带重解析 marker 与依赖树，diff 远超版本号本身。此时**禁止在本地跑 `uv lock` 重生成**（会再改一次并制造二次冲突）；直接接受机器人产物，或整体暂缓。
+- `package-lock.json` 的 `lockfileVersion` 变动同理。
+- 只改锁文件、未改 `package.json` / `pyproject.toml` 的 PR，说明是**传递依赖**升级，运行时变化面小，但仍须条件 2 兜底。
+
+### 12.5 授权与执行
+
+1. **授权形式**：用户在当前会话说出「合并 #45」类指令。含糊表述（如「把 PR 处理一下」）**不构成授权**，须回问具体编号。
+2. **执行前复述**：「即将 squash 合并 #<n>（<依赖> <旧版本> → <新版本>），并删除远端分支」。
+3. **执行**：
+   ```bash
+   gh pr merge <n> --squash --delete-branch
+   ```
+4. **执行后必须回报**：合并 commit SHA、远端分支是否已删除、**提示用户本地 `main` 已落后需自行 `git pull`**（Agent 不得代拉）。
+5. **失败即停**：`gh pr merge` 非零退出时原样转述错误，**不重试、不改用 `--admin`、不换合并方式绕过**。
+
+### 12.6 版本号与日志归属
+
+| 场景 | 版本号 | 日志 |
+|---|:---:|---|
+| 仅查看 / 判定 | 不动 | 不写 |
+| 合并机器人 PR（无需改代码） | **不动** | 不写独立日志；改动记入交接块「改动文件」一栏 |
+| 合并后发现需**改代码适配**（如 major 致构建失败） | 适配部分按 **L2**，+1 修订号 | 按 §6 写完整日志 |
+
+**理由**：机器人 PR 的内容不是 Agent 产出的代码，为其升版本会污染版本历史语义（版本号应对应「本项目做了什么」）；但 Agent 为适配而写的代码是真实改动，必须走全流程。
+
+### 12.7 本节禁止事项
+
+1. 开启仓库级 auto-merge，或使用 `gh pr merge --auto` / `--admin`。
+2. 未经授权执行 `gh pr checkout` / `pr review` / `pr close` / `pr comment` / `pr edit`。
+3. 对**非 Dependabot** 的 PR 套用本节授权（人类 PR 一律禁止写操作）。
+4. 为「让 CI 变绿」而修改 `.github/workflows/`（属 §2.3 第 3 条部署面）。
+5. 放宽 `dependabot.yml` 的 `ignore` 以制造更多 PR，或调高 `open-pull-requests-limit`。
+6. 任何 `gh api` 的 POST / PATCH / DELETE / PUT 方法。
+
+### 12.8 常见故障
+
+`no checks reported`（**不得视为通过**）/ `BLOCKED` / `BEHIND` / 锁文件 diff 异常 / `401-403` / 合并后分支残留 —— 六种现象的成因与处置见 [`Guide/bot-pr-playbook.md`](Guide/bot-pr-playbook.md#常见故障对照)。
 
 ---
 

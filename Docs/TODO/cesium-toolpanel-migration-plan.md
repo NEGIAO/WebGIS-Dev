@@ -1,7 +1,7 @@
 # CesiumToolPanel 功能迁移至统一 TOC 实施方案
 
 > 起草：2026-08-25 ｜ 状态：**待用户批准** ｜ 预估总工作量：3 个阶段，每阶段半天~一天
-> 前置文档：`Docs/TODO/unified-layer-management-refactor-plan.md`
+> 前置文档：`Docs/TODO/archive/unified-layer-management-refactor-plan.md`（已实施，存档）
 
 ---
 

@@ -1,7 +1,7 @@
 # WebGIS 配置指南（Clone 必读）
 
 > 权威配置清单：[`deploy/.env.example`](../../deploy/.env.example)  
-> 分阶段架构计划：[configuration-architecture-plan.md](configuration-architecture-plan.md)  
+> 分阶段架构计划（已全部落地，存档）：[configuration-architecture-plan.md](../TODO/archive/configuration-architecture-plan.md)  
 > 返回 [根 README](../../README.md)
 
 ---

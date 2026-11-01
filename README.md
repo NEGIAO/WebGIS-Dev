@@ -101,6 +101,8 @@
 - [🧰 功能模块全景](#-功能模块全景)
 - [🛠️ 技术栈](#️-技术栈)
 - [⚠️ 建筑抓取合规声明（必读）](#️-建筑抓取合规声明必读)
+  - [数据来源](#数据来源)
+  - [使用边界](#使用边界)
 - [🚀 快速开始](#-快速开始)
   - [环境要求](#环境要求)
   - [配置（双 env 文件架构，先看这一处）](#配置双-env-文件架构先看这一处)
@@ -125,7 +127,7 @@
 
 ## 🎯 项目简介
 
-**NEGIAO's WebGIS** 是一个功能完整、架构清晰的前后端分离 WebGIS 平台（当前版本 V3.6.36），前端托管于 GitHub Pages（正式域名 webgis.negiao.cn），后端以 Docker 部署在 Hugging Face Spaces，通过 RESTful API 通信，支持独立扩展。
+**NEGIAO's WebGIS** 是一个功能完整、架构清晰的前后端分离 WebGIS 平台（当前版本 V3.6.37），前端托管于 GitHub Pages（正式域名 webgis.negiao.cn），后端以 Docker 部署在 Hugging Face Spaces，通过 RESTful API 通信，支持独立扩展。
 
 > 📚 本 README 仅保留核心概览与导航。完整文档已模块化至 [`Docs/Guide/`](Docs/Guide/)，详见下方「文档导航」。
 >
@@ -531,7 +533,7 @@ tiles.negiao.cc.cd"]
 | [项目结构详解](Docs/Guide/project-structure.md) | 完整目录树与各模块职责说明 |
 | [前端结构](Docs/Guide/frontend-structure.md) / [后端结构](Docs/Guide/backend-structure.md) | 逐目录文件树 |
 | [配置指南](Docs/Guide/configuration.md) | 三层配置（deploy .env / Admin+DB / HF Secrets） |
-| [配置架构执行计划](Docs/Guide/configuration-architecture-plan.md) | 分阶段收拢配置的落地路线 |
+| [配置架构执行计划（已落地，存档）](Docs/TODO/archive/configuration-architecture-plan.md) | 分阶段收拢配置的落地路线（V3.4.6–V3.4.13 全阶段完成） |
 | [OAuth 部署配置指南](Docs/Guide/oauth-deployment.md) | Google/GitHub 登录全流程 |
 | [技术栈与常见问题](Docs/Guide/faq.md) | 前后端技术栈、参考资源、FAQ、TODO |
 | [ESRI Wayback 图层清单](Docs/Guide/ESRI_Wayback_Layers_List.md) | 历史影像可用版本台账 |
@@ -555,23 +557,28 @@ tiles.negiao.cc.cd"]
 |------|------|
 | 2D/3D 双引擎 | [`ol-cesium-dual-engine.md`](Docs/Architecture/ol-cesium-dual-engine.md) |
 | 底图源系统 | [`basemap-source-system.md`](Docs/Architecture/basemap-source-system.md) |
-| 底图单一事实源重构 | [`2026-08-02-basemap-ssot-refactor.md`](Docs/Architecture/2026-08-02-basemap-ssot-refactor.md) |
-| 统一底图选择 | [`2026-08-20-unified-basemap-selection.md`](Docs/Architecture/2026-08-20-unified-basemap-selection.md) |
+| 双引擎坐标转换规范 | [`ol-cesium-coordinate-transform-spec.md`](Docs/Architecture/ol-cesium-coordinate-transform-spec.md) |
 | 多格式数据导入 | [`multi-format-data-import.md`](Docs/Architecture/multi-format-data-import.md) |
 | 空间分析后端 | [`spatial-analysis-backend.md`](Docs/Architecture/spatial-analysis-backend.md) |
 | 路径规划 | [`route-planning.md`](Docs/Architecture/route-planning.md) |
 | 三维特效 | [`cesium-3d-effects.md`](Docs/Architecture/cesium-3d-effects.md) |
 | 洪水淹没模拟 | [`cesium-fluid-flood-simulation.md`](Docs/Architecture/cesium-fluid-flood-simulation.md) |
 | 面状航线 | [`cesium-planar-route.md`](Docs/Architecture/cesium-planar-route.md) |
-| 贴地策略 | [`2026-08-22-clamp-to-ground-strategy.md`](Docs/Architecture/2026-08-22-clamp-to-ground-strategy.md) |
 | Cesium 统一图层管理 | [`cesium-unified-layer-management.md`](Docs/Architecture/cesium-unified-layer-management.md) |
 | 实用工具集 | [`utility-tools.md`](Docs/Architecture/utility-tools.md) |
 | 账号体系与 AI 配额 | [`account-system-ai-quota.md`](Docs/Architecture/account-system-ai-quota.md) |
 | 地图 token 运行时池 | [`runtime-map-token-pool.md`](Docs/Architecture/runtime-map-token-pool.md) |
-| 建筑抓取与入库方案 | [`tencent-building-import-plan.md`](Docs/Architecture/tencent-building-import-plan.md) |
 | 瓦片纠偏系统（历史稿，已迁出） | [`tile-rectify-system.md`](Docs/Architecture/tile-rectify-system.md) |
 
-**其它目录**：`Docs/Force_command.md`（Agent 强制规范）· `Docs/TODO/`（20+ 待办方案）· `Docs/LLM_record/`（逐次开发记录）· `Docs/Demo/`（特效与纠偏单页示例）· `Docs/Refactor.md`
+**历史重构记录（`Docs/Architecture/decisions/`）** —— 记录「当时怎么改的」，非现行架构
+
+| 决策 | 文档 |
+|------|------|
+| 底图单一事实源重构 | [`decisions/2026-08-02-basemap-ssot-refactor.md`](Docs/Architecture/decisions/2026-08-02-basemap-ssot-refactor.md) |
+| 统一底图选择 | [`decisions/2026-08-20-unified-basemap-selection.md`](Docs/Architecture/decisions/2026-08-20-unified-basemap-selection.md) |
+| 贴地策略 | [`decisions/2026-08-22-clamp-to-ground-strategy.md`](Docs/Architecture/decisions/2026-08-22-clamp-to-ground-strategy.md) |
+
+**其它目录**：`Docs/Force_command.md`（Agent 强制规范）· [`Docs/TODO/`](Docs/TODO/README.md)（方案与待办，**入口见其 README 索引**）· `Docs/LLM_record/`（逐次开发记录）· [`Docs/Demo/`](Docs/Demo/README.md)（演示页与样例数据，**非文档**）· `Docs/Refactor.md`
 
 ---
 
@@ -607,10 +614,10 @@ tiles.negiao.cc.cd"]
 
 | 版本 | 日期 | 概要 |
 |------|------|------|
+| **V3.6.37** | 2026-11-01 | **单版本整合：HF 推送 LFS 字体修复 + 规范 §12 机器人 PR 处置 + 文档组织治理**。① **LFS**：两个 HF 推送任务的 LFS 白名单自建立起缺字体扩展名，`fontawesome/webfonts/*.woff2` 等以裸 blob 提交被 pre-receive 拒收**整次 push**（远端只列前两个超阈值文件，极易误判为个案）；补 `woff2/woff/ttf/otf/eot` 覆盖 dist 内 64 个字体（1.3 MB）与全栈包 5 个 woff2，并在两处推送前加二进制兜底校验（`git diff --cached --numstat` 判定，漏配时 CI 本地即失败并打印文件名）。② **规范 §12**：新增「线上机器人 PR 处置（GitHub CLI）」，把 Dependabot 依赖 PR 从 §2.1 的灰区变为可执行规程——权限三分（只读随时可做 / 合并须逐次显式授权 / 自动合并·切分支·自评审·close 一律禁止）、五步只读核查、合并准入六条件；明确 `gh pr checkout` 属「改分支」故禁止、`deleteBranchOnMerge=false` 故合并须显式 `--delete-branch`、合并机器人 PR 不升版本不写日志。③ **文档治理**：文档按生命周期分区——`Architecture/decisions/` 隔离历史重构记录、未实施方案迁回 `TODO/`、`ol2cesium` 实现规范迁 `Architecture/`；`TODO/` 建 `README.md` 六态状态机索引，10 篇经代码存在性核验的方案迁 `archive/`；`Force_command` 新增 §0.5 项目速览、§3 技术契约迁 `dev-conventions`、§11.2 四扫合一、§12 手册拆至 `bot-pr-playbook`；新建 `Demo/README.md` 声明非文档，孤儿脚本迁 `Scripts/archive/`，全库修复 33 处引用。详见[完整更新日志](Docs/Guide/CHANGELOG.md) |
 | **V3.6.36** | 2026-10-31 | **Agent 能力扩展 + 搜索链路修复（多批未提交改动整合为单一版本）**。① 新增只读工具 `get_weather`（高德天气，实况 / 四日预报），`AgentExecutor` 注册映射、工具结果白名单补 `weather` 字段，空状态演示建议词改为四条各命中一条能力路径；② 底图关键词匹配改「最长优先 + 代理优先」，系统提示词 8.6k → 1.4k 字符（-83%），`switch_basemap` 的 `url` 通道恢复为一等能力；③ `locationSearch.js` 19 处 `throw new Error` 补 `{ cause }`，`backend/client.js` 清无用赋值并支持 `config.silent`；④ 新增后端 `/api/proxy/amap/place/around`，Agent 搜索改「地理编码 → 周边检索（5km→50km）→ 城市限定文本 → 全国文本 → Nominatim」四级降级并锚定当前视图中心，修复 400 报错与「结果总落在北京」；⑤ 搜索命中自动落图进 TOC：2D 复用 `createManagedVectorLayer`（`sourceType=search`）进「搜索结果图层」分组，3D 序列化为单点 GeoJSON 走 `importUserData` 进「三维数据」分组，导入链补 `silent` 跳过遮罩；⑥ 本轮复核修复：2D/3D 落图改「读回判定」不再乐观上报、`cityCache` 提到工厂作用域、提示词补回「不调用未声明命令」与「不复述带 key 的 URL」两条约束、清理 4 个调用即 `UNKNOWN_COMMAND` 的孤儿图层方法。详见[完整更新日志](Docs/Guide/CHANGELOG.md) |
 | **V3.6.35** | 2026-10-31 | **首屏 LCP 预加载 + RegisterView 按需加载**。① `index.html` 为落地页环纹背景图 `d-bg2_1.webp` 增加按断点 `preload` + `fetchpriority=high`，解决该图因运行时 CSS 注入而无法被初始文档发现的问题；Slow 4G + CPU 4× 实测资源加载延迟 2728 ms → 594 ms、LCP 3471 ms → 2793 ms（-678 ms）；② `router/index.js` 的 `RegisterView` 由静态导入改为动态 `import()`，入口 chunk 187.8 kB（gzip 61.3 kB）→ 98.7 kB（gzip 34.0 kB，-44.5%），并将 `RegisterView` + `api/backend`→`axios` 移出首屏关键路径；另外移除落地页无条件加载的 Google GSI 第三方脚本（改由 RegisterView 按需注入）与失效的 `icon.webp` preload，并为落地页英雄图与 starChart 补显式宽高以消除控制台告警。详见[完整更新日志](Docs/Guide/CHANGELOG.md) |
-| **V3.6.34** | 2026-10-31 | **移动端信息层级收敛 + Cesium 控制条对齐 OL + 首屏打包与依赖加载优化（构建链根治 + 异步组件韧性）+ TIF 解码依赖按需加载**。① OL/Cesium 坐标控制条逐项同构（显隐开关 → 坐标胶囊 → 瓦片级别 → 分隔线 → 主页），触屏默认收起、桌面默认展开，视觉统一为浅色玻璃外壳 + 内层品牌胶囊 + 等宽数值字体；Cesium 触屏坐标收敛为「经度, 纬度, 海拔」单行，瓦片级别由相机高度反解 OL zoom（取整规则与 OL `displayZoom` 一致）；② TOC 触屏默认只显示一级、点击逐级展开，搜索命中强制展开；落地页移动菜单关闭钮改 Lucide `X` SVG 修复 iOS 不居中；③ 移除 Vite 8 / rolldown 下失效的手动 `manualChunks` 与 `modulePreload` 白名单（应用模块被错并入以第三方库命名的 chunk、入口被迫引用 591 kB 的 `vendor-geotiff` blob），首屏 gzip 传输约 365 kB → 120 kB；④ 首屏 4 文件改 store 深导入、`useAuthStore` / `useUserPreferencesStore` 的 API 调用改按需 `import()`，切断 `stores/index.ts` 与 `src/api` 聚合桶，把整张 store 图与 axios 移出首屏预加载图；⑤ 新增 `defineResilientAsync`（占位 + 线性退避重试 + 超时兜底 + 内联样式占位，失败态可点击重试），账号中心五分页与图层面板搜索框改用它，修复分片挂起时「整块 UI 空白、无占位无重试」；⑥ `tifUtils.js` 四个顶层重依赖（geotiff 309 kB 等）下沉为函数内按需 import，`olRemoteServiceAdapter.js` 的 `ol/source` 桶导入改子路径，进入 OL 后不再连带下载栅格解码器。详见[完整更新日志](Docs/Guide/CHANGELOG.md) |
-更早版本（V3.6.33 及以前）请查阅 [完整更新日志 →](Docs/Guide/CHANGELOG.md)。
+更早版本（V3.6.34 及以前）请查阅 [完整更新日志 →](Docs/Guide/CHANGELOG.md)。
 
 ---
 
@@ -632,6 +639,6 @@ tiles.negiao.cc.cd"]
 |:------:|:--------:|:--------:|
 | [GitHub](https://github.com/NEGIAO/WebGIS-Dev) | [webgis.negiao.cn](https://webgis.negiao.cn)（正式域名，GitHub Pages 托管） | [Hugging Face](https://NEGIAO-WebGIS.hf.space) |
 
-<sub>V3.6.36 · 开发中 · 最后更新 2026-10-31</sub>
+<sub>V3.6.37 · 开发中 · 最后更新 2026-11-01</sub>
 
 </div>

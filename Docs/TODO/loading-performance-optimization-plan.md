@@ -6,7 +6,7 @@
 > 实施日志:[`Docs/LLM_record/26-07/2026-07-26/2026-07-26-loading-performance.md`](../LLM_record/26-07/2026-07-26/2026-07-26-loading-performance.md)。
 > 勘误:§1.4/§三 的「dist 121.5MB」为目录清单 2000 条截断假象,真实 dist ≈388MB(tiles 307MB,按需加载不影响首屏);「−7.5MB 死重」结论不受影响。
 > 起草:2026-07-26 会话(基线版本 V3.4.52)。
-> 关联：[`requestrendermode-plan.md`](requestrendermode-plan.md)（运行时 GPU 渲染优化，另一条待批 L3 流水，与本方案零重叠——本方案管「网络加载」，它管「渲染耗电」）；
+> 关联：[`requestrendermode-plan.md`](archive/requestrendermode-plan.md)（运行时 GPU 渲染优化，已实施存档，与本方案零重叠——本方案管「网络加载」，它管「渲染耗电」）；
 > [`bugfix-optimization-plan.md`](bugfix-optimization-plan.md)（滚动规划，顺带发现已登记至该文件）。
 
 ---

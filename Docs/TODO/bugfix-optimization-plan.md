@@ -3,9 +3,9 @@
 > 状态：规划定稿，按优先级滚动执行；每完成一项在本文勾选并链接维护日志。
 > 盘点方法：全库 TODO/FIXME 扫描 + `tsc --noEmit` 全量 + 近日维护日志「待实机回归/风险」归集 +
 > 大文件统计 + 后端安全面走查。基线版本 V3.4.37（2026-07-26）。
-> **2026-07-26 合并**：原并行会话的 `next-sprint-bugfix-and-optimization.md`（属性表 B1–B6 + 容器/架构 O 项 + Phase 3）
+> **2026-07-26 合并**：原并行会话的 `archive/next-sprint-bugfix-and-optimization.md`（属性表 B1–B6 + 容器/架构 O 项 + Phase 3）
 > 已全量并入本文（B 簇 → P0-4，容器二轮 → P3-1，T2 分域/门禁 CI → P3-3/P3-4，性能项 → P2-4/P3-5/P3-6），
-> 该文件删除。本文为**唯一**滚动修复优化规划（Force_command §2.5 指定登记处）。
+> 该文件已迁 `archive/`（V3.6.37）。本文为**唯一**滚动修复优化规划（Force_command §2.5 指定登记处）。
 
 ---
 
@@ -74,7 +74,7 @@
   私网 IP 过滤可被 `2130706433`/`127.1` 等非点分十进制字面量绕过）、`/proxy/gcj2wgs/`（无界磁盘缓存 +
   无响应体大小上限 + Pillow 解压炸弹）、`download_xyz` 瓦片模板无 host 校验。方案：统一 host 白名单 +
   `getaddrinfo` 解析后拒私网 + 响应体/像素上限 + 缓存 LRU/TTL。**需先定「允许代理的瓦片源」清单（L3）**。
-- ✅ **[P0 安全] agent `override_base_url` 致平台 Key 外泄** 【已完成 V3.4.63 · L3 方案 `agent-override-key-leak-plan.md`
+- ✅ **[P0 安全] agent `override_base_url` 致平台 Key 外泄** 【已完成 V3.4.63 · L3 方案 `archive/agent-override-key-leak-plan.md`
   · 日志 2026-07-27-agent-override-base-url-key-leak-fix.md】成立面经逐行核实纠偏为 `/chat/completions` + `/models`
   两处（`/chat/default-proxy` 只接受 override_model 不成立；漏列的 `/chat/proxy` 无 Key 泄漏，其 SSRF 面归上一条）。
   落地：`_validate_override_base_url` 单点护栏（成对校验 fail-closed + 仅 https + 私网/回环拒绝，`_coerce_ip_literal`
@@ -198,7 +198,7 @@ Sprint 3（穿插）：P3-1 容器二轮（O1/O2 交替）→ P2-1 bundle 分析
 - [ ] **后端 HF Space 国内不可达**(影响面最大):前端首屏已提速 79%,但国内用户登录/API/瓦片代理仍会失败。建议单独 L3 立项:后端可达性探测 + 降级策略(分享模式/游客只读)或多活方案;涉及部署面与预算,需用户决策
 - [x] **CHANGELOG 缺 V3.4.52 完整条目** ✅ 07-27 对账会话已补录（连带修复五会话连环撞号：48 空号注记、53′→55、54′→56、55′→57、56′→58 顺延补录，README 推进 V3.4.58，各日志头同步注记）
 - [x] **P0-2 状态与代码疑似脱节** ✅ 07-27 复核销项:`edit?: boolean` 已在 `layerHelpers.ts:22`,全量 `tsc --noEmit` 实测 12 项错误全部为 cesium 模块解析环境噪音、业务代码零错误——修复已随后续提交落地,疑虑解除
-- [ ] **`next-sprint-bugfix-and-optimization.md` 残留**:本文自述该文件「已全量并入本文,该文件删除」,但文件仍存在;删除属范围外操作,提请用户执行
+- [x] ~~**`next-sprint-bugfix-and-optimization.md` 残留**~~（V3.6.37 已解：该文件迁入 `Docs/TODO/archive/`，未删除，符合 Force_command §2.4「只迁移不删除」；本文文首自述已同步改为「已迁 archive」）
 - [ ] `frontend/stats.html`(1.8MB 旧分析产物)与本地 `frontend/dist/` 建议加入 .gitignore(仓库瘦身,CI 全新构建不受影响;用户 2026-07-26 已表态暂不处理,留档备查)
 - [ ] tiles/(307MB PNG)长尾优化候选:WebP 转码/抽稀属大工程,按需加载已成立,收益后置
 - [ ] **V3.5.17 审查遗留（2026-08-11 · 合并关账会话,按 Force_command §2.5 只记不改）· 日志 [2026-08-11-v3.5.17-consolidated-review.md](../LLM_record/26-08/2026-08-11/2026-08-11-v3.5.17-consolidated-review.md)**：
@@ -302,7 +302,7 @@ Sprint 3（穿插）：P3-1 容器二轮（O1/O2 交替）→ P2-1 bundle 分析
   - [ ] (需产品确认) **GLB 是否允许下沉到地表以下**：能力表 `offsetRange.min = -20`，负 z 配 RELATIVE_TO_GROUND 会让模型沉入地下。若不应允许，把 min 调为 0 即可
   - [ ] (观测) **高程滑杆范围未随数据自适应**：GLB 固定 −20~200，对超高模型（>200 m）不够用；3D Tiles 走 `record.heightRange`（±100）。建议统一为「按 boundingSphere 半径比例推导」
 
-- [ ] **3D Tiles 大面积 / 大起伏贴地优化**（2026-10-25 · V3.6.26 后，方案见 `Docs/Architecture/2026-10-25-tileset-large-area-terrain-fit-plan.md`，**待确认后再动代码**）：
+- [ ] **3D Tiles 大面积 / 大起伏贴地优化**（2026-10-25 · V3.6.26 后，方案见 `Docs/TODO/2026-10-25-tileset-large-area-terrain-fit-plan.md`，**待确认后再动代码**）：
   - [x] (P0·已实施 V3.6.26) **目标函数由中位数改为分位数 + 面积加权** ✅ 默认 p75（嵌入率 50%→25%）、三路足迹面积权重、残余高差画像 `fitResidual` + 跨度 >50 m 主动 toast：模拟显示当前 p50 在 343 m 高差场景下嵌入率 50%、最大埋深 148 m；改 p75 可降到 25%。同时把残余高差写入 `record.terrainFitResidual` 并在 TOC 提示，把「单一平移无法完全贴合」显式告知而非静默接受。预估 0.5 人日
   - [x] (P1·已实施 V3.6.26) **区域化贴合** ✅ TOC 右键「贴合到当前视野」：`terrain-fit-view` 动作 + `GroundCtx.region` + `fitToTerrainInView` adapter，按视野内采样估算，命中 <8 点退回整幅：只对当前视野 / 框选范围内的采样点求偏移，新增右键「贴合到当前视野」；采样跨度收敛后现有估算已足够。预估 1 人日
   - [ ] (P2·需立项) **分区多 tileset 实例**：同 URL 加载 N 份 + `clippingPolygons` + 各自 modelMatrix，可近似消除局部失配；**关键未知项是瓦片内容是否重复驻留**（预计内存 N 倍），需先做内存实测再决定 N 与启用阈值。预估 3–5 人日
@@ -366,3 +366,15 @@ Sprint 3（穿插）：P3-1 容器二轮（O1/O2 交替）→ P2-1 bundle 分析
   - [ ] (功能) 设计已定稿（双引擎处理器 + 命令总线白名单 + id 解析 + 状态回读），代码全部丢失：`chat/agent/layerCommandHandlers.ts`（未跟踪文件被并行会话清理）、`MapCommandBus` 的 4 条 COMMAND_SPECS、两个 adapter 的 `layerApi` 注入、`HomeView` 的图层投影与依赖注入、4 条工具声明与提示词、`TOOL_REGISTRY` 映射
   - [ ] (已处理) V3.6.36 整合时清掉了 `GISCommander.js` 里遗留的 4 个孤儿方法（`listLayers` / `setLayerVisibility` / `setLayerOpacity` / `zoomToLayer`）及其 typedef —— 它们对应的命令从未在 `MapCommandBus` 注册，调用只会返回 `UNKNOWN_COMMAND`。**重做时从零补齐整条链路，不要再只加门面方法**
   - [ ] (流程) 教训：同仓库多会话并行时，`git checkout` / `git clean` 类操作会连带清掉他方未跟踪文件。建议并行期间只在**已提交**基线上开工，或先 `git add -A` 固化再动手
+
+- [ ] **README 版本号三处同步缺口（历史遗留，已在 V3.6.37 整合时闭合）**（2026-11-01 记录，按 §2.5 只记不改）：
+  - [ ] (成因) 上一轮发布只更新了「版本演进」表首行与 `CHANGELOG.md`，**未改「项目简介」行与页脚**，两处长期停留在 `V3.6.36` / `2026-10-31`。§5 明确要求三处同步，缺一即视为未完成
+  - [ ] (影响) 「项目简介」行是 `frontend/vite.config.js` 正则 `/当前版本[^\d]*(\d+\.\d+\.\d+)/` 的**机器读取源**，缺口存续期间构建注入的 `__APP_VERSION__` 与真实发布版本不符 —— 属**用户可见**的版本号错报，非纯文档问题
+  - [x] ~~(已处理)~~ V3.6.37 单版本整合时按 §5 强制三处同步（简介行 / 版本表首行 / 页脚均为 `V3.6.37`），缺口闭合。本条留档记录成因，供后续会话识别「表格改了但简介/页脚没改」这一重复模式
+  - [ ] (建议) 在 `Scripts/` 增 `CheckVersionConsistency.py`，校验 README 三处 + `CHANGELOG.md` 首条版本号是否一致并纳入门禁，从机制上消灭该缺口。预估 0.2 人日
+
+- [ ] **结构树门禁只覆盖 1/3 结构文件**（2026-11-01 · V3.6.37 顺带发现，按 §2.5 只记不改）：
+  - [ ] (门禁缺口) **`Scripts/CheckStructureTree.py` 的 docstring 明确只校验 `Docs/Guide/frontend-structure.md` ⇄ `frontend/src`**；`project-structure.md`（根级 + Docs 树）与 `backend-structure.md` 完全不在门禁范围内。而 `Force_command.md` §7 DoD 要求「涉及文件增删 → 对应 `*-structure.md` 已同步」，实际只有 1/3 有机器保障，其余靠人工纪律
+  - [ ] (实证) V3.6.37 治理时发现 `project-structure.md` 的 TODO 段只列了 7/23 个文件（其中 2 个已实施、1 个已自我声明归档），且 `Architecture/` 漏列 3 篇、`Demo/` 漏列 2 页 —— 正是「无门禁覆盖」的必然结果，而非偶发疏忽
+  - [ ] (建议) 扩展脚本：把 `DOC` 常量改为路径列表（三个 structure 文件），分别与 `frontend/src`、`backend/`、`Docs/` 比对；`Docs/` 侧须排除 `LLM_record/`（按月份聚合）与 `Demo/data|textures`（样例数据）。预估 0.5 人日
+  - [ ] (附带) 可一并加两条低成本校验：① `Architecture/decisions/` 内文件名必须匹配 `YYYY-MM-DD-*`（防现行架构混入）；② `Docs/TODO/` 根层每个 md 必须出现在 `TODO/README.md` 索引表中（防索引退化回无索引状态）

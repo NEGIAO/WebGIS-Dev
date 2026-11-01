@@ -2,7 +2,7 @@
 
 > 状态：已全量落地（V3.4.6 → V3.4.13，配置架构计划阶段 0–6 完成）
 > 使用手册：[Docs/Guide/configuration.md](../Guide/configuration.md) ·
-> 落地路线与各阶段记录：[configuration-architecture-plan.md](../Guide/configuration-architecture-plan.md) ·
+> 落地路线与各阶段记录：[configuration-architecture-plan.md](../TODO/archive/configuration-architecture-plan.md) ·
 > 返回 [根 README](../../README.md)
 
 本文回答一个问题：**一份配置从哪里来、经过谁、最终被谁消费，以及绝密为什么到不了不该到的地方。**
@@ -186,4 +186,4 @@ sequenceDiagram
 ---
 
 *相关代码：`backend/config/`、`frontend/src/config/publicRuntime.ts`、`Scripts/CheckConfigRegistry.py`；
-维护日志见 `Docs/LLM_record/26-07-26/`。*
+维护日志见 `Docs/LLM_record/26-07/2026-07-26/`。*

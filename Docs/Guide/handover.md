@@ -24,7 +24,7 @@
 
 | 你想… | 看这里 |
 |--------|--------|
-| 配置/部署/密钥分层 | [configuration.md](configuration.md)（手册）→ [configuration-three-tier.md](../Architecture/configuration-three-tier.md)（运行原理）→ [执行计划](configuration-architecture-plan.md)（演进史） |
+| 配置/部署/密钥分层 | [configuration.md](configuration.md)（手册）→ [configuration-three-tier.md](../Architecture/configuration-three-tier.md)（运行原理）→ [执行计划（存档）](../TODO/archive/configuration-architecture-plan.md)（演进史） |
 | OAuth 登录配置排错 | [oauth-deployment.md](oauth-deployment.md) |
 | 找某个文件/理解目录 | [project-structure.md](project-structure.md) → [frontend-structure.md](frontend-structure.md) / [backend-structure.md](backend-structure.md)（唯一权威树，改文件必同步） |
 | 理解某功能架构 | `Docs/Architecture/` 十一篇（双引擎/底图/导入/分析/特效/账号/配置/图层管理…），入口见根 README「架构文档」表 |
@@ -74,7 +74,7 @@ L3 HF Secrets（SUPER_USER / OAuth secret / SMTP 密码 / API Key）→ 只有�
   绘制面板 SelectEdit 共用同一引擎；非绘制图层删空保留记录（移除权归 TOC）。
 - **用户偏好消费模式**：store 写 runtime 缓存（`webgis_pref_*`）→ 消费方同步读取（零 Pinia、不阻塞初始化）；
   底图优先级恒为 URL 参数 > 用户偏好 > 管理员默认（2D/3D 共用 preset id）。
-- 细节与验收清单：[UI/UX 线交接文档](../LLM_record/26-07-26/2026-07-26-handover-ui-ux-workstream.md)。
+- 细节与验收清单：[UI/UX 线交接文档](../LLM_record/26-07/2026-07-26/2026-07-26-handover-ui-ux-workstream.md)。
 
 ## 5. 高频修改场景 → 代码坐标
 

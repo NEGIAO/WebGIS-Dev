@@ -1,7 +1,7 @@
 # Cesium 统一图层管理 — 设计文档
 
 > 状态：**已实施（V3.4.33，两步走全量落地）**；决策点拍板：分组内平铺、2D 模式隐藏（随容器清档自动实现）、
-> 数据生命周期跟随容器、矢量透明度二期。实施日志：`Docs/LLM_record/26-07-26/2026-07-26-cesium-unified-layer-mgmt-impl.md`
+> 数据生命周期跟随容器、矢量透明度二期。实施日志：`Docs/LLM_record/26-07/2026-07-26/2026-07-26-cesium-unified-layer-mgmt-impl.md`
 > 关联：[2D 图层体系 basemap-source-system.md](basemap-source-system.md) ·
 > [多格式数据导入 multi-format-data-import.md](multi-format-data-import.md) ·
 > 返回 [根 README](../../README.md)

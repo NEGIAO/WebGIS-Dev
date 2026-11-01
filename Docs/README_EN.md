@@ -485,7 +485,7 @@ tiles.negiao.cc.cd"]
 | [Project structure](Guide/project-structure.md) | Full directory tree and module responsibilities |
 | [Frontend structure](Guide/frontend-structure.md) / [Backend structure](Guide/backend-structure.md) | File-level trees |
 | [Configuration](Guide/configuration.md) | Three-tier config (deploy .env / Admin+DB / HF Secrets) |
-| [Configuration architecture plan](Guide/configuration-architecture-plan.md) | Staged consolidation roadmap |
+| [Configuration architecture plan (done, archived)](TODO/archive/configuration-architecture-plan.md) | Staged consolidation roadmap (all phases V3.4.6–V3.4.13) |
 | [OAuth deployment](Guide/oauth-deployment.md) | Google/GitHub login end to end |
 | [Tech stack & FAQ](Guide/faq.md) | Stacks, references, FAQ, TODO |
 | [ESRI Wayback layers](Guide/ESRI_Wayback_Layers_List.md) | Historical imagery version catalog |
@@ -508,24 +508,29 @@ tiles.negiao.cc.cd"]
 | Feature | Document |
 |------|------|
 | 2D/3D dual engine | [`ol-cesium-dual-engine.md`](Architecture/ol-cesium-dual-engine.md) |
+| Dual-engine coordinate transform spec | [`ol-cesium-coordinate-transform-spec.md`](Architecture/ol-cesium-coordinate-transform-spec.md) |
 | Basemap source system | [`basemap-source-system.md`](Architecture/basemap-source-system.md) |
-| Basemap single-source-of-truth refactor | [`2026-08-02-basemap-ssot-refactor.md`](Architecture/2026-08-02-basemap-ssot-refactor.md) |
-| Unified basemap selection | [`2026-08-20-unified-basemap-selection.md`](Architecture/2026-08-20-unified-basemap-selection.md) |
 | Multi-format data import | [`multi-format-data-import.md`](Architecture/multi-format-data-import.md) |
 | Spatial analysis backend | [`spatial-analysis-backend.md`](Architecture/spatial-analysis-backend.md) |
 | Route planning | [`route-planning.md`](Architecture/route-planning.md) |
 | 3D effects | [`cesium-3d-effects.md`](Architecture/cesium-3d-effects.md) |
 | Flood simulation | [`cesium-fluid-flood-simulation.md`](Architecture/cesium-fluid-flood-simulation.md) |
 | Planar route | [`cesium-planar-route.md`](Architecture/cesium-planar-route.md) |
-| Clamp-to-ground strategy | [`2026-08-22-clamp-to-ground-strategy.md`](Architecture/2026-08-22-clamp-to-ground-strategy.md) |
 | Cesium unified layer management | [`cesium-unified-layer-management.md`](Architecture/cesium-unified-layer-management.md) |
 | Utility tools | [`utility-tools.md`](Architecture/utility-tools.md) |
 | Accounts & AI quota | [`account-system-ai-quota.md`](Architecture/account-system-ai-quota.md) |
 | Runtime map-token pool | [`runtime-map-token-pool.md`](Architecture/runtime-map-token-pool.md) |
-| Building import plan | [`tencent-building-import-plan.md`](Architecture/tencent-building-import-plan.md) |
 | Tile rectification (historical; moved out) | [`tile-rectify-system.md`](Architecture/tile-rectify-system.md) |
 
-**Other**: `Docs/Force_command.md` (agent policy) · `Docs/TODO/` (20+ proposals) · `Docs/LLM_record/` (per-session records) · `Docs/Demo/` (standalone effect demos) · `Docs/Refactor.md`
+**Historical refactor records (`Architecture/decisions/`)** — how it was changed at the time, not current architecture
+
+| Decision | Document |
+|------|------|
+| Basemap single-source-of-truth refactor | [`decisions/2026-08-02-basemap-ssot-refactor.md`](Architecture/decisions/2026-08-02-basemap-ssot-refactor.md) |
+| Unified basemap selection | [`decisions/2026-08-20-unified-basemap-selection.md`](Architecture/decisions/2026-08-20-unified-basemap-selection.md) |
+| Clamp-to-ground strategy | [`decisions/2026-08-22-clamp-to-ground-strategy.md`](Architecture/decisions/2026-08-22-clamp-to-ground-strategy.md) |
+
+**Other**: `Docs/Force_command.md` (agent policy) · [`Docs/TODO/`](TODO/README.md) (proposals — **see its README index**) · `Docs/LLM_record/` (per-session records) · [`Docs/Demo/`](Demo/README.md) (demos & sample data, **not docs**) · `Docs/Refactor.md`
 
 ---
 
