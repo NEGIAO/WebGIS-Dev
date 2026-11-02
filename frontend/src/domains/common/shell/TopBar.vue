@@ -591,8 +591,8 @@ function normalizeLayerIndex(value, fallback = DEFAULT_BASEMAP_URL_LAYER_NUMBER)
 }
 
 /**
- * 分享链接黑名单：这 3 个参数为用户私有信息，分享时一律清空。
- * ut  = 用户身份（guest/admin/registered）
+ * 分享链接剥离清单：用户私有信息，分享时一律清空。
+ * ut  = 用户类型标签（guest/admin/registered）
  * loc = 定位授权来源（gps/ip）
  * p   = 编码后的 GPS 精准位置
  * 其余参数（lng、lat、z、l、view、cv、cs 等）全部保留，用于还原分享者的视图与位置状态。

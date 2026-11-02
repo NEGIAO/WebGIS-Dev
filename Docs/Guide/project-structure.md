@@ -107,6 +107,7 @@ Docs/
 │   ├── download-service.md            # 下载服务
 │   ├── utility-tools.md               # 实用工具：测量、坐标拾取、罗盘
 │   ├── account-system-ai-quota.md     # 账号体系：邮箱登录、三级身份、双 AI 配额
+│   ├── identity-auth-security.md      # 身份鉴权链路与安全模型（信任边界、威胁、反爬强度）
 │   ├── runtime-map-token-pool.md      # 运行时地图 token 池
 │   └── decisions/                     # 历史重构记录（日期命名，非现行架构）
 │       ├── 2026-08-02-basemap-ssot-refactor.md    # 底图单一事实源重构

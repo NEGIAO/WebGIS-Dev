@@ -12,6 +12,7 @@ import {
     apiAuthListOAuthAccounts,
     apiAuthUnlinkOAuthAccount,
     redirectToOAuthBindProvider,
+    apiAdminOverview,
     apiAgentListModels,
     apiCreateUserMessage,
     apiListUserMessages,
@@ -19,6 +20,7 @@ import {
     apiStatisticsRealtime,
 } from '@/api/backend';
 import { clearAuthSession, getAuthToken, getAuthUser, setAuthSession, syncUserRoleToUrl } from '@common/user/services/auth';
+import { useAuthStore } from '@common/user/stores/useAuthStore';
 import { BASEMAP_OPTIONS } from '@/constants';
 import { useUserPreferencesStore, useThemeStore, isBasemapPreferenceSelectable } from '@/stores';
 import { getUserDisplayName } from '@common/user/composables/useAuthIdentity';
@@ -56,6 +58,7 @@ const router = useRouter();
 const message = useMessage();
 const userPreferencesStore = useUserPreferencesStore();
 const themeStore = useThemeStore();
+const authStore = useAuthStore();
 const { t } = useLocale();
 
 // SSE 实时统计推送：连接由全局 HomeView 管理（打开网站即在线），
@@ -148,7 +151,21 @@ const preferenceDraft = ref({
 const preferenceSaving = ref(false);
 const preferenceModelOptions = ref([]);
 
-const isAdmin = computed(() => String(user.value?.role || '') === 'admin');
+// 管理入口可见性只认后端判定：authStore.user 由 /api/auth/me 的响应写入。
+// 不使用 sessionStorage 缓存（getAuthUser）作为判据——该缓存可被用户手工改写，
+// 只能用于展示昵称/头像，不能决定任何权限相关 UI 的可见性。
+const adminDenied = ref(false);
+const isAdmin = computed(
+    () => !adminDenied.value && String(authStore.user?.role || '') === 'admin',
+);
+
+// 身份变化（重新登录 / 切换账号）时重置拒绝标记，避免一次 403 永久锁死入口
+watch(
+    () => authStore.user?.username,
+    () => {
+        adminDenied.value = false;
+    },
+);
 
 function resolvePublicAssetPath(relativePath) {
     const normalizedBase = ASSET_BASE_URL.endsWith('/') ? ASSET_BASE_URL : `${ASSET_BASE_URL}/`;
@@ -556,8 +573,25 @@ async function handleUnlinkOAuth(provider) {
     }
 }
 
-function selectMenu(menu) {
+async function selectMenu(menu) {
     if (menu === 'admin' && !isAdmin.value) return;
+
+    // 进入管理页签前先向后端探活一次：返回 403 即说明当前会话在后端看来不是管理员，
+    // 立即收回入口。可见性由服务端判定，前端不自行推断。
+    if (menu === 'admin') {
+        try {
+            await apiAdminOverview();
+        } catch (error) {
+            if (Number(error?.status) === 403) {
+                adminDenied.value = true;
+                activeMenu.value = 'overview';
+                message.error(t('account.messages.adminDenied'));
+                return;
+            }
+            // 401 说明会话已失效，交给全局拦截器跳转登录，不再渲染管理页签
+            if (Number(error?.status) === 401) return;
+        }
+    }
 
     activeMenu.value = menu;
     // 切页缓存（V3.4.62 A10）：本次打开期间首次进入才拉取；

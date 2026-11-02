@@ -6,6 +6,7 @@
 """
 
 import hashlib
+import ipaddress
 import logging
 import re
 import secrets
@@ -336,19 +337,44 @@ def _validate_password(password: str, field_name: str = "密码") -> None:
 
 
 # ─── 请求工具函数 ───
+def _first_valid_ip(raw_value: object) -> str:
+    """从逗号分隔的头部值里取第一个合法 IP；非法内容返回空串。
+
+    仅做格式收敛，不构成信任判断：这些头部由客户端可写，任何取值都能被伪造。
+    """
+    for candidate in str(raw_value or "").split(","):
+        text = candidate.strip()
+        if not text:
+            continue
+        # 兼容 "1.2.3.4:5678" 形式；IPv6 含多个冒号，不按端口切分
+        if text.count(":") == 1 and "." in text:
+            text = text.split(":", 1)[0]
+        try:
+            return str(ipaddress.ip_address(text))
+        except ValueError:
+            continue
+    return ""
+
+
 def _extract_client_ip(request: Request) -> str:
+    """提取客户端 IP，仅用于展示、审计与游客身份派生。
+
+    ⚠️ 不是信任边界：`X-Client-IP` / `X-Forwarded-For` / `X-Real-IP` 全部由客户端
+    可写，取值可任意伪造。因此**任何鉴权或限流决策都不得只依赖本函数的结果**——
+    登录失败节流以账号维度为主（见 `throttle.py`），IP 仅作次级约束。
+    """
     # 优先级 1: 前端主动上报的公网 IP（解决 Docker 环境 request.client.host 是容器网关 IP 的问题）
-    client_ip = str(request.headers.get("X-Client-IP", "")).strip()
+    client_ip = _first_valid_ip(request.headers.get("X-Client-IP", ""))
     if client_ip:
         return client_ip
 
     # 优先级 2: 反向代理设置的 X-Forwarded-For
-    forwarded = str(request.headers.get("X-Forwarded-For", "")).strip()
+    forwarded = _first_valid_ip(request.headers.get("X-Forwarded-For", ""))
     if forwarded:
-        return forwarded.split(",")[0].strip()
+        return forwarded
 
     # 优先级 3: 反向代理设置的 X-Real-IP
-    real_ip = str(request.headers.get("X-Real-IP", "")).strip()
+    real_ip = _first_valid_ip(request.headers.get("X-Real-IP", ""))
     if real_ip:
         return real_ip
 

@@ -48,6 +48,7 @@ backend/
 │   │   ├── schema.py                              # DDL、邮箱账号迁移与数据库维护事件同步
 │   │   ├── session.py                             # 会话管理、邮箱与受限绑定 session
 │   │   ├── system_config.py                       # 系统配置
+│   │   ├── throttle.py                            # 登录失败节流（进程内滑动窗口，账号维度优先）
 │   │   ├── user.py                                # 用户 CRUD + 游客名由 guest_uid 派生（防撞名）
 │   │   └── verification.py                        # 验证码生成/存储/校验/频率限制
 │   └── spatial/                                   # 空间分析 API（模块化拆分，统一 EPSG:3857）

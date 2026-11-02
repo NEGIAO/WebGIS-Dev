@@ -48,7 +48,7 @@ interface PendingParams {
  * @property loc: 定位来源标记 ('gps' | 'ip' | '0') — '1' 视为 'gps' 兼容旧链接
  * @property p: 加密位置编码
  * @property view: 地图视图引擎 ('ol' | 'cesium')
- * @property ut: 用户类型（guest|admin|registered）
+ * @property ut: 用户类型标签（guest|admin|registered），仅供统计分组，不参与鉴权
  *
  * 注意：罗盘参数 (cs) 由 compassUrlState.ts 独立管理，不在此接口中定义
  */

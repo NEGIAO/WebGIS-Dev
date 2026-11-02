@@ -35,6 +35,7 @@ export default {
         },
         messages: {
             refreshed: '账号中心数据已刷新',
+            adminDenied: '服务端校验未通过：当前会话不具备管理员权限，已隐藏管理入口',
             centerLoadFailed: '用户中心数据加载失败',
             realtimeLoadFailed: '实时统计刷新失败',
             oauthLoadFailed: '第三方账号绑定状态加载失败',

@@ -21,6 +21,7 @@ export default {
         },
         messages: {
             refreshed: 'Account data refreshed',
+            adminDenied: 'Server check failed: this session has no admin rights, admin entry hidden',
             centerLoadFailed: 'Failed to load account center data',
             realtimeLoadFailed: 'Failed to refresh realtime stats',
             oauthLoadFailed: 'Failed to load linked account status',

@@ -256,16 +256,24 @@ app = FastAPI(
 
 # ==================== CORS 中间件配置 ====================
 
-# CORS 来源白名单经统一 loader 读取（L1 key: CORS_ALLOWED_ORIGINS，逗号分隔）；
-# 留空 = 允许所有来源（allow all）。SSE（EventSource withCredentials）要求
-# 响应必须带 Access-Control-Allow-Credentials: true，故 credentials 恒开；
-# Starlette 在 credentials 模式下会把通配来源回显为请求 Origin（等价 allow all）。
+# CORS 来源白名单经统一 loader 读取（L1 key: CORS_ALLOWED_ORIGINS，逗号分隔）。
+# 留空 = 拒绝全部跨源请求（fail-closed），同源访问不受影响；不再回退通配 "*"。
+# 理由：通配 + allow_credentials 会让任意站点都能携带凭据调用本服务。真正的权限边界
+# 在 require_admin 的服务端会话校验，但不该主动放弃这层浏览器侧约束。
+# 注意：CORS 只约束浏览器，挡不住 curl / Postman / 本地脚本直连，它不是鉴权。
 _cors_raw = get_str("CORS_ALLOWED_ORIGINS", "")
-_cors_origins = [item.strip().rstrip("/") for item in _cors_raw.split(",") if item.strip()] or ["*"]
+_cors_origins = [item.strip().rstrip("/") for item in _cors_raw.split(",") if item.strip()]
+if not _cors_origins:
+    logger.warning(
+        "CORS_ALLOWED_ORIGINS 未配置：所有跨源请求将被浏览器拒绝（同源不受影响）。"
+        "请在前端来源白名单中登记域名后重启服务。"
+    )
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_cors_origins,
+    # SSE（EventSource withCredentials）要求响应带 Access-Control-Allow-Credentials: true，
+    # 故 credentials 恒开；正因如此白名单必须是精确来源，不能用通配。
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

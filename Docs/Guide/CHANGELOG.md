@@ -6,6 +6,71 @@
 
 ## 版本记录
 
+### V3.6.39 (2026-11-02) — 鉴权加固：CORS 白名单、管理入口后端判定、登录失败节流（含文档整合）
+
+> **一句话**：把「谁能看到管理入口」「谁能反复试密码」「哪些站点能调接口」三件事，从前端约定收回到服务端判定，并补一份鉴权链路架构文档。
+>
+> **整合说明**：本版合并同日迭代中的 4 个中间版本（V3.6.40–V3.6.43）为单一版本。中间两次围绕 `ut` 的改动（先移除、后新增 `utt`）**均已回滚**，最终 `ut` 与 V3.6.38 保持一致。
+
+#### ① CORS 白名单显式化
+
+`app.py` 原在 `CORS_ALLOWED_ORIGINS` 为空时回退 `["*"]`，配合 `allow_credentials=True` 等于任意站点都能携带凭据调用接口。改为：空值 → 空列表（拒绝全部跨源，同源不受影响）并输出 warning；`deploy/.env` 显式登记 9 个前端来源（正式域名、GitHub Pages 全路径、CF Pages 与 Posit/HF Static 镜像），`.env.example` 与 `catalog.py` 描述同步。
+
+**边界**：CORS 只约束浏览器，`curl` / Postman / 服务端脚本不受限，它不是鉴权。
+
+#### ② 管理入口改由后端判定
+
+`FloatingAccountPanel` 原用 `getAuthUser()`（sessionStorage 缓存）判定 `isAdmin`，该缓存可被用户手工改写，会出现「界面像管理员、接口全 403」的分裂状态。改为：
+
+- `isAdmin` 读 `useAuthStore().user.role`——该值仅由 `/api/auth/me` 响应写入；
+- 切换到管理页签前调用 `apiAdminOverview()` 探活，返回 **403** 即置 `adminDenied`、回退总览并提示；返回 **401** 交由全局拦截器跳登录；
+- 身份变化（重新登录/切换账号）时重置 `adminDenied`，避免一次 403 永久锁死入口。
+
+#### ③ 登录失败节流（新增 `auth/throttle.py`）
+
+`/login` 原对管理员分支只做一次 `hmac.compare_digest`，无失败计数、无锁定；而 `admin` 用户名固定、`SUPER_USER` 为单一静态口令。新增进程内滑动窗口：
+
+| 维度 | 阈值 | 锁定时长 | 说明 |
+|---|---|---|---|
+| 账号 | 5 次失败 / 60 秒 | 60 秒 | **主约束**，账号名无法伪造 |
+| IP | 30 次失败 / 60 秒 | 60 秒 | 次级约束，压制单源撞库 |
+
+超限返回 `429` + `Retry-After` + 业务码 `LOGIN_THROTTLED`；成功登录清空账号维度计数。四个阈值经 `LOGIN_THROTTLE_ACCOUNT_MAX_FAILURES` / `LOGIN_THROTTLE_IP_MAX_FAILURES` / `LOGIN_THROTTLE_WINDOW_SECONDS` / `LOGIN_THROTTLE_LOCK_SECONDS` 配置（启动时读取，改后需重启）。
+
+**为何账号维度优先**：客户端 IP 取自 `X-Client-IP` / `X-Forwarded-For`，`curl -H "X-Client-IP: ..."` 即可逐次轮换；只按 IP 限流等于没有限流。
+
+#### ④ 客户端 IP 提取加固
+
+`_extract_client_ip` 新增 `_first_valid_ip`：非法值（垃圾串、`ip:port`、注入内容）直接丢弃并回退下一来源；函数注释明确它**不是信任边界**，鉴权与限流不得只依赖其结果。
+
+#### ⑤ 新增架构文档
+
+`Docs/Architecture/identity-auth-security.md`：登录时序图 + 逐请求鉴权分层图（2 张 Mermaid），信任边界表、管理员四条硬约束、9 项威胁的「控制 → 残留」对照、反爬强度评估（含 3 个已知缺口）。与 `account-system-ai-quota.md` 的边界：本文只讲链路与安全属性，角色与配额以该文为准。
+
+#### ⑥ 传输层约束：线上仅 HTTPS，后端容器拒绝一切显式 http 请求
+
+**文档**：`identity-auth-security.md` §7 把「传输层」拆为前端与后端两行，并补 §7.1 / §7.2——
+
+- 301 只挡住第二次请求，首个明文请求仍可被劫持重定向、注入 JS 读取 `sessionStorage`，因此「只允许 HTTPS」必须配 HSTS 才算完整（CF 开启路径、`includeSubDomains` 波及面、HSTS 生效后本地 hosts 复现失效的预期副作用）；
+- 后端容器内 uvicorn 只监听 `127.0.0.1:8000` 明文，无法自行提供 TLS，"禁止 HTTP"只能落成「拒绝声称自己不是 HTTPS 的请求」。
+
+**代码**：`deploy/nginx.conf`
+
+1. server 级新增 `if ($http_x_forwarded_proto ~* "^http$") { return 403; }`，覆盖全部 location（含静态资源）；不带该头的请求放行，容器内健康检查与同机调用不受影响；
+2. 修正一处隐患：原 `proxy_set_header X-Forwarded-Proto $scheme` 会把该头**覆盖成恒为 `http`**（nginx 自身只监听明文），真实协议信息被抹掉；改为透传边缘下发的 `$http_x_forwarded_proto`。
+
+已用容器校验配置：`docker run --rm ... nginx -t` → `syntax is ok` / `test is successful`。
+
+#### ⑦ 试错记录：为什么最终没有改 `ut`
+
+| 尝试 | 结论 |
+|---|---|
+| 移除 `ut`（原 V3.6.39） | 误判。`ut` 是统计分组与人工排查的真实用途，删除等于砍掉观测手段 |
+| 新增 `utt` = `sha256(令牌)[:12]` + 回查接口（原 V3.6.40） | 无效。统计上报的 URL 由客户端完全可控（`window.location` / 采集端均可构造），URL 内的任何标记都无法证明身份 |
+| 最终 | `ut` 保持原样，仅在注释中标注「仅统计、不参与鉴权」；改由服务端会话与登录审计承担身份判断 |
+
+> 完整日志：[Docs/LLM_record/26-11/2026-11-02/2026-11-02-v3.6.39-consolidated.md](../LLM_record/26-11/2026-11-02/2026-11-02-v3.6.39-consolidated.md)
+
 ### V3.6.38 (2026-11-01) — 整合发布：V3.6.38–V3.6.50 十三项改动合并为单一版本
 
 > **一句话**：将 2026-11-01 当天零散提交的 13 个版本（V3.6.38–V3.6.50）整合为单一发布版本 V3.6.38，消除「一次小改动升一个版本号」带来的版本号通胀与日志碎片；功能与修复内容完全保留，仅统一版本号与发布叙事。原 12 份独立 `LLM_record` 日志合并为本文件 `Docs/LLM_record/26-11/2026-11-01/2026-11-01-v3.6.38-consolidated.md`。

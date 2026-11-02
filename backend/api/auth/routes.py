@@ -31,7 +31,7 @@ from .constants import (
     normalize_role,
     resolve_quota_subject,
 )
-from .dependencies import require_login, require_admin
+from .dependencies import _auth_error_detail, require_login, require_admin
 from .models import (
     BindEmailRequest,
     ChangeAvatarRequest,
@@ -73,6 +73,7 @@ from .session import (
     _update_user_password_sync,
 )
 from .system_config import _get_admin_avatar_index_sync, _set_admin_avatar_index_sync
+from .throttle import check_login_allowed, clear_login_failures, record_login_failure
 from .password import _verify_password
 from .user import (
     _create_user_sync,
@@ -724,10 +725,23 @@ async def login_user(payload: LoginRequest, request: Request) -> Dict[str, Any]:
 
     normalized_credential = credential.lower()
 
+    # 登录失败节流：账号维度为主、IP 维度为辅。IP 来自请求头（X-Client-IP 等）且可伪造，
+    # 只按 IP 限流等于没有限流；账号名是攻击者必须命中的目标，无法靠改头绕过。
+    request_ip = _extract_client_ip(request)
+    allowed, retry_after, _throttle_reason = check_login_allowed(normalized_credential, request_ip)
+    if not allowed:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=_auth_error_detail(
+                "LOGIN_THROTTLED",
+                f"登录尝试过于频繁，请在 {retry_after} 秒后重试",
+            ),
+            headers={"Retry-After": str(retry_after)},
+        )
+
     if normalized_credential == GUEST_USERNAME and hmac.compare_digest(
         password.encode("utf-8"), GUEST_PASSWORD.encode("utf-8")
     ):
-        request_ip = _extract_client_ip(request)
         request_user_agent = str(request.headers.get("User-Agent", "unknown"))
         guest_device_id = _normalize_guest_device_id(payload.guest_device_id)
         guest_uid = _build_guest_uid(request_ip, request_user_agent, guest_device_id)
@@ -756,11 +770,13 @@ async def login_user(payload: LoginRequest, request: Request) -> Dict[str, Any]:
         # 编码为 bytes 再比较：password 含非 ASCII 字符时 hmac.compare_digest(str, str)
         # 会抛 TypeError → 500（且能借此区分保留账号），bytes 比较等长时间且不受字符集影响。
         if not hmac.compare_digest(password.encode("utf-8"), super_user_secret.encode("utf-8")):
+            record_login_failure(normalized_credential, request_ip)
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="账号或密码错误",
             )
 
+        clear_login_failures(normalized_credential)
         return await _build_login_response(
             request=request,
             username=ADMIN_USERNAME,
@@ -781,11 +797,13 @@ async def login_user(payload: LoginRequest, request: Request) -> Dict[str, Any]:
             password,
             str(user.get("password_hash", "")),
         ):
+            record_login_failure(normalized_credential, request_ip)
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="账号或密码错误",
             )
 
+        clear_login_failures(normalized_credential)
         return await _build_login_response(
             request=request,
             username=str(user.get("username") or ""),

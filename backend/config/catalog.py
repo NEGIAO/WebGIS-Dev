@@ -60,6 +60,30 @@ CONFIG_CATALOG: Dict[str, ConfigMeta] = {
         "secret": False,
         "description": "PBKDF2 迭代次数",
     },
+    "LOGIN_THROTTLE_ACCOUNT_MAX_FAILURES": {
+        "layer": "L1",
+        "default": 5,
+        "secret": False,
+        "description": "登录节流：同一账号在统计窗口内的失败次数上限",
+    },
+    "LOGIN_THROTTLE_IP_MAX_FAILURES": {
+        "layer": "L1",
+        "default": 30,
+        "secret": False,
+        "description": "登录节流：同一 IP 在统计窗口内的失败次数上限（次级约束，IP 可伪造）",
+    },
+    "LOGIN_THROTTLE_WINDOW_SECONDS": {
+        "layer": "L1",
+        "default": 60,
+        "secret": False,
+        "description": "登录节流：失败计数的统计窗口（秒）",
+    },
+    "LOGIN_THROTTLE_LOCK_SECONDS": {
+        "layer": "L1",
+        "default": 60,
+        "secret": False,
+        "description": "登录节流：达到阈值后的锁定时长（秒）",
+    },
     "OAUTH_STATE_TTL_SECONDS": {
         "layer": "L1",
         "default": 600,
@@ -257,7 +281,7 @@ CONFIG_CATALOG: Dict[str, ConfigMeta] = {
         "layer": "L1",
         "default": "",
         "secret": False,
-        "description": "全局 CORS 来源白名单（逗号分隔；空 = 允许所有来源，兼容旧行为）",
+        "description": "全局 CORS 来源白名单（逗号分隔，scheme+host[:port]；空 = 拒绝全部跨源请求，同源不受影响）",
     },
     "HF_RUN_LOGS_URL": {
         "layer": "L1",

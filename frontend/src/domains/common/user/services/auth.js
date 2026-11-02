@@ -275,7 +275,11 @@ export function getGuestSessionMetadata() {
 
 /**
  * 将用户角色同步到 URL hash 参数中（ut=userType）
- * 用于前端路由守卫和分享链接识别用户身份
+ *
+ * 该参数仅用于访问统计与人工排查（按身份分组看访问），
+ * **不参与任何权限判断**：它在地址栏里，任何人手工改写都能伪造，
+ * 因此不能作为「管理员登录过」的证据；鉴权只认 Authorization / X-Auth-Token 的会话令牌。
+ *
  * @param {Object} user - 用户对象，包含 role 字段
  */
 export function syncUserRoleToUrl(user) {
