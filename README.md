@@ -127,7 +127,7 @@
 
 ## 🎯 项目简介
 
-**NEGIAO's WebGIS** 是一个功能完整、架构清晰的前后端分离 WebGIS 平台（当前版本 V3.6.39），前端托管于 GitHub Pages（正式域名 webgis.negiao.cn），后端以 Docker 部署在 Hugging Face Spaces，通过 RESTful API 通信，支持独立扩展。
+**NEGIAO's WebGIS** 是一个功能完整、架构清晰的前后端分离 WebGIS 平台（当前版本 V3.6.40），前端托管于 GitHub Pages（正式域名 webgis.negiao.cn），后端以 Docker 部署在 Hugging Face Spaces，通过 RESTful API 通信，支持独立扩展。
 
 > 📚 本 README 仅保留核心概览与导航。完整文档已模块化至 [`Docs/Guide/`](Docs/Guide/)，详见下方「文档导航」。
 >
@@ -614,10 +614,8 @@ tiles.negiao.cc.cd"]
 
 | 版本 | 日期 | 概要 |
 |------|------|------|
-| **V3.6.39** | 2026-11-02 | **鉴权加固 + 文档整合**。① **CORS 白名单显式化**：`CORS_ALLOWED_ORIGINS` 空值由 `["*"]` 改为 fail-closed（拒绝全部跨源、同源不受影响），生产登记 9 个前端来源，`catalog.py` 描述同步；② **管理入口改由后端判定**：`isAdmin` 读 `/api/auth/me` 返回的角色，进入管理页签前调用 `apiAdminOverview()` 探活，403 立即收回入口并隐藏页签（不再信任可被手工改写的 sessionStorage 缓存）；③ **新增登录失败节流**：账号维度 5 次 / 60 秒 → 锁定 60 秒，IP 维度 30 次兜底，超限返回 429 + `Retry-After`，四个阈值经 `LOGIN_THROTTLE_*` 环境变量配置；④ `_extract_client_ip` 增加 IP 格式校验并标注「非信任边界」，限流不以可伪造的 IP 为依据；⑤ 新增架构文档《身份鉴权链路与安全模型》（登录时序 + 鉴权分层 2 图、信任边界 / 威胁对照 6 表）。详见[完整更新日志](Docs/Guide/CHANGELOG.md) |
-| **V3.6.38** | 2026-11-01 | **整合发布（V3.6.38–V3.6.50 合并为单一版本）**。同日 13 个零散版本统一为 V3.6.38，功能/修复全保留：① 用户中心数据管理页容器查询适配（断点维度错配修复）；② Cesium TOC 动作补全（复制坐标/多选/批量寻址链路打通）+ 属性表复用 2D 组件（删私有 CesiumAttributeTableDialog，三维实体经 cesiumAttrDataset 注入统一 attrStore，只读降级）；③ 透明度全类型覆盖（route 等 12 类可调）+ 属性表定位回归；④ 透明滑杆卡死根治（u_alpha uniform 零编译 + 节流末值必达）；⑤ POI 透明度失效 + 贴地图标地形裁切 + 要素数量谎报 0 修复；⑥ Agent 空内容自诊断 + 网关包装解包 + 404/502 归因与文案精简（双候选端点兜底、五形态错误提取）；⑦ 状态条 3+2 固定分组；⑧ AI 对话面板三处 UI 重排（状态条/消息区/输入栏）；⑨ 落地页去边框化重设计 + iOS 旋转遮罩黑块修复；⑩ 视觉设计纪律入宪（8 视觉 + 4 布局硬约束）；⑪ RegisterView 视觉语言重构；⑫ SidePanel 视觉重构 + 跨主题色板归位；⑬ 视觉纪律 Phase 0 门禁（CheckVisualDiscipline 棘轮）+ 合成投影令牌 + TopBar 菜单重组织。详见[完整更新日志](Docs/Guide/CHANGELOG.md) |
-| **V3.6.37** | 2026-11-01 | **单版本整合：HF 推送 LFS 字体修复 + 规范 §12 机器人 PR 处置 + 文档组织治理**。① **LFS**：两个 HF 推送任务的 LFS 白名单自建立起缺字体扩展名，`fontawesome/webfonts/*.woff2` 等以裸 blob 提交被 pre-receive 拒收**整次 push**（远端只列前两个超阈值文件，极易误判为个案）；补 `woff2/woff/ttf/otf/eot` 覆盖 dist 内 64 个字体（1.3 MB）与全栈包 5 个 woff2，并在两处推送前加二进制兜底校验（`git diff --cached --numstat` 判定，漏配时 CI 本地即失败并打印文件名）。② **规范 §12**：新增「线上机器人 PR 处置（GitHub CLI）」，把 Dependabot 依赖 PR 从 §2.1 的灰区变为可执行规程——权限三分（只读随时可做 / 合并须逐次显式授权 / 自动合并·切分支·自评审·close 一律禁止）、五步只读核查、合并准入六条件；明确 `gh pr checkout` 属「改分支」故禁止、`deleteBranchOnMerge=false` 故合并须显式 `--delete-branch`、合并机器人 PR 不升版本不写日志。③ **文档治理**：文档按生命周期分区——`Architecture/decisions/` 隔离历史重构记录、未实施方案迁回 `TODO/`、`ol2cesium` 实现规范迁 `Architecture/`；`TODO/` 建 `README.md` 六态状态机索引，10 篇经代码存在性核验的方案迁 `archive/`；`Force_command` 新增 §0.5 项目速览、§3 技术契约迁 `dev-conventions`、§11.2 四扫合一、§12 手册拆至 `bot-pr-playbook`；新建 `Demo/README.md` 声明非文档，孤儿脚本迁 `Scripts/archive/`，全库修复 33 处引用。详见[完整更新日志](Docs/Guide/CHANGELOG.md) |
-更早版本（V3.6.34 及以前）请查阅 [完整更新日志 →](Docs/Guide/CHANGELOG.md)。
+| **V3.6.40** | 2026-11-02 ~ 11-03 | **iOS 装饰层黑块修复 + 首屏交互升级 + 安全/质量收口（整合发布）**。① 落地页/认证页公转点触发 iOS WebKit 合成黑块（「整块透明+圆角裁剪+绕圆心自转」三条件，真机 9 次二分锁定）：手机 ≤768px 隐藏、iPad 经 `@supports (-webkit-touch-callout: none)` 能力判据隐藏（仅 iOS WebKit 解析），桌面公转照旧；沉淀架构文档与 dev-conventions 第 16 条。② 首屏交互：新增 `useSpinBoost`（hover 驱动背景环 playbackRate 平滑倍速，防跳帧）与 `useViewTransitionNavigation`（View Transitions 形变跳转，六类能力降级）、注册页展开扫光、纹样图源合并单张 PNG。③ 下载失败提示修复：抽出 `api/blobError.ts`，blob 错误体读文本解析 detail，替代 `Request failed with status code 4xx`。④ 管理端「默认 AI API Key」由 password 改 text + CSS 遮蔽 + 自动填充抑制（防密码管理器污染 L2 密钥表）。⑤ `eslint src` 存量 30 条清零（19 文件），可作 CI 棘轮基线。⑥ 删除零引用 `public/fontawesome/`（-396 KB）；底图下载节点停用（提交假成功 → 恢复 404 报错）；架构文档纠正天地图坐标系归属。详见[完整更新日志](Docs/Guide/CHANGELOG.md) |
+更早版本（V3.6.39 及以前）请查阅 [完整更新日志 →](Docs/Guide/CHANGELOG.md)。
 
 ---
 
@@ -639,6 +637,6 @@ tiles.negiao.cc.cd"]
 |:------:|:--------:|:--------:|
 | [GitHub](https://github.com/NEGIAO/WebGIS-Dev) | [webgis.negiao.cn](https://webgis.negiao.cn)（正式域名，GitHub Pages 托管） | [Hugging Face](https://NEGIAO-WebGIS.hf.space) |
 
-<sub>V3.6.39 · 开发中 · 最后更新 2026-11-02</sub>
+<sub>V3.6.40 · 开发中 · 最后更新 2026-11-03</sub>
 
 </div>

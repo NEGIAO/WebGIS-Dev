@@ -238,7 +238,7 @@ export async function extractKmlFromKmz(kmzInput, options = {}) {
     }
 
     let mainKmlEntry = pickMainKmlEntry(kmlEntries);
-    let kmlString = '';
+    let kmlString;
 
     // 先解码候选 KML，再基于内容打分，避免选中空壳 doc.kml。
     const decodedCandidates = [];

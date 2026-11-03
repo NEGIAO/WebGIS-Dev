@@ -6,6 +6,7 @@
          层次（由后至前）：底纹渐变 → 经纬网 → 等高线 → 散点/点位 → 天光 → 双轨 → 光斑。
          整层 pointer-events: none，纯视觉；层级低于表单卡片（.container z-index: 1） -->
     <div
+        ref="rootEl"
         class="auth-decor"
         aria-hidden="true"
     >
@@ -350,7 +351,9 @@
 </template>
 
 <script setup lang="ts">
+import { ref, watch } from 'vue';
 import { useRingPatternStyle } from '../composables/useRingPatternStyle';
+import { useSpinBoost } from '../composables/useSpinBoost';
 
 // 纹样 PNG 的 url() 必须由文档级样式表解析（相对路径写在 scoped CSS 里
 // 会按打包产物 /assets/ 解析而 404），注入实现与 Landing 共用同一份；
@@ -367,6 +370,33 @@ useRingPatternStyle({
 const motionEnabled =
     typeof window === 'undefined' ||
     !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+/**
+ * 双轨 PNG 圆环的悬停加速
+ *
+ * 只作用于 `auth-orbit`（.auth-decor__ring--outer/mid/core 的自转），不牵动
+ * 右上角渐变色轮、数据流、脉冲等其它动效。每轨三环必须一起提速——只提外环
+ * 会让「综合圆环」视觉上被撕开，三环同步才读得成一个整体在转。
+ * 由外层按钮的 hover/focus 驱动（props.boost）。
+ */
+const rootEl = ref<HTMLElement | null>(null);
+const orbitSpin = useSpinBoost(() => rootEl.value, { match: 'auth-orbit' });
+
+const props = defineProps<{
+    /** 由外层按钮的 hover/focus 驱动：true 时渐变色轮加速 */
+    boost?: boolean;
+}>();
+
+watch(
+    () => props.boost === true,
+    (on) => {
+        if (on) {
+            orbitSpin.start();
+        } else {
+            orbitSpin.stop();
+        }
+    },
+);
 </script>
 
 <style scoped>
@@ -376,6 +406,9 @@ const motionEnabled =
     z-index: 0;
     overflow: hidden;
     pointer-events: none;
+    /* 与首屏 .hero-bg 同名：从 Landing 点「立即体验」进来时，
+       装饰层由浏览器做位置/尺度形变，而不是整页硬切 */
+    view-transition-name: hero-decor;
 }
 
 /* 底纹渐变：顶部品牌绿微光 + 右下暖金微光。
@@ -1114,6 +1147,21 @@ const motionEnabled =
    与输入设备能力无关（窄桌面窗口同样成立） */
 @media (max-width: 768px) {
     .auth-decor {
+        display: none;
+    }
+}
+
+/* ============ iPad / iOS（>768px 不走上面整层关闭分支）============
+   `.auth-decor__ring--outer::after` 两个公转点与落地页 V3.6.40 修掉的黑块同构：
+   「整块透明 + 圆角裁剪 + 绕圆心自转」的纯装饰层会被 iOS WebKit 整块栅格化成黑色，
+   且已证实拆成兄弟节点无效（落地页真机二分实验 9）。≤768px 已整层关闭，此处只需
+   覆盖 iPad —— 判据用 `-webkit-touch-callout`（caniuse/MDN：仅 Safari on iOS 解析，
+   桌面 Safari/Chrome/Firefox 全部不支持；iPadOS 各浏览器均为 WebKit，必然命中），
+   桌面零影响。待 iPad 真机复验；若仍黑，按 dev-conventions 第 16 条升级为
+   非旋转画法（SVG stroke-dashoffset）。 */
+@supports (-webkit-touch-callout: none) {
+    .auth-decor__orbit--a .auth-decor__ring--outer::after,
+    .auth-decor__orbit--b .auth-decor__ring--outer::after {
         display: none;
     }
 }

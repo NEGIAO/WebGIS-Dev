@@ -686,7 +686,7 @@ export function useCesiumToolModules({
 
             // Tellux 大气渲染参数（开启后等效硬写 globe.showGroundAtmosphere = true，纳入互斥）
             if (controlId === 'atmosphereEnabled') {
-                if (Boolean(value)) {
+                if (value) {
                     handleGroundAtmosphereToggle(true);
                 }
                 advancedEffectControls.value = {

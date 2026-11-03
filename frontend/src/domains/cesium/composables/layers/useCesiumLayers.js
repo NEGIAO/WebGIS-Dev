@@ -309,7 +309,8 @@ export function useCesiumLayers({
     getViewer,
     getCesium,
     message,
-    backendBaseUrl,
+    // 参数保留（调用方仍传 backendBaseUrl 键），当前实现未消费，加 _ 前缀声明有意未用
+    backendBaseUrl: _backendBaseUrl,
     tiandituToken,
     ovitalTdtkeyToken,
     cesiumIonToken,

@@ -861,7 +861,7 @@ export class FirstPersonFlyController {
         if (!Cesium || !file) throw new Error('IMPORT_FAILED');
 
         const ext = String(file.name || '').split('.').pop().toLowerCase();
-        let text = '';
+        let text;
         try {
             if (ext === 'kmz') {
                 const zip = await JSZip.loadAsync(file);
@@ -875,7 +875,7 @@ export class FirstPersonFlyController {
             }
         } catch (e) {
             if (e instanceof Error && e.message === 'IMPORT_EMPTY') throw e;
-            throw new Error('IMPORT_FAILED');
+            throw new Error('IMPORT_FAILED', { cause: e });
         }
 
         const cartographics =

@@ -7,9 +7,12 @@
         <AuthGlobeStage />
         <!-- 背景装饰层：经纬网 + 天光 + 双环旋转纹样 + 光斑
              （与 Landing 首屏同一套装饰语言，实现见 AuthDecorBackground） -->
-        <AuthDecorBackground />
+        <AuthDecorBackground :boost="confirmHovered" />
 
-        <div class="container fade-in">
+        <div
+            class="container"
+            :class="{ 'fade-in': !arrivedByTransition }"
+        >
             <div class="form-header">
                 <div class="brand-row">
                     <!-- 品牌区整体为返回首页入口（点击 logo/标题回 LandingView） -->
@@ -377,6 +380,10 @@
                             type="submit"
                             class="quick-btn confirm-login"
                             :disabled="isSubmitting"
+                            @mouseenter="confirmHovered = true"
+                            @mouseleave="confirmHovered = false"
+                            @focus="confirmHovered = true"
+                            @blur="confirmHovered = false"
                         >
                             <LogIn :size="15" />
                             {{ isSubmitting ? t('auth.submitting') : t('auth.confirmLogin') }}
@@ -688,6 +695,11 @@ import { useLocale } from '@common/app/useLocale';
 // 深导入：注册页与落地页同属首屏入口，禁止经 '../stores' 聚合桶取 store（见 LandingView 注释）
 import { useUserPreferencesStore } from '@common/user/stores/useUserPreferencesStore';
 import AuthDecorBackground from './components/AuthDecorBackground.vue';
+import { consumeViewTransitionNavFlag } from './composables/useViewTransitionNavigation';
+
+// 由 Landing 的形变过渡进入时跳过入场动画：`.fade-in` 从 opacity 0 起跑，
+// 会让浏览器抓到一张几乎透明的卡片快照，形变过去只剩背景。
+const arrivedByTransition = consumeViewTransitionNavFlag();
 import AuthGlobeStage from './components/AuthGlobeStage.vue';
 import { GOOGLE_OAUTH_CLIENT_ID, GUEST_PASSWORD, ASSET_BASE_URL } from '../config/publicRuntime';
 import {
@@ -761,6 +773,8 @@ function switchLanguage(nextLanguage) {
 }
 
 const mode = ref('login');
+// 确认登录按钮悬停/聚焦时置 true，驱动装饰层的渐变色轮加速（见 AuthDecorBackground）
+const confirmHovered = ref(false);
 const username = ref('');
 const password = ref('');
 const confirmPassword = ref('');
@@ -1675,6 +1689,9 @@ onUnmounted(() => {
 .container {
     position: relative;
     z-index: 1;
+    /* 形变目标：Landing 三个入口的按钮在点击时临时挂同名 `auth-card`，
+       浏览器把按钮快照按位置/尺度插值到这张卡上（见 useViewTransitionNavigation） */
+    view-transition-name: auth-card;
     /* 去描边（V3.6.47 视觉纪律）：原来的中性发丝描边由「白色外缘 + 接触阴影 + 大扩散」
        三层承担。白色外缘保留 —— 本页底色是经纬网/光斑装饰层，卡片需要一圈亮边把边缘
        从纹样里「切」出来；这是与背景的对比边界，不是装饰性描边（同 .ui-panel 的
@@ -1887,6 +1904,7 @@ onUnmounted(() => {
     /* 完整显示副标题：允许换行（最多 2 行），不再截断省略 */
     display: -webkit-box;
     -webkit-line-clamp: 2;
+    line-clamp: 2;
     -webkit-box-orient: vertical;
     overflow: hidden;
     line-height: 1.45;
@@ -1957,7 +1975,7 @@ onUnmounted(() => {
 .oauth-section {
     display: grid;
     gap: 10px;
-    margin-bottom: 18px;
+    margin-bottom: 8px;
 }
 
 .oauth-btn {

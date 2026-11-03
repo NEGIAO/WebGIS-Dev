@@ -82,7 +82,7 @@ export function hydrateAgentConfigDraft(agentConfig, agentConfigDraft) {
 export function buildSavePayload(agentConfigDraft) {
     const availableModels = parseAvailableModelsText(agentConfigDraft.value.available_models_text);
 
-    let extraBodyParsed = {};
+    let extraBodyParsed;
     try {
         extraBodyParsed = JSON.parse(agentConfigDraft.value.extra_body || '{}');
     } catch (_e) {

@@ -261,7 +261,7 @@ async function connect() {
     }
 
     // 先换取一次性 ticket，再建立 SSE 连接（失败则进入错误重试路径）
-    let url = baseUrl;
+    let url;
     try {
         const ticket = await _fetchTicket();
         url = ticket ? `${baseUrl}?ticket=${encodeURIComponent(ticket)}` : '';

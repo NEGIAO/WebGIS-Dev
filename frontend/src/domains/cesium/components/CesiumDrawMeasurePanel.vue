@@ -435,7 +435,7 @@ function buildFeature() {
     }
 
     const ring = r.lonLats.map((p) => [p[0], p[1]]);
-    let geometry = null;
+    let geometry;
 
     if (r.type === 'Point') {
         geometry = { type: 'Point', coordinates: ring[0] };

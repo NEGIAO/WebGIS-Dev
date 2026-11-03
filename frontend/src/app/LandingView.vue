@@ -104,14 +104,15 @@
                     <!-- aria-label 兜底：≤480px 时 .btn-primary-label 被隐藏、
                          按钮只剩 LogIn 图标，读屏仍能拿到完整文案
                          （与 .nav-github 隐藏 .nav-github-count 同一套处理） -->
-                    <router-link
-                        to="/register"
+                    <a
+                        href="#/register"
                         class="btn-primary"
                         :aria-label="t('landing.navLogin')"
+                        @click="onRegisterClick"
                     >
                         <LogIn :size="16" />
                         <span class="btn-primary-label">{{ t('landing.navLogin') }}</span>
-                    </router-link>
+                    </a>
                 </div>
             </div>
         </header>
@@ -120,6 +121,7 @@
         <main class="content">
             <section class="hero-section">
                 <div
+                    ref="heroBgEl"
                     class="hero-bg"
                     aria-hidden="true"
                 >
@@ -180,14 +182,21 @@
                         </div>
                     </div>
 
-                    <div class="hero-actions">
-                        <router-link
-                            to="/register"
+                    <div
+                        class="hero-actions"
+                        @mouseenter="heroSpin.start()"
+                        @mouseleave="heroSpin.stop()"
+                        @focusin="heroSpin.start()"
+                        @focusout="heroSpin.stop()"
+                    >
+                        <a
+                            href="#/register"
                             class="btn-large"
+                            @click="onRegisterClick"
                         >
                             <Rocket :size="18" />
                             {{ t('landing.tryNow') }}
-                        </router-link>
+                        </a>
                         <a
                             :href="GITHUB_PAGE_URL"
                             target="_blank"
@@ -512,6 +521,7 @@
             <section class="cta-section">
                 <div class="cta-card">
                     <div
+                        ref="ctaBgEl"
                         class="cta-bg"
                         aria-hidden="true"
                     >
@@ -526,13 +536,18 @@
                     </div>
                     <h3>{{ t('landing.ctaTitle') }}</h3>
                     <p>{{ t('landing.ctaDesc') }}</p>
-                    <router-link
-                        to="/register"
+                    <a
+                        href="#/register"
                         class="btn-cta"
+                        @mouseenter="ctaSpin.start()"
+                        @mouseleave="ctaSpin.stop()"
+                        @focus="ctaSpin.start()"
+                        @blur="ctaSpin.stop()"
+                        @click="onRegisterClick"
                     >
                         <Send :size="16" />
                             {{ t('landing.getStarted') }}
-                    </router-link>
+                    </a>
                     <div class="cta-login-methods">
                         <span class="cta-methods-label">{{ t('landing.ctaMethods') }}</span>
                         <span class="cta-method"><svg class="cta-g-logo" viewBox="0 0 23.5 24" aria-hidden="true"><clipPath id="ctg-a"><path d="M12 10v4.5h6.47c-.5 2.7-3 4.74-6.47 4.74-3.9 0-7.1-3.3-7.1-7.25S8.1 4.75 12 4.75c1.8 0 3.35.6 4.6 1.8l3.4-3.4C18 1.2 15.24 0 12 0 5.4 0 0 5.4 0 12s5.4 12 12 12c7 0 11.5-4.9 11.5-11.7 0-.8-.1-1.54-.2-2.3z"/></clipPath><filter id="ctg-b"><feGaussianBlur stdDeviation="1"/></filter><g style="clip-path:url(#ctg-a)"><foreignObject style="filter:url(#ctg-b)" height="28" width="28" transform="translate(-2 -2)"><div xmlns="http://www.w3.org/1999/xhtml" style="height:100%;width:100%;background:conic-gradient(#FF4641,#FD5061 40deg,#FD5061 60deg,#3186FF 85deg,#3186FF 117deg,#00A5B7 142deg,#0EBC5F 167deg,#0EBC5F 200deg,#6CC500 226deg,#FC0 253deg,#FFD314 268deg,#FC0 292deg,#FF4641 327deg)"/></foreignObject><path fill="#3186FF" d="M11 8h16v8H11z"/></g></svg>Google</span>
@@ -839,11 +854,14 @@
 
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
+import { useRouter } from 'vue-router';
 import { useLocale } from '@common/app/useLocale';
 // 深导入：落地页是首屏路由，禁止经 '../stores' 聚合桶（`export *` 14 个 store）取 store，
 // 否则 OL / chat / data-import 等无关 store 图会被整体拖进入口 chunk。
 import { useUserPreferencesStore } from '@common/user/stores/useUserPreferencesStore';
 import { useRingPatternStyle } from './composables/useRingPatternStyle';
+import { useSpinBoost } from './composables/useSpinBoost';
+import { useViewTransitionNavigation } from './composables/useViewTransitionNavigation';
 import { fetchVisitorStats, formatVisitorNumber, formatUpdatedAt } from '@common/app/visitorStats';
 import { ASSET_BASE_URL, GITHUB_STATS_WORKER_URL } from '../config/publicRuntime';
 import {
@@ -1102,6 +1120,29 @@ const MOBILE_MENU = computed(() => [
 // 滚动仅作增强，不参与数据正确性的表达。
 const statDisplay = ref(heroStats.value.map((stat) => (stat.num != null ? stat.num : 0)));
 const heroStatsEl = ref(null);
+const heroBgEl = ref(null);
+const ctaBgEl = ref(null);
+
+// 悬停加速：按钮 hover 时把背景环的旋转倍速平滑推到 8x（见 useSpinBoost）
+const heroSpin = useSpinBoost(() => heroBgEl.value);
+const ctaSpin = useSpinBoost(() => ctaBgEl.value);
+
+// 「立即体验」：带装饰层形变的跨页过渡（不支持的浏览器自动降级为普通跳转）
+const router = useRouter();
+const goRegister = useViewTransitionNavigation(router);
+
+/**
+ * 三个入口（导航「登录」/ 首屏「立即体验」/ 底部「开始使用」）共用：
+ * 只拦截左键无修饰键的点击，其余保留浏览器原生行为（新标签打开等）。
+ * 传入触发元素，让它作为共享元素形变到注册页的表单卡。
+ */
+function onRegisterClick(event) {
+    if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0) {
+        return;
+    }
+    event.preventDefault();
+    void goRegister('/register', event.currentTarget);
+}
 let statObserver = null;
 let statRafId = 0;
 
@@ -1784,6 +1825,8 @@ button:focus-visible {
         background-color 0.28s ease,
         border-color 0.28s ease,
         box-shadow 0.28s ease;
+    user-select: none;
+    -webkit-user-select: none;
 }
 
 /* 滚过首屏：玻璃底 + 发丝线 + 一层极轻的投影（不是那种"卡片浮起"的重阴影） */
@@ -2280,12 +2323,21 @@ button:focus-visible {
        配合 overflow:hidden（裁光斑必须保留）会直接裁掉标题。
        垂直安全居中改由 .hero-inner 的 auto margin 实现（溢出时 margin 归零、
        从顶部开始排，不裁剪） */
+    /* 首屏是展示型内容（标语 / 副标题 / 统计数字 / 出口按钮），拖选会在
+       文字上拉出蓝色选区，破坏"产品界面"而非"网页文档"的手感。
+       只关掉选区：文本仍在 DOM 与无障碍树中，SEO、读屏、划词翻译插件
+       均不受影响；真需要复制某段时，给该元素单独写 user-select: text 即可。 */
+    user-select: none;
+    -webkit-user-select: none;
 }
 
 .hero-bg {
     position: absolute;
     inset: 0;
     pointer-events: none;
+    /* 跨页形变的锚：与注册页 .auth-decor 同名，浏览器据此把首屏装饰层
+       形变到认证页（见 assets/theme.css 的 ::view-transition-* 规则） */
+    view-transition-name: hero-decor;
 }
 
 /* 首屏 Ken Burns 缓推（P0#3）：本页 hero 背景为纯 CSS（无 Cesium 白底闪烁），
@@ -2423,9 +2475,9 @@ button:focus-visible {
    1080px 外环在 1440×996 首屏上基本不可见）。圆环本身低透明度，
    靠 overflow:hidden 裁切读作"延伸到视野外"即可。
 
-   三环差异化：outer 虚线 130s 顺时针 + **空心**轨道点；mid 实线 70s
-   逆时针 + **实心**金点；inner 实线最淡 140s 顺时针、无点。
-   一实一空 + 反向 + 异速，才读得出是两套独立轨道。
+   三环差异化：outer 虚线 130s 顺时针、mid 虚线 70s 逆时针、inner 虚线最淡
+   140s 顺时针。反向 + 异速 + 深浅递进，才读得出是两套独立轨道。
+   （原 outer/mid 各有一枚公转金点，2026-11-02 因 iOS 合成缺陷移除，见下方说明）
 
    两个点还与各自的环**差速**：点自己再转一层，叠加后的净周期是
    outer 45s / mid 33s（环本身 130s / 70s），相对环的滑动周期 69s / 62s。
@@ -2468,8 +2520,9 @@ button:focus-visible {
 }
 
 /* 放大到 124%：花边顶到 r=451~476（虚线在 480 内侧），发丝线被推到
-   589 裁出 border-box。alpha 峰值 0.557 × 0.85 = 有效 0.473，
+   589 裁出 padding-box。opacity 0.85，alpha 峰值 0.557 × 0.85 = 有效 0.473，
    叠在 #f9f9f9 上最深 RGB(230,211,153)—— 一圈看得清又不抢标题的淡金 */
+
 .hero-bg__ring--outer::before {
     background-size: 124% 124%;
     opacity: 0.85;
@@ -2483,7 +2536,11 @@ button:focus-visible {
    精确落到环心，而环尺寸是 min(960px, 86vw) 随视口变、断点里还要改一次，
    那个原点会跟着漂；用整层就没这个问题。
    inset 取负值是为了让 12 点处的点**正压在环线上**（内缩 0 会让点整体
-   偏进环内 7px）。空心 = 一段 1.5px 宽的环带：r 5.5→7 上色，其余透明。 */
+   偏进环内 7px）。空心 = 一段 1.5px 宽的环带：r 5.5→7 上色，其余透明。
+
+   ⚠️ iOS：这一层是"整块透明 + 圆形裁剪 + 绕圆心自转"的纯装饰层，iOS Safari
+   会把该层整块栅格化成黑色（详见 Architecture/ios-safari-rendering-pitfalls.md）。
+   桌面端完全正常，因此**只在 ≤768px 隐藏**（见手机断点里的 display:none）。 */
 .hero-bg__ring--outer::after {
     content: '';
     position: absolute;
@@ -2497,8 +2554,9 @@ button:focus-visible {
     );
 }
 
-/* 中环同样改虚线：正圆的实线边框旋转在视觉上等于静止（圆周完全对称），
-   本环虽有 mid 的公转金点作运动线索，但环线本身不动仍会被读成"死环"。
+
+/* 中环同样改虚线：正圆的实线边框旋转在视觉上等于静止（圆周完全对称）。
+   公转点移除后，环线的虚线滑动是这一环唯一的运动线索，所以虚线必须保留。
    虚线墨量约为实线一半，故 alpha 相对原实线值上调补足视觉重量；
    具体取值见下方 border，层次保持 外 > 中 > 内 递减 */
 .hero-bg__ring--mid {
@@ -2517,7 +2575,8 @@ button:focus-visible {
 }
 
 /* mid 环上的实心公转点：同样是整层 + radial-gradient，只是实心（r 4px 全上色）。
-   与 outer 的空心点配对，且两者转速不同 —— 见下方 prefers-reduced-motion 段 */
+   与 outer 的空心点配对，两者转速不同 —— 见下方 prefers-reduced-motion 段。
+   iOS 下同样只在桌面显示（原因同 outer::after）。 */
 .hero-bg__ring--mid::after {
     content: '';
     position: absolute;
@@ -2529,6 +2588,7 @@ button:focus-visible {
         transparent 4px
     );
 }
+
 
 /* 核心环是最需要改的一环：它没有公转点，实线边框叠加低 alpha
    等于"整圈完全静止"，140s 的旋转没有任何可感知的痕迹。
@@ -2560,16 +2620,9 @@ button:focus-visible {
         animation: ring-spin 140s linear infinite;
     }
 
-    /* ===== 差速公转 =====
-       两个点不再钉在环上跟着环走，而是各自再转一层。因为 ::after 是环的
-       子节点，实际角速度 = 环角速度 + 点自身角速度（同向相加、反向相减）：
-
-         outer：130s 顺时针 ⊕ 自身 69s 顺时针 → 净周期 45s 顺时针
-         mid  ： 70s 逆时针 ⊕ 自身 62s 逆时针 → 净周期 33s 逆时针
-
-       即"点在环上的相对滑动"周期为 69s / 62s —— 盯两秒就能看出点在跑，
-       而不是被环钉住。两者净速度不同（45s vs 33s），一快一慢，
-       再加上空心/实心的差别，两个点不会被读成"同一个动画的两份"。 */
+    /* 差速公转（仅桌面）：点的实际角速度 = 环角速度 + 点自身角速度，
+       outer 130s ⊕ 69s ≈ 45s、mid 70s ⊕ 62s ≈ 33s —— 盯两秒能看出点在环上滑动。
+       手机断点里整层 display:none，因此这两条动画在 iOS 上不会执行。 */
     .hero-bg__ring--outer::after {
         animation: ring-spin 69s linear infinite;
     }
@@ -2577,6 +2630,8 @@ button:focus-visible {
     .hero-bg__ring--mid::after {
         animation: ring-spin-rev 62s linear infinite;
     }
+
+
 }
 
 @keyframes ring-spin {
@@ -2621,8 +2676,8 @@ button:focus-visible {
    1. 可见度 —— 这条最致命。mask 按设备像素栅格化，1060 的细花边在手机上
       被缩到 400px（1x 屏）时 alpha 峰值 0.502 → 0.220，等于遮罩自己就被
       平均没了，opacity 提到 1 也只有一层灰雾。
-      → 换 alpha 加强版 d-bg2_1-mobile.png（见下方 @media 内注释），
-        再配合 0.75/0.65/0.4 的透明度；三条边框同步加深。
+      → 靠 0.75/0.65/0.4 的透明度分档补偿（图源与桌面同一张，移动端加强版
+        已合并，见 useRingPatternStyle 的单图源说明）；三条边框同步加深。
    2. 构图 —— 375px 下三环是 322/225/150px，内环那个 150px 的圆正好框住
       标题（花边落在 r=48~64，横穿字面），所以内环纹样只给 0.4，
       读作极淡的质感层而不是第二层图案。
@@ -2639,14 +2694,12 @@ button:focus-visible {
    · 天光去掉 repeating-conic 光芒层并停转 —— 46vw≈172px 时那道光芒
      已经落在亚像素上，只剩径向核有意义，conic 白栅格化一遍。 */
 @media (max-width: 768px) {
-    /* 纹样换加强版（d-bg2_1-mobile.png：尺寸与 RGB 不动，只把 alpha
-       ×2 后截顶）。原因：mask 是按**设备像素**栅格化的，1060 的细花边缩到
-       400px 时峰值从 0.502 掉到 0.220 —— 靠调 opacity 补不回来，因为遮罩
-       本身已经被平均没了。加强后在同样位置峰值回到 0.44（1x）/ 0.77（2x），
-       才有"提透明度"的空间。
-       background-image 不在此声明：由 useRingPatternStyle 注入的同断点
-       @media (max-width: 768px) 规则提供（相对 url() 必须由文档级样式表解析，
-       原因见桌面纹样层块注释）。 */
+    /* 纹样与桌面共用同一张图（移动端加强版已合并，见 useRingPatternStyle）。
+       小屏的 alpha 峰值会被栅格化平均（0.502 → 0.220），故三环 opacity 各提
+       一档（0.75 / 0.65 / 0.4），与边框加深一起维持三环层次。
+       background-image 不在此声明：由 useRingPatternStyle 注入单条规则
+       （相对 url() 必须由文档级样式表解析，原因见桌面纹样层块注释）。
+       唯一的结构差异是**公转点在移动端不显示**，原因见下方。 */
 
     /* 三条边框同步加深：小屏上 1px 细线本来就吃亏，
        桌面档的绿在 #f9f9f9 上几乎读不出"这里有三个环" */
@@ -2668,6 +2721,16 @@ button:focus-visible {
         border-color: rgba(var(--brand-primary-rgb), 0.28);
     }
 
+    /* 公转点在移动端直接不显示：iOS Safari 会把「整块透明 + 圆形裁剪 +
+       绕圆心自转」的纯装饰层整块渲染成黑色（真机验证）。display:none 之后
+       该层不参与渲染，也就不会触发合成缺陷；桌面端不受影响，保留公转。
+       详见 Architecture/ios-safari-rendering-pitfalls.md。 */
+    .hero-bg__ring--outer::after,
+    .hero-bg__ring--mid::after {
+        display: none;
+    }
+
+    /* 三环纹样透明度分档（小屏 alpha 峰值被栅格化平均，故比桌面提一档） */
     .hero-bg__ring--outer::before {
         opacity: 0.75;
     }
@@ -2678,28 +2741,6 @@ button:focus-visible {
 
     .hero-bg__ring--inner::before {
         opacity: 0.4;
-    }
-
-    /* 公转点跟着环一起缩小，否则 14px 的视觉直径在 322px 的环上占 4.3%
-       （桌面上只占 1.5%），会读成"一个大圆点"而不是"轨道上的质点"。
-       点改由渐变绘制后，缩尺寸 = 改渐变半径 + 同步改 inset（点始终压环线） */
-    .hero-bg__ring--outer::after {
-        inset: -5.5px;
-        background: radial-gradient(
-            circle 5.5px at 50% 5.5px,
-            transparent 4px,
-            var(--brand-gold) 4px 5.5px,
-            transparent 5.5px
-        );
-    }
-
-    .hero-bg__ring--mid::after {
-        inset: -3px;
-        background: radial-gradient(
-            circle 3px at 50% 3px,
-            var(--brand-gold) 3px,
-            transparent 3px
-        );
     }
 
     .hero-bg__grid {
@@ -3576,6 +3617,57 @@ button:focus-visible {
     opacity: 1;
 }
 
+/* hover 掠光：与技术栈卡区分 ——
+   .tech-layer::after 是"从左侧填充并停留"（scaleX 0→1），适合 3 张大卡的沉静感；
+   功能卡有 11 张、更小更密，整片填充会显得笨重且雷同，改为一道 40% 宽的斜向掠光
+   快速扫过（0.6s）后消失，不留终态。调色板与角度（100deg、品牌+金）保持同源，
+   只是节奏更轻——同一族语汇，不同量级。 */
+.feature-card::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    width: 40%;
+    background: linear-gradient(
+        100deg,
+        transparent 0%,
+        rgba(var(--brand-primary-rgb), 0.06) 40%,
+        rgba(var(--brand-gold-rgb), 0.1) 55%,
+        transparent 100%
+    );
+    transform: translateX(-120%);
+    opacity: 0;
+    pointer-events: none;
+}
+
+.feature-card:hover::after {
+    animation: feature-sheen 0.6s cubic-bezier(0.33, 0, 0.2, 1);
+}
+
+@keyframes feature-sheen {
+    0% {
+        transform: translateX(-120%);
+        opacity: 0;
+    }
+
+    15%,
+    85% {
+        opacity: 1;
+    }
+
+    100% {
+        transform: translateX(320%);
+        opacity: 0;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .feature-card:hover::after {
+        animation: none;
+    }
+}
+
 /* 图标井由方圆改圆：全页 10 枚，是"圆"这一语汇在内容层的主要载体。
    hover 时外围绽开一圈虚线光环 —— 与 Hero 的外圈虚线环同源，
    让装饰语言在背景层和内容层说的是同一种话 */
@@ -3688,8 +3780,9 @@ button:focus-visible {
     transition: box-shadow 0.25s ease, transform 0.25s ease;
 }
 
-/* 顶部渐显细线 + hover 抬升：与 .feature-card 同一套交互语言，
-   保证同一页里"卡片"这个语汇只有一种表现 */
+/* 顶部渐显细线 + hover 抬升：与 .feature-card 同属一套卡片语汇。
+   区别在扫光方式——技术栈卡是"左侧填充并停留"（承载链路叙事，节奏更沉），
+   功能卡是"掠光扫过即散"（卡片更小更密，节奏更轻），二者共用调色板与 100deg 角度 */
 .tech-layer::before {
     content: '';
     position: absolute;

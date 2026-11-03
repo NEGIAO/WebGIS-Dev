@@ -320,7 +320,6 @@ function parseThinkAndAnswer(rawContent) {
         if (end === -1) {
             // 未闭合：剩余全部视为思考中
             thinkParts.push(text.slice(start + startTag.length).trim());
-            cursor = text.length;
             break;
         }
 
@@ -421,7 +420,7 @@ function renderAnswerHtml(rawContent) {
 
     if (!trimmed) return '<p style="color:#999">（正在组织回答...）</p>';
 
-    let html = '';
+    let html;
 
     if (looksLikeHtml(trimmed)) {
         // 原始 HTML 直接透传

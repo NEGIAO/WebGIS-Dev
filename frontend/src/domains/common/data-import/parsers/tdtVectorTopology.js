@@ -685,7 +685,7 @@ export function topoTdtVectorLayers(perLayer, zoom) {
     const layers = {};
     const stats = {};
     for (const [name, records] of perLayer) {
-        let result = null;
+        let result;
         if (name === 'CE') {
             const recs = [];
             let noidSeq = 0;

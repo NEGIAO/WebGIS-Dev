@@ -104,8 +104,8 @@ export function createSpatialAnalysisFeature({
         }
 
         let operation;
-        let layerName = '';
-        let featuresA = [];
+        let layerName;
+        let featuresA;
         let featuresB = [];
 
         try {

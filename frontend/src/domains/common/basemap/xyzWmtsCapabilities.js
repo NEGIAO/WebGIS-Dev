@@ -46,7 +46,7 @@ async function fetchCapsText(url) {
         const retryTimeout = setTimeout(() => retryController.abort(), 10000);
         try {
             const res2 = await fetch(proxiedUrl, { signal: retryController.signal });
-            if (!res2.ok) throw new Error(`HTTP ${res2.status}`);
+            if (!res2.ok) throw new Error(`HTTP ${res2.status}`, { cause: directError });
             return await res2.text();
         } finally {
             clearTimeout(retryTimeout);

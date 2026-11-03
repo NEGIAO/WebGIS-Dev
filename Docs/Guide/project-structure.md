@@ -109,6 +109,7 @@ Docs/
 │   ├── account-system-ai-quota.md     # 账号体系：邮箱登录、三级身份、双 AI 配额
 │   ├── identity-auth-security.md      # 身份鉴权链路与安全模型（信任边界、威胁、反爬强度）
 │   ├── runtime-map-token-pool.md      # 运行时地图 token 池
+│   ├── ios-safari-rendering-pitfalls.md # iOS Safari 旋转图层黑块：触发条件与动效规避规约
 │   └── decisions/                     # 历史重构记录（日期命名，非现行架构）
 │       ├── 2026-08-02-basemap-ssot-refactor.md    # 底图单一事实源重构
 │       ├── 2026-08-20-unified-basemap-selection.md # 统一底图选择

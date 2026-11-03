@@ -6,6 +6,7 @@ import {
     DOWNLOAD_REQUEST_TIMEOUT_MS,
     DOWNLOAD_SERVICE_BASE_URL,
 } from '../config/publicRuntime';
+import { readErrorPayload } from './blobError';
 
 // ────────────────────────────────────────────────────────────────
 // 瓦片下载服务（独立节点 gis.negiao.cn）
@@ -51,16 +52,18 @@ if (USE_REMOTE_SERVICE) {
             }
             return response.data;
         },
-        (error) => {
+        async (error) => {
             const resp = error?.response;
             const status = Number(resp?.status || 0);
-            const detail = resp?.data?.detail;
-            const detailMsg =
-                typeof detail === 'string' ? detail : String(detail?.message || detail?.detail || '').trim();
-            const detailCode =
-                detail && typeof detail === 'object' ? String(detail?.code || '').trim() : '';
 
-            const apiError = new Error(detailMsg || error?.message || '瓦片下载服务请求失败');
+            // 文件下载走 responseType: 'blob'，失败体同样是 Blob：
+            // 直接读 resp.data.detail 恒为 undefined，文案会退化成
+            // "Request failed with status code 4xx"。必须先读文本再解析。
+            const { message, detailCode } = resp
+                ? await readErrorPayload(resp.data, status)
+                : { message: '', detailCode: '' };
+
+            const apiError = new Error(message || error?.message || '瓦片下载服务请求失败');
             apiError.status = status;
             apiError.detailCode = detailCode;
             apiError.isQuotaExceeded = status === 429;

@@ -156,6 +156,9 @@ const shouldLoadWeatherChartPanel = ref(false);
 const isMagicMode = ref(false);
 const magicEffectData = ref('');
 const isSidePanelCollapsed = ref(true);
+// 展开时给面板放一次渐变扫光（CSS 实现，见 SidePanel.vue 的 panel-sheen）
+const isPanelRevealing = ref(false);
+let revealTimer = 0;
 const shouldLoadSidePanel = ref(false);
 const activeSidePanelTab = ref('info'); // 'info' | 'chat' | 'toolbox' | 'bus' | 'drive' | 'compass' | 'buildings'
 const toolboxTab = ref('layers');
@@ -345,6 +348,15 @@ function toggleSidePanel() {
     isSidePanelCollapsed.value = !isSidePanelCollapsed.value;
     if (isSidePanelCollapsed.value) {
         compassStore.setPlacementMode(false);
+    } else {
+        // 展开：放一次扫光。用 CSS 而非 View Transitions——面板宽度由
+        // sidePanelRatio 与懒加载共同驱动，尺寸会异步落定，整页快照会与
+        // 这种延迟打架（实测点击后宽度滞留约 1s），CSS 扫光不受影响。
+        isPanelRevealing.value = true;
+        window.clearTimeout(revealTimer);
+        revealTimer = window.setTimeout(() => {
+            isPanelRevealing.value = false;
+        }, 620);
     }
     message.soup();
 }
@@ -2260,6 +2272,7 @@ onMounted(async () => {
                     :location-info="locationInfo"
                     :selected-image="selectedImage"
                     :is-collapsed="isSidePanelCollapsed"
+                    :revealing="isPanelRevealing"
                     :active-tab="activeSidePanelTab"
                     :toolbox-tab="toolboxTab"
                     :active-engine="is3DMode ? 'cesium' : 'ol'"

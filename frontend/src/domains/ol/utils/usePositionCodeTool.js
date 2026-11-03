@@ -57,7 +57,7 @@ export function usePositionCodeTool({
             };
         }
 
-        let reverseResult = null;
+        let reverseResult;
         try {
             const reverseResponse = await reverseGeocode(decoded.lng, decoded.lat, {
                 tiandituTk: getTiandituTk(),

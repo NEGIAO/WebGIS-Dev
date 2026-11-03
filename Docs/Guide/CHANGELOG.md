@@ -6,12 +6,68 @@
 
 ## 版本记录
 
-### V3.6.39 (2026-11-02) — 鉴权加固：CORS 白名单、管理入口后端判定、登录失败节流（含文档整合）
+### V3.6.40 (2026-11-02 ~ 11-03 整合发布) — iOS 装饰层黑块修复 + 首屏交互升级 + 安全/质量收口
 
-> **一句话**：把「谁能看到管理入口」「谁能反复试密码」「哪些站点能调接口」三件事，从前端约定收回到服务端判定，并补一份鉴权链路架构文档。
->
-> **整合说明**：本版合并同日迭代中的 4 个中间版本（V3.6.40–V3.6.43）为单一版本。中间两次围绕 `ut` 的改动（先移除、后新增 `utt`）**均已回滚**，最终 `ut` 与 V3.6.38 保持一致。
+> **整合说明**：V3.6.39 之后的多轮未提交改动按 Force_command §5 整合为单一版本发布，不再占用中间版本号。分期细节见 `Docs/LLM_record/26-11/2026-11-02/` 与 `26-11/2026-11-03/` 三份日志。
+> **一句话**：黑块根因是环上的**公转点**——「整块透明 + 圆形裁剪 + 绕圆心自转」的纯装饰层被 iOS WebKit 整块栅格化成黑色；手机 ≤768px 隐藏、iPad 按能力判据隐藏、桌面公转照旧。同批收口：首屏悬停加速与跨页形变、下载失败提示退化、管理端密钥框自动填充、ESLint 存量 30 条、失效图源/字体残留、底图下载节点假成功。
 
+#### 1. iOS 首屏黑块：真机二分与修法（核心）
+
+| # | 变量 | 结果 |
+|---|---|---|
+| 1 | 换图源（WebP → 量化 PNG） | 仍黑 |
+| 2 | 换承载（伪元素背景 → `<img>`） | 仍黑 |
+| 3 | 去掉 `opacity` | 仍黑 |
+| 4 | 移动端只留一张 PNG | 仍黑 |
+| 5 | 移动端单张 PNG 静止 | 仍黑 |
+| 6 | 三张 PNG 恢复旋转 + 环线置透明 | **正常** |
+| 7 | 加回 `1px dashed` 环线 | **正常** |
+| 8 | 加回两个公转点 | **又黑** ← 锁定 |
+| 9 | 点从 `::after` 拆成兄弟节点（只留一层旋转） | **仍黑** |
+
+前五项动的都是"只带一层旋转"的图层，所以怎么改都没用；第 6、7 项证明环的 transform 与边框绘制都无害；第 9 项说明关键不在层数，而在「整块透明 + 圆角裁剪 + 绕圆心旋转」这类图层结构本身。
+
+**修法：仅移动端隐藏** —— ≤768px 下 `.hero-bg__ring--outer::after` / `--mid::after { display: none }`（该层不参与渲染即不触发合成缺陷）；桌面两公转点与 69s / 62s 差速动画完全不变。顺带修掉外环纹样残留的 `--ring-dim-a: 0.15` 双值 `background-size`（恢复 `opacity: 0.85` + 单值）。文档沉淀：`Architecture/ios-safari-rendering-pitfalls.md`（新增，判据/9 次对照/排查手册）+ `dev-conventions.md` 强制规范第 16 条与「动效与合成约束」节。
+
+#### 2. 认证页同构缺陷收口（iPad）
+
+`.auth-decor__ring--outer::after` 与落地页黑块同构；认证页 ≤768px 整层关闭覆盖手机，**iPad（>768px）不走该分支**。新增 `@supports (-webkit-touch-callout: none)` 隐藏两点——判据经 caniuse/MDN 查证：该属性仅 iOS/iPadOS WebKit 解析，桌面 Safari 3.1–26.6 与 Chrome/Firefox 全部不支持，桌面零影响。真机二分实验 9 已证拆兄弟节点无效，故不走结构性改造；若 iPad 真机仍黑，按 dev-conventions 第 16 条升级为非旋转画法（SVG `stroke-dashoffset`）。同步订正 11-02 日志遗留节中与实验 9 矛盾的表述。
+
+#### 3. 首屏交互升级（悬停加速 + 跨页形变 + 面板扫光）
+
+| 项 | 实现 |
+|---|---|
+| 悬停加速 | 新增 `useSpinBoost.ts`：对已有 CSS 动画改 `playbackRate`（4× 起手、1.5/s 线性递增、16× 封顶、指数平滑跟随、页面隐藏归位），按动画名 `ring-spin` / `auth-orbit` 过滤。改 duration 会按「已过时间/新时长」重算进度导致跳帧，playbackRate 当前角度连续 |
+| 跨页形变 | 新增 `useViewTransitionNavigation.ts`：`document.startViewTransition` 包 `router.push` + `nextTick`，装饰层挂同名 `hero-decor`、按钮→表单卡挂 `auth-card` 共享元素形变；不支持 / `prefers-reduced-motion` / Save-Data / `deviceMemory<4GB` / 2G / 低刷新率六类条件降级为普通跳转 |
+| 面板扫光 | HomeView 展开 SidePanel 时放一次 `panel-sheen` 渐变扫光（560ms，`prefers-reduced-motion` 关闭）——面板宽度由 `sidePanelRatio` 异步驱动，整页快照会与之打架，故不用 View Transitions |
+
+#### 4. 下载失败文案退化修复（blob 错误体解析）
+
+文件下载走 `responseType: 'blob'`，失败体同样是 Blob，`api/download.js` 按 JSON 通道读 `resp.data.detail` 恒为 `undefined`，提示退化为 `Request failed with status code 4xx`。新增 `api/blobError.ts` 的 `readErrorPayload(data, status)`：JSON Blob → 读文本解析 `detail` / `detail_code`；非 JSON Blob → 取前 200 字符；普通 JSON → 同契约；异常退回状态码文案（只读不抛）。主站 `client.js` 与下载节点客户端共用同一实现，MIME 判定放宽到 `/json/i`（覆盖 `application/problem+json`）。
+
+#### 5. 管理端密钥框自动填充硬化（安全）
+
+`ApiKeysManagementPanel.vue` 的「默认 AI API Key」原为 `type="password"`：Chrome 密码管理器对 password 字段忽略 `autocomplete`，会把本 origin 保存的登录密码填入，管理员点「保存」即写进 L2 密钥表（V3.6.32 同源事故）。改为 `type="text"` + `-webkit-text-security: disc` 遮蔽，补齐 `autocomplete="off"` / `autocorrect` / `autocapitalize` / `spellcheck="false"` 与 `data-lpignore` / `data-1p-ignore` / `data-bwignore`，写法与 `TencentBuildingPanel.vue` 凭证框一致。
+
+#### 6. ESLint 存量 30 条 → 0（19 文件）
+
+ESLint 10.13.0 将 `no-useless-assignment` / `preserve-caught-error` 纳入 recommended，存量代码告警恒红。逐处确认后手工修复：23 条死初始化值删除（规则保证初始值从未被读，行为等价；`useSpatialAnalysis` 的 `featuresB` 初始值被真实读取故保留）；4 条新抛 Error 补 `cause`（含 `.catch()` 回调之后仍处外层 catch 作用域的一处）；解构未用参数 `backendBaseUrl: _backendBaseUrl` 保键名显式化；`if (Boolean(value))` → `if (value)`；`AdminControlPanel` 的 v-html 就地 disable（`highlightCell` 已转义 + 自产标签）。`eslint src` 此后可作 CI 棘轮基线（接入 workflow 属部署面，另行批准）。
+
+#### 7. 无效产物清理与底图下载节点停用
+
+- **`frontend/public/fontawesome/` 删除**（6 文件，-396 KB）：V3.6.35 自托管、回退 CDN 后零引用，但 `public/` 会被原样拷进 `dist/`；`index.html` 注释补记。
+- **纹样图源合并为单张 PNG**：`d-bg2_1.webp` + `d-bg2_1-mobile.webp` → `d-bg2_1.png`（移动端加强版实测与桌面版字节一致），少一次请求与一条同断点 `@media` 覆盖；`index.html` 预加载同步改 PNG。
+- **底图下载节点停用**：`deploy/.env` / `.env.local` 自 V3.6.28 配置的 `VITE_DOWNLOAD_SERVICE_URL=https://gis.negiao.cn:8443` 近期变为存活（health OK、任务可创建）但瓦片抓取永远拿不到结果，前端表现为「提交成功却永无数据」。清空配置回落至已删模块的 HF 后端，恢复「404 明确报错」；注释记录一键恢复方法。产物核对节点地址 0 命中。
+
+#### 8. 文档纠错（三处）
+
+- `Architecture/tile-rectify-system.md` §2：删除「天地图属 GCJ-02」失实描述——天地图发布 CGCS2000（与 WGS84 差异 < 1 m），直连 `t{0-7}.tianditu.gov.cn` 携带 `tk`，从未经 `gcj2wgs` 代理；补「代码对照」段。
+- `Guide/handover.md` §8：tsc 存量错误结论更正为实测 0 错误。
+- `Guide/frontend-structure.md`：登记 `blobError.ts` / `useSpinBoost.ts` / `useViewTransitionNavigation.ts`，纹样图源注释同步为 PNG 单图源。
+
+#### 9. 验证（Agent 已执行）
+
+`eslint src` **0 problems**（此前 30 条 / 23 文件）；`tsc --noEmit` 0 错误；`CheckStructureTree` 525:525；`CheckConfigRegistry` 7 项全通过；`npm run build` 成功，产物核对：`dist/fontawesome/` 不存在、`webkit-touch-callout` 规则进入认证页 CSS、`gis.negiao.cn:8443` 0 命中、纹样 PNG 预加载为 png。**待用户实机验证**：iPad Safari/Chrome 登录页（无金点、无黑块）、桌面三浏览器装饰回归、底图下载提交出现 404 明确报错、Landing→注册页形变过渡（支持的浏览器）。
 #### ① CORS 白名单显式化
 
 `app.py` 原在 `CORS_ALLOWED_ORIGINS` 为空时回退 `["*"]`，配合 `allow_credentials=True` 等于任意站点都能携带凭据调用接口。改为：空值 → 空列表（拒绝全部跨源，同源不受影响）并输出 warning；`deploy/.env` 显式登记 9 个前端来源（正式域名、GitHub Pages 全路径、CF Pages 与 Posit/HF Static 镜像），`.env.example` 与 `catalog.py` 描述同步。
@@ -37,6 +93,14 @@
 
 超限返回 `429` + `Retry-After` + 业务码 `LOGIN_THROTTLED`；成功登录清空账号维度计数。四个阈值经 `LOGIN_THROTTLE_ACCOUNT_MAX_FAILURES` / `LOGIN_THROTTLE_IP_MAX_FAILURES` / `LOGIN_THROTTLE_WINDOW_SECONDS` / `LOGIN_THROTTLE_LOCK_SECONDS` 配置（启动时读取，改后需重启）。
 
+### V3.6.39 (2026-11-02) — 鉴权加固：CORS 白名单、管理入口后端判定、登录失败节流（含文档整合）
+
+> **一句话**：把「谁能看到管理入口」「谁能反复试密码」「哪些站点能调接口」三件事，从前端约定收回到服务端判定，并补一份鉴权链路架构文档。
+>
+> **整合说明**：本版合并同日迭代中的 4 个中间版本（V3.6.40–V3.6.43）为单一版本。中间两次围绕 `ut` 的改动（先移除、后新增 `utt`）**均已回滚**，最终 `ut` 与 V3.6.38 保持一致。
+
+#### ① CORS 白名单显式化
+
 **为何账号维度优先**：客户端 IP 取自 `X-Client-IP` / `X-Forwarded-For`，`curl -H "X-Client-IP: ..."` 即可逐次轮换；只按 IP 限流等于没有限流。
 
 #### ④ 客户端 IP 提取加固
@@ -61,7 +125,65 @@
 
 已用容器校验配置：`docker run --rm ... nginx -t` → `syntax is ok` / `test is successful`。
 
-#### ⑦ 试错记录：为什么最终没有改 `ut`
+#### ⑦ 落地页核心功能卡 hover：掠光（与技术栈卡区分）
+
+`.feature-card` 此前只有「上浮 3px + 顶部渐变线 + 序号放大」。补扫光时不照搬技术栈卡，而是同一族的另一档节奏：
+
+| | 技术栈卡 `.tech-layer::after` | 功能卡 `.feature-card::after` |
+|---|---|---|
+| 形态 | 从左侧填充并停留（`scaleX 0→1`） | 40% 宽的斜向掠光扫过即散 |
+| 时长 | 0.8s，有终态 | 0.6s，结束后 `opacity: 0` |
+| 理由 | 3 张大卡，承载「链路」叙事，节奏沉 | 11 张小卡，密度高，整片填充会笨重且雷同 |
+
+调色板与角度（100deg、品牌 + 金）保持同源，并附 `prefers-reduced-motion` 降级。
+
+#### ⑧ 按钮悬停加速背景旋转（停留越久越快）
+
+首屏「立即体验 / GitHub 源码」与底部「开始使用」hover 时，背景同心环从 **4×** 起手，并按停留时长持续加速，**16× 封顶**（约 8 秒到顶）；移开后回落 1×。以 130s 的环为例：常速 130s/圈 → 起手 32s/圈 → 封顶 8s/圈。
+
+实现要点（新增 `app/composables/useSpinBoost.ts`）：
+
+- **改 `playbackRate` 而不是 `animation-duration`**：改时长会让浏览器按「已过时间 / 新时长」重算进度，元素瞬间跳到另一个角度（肉眼闪一下）；倍速只改推进速度，当前角度连续；
+- **按钮与背景环是兄弟分支**，CSS `:hover` 跨不过去；且「越停越快」要按时间求值，纯 CSS 做不到；
+- 速度模型：`target = min(16, 4 + 1.5 × 停留秒数)`，再用帧率无关的指数平滑跟随（`τ = 73ms`），保证起手不跳；
+- `getAnimations({ subtree: true })` 按动画名 `ring-spin` 过滤，只影响环的旋转，不牵动网格漂移与光斑呼吸；
+- `prefers-reduced-motion: reduce` 不介入；键盘 `focusin/focusout` 同样触发；
+- 页面切到后台时强制归位，避免 rAF 被压到 1fps 后倍速卡在高位；
+- **认证页复用**：「确认登录」按钮 hover/focus 时，通过 `boost` prop 驱动装饰层，加速**双轨 PNG 圆环**（`.auth-decor__ring--outer/mid/core` 的 `auth-orbit` 自转，90s/130s/180s 与 120s/150s/210s 两轨）；每轨三环必须同步提速，只提外环会把「综合圆环」撕开。
+
+#### ⑨ 轨道环纹样改为单图源
+
+`useRingPatternStyle` 原先维护「桌面版 + 移动端 alpha 加强版」两张图，并在注入样式里附带一条 `@media (max-width: 768px)` 覆盖。实测两张图字节完全一致（md5 相同），移动端分支只是把同一个 URL 又声明了一遍。
+
+- 删除 `RING_PATTERN_MOBILE_FILE`、`breakpoint` 选项与注入样式的 `@media` 块；
+- 注入结果由「1 条规则 + 1 条断点覆盖」降为 1 条规则（浏览器实测 `textContent` 只剩一条，无 `@media`）；
+- 断点差异改由各页 SFC 的透明度分档与环边框承担，`LandingView` 的移动端注释同步改写。
+
+#### ⑩ 三个入口的跨页形变（共享元素 Morph）
+
+导航「登录」、首屏「立即体验」、底部「开始使用」统一接入 `document.startViewTransition`，两段形变叠加：
+
+| 形变对象 | 旧 → 新 | 时长 |
+|---|---|---|
+| 装饰层 | `.hero-bg` → `.auth-decor`（同名 `hero-decor`） | 620ms |
+| 表单卡 | **被点击的按钮** → 注册页 `.container`（同名 `auth-card`） | 组 680ms / 旧 220ms / 新 680ms |
+
+- 按钮的 `view-transition-name` 在点击瞬间由脚本挂上、动画结束还原，三个入口因此都能作为形变起点，同页也不会出现重名；
+- 旧快照（小按钮）要被放大数倍，220ms 就退场以免长时间显示糊图；新卡片淡入拉长到 680ms，读作「按钮化开成卡片」——这是 Web 上最接近 PPT Morph 的近似：浏览器只插值快照的位置与尺度，不会重排内容；
+- 入场动画抑制：目标页读到 `sessionStorage` 标记后跳过 `.fade-in`，否则新快照是一张几乎透明的卡片；
+- 三处入口由 `<router-link>` 改为 `<a href="#/register">`，保留中键与 ⌘/Ctrl 点击开新标签；
+- **设备能力门控**：`canAnimateViewTransition()` 统一判断——不支持该 API / `prefers-reduced-motion` / `Save-Data` / `deviceMemory < 4` / 2G 及 slow-2g 网络 / `(update: slow)` 任一命中即不启动过渡，直接跳转，功能不受影响；
+- 实测：三个入口分别点击，`startViewTransition` 各调用 1 次，`auth-card` 均正确落在被点元素上；目标页 `.container` 计算值为 `auth-card`，且未挂 `fade-in`。
+
+#### ⑪ 侧栏展开扫光（Home）
+
+折叠开关展开时，面板从左向右扫过一道品牌 + 金的水洗（560ms），与落地页卡片的 hover 掠光同一套语汇。
+
+- 实现落在 `SidePanel.vue`：`.info-panel::after` + `.is-revealing` 触发 `panel-sheen`，只动 `transform/opacity`，不参与布局；`HomeView` 只负责置 `revealing` 并在 620ms 后复位；
+- **没有用 View Transitions**：面板宽度由 `sidePanelRatio` 与懒加载共同驱动，尺寸会异步落定（实测点击后宽度滞留约 1s），整页快照会与这种延迟打架；CSS 扫光不依赖布局，稳定；
+- `prefers-reduced-motion: reduce` 下不播放。
+
+#### ⑫ 试错记录：为什么最终没有改 `ut`
 
 | 尝试 | 结论 |
 |---|---|

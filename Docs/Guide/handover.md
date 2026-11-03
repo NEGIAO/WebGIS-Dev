@@ -127,7 +127,7 @@ L3 HF Secrets（SUPER_USER / OAuth secret / SMTP 密码 / API Key）→ 只有�
 
 - **待实机回归**（沙盒无法跑 vite/uvicorn，静态验证已过）：统一图层管理双入口互通、矢量透明度反复调节、
   三维分析两工具、`npm run build` 产物域名扫描——各任务日志的「测试方案」节有逐条清单。
-- **存量 tsc 错误**：cesium 模块类型解析（Windows 安装的 node_modules 在异构环境）与个别历史文件——与新代码无关。
+- **存量 tsc 错误**：`npx tsc --noEmit` 于 2026-11-03（V3.6.40）实测 **0 错误**。此前记录的「cesium 模块类型解析（异构 node_modules）」噪音在本机已不复现，成因未追查；若他机复现模块解析类报错，先比对 `node_modules` 与平台，再判断是否本次新引入。
 - **候选增强**（未排期）：TOC 三维节点属性表（DataSource entity properties 数据已具备）、
   分析结果导出、Demo 库剩余候选（odFlyLine 飞线/buildingShade 白膜）、矢量透明度覆盖非 Color 材质。
 

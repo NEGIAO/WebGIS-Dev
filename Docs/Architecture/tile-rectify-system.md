@@ -15,20 +15,23 @@
 ```mermaid
 flowchart LR
     FE["WebGIS 前端<br/>webgis.negiao.cn / HF / localhost"] -->|"VITE_TILE_PROXY_BASE_URL"| VPS["vpn.negiao.cn/proxy/*<br/>tile-proxy 服务 :9002"]
-    VPS --> UP["高德 / 百度 / Google / 天地图 等上游瓦片"]
+    VPS --> UP["高德 / 百度 / 腾讯 / 谷歌中国 等加偏上游瓦片<br/>（天地图直连，不经本代理）"]
     FE -->|"VITE_BACKEND_URL"| HF["negiao-webgis.hf.space<br/>业务 API（无瓦片中转）"]
 ```
 
 ## 2. 为什么需要纠偏（业务背景）
 
-国内合规图源（高德、百度、天地图等）发布的瓦片不是 WGS84，而是加偏坐标系：
+需要纠偏的不是「国内图源」这个集合整体，而是**采用加偏坐标系的那几家**：高德、腾讯、谷歌中国（GCJ-02）与百度（BD-09）。**天地图不在其中** —— 它发布 CGCS2000（经纬度，与 WGS84 差异在 1 m 量级），本仓库各天地图图源一律直连 `t{0-7}.tianditu.gov.cn` 并携带 `tk`，未经 `gcj2wgs` 代理。
 
 | 坐标系 | 谁在用 | 与 WGS84 的关系 |
 |---|---|---|
 | WGS84 | GPS、OSM、Esri、前端双引擎统一工作空间 | 基准，无偏移 |
-| GCJ-02（火星坐标） | 高德、腾讯、谷歌中国、天地图 | 国测局非线性偏移，城区可达数百米 |
+| CGCS2000 | 天地图全系（矢量/影像/注记/国界） | 与 WGS84 差异 < 1 m，工程上按 WGS84 直接使用，**无需纠偏** |
+| GCJ-02（火星坐标） | 高德、腾讯、谷歌中国 | 国测局非线性偏移，城区可达数百米 |
 | BD-09 | 百度全系 | GCJ-02 之上再加偏 |
 | BD09MC（百度墨卡托） | 百度瓦片网格 | 独立投影 + 独立网格 |
+
+> 代码对照：`basemapConfig.ts` 中走 `gcj2wgsProxyUrl` 的仅高德（注记无偏 / 影像 WGS / 地图 WGS）、谷歌中国（水系 WGS / 简洁 wgs）、腾讯（地图 WGS）；走 `bd2wgsProxyUrl` 的仅百度（地图 WGS）；天地图各图源走 `buildTiandituUrl`。
 
 把 GCJ/BD 瓦片按标准 XYZ 直接贴到 WGS84 画布会整城错位。纠偏服务在**服务端逐瓦片重采样**，输出与请求方网格对齐的 256×256 图，前端零改造。
 

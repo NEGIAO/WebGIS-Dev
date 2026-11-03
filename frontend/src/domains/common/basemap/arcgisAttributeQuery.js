@@ -92,7 +92,7 @@ export async function fetchArcgisLayerAttributes({ endpoint, layerId, maxFeature
         if (!esriGeom || typeof esriGeom !== 'object') return null;
         // Esri 要素级 geometry 不含 type：类型取响应级 geometryType
         const geoType = geoTypeOverride || String(esriGeom.type || '');
-        let coordinates = null;
+        let coordinates;
 
         if (geoType === 'esriGeometryPoint') {
             const pair = projPair(esriGeom.x, esriGeom.y);

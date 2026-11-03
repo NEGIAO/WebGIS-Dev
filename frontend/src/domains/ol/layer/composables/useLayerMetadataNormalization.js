@@ -578,7 +578,7 @@ function ensureStableFeatureId(feature, index = 0) {
         .toString(36)
         .slice(2, 8)}`;
 
-    let persisted = false;
+    let persisted;
     try {
         if (typeof feature.set === 'function') {
             // OL Feature：silent 写 _gid + setId（供 getFeatureById O(1) 命中）

@@ -16,6 +16,7 @@ frontend/src/
 ├── vue-shims.d.ts  # .vue 单文件组件模块声明（.ts 动态 import .vue 组件时使用）
 ├── api/
 │   ├── backend.js  # ⚠️ DEPRECATED 转发壳（删除后 api/backend 自动解析目录 index，待 git rm）
+│   ├── blobError.ts  # blob/JSON 错误体解析（后端文案还原；主站 client 与下载节点共用）
 │   ├── download.js  # 底图下载任务 API
 │   ├── geocoding.js  # 天地图/高德地理编码
 │   ├── httpStatusMap.js  # HTTP 状态码 + 高德 infocode 统一映射
@@ -46,12 +47,14 @@ frontend/src/
 │   ├── RegisterView.vue  # 注册/登录（邮箱 + Google/GitHub/Hugging Face OAuth，全量 i18n + 语言切换；背景装饰挂 AuthDecorBackground + AuthGlobeStage）
 │   ├── TermsOfService.vue  # 服务条款
 │   ├── components/
-│   │   ├── AuthDecorBackground.vue  # 认证页装饰层（底纹渐变 + 经纬网 + 等高线×2 + 散点/点位 + 天光 + 双轨异径逆向椭圆，每轨内套「外/中/核」三环综合圆环（同一 PNG 按 124%/96%/90% 缩放落在不同半径）+ 动态 SVG（流动轨迹 / 定位脉冲 / 自绘星座 / 漂浮宇航员：纯白填充 + 白色包边与落地投影，与脚下线框地球形成材质差）+ 光斑×3；≤768px 整层关闭）
+│   │   ├── AuthDecorBackground.vue  # 认证页装饰层（底纹渐变 + 经纬网 + 等高线×2 + 散点/点位 + 天光 + 双轨异径逆向椭圆，每轨内套「外/中/核」三环综合圆环（同一 PNG 按 124%/96%/90% 缩放落在不同半径）+ 动态 SVG（流动轨迹 / 定位脉冲 / 自绘星座 / 漂浮宇航员：纯白填充 + 白色包边与落地投影，与脚下线框地球形成材质差）+ 光斑×3；`boost` prop 可加速双轨 PNG 圆环；≤768px 整层关闭）
 │   │   ├── AuthGlobeStage.vue  # 认证页线框地球（3 条 rx 递减椭圆自转伪造球体 + 2 条纬线 ±5° 慢摆 + conic 扫掠光 + 三层脉冲环 + 差速轨道环 20s / 卫星 13s + 九道流星 3.8~6.7s 错峰；线稿走 --brand-primary-rgb alpha 以适配浅色底，整层透明度由 --globe-opacity 单一开关收敛，球底贴屏幕底边（left 9% + bottom 0 + translateX(-50%)，直径 min(230px,24vw,40vh)），≤1100px 收一档、≤768px 整层关闭）
 │   │   └── SectionTitle.vue  # 通用节标题三件套（印章 + 衬线标题 + 罗盘水印；LandingView 各节复用）
 │   └── composables/
 │       ├── useLazyModules.ts  # CesiumContainer / SidePanel 懒加载 + 重试逻辑（**重试必须复用同一静态字面量 specifier**：带 `?t=${Date.now()}` 的运行时变量 specifier 无法被 Vite 分析，dev 抛 Unknown variable dynamic import、prod 指向不存在路径；瞬态失败判据覆盖 Chromium/Firefox/Safari 三种措辞 + 150ms×n 退避）
-│       └── useRingPatternStyle.ts  # 轨道环旋转纹样 PNG 注入（文档级 `<style>` 承载相对 url()，绕开 scoped CSS 的 /assets/ 解析基准；Landing / 认证页共用，图源由 ASSET_BASE_URL 派生）
+│       ├── useRingPatternStyle.ts  # 轨道环旋转纹样 PNG 注入（文档级 `<style>` 承载相对 url()，绕开 scoped CSS 的 /assets/ 解析基准；Landing / 认证页共用，**单图源** `d-bg2_1.png` 桌面与移动共用（原 webp 双图源已合并），图源由 ASSET_BASE_URL 派生）
+│       ├── useSpinBoost.ts  # 悬停加速：对已有 CSS 动画改 playbackRate，4× 起手、按停留时长线性递增（1.5/s、16× 封顶）、指数平滑跟随、页面隐藏归位；按动画名 `ring-spin` 过滤，解决「按钮与背景环是兄弟分支，CSS `:hover` 跨不过去」与「改 animation-duration 会跳帧」两个问题
+│       └── useViewTransitionNavigation.ts  # 跨页形变跳转：包 `document.startViewTransition` → `router.push` → `nextTick`（懒加载页必须等挂载，否则新快照是空白）；不支持 / reduced-motion / skip() 时降级为普通跳转
 ├── assets/
 │   ├── cesium-tool-theme.css
 │   ├── logo.svg

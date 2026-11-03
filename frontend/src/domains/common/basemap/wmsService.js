@@ -273,13 +273,13 @@ async function requestServiceJson(url, options = {}) {
         if (!proxiedUrl || proxiedUrl === url) {
             if (directError?.message === '响应非 JSON') throw directError;
             const reason = directError?.name === 'AbortError' ? '请求超时' : '网络不可达或跨域被拦截(CORS)';
-            throw new Error(reason);
+            throw new Error(reason, { cause: directError });
         }
         const viaProxy = await fetchJsonText(proxiedUrl, timeoutMs).catch((proxyError) => {
             const reason = proxyError?.name === 'AbortError' ? '请求超时' : (proxyError?.message || '不可达');
-            throw new Error(`直连失败且后端代理亦不可用（${reason}）`);
+            throw new Error(`直连失败且后端代理亦不可用（${reason}）`, { cause: proxyError });
         });
-        if (!viaProxy.ok) throw new Error(`服务响应异常（HTTP ${viaProxy.status}，代理通道）`);
+        if (!viaProxy.ok) throw new Error(`服务响应异常（HTTP ${viaProxy.status}，代理通道）`, { cause: directError });
         try {
             return JSON.parse(viaProxy.text);
         } catch {

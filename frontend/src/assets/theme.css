@@ -250,3 +250,54 @@ body {
 svg.lucide {
     flex: none;
 }
+
+/* ==========================================================================
+   跨页形变（View Transitions）：Landing → 注册页
+   ==========================================================================
+   两页装饰层都挂了 `view-transition-name: hero-decor`（.hero-bg / .auth-decor），
+   浏览器据此把新旧快照按位置与尺度插值——读作"环从首屏长到认证页"；
+   内容层不做特殊处理，走 root 的默认交叉淡化。
+   时长取 620ms：比常规 300ms 慢一档，让形变过程看得出来。 */
+::view-transition-group(hero-decor) {
+    animation-duration: 620ms;
+    animation-timing-function: cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+
+::view-transition-old(hero-decor),
+::view-transition-new(hero-decor) {
+    animation-duration: 620ms;
+    animation-timing-function: cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+
+::view-transition-old(root),
+::view-transition-new(root) {
+    animation-duration: 420ms;
+}
+
+/* 用户要求减少动态效果时，快照直接切换（脚本侧也已跳过启动过渡，这里是双保险） */
+@media (prefers-reduced-motion: reduce) {
+    ::view-transition-group(*),
+    ::view-transition-old(*),
+    ::view-transition-new(*) {
+        animation: none !important;
+    }
+}
+
+/* 共享元素：按钮 → 注册页表单卡（PPT Morph 的核心那一下）
+   按钮在点击瞬间由脚本挂上同名 auth-card，浏览器把它的快照按位置/尺度
+   插值到卡片上，读作「按钮长成卡片」；比整页淡入更有方向感。 */
+::view-transition-group(auth-card) {
+    animation-duration: 680ms;
+    animation-timing-function: cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+
+/* 旧快照（按钮）要被放大数倍，长时间停留只会是糊的；让它 220ms 退场，
+   新卡片淡入拉长到 680ms，视觉上就是「按钮化开成卡片」 */
+::view-transition-old(auth-card) {
+    animation-duration: 220ms;
+}
+
+::view-transition-new(auth-card) {
+    animation-duration: 680ms;
+    animation-timing-function: cubic-bezier(0.22, 0.61, 0.36, 1);
+}

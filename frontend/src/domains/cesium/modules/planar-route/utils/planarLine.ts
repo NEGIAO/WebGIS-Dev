@@ -291,7 +291,7 @@ export function convertToPositions(flatArray) {
 	}
 
 	positions = positions.map((res) => {
-		let height = 0;
+		let height;
 		if (globeConfig.heightType == 1) {
 			height = globeConfig.lineHeight;
 		} else if (globeConfig.heightType == 2) {

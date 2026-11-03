@@ -2,7 +2,11 @@
     <!-- 外壳：负责布局与折叠手柄溢出，不裁切 -->
     <div
         class="info-panel-shell"
-        :class="{ collapsed: isCollapsed, 'in-dihuan': props.locationInfo.isInDihuan }"
+        :class="{
+            collapsed: isCollapsed,
+            'in-dihuan': props.locationInfo.isInDihuan,
+            'is-revealing': props.revealing,
+        }"
     >
         <!-- 折叠开关（放在 shell 上，可伸出面板） -->
         <div
@@ -387,6 +391,11 @@ const props = defineProps({
         default: 'layers',
     },
     isCollapsed: {
+        type: Boolean,
+        default: false,
+    },
+    /** 展开瞬间置 true：放一次渐变扫光（由 HomeView 控制时长） */
+    revealing: {
         type: Boolean,
         default: false,
     },
@@ -816,6 +825,7 @@ onUnmounted(() => {
 
 /* 内层面板：overflow hidden 让子元素背景被 border-radius 裁切 */
 .info-panel {
+    position: relative;
     display: flex;
     flex-direction: row;
     flex: 1;
@@ -832,6 +842,55 @@ onUnmounted(() => {
     transition: width 0.3s ease;
     /* 简写顺序：左上 右上 右下 左下 */
     border-radius: 16px 0 0 16px;
+}
+
+/* 展开扫光：沿面板宽度从左扫过一道品牌 + 金的低透水洗。
+   与落地页卡片的 hover 掠光同一套语汇，但这里是"面板出现"的一次性提示。
+   不用 View Transitions 的原因：面板宽度由 sidePanelRatio 与懒加载共同驱动，
+   尺寸会异步落定，整页快照会与这种延迟打架（实测宽度滞留约 1s）；
+   CSS 扫光只动 transform/opacity，不参与布局，不受影响。 */
+.info-panel::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    background: linear-gradient(
+        100deg,
+        transparent 0%,
+        rgba(var(--brand-primary-rgb), 0.1) 45%,
+        rgba(var(--brand-gold-rgb), 0.12) 55%,
+        transparent 100%
+    );
+    transform: translateX(-100%);
+    opacity: 0;
+    pointer-events: none;
+}
+
+.info-panel-shell.is-revealing .info-panel::after {
+    animation: panel-sheen 560ms cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+
+@keyframes panel-sheen {
+    0% {
+        transform: translateX(-100%);
+        opacity: 0;
+    }
+
+    12%,
+    70% {
+        opacity: 1;
+    }
+
+    100% {
+        transform: translateX(100%);
+        opacity: 0;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .info-panel-shell.is-revealing .info-panel::after {
+        animation: none;
+    }
 }
 
 /* 折叠手柄 */

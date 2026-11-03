@@ -13,6 +13,7 @@ import {
     readShareModeFromUrl,
 } from '@common/user/services/auth';
 import { getHttpStatusMessage, buildHttpErrorMessage } from '../httpStatusMap';
+import { readErrorPayload } from '../blobError';
 import { BACKEND_BASE_URL as PUBLIC_BACKEND_BASE_URL, BACKEND_REQUEST_TIMEOUT_MS } from '../../config/publicRuntime';
 import { useMessage } from '@common/shell/useMessage';
 
@@ -274,49 +275,15 @@ backendAPI.interceptors.response.use(
 );
 
 /**
- * 尝试将错误响应的 Blob 解析为 JSON 错误信息。
- * 后端 FastAPI 返回 401/403 时，若前端请求设置了 responseType: 'blob'，
- * 响应体是 Blob 而非 JSON，需要手动读取并解析。
+ * 将错误响应体解析为 Error 对象。
+ * 后端 FastAPI 返回 4xx 时，若前端请求设置了 responseType: 'blob'，
+ * 响应体是 Blob 而非 JSON，需要先读文本再解析。
+ * 解析逻辑已抽到 `api/blobError.ts`，与独立下载节点客户端共用同一套文案契约。
  * @param {import('axios').AxiosResponse} response
  * @returns {Promise<Error>}
  */
 async function parseBlobError(response) {
-    const data = response.data;
-    let message = `请求失败 [${response.status}]`;
-    let detailCode = '';
-
-    if (data instanceof Blob && data.type?.includes('application/json')) {
-        try {
-            const text = await data.text();
-            const json = JSON.parse(text);
-            const detail = json?.detail;
-            if (typeof detail === 'string') {
-                message = detail;
-            } else if (detail && typeof detail === 'object') {
-                message = String(detail?.message || detail?.detail || json?.message || '请求失败');
-                detailCode = String(detail?.code || '');
-            } else if (json?.message) {
-                message = json.message;
-            }
-            if (!detailCode && json?.detail_code) {
-                detailCode = String(json.detail_code);
-            }
-        } catch {
-            // JSON 解析失败，使用状态码兜底
-            message = `请求失败 [${response.status}] ${getHttpStatusMessage(response.status)}`;
-        }
-    } else if (data instanceof Blob) {
-        // 非 JSON Blob（如 HTML 错误页），尝试读取前 200 字符获取更多信息
-        try {
-            const text = await data.text();
-            const snippet = text.slice(0, 200).trim();
-            message = snippet
-                ? `[${response.status}] ${snippet}`
-                : `[${response.status}] ${getHttpStatusMessage(response.status)}`;
-        } catch {
-            message = `[${response.status}] ${getHttpStatusMessage(response.status)}`;
-        }
-    }
+    const { message, detailCode } = await readErrorPayload(response.data, response.status);
 
     // 注意：不在此处调用 showError，避免与调用方的错误处理重复弹窗。
     // 调用方可通过 apiError.detailCode / apiError.isGuestInsufficient / apiError.isQuotaInsufficient

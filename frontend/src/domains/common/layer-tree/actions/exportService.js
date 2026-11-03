@@ -115,7 +115,7 @@ export function exportFeaturesAsKml({
         fileName || `${safeName}_${String(sourceCrs || 'wgs84').toLowerCase()}.kml`,
     );
 
-    let sizeBytes = 0;
+    let sizeBytes;
     if (triggerDownload) {
         sizeBytes = triggerTextDownload(
             outputFileName,

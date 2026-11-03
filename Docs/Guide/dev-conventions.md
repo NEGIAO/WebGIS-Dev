@@ -25,6 +25,7 @@
 13. **移动端基线**：viewport 常带 `shrink-to-fit=no, viewport-fit=cover`；全局禁 iOS 自动调字与横向溢出；触屏目标按 `pointer: coarse` 给 ≥40px（新增 icon 同步跟进）；F12 拉窄≠真机，必须真机或设备模式复验。**细则见本文「场景数据与移动端契约」**
 14. **线上机器人 PR 只读优先**：Dependabot 依赖 PR 的查看与判定随时可做（`gh pr list` / `pr view` / `pr checks` / `pr diff`）；**合并须逐次显式授权**（用户说出「合并 #n」），且仅在「检查全绿 + diff 仅锁文件 + 版本跨越已判定 + 不触部署面」时才可提议；`pr merge --auto` / `--admin` / `pr checkout` / `pr review` / `pr close` 一律禁止；合并本身**不升版本、不写独立日志**。详见 Force_command §12
 15. **视觉层次（去「AI 生成感」）**：卡片 / 面板 / 弹层 / 按钮默认**去描边**，层次由「分层投影 + 明度差 + 留白」建立，不由常驻 `1px` 描边建立；确需硬边界时用**环状阴影** `0 0 0 1px` 而非 `border`；**表单控件与语义态（focus / error / selected / disabled）的描边属可用性提示，例外保留**；投影只走既有令牌，禁新增第四套；`transition` 禁 `all`。**细则见本文「视觉层次规范」**
+16. **旋转装饰层的动效约束（iOS）**：纯装饰图层禁同时具备「整块透明 + 圆形/异形裁剪 + 绕圆心旋转」——iOS Safari 会把该层整块渲染成黑色；旋转只挂在有实体内容（边框 / 位图 / 文字）的元素上；「点绕圈」改用 SVG `stroke-dashoffset` 或 canvas。此类改动**必须真机复验，F12 设备模拟不算通过**。**判据与排查手册见本文「动效与合成约束（iOS Safari）」**
 
 ### 分层边界
 
@@ -194,6 +195,20 @@ box-shadow:
 #### 九、实施顺序（先补令牌，再改表面）
 
 **`--shadow-rgb` 目前尚未在 `theme.css` 中定义**。执行视觉改造前，必须先在 `:root` 与 `[data-theme="blue"]` 补上该变量，否则 `rgba(var(--shadow-rgb), …)` 整体解析失败，表现为**阴影全部消失**（比保留描边更糟）。顺序恒为：补令牌 → 改共享卡片（`.ui-card` / `.ui-panel`）→ 改页面级卡片 → 逐页收敛 `transition: all`。
+
+### 动效与合成约束（iOS Safari）
+
+> **触发场景**：给首屏 / 认证页这类「持续旋转的装饰层」增加任何新图层（点、光斑、描边、文本、图片）。
+> **硬约束**：真机（iOS Safari）复验，**F12 设备模拟不算通过** —— 它不还原合成行为。
+> **完整判据与排查手册**：[`Architecture/ios-safari-rendering-pitfalls.md`](../Architecture/ios-safari-rendering-pitfalls.md)。
+
+三条速记：
+
+1. **纯装饰图层别三件套全占** —— 整块透明 + 圆形裁剪（`border-radius`）+ 绕圆心旋转，三者同时出现时 iOS 会把该层整块渲染成黑色；
+2. **旋转挂在有实体内容的元素上** —— 边框、位图、文字都安全；空的渐变层不安全；
+3. **"点绕圈"改用非旋转画法** —— SVG `circle` + `stroke-dashoffset`，或 canvas，不要走 CSS 图层旋转。
+
+排查方法（**先做减法，别先换写法**）：列出该区域所有图层 → 一次只删一个 → 删到不黑为止 → 再逐项加回来确认。
 
 ### 提交前检查（门禁）
 

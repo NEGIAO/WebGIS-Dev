@@ -1505,6 +1505,8 @@ onMounted(async () => {
                                                 <button class="btn-icon" title="保存" @click="saveEditCell(row, col.name)"><Check :size="14" /></button>
                                                 <button class="btn-icon" title="取消" @click="cancelEditCell"><X :size="14" /></button>
                                             </div>
+                                            <!-- 内容先经 escapeHtmlText 转义、再拼自产 <mark> 高亮标签，无外部 HTML 注入面 -->
+                                            <!-- eslint-disable-next-line vue/no-v-html -->
                                             <span v-else class="cell-value" v-html="highlightCell(row, col.name)"></span>
                                         </td>
                                         <td class="actions-cell">

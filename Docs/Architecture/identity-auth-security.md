@@ -206,6 +206,22 @@ curl -sI https://webgis.negiao.cn/ | grep -i strict  # 期望输出 max-age=...
 curl -sI https://negiao-webgis.hf.space/health       # 平台侧 HTTPS，无自定义头
 ```
 
+**首启参数建议**（Cloudflare → SSL/TLS → Edge Certificates → HSTS）：
+
+| 选项 | 建议 | 理由 |
+|---|---|---|
+| 启用 HSTS | 开 | 补上首个明文请求的缺口 |
+| `max-age` | 先 `86400`（1 天），观察一周后升到 `31536000`（1 年） | 该值被浏览器缓存，调低不会立刻解除已生效的锁定，只能小步放量 |
+| `includeSubDomains` | **建议不勾** | 一旦下发，`negiao.cn` 下**所有**子域（含未来新增）被永久约束为 HTTPS，且移除需等 `max-age` 过期。主站单独 HSTS 已足够，子域约束收益有限 |
+| `preload` | **不勾** | 入列需另行提交且移除以月计；CF 的开关只是加指令，个人项目无收益 |
+| `nosniff` | 勾 | 独立于 HSTS，零风险，阻止 MIME 嗅探 |
+
+> 勾选 `includeSubDomains` 的前置条件：`negiao.cn` 下**所有**子域（含未来新增）均已全站 HTTPS 且无明文端口。当前 `vpn.negiao.cn` 达标（http 301 / https 200）；`gis.negiao.cn` 为腾讯云一个月试用实例，**计划下线**，不再作为阻塞项。
+>
+> **下线 `gis.negiao.cn` 时必须删除其 DNS 记录**（A/AAAA/CNAME 全部），不要只停实例：试用到期后公网 IP 会被回收再分配，残留解析会让该子域指向陌生人的服务器（悬空 DNS / 子域接管）。该实例的 Let's Encrypt 证书随实例消失即可，无需另行处理。
+>
+> **`gis.negiao.cn` 443 不通的原因**（2026-11-02 实测，留档备查）：服务 HTTPS 实际在 **8443**（`CN=gis.negiao.cn`，有效期至 2027-01-24），80 端口 301 指向 `https://gis.negiao.cn:8443/`；443 同为 nginx 的 ssl 监听（明文请求返回 `400 The plain HTTP request was sent to HTTPS port`），但带 SNI 的 ClientHello 会被重置，不带 SNI 可正常握手，同 IP 的 8443 带任意 SNI 均正常——特征指向接入商对 80/443 的 SNI 拦截。
+
 **回归红线**：任何新增入口（新 VPS、新静态托管、临时调试服务）都必须先具备 TLS 与 301，**不得以 HTTP 形式对外提供登录或 API**。这条约束对「临时」一视同仁——`5173` 那类裸端口正是从"临时开一下"开始的。
 
 ### 7.2 后端容器的 HTTP 拒绝是怎么实现的

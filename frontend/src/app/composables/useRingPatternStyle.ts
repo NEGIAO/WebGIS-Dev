@@ -26,9 +26,15 @@
 import { onBeforeUnmount, onMounted } from 'vue';
 import { ASSET_BASE_URL } from '../../config/publicRuntime';
 
-/** 纹样图源（public/images/njnu-media/）：桌面版 + 移动端 alpha 加强版 */
-const RING_PATTERN_FILE = 'images/njnu-media/d-bg2_1.webp';
-const RING_PATTERN_MOBILE_FILE = 'images/njnu-media/d-bg2_1-mobile.webp';
+/**
+ * 纹样图源（public/images/njnu-media/）
+ *
+ * 单图源：桌面与移动共用同一张 1060×1060 RGBA。
+ * 移动端原先单独换过一张 alpha 加强版，实测与桌面版字节一致（md5 相同），
+ * 已合并为一张——少一次请求，也少一条同断点的 @media 覆盖规则。
+ * 断点差异只体现在透明度与环边框（见各页 SFC 的 @media 段）。
+ */
+const RING_PATTERN_FILE = 'images/njnu-media/d-bg2_1.png';
 
 /** 注入参数 */
 export interface RingPatternStyleOptions {
@@ -38,8 +44,6 @@ export interface RingPatternStyleOptions {
     scope: string;
     /** 单个环的类名（不含点），如 'hero-bg__ring' */
     ringClass: string;
-    /** 移动端断点像素值，默认 768（与各页 SFC 的降级断点保持一致） */
-    breakpoint?: number;
 }
 
 /**
@@ -55,19 +59,14 @@ function assetUrl(file: string): string {
 /**
  * 生成注入用的 CSS 文本。
  * @param options 注入参数
- * @returns 桌面 + 移动端两档 background-image 规则
+ * @returns 单条 background-image 规则（桌面与移动共用同一图源）
  */
-function buildStyleText({ scope, ringClass, breakpoint = 768 }: RingPatternStyleOptions): string {
+function buildStyleText({ scope, ringClass }: RingPatternStyleOptions): string {
     const selector = `${scope} .${ringClass}.${ringClass}::before`;
     return `${selector} {
     background-image: url('${assetUrl(RING_PATTERN_FILE)}');
     background-repeat: no-repeat;
     background-position: center;
-}
-@media (max-width: ${breakpoint}px) {
-    ${selector} {
-        background-image: url('${assetUrl(RING_PATTERN_MOBILE_FILE)}');
-    }
 }`;
 }
 

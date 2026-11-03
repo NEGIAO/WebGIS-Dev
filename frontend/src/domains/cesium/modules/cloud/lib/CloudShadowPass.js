@@ -302,7 +302,7 @@ export class CloudShadowPass {
             Number.isFinite(v.x) && Number.isFinite(v.y) && Number.isFinite(v.z) &&
             (v.x * v.x + v.y * v.y + v.z * v.z) > 1e-12;
 
-        let toSunSource = null;
+        let toSunSource;
         if (isValidDir(sunDirWC)) toSunSource = sunDirWC;
         else if (isValidDir(cam.positionWC)) toSunSource = cam.positionWC;
         else if (isValidDir(cam.directionWC)) toSunSource = cam.directionWC;

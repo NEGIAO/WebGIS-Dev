@@ -664,9 +664,9 @@ export function createChatAgentConfig({ message, onModeChanged = () => {} }) {
          * @returns {Promise<{ reply: string, usedModel: string, rawData: Object, quota: Object|null, cost: number }>}
          */
         async callLLM({ message: userMsg, history, locationContext, mapContext, systemPrompt, tools }) {
-            let reply = '';
-            let usedModel = '';
-            let rawData = {};
+            let reply;
+            let usedModel;
+            let rawData;
             let quotaData = null;
             let callCost = 0;
 

@@ -403,7 +403,7 @@ function parseDbfRecord(
         const fieldBytes = recordBytes.slice(offset, offset + field.length);
         const fieldString = decodeString(fieldBytes, encoding);
 
-        let value: any = null;
+        let value: any;
 
         try {
             switch (field.type.toUpperCase()) {

@@ -66,7 +66,7 @@ export async function getIpLocation(ip = '', options = {}) {
 
         return normalized;
     } catch (error) {
-        let errorMessage = '网络异常';
+        let errorMessage;
         const httpStatus = error?.status || 0;
         if (error?.isQuotaExceeded) {
             // 配额用完：仅记录日志

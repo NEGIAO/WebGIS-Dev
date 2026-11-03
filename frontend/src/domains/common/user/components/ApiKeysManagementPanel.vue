@@ -560,10 +560,22 @@
                 <div class="config-grid">
                     <label class="config-item config-item-full">
                         <span>API Key</span>
+                        <!-- 刻意不用 type="password"：浏览器密码管理器对 password 字段忽略
+                             autocomplete，会把本 origin 保存的登录密码自动填入；管理员一旦点
+                             「保存」，密码就被写进 L2 密钥表（V3.6.32 同源事故）。改 text +
+                             CSS 遮蔽后不再被识别为登录凭据框。 -->
                         <input
                             v-model="defaultAIDraft.api_key"
-                            type="password"
-                            class="key-input"
+                            type="text"
+                            class="key-input key-input--masked"
+                            name="default-ai-api-key"
+                            autocomplete="off"
+                            autocorrect="off"
+                            autocapitalize="off"
+                            spellcheck="false"
+                            data-lpignore="true"
+                            data-1p-ignore="true"
+                            data-bwignore="true"
                             :placeholder="t('apiKeys.defaultAIKeyPlaceholder')"
                         />
                     </label>
@@ -1239,6 +1251,14 @@ onMounted(async () => {
 
 textarea.key-input {
     min-height: 76px;
+}
+
+/* 密钥框遮蔽：用 text + CSS 文本遮蔽替代 type="password"。
+   password 类型会被浏览器密码管理器强行填充（autocomplete="off" 对其无效）；
+   Firefox 不支持 -webkit-text-security，退化为明文显示（仅管理员本人可见，可接受）。 */
+.key-input--masked {
+    -webkit-text-security: disc;
+    letter-spacing: 1px;
 }
 
 .key-input:focus {

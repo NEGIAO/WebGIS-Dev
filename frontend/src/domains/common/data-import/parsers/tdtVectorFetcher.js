@@ -275,7 +275,7 @@ function parseValue(buf) {
     for (const f of splitFields(buf)) {
         if (f.fl === 1 && f.wt === 2) {
             const s = buf.slice(f.start, f.start + f.L);
-            let st = null;
+            let st;
             try {
                 st = strictDecoder.decode(s);
             } catch {
@@ -503,7 +503,7 @@ function parsePreambleLayer(raw) {
                 for (const vf of splitFields(data)) {
                     if (vf.fl === 1 && vf.wt === 2) {
                         const s = data.slice(vf.start, vf.start + vf.L);
-                        let st = null;
+                        let st;
                         try {
                             st = strictDecoder.decode(s);
                         } catch {
