@@ -37,6 +37,12 @@ type NavigatorWithHints = Navigator & {
 export interface ViewTransitionNavigationOptions {
     /** 额外的跳过条件，返回 true 时不做过渡 */
     skip?: () => boolean;
+    /**
+     * 目标路由是否已具备「立即过渡」的条件（chunk / 会话校验等前置资源就绪）。
+     * 返回 false 时**不启动过渡**，直接普通跳转：过渡回调里若有网络等待，
+     * 浏览器会冻结旧快照，表现为页面卡住——宁可不播动画，也不给冻结帧。
+     */
+    ready?: () => boolean;
 }
 
 /** 共享元素名：按钮 → 表单卡 */
@@ -143,15 +149,19 @@ export function useViewTransitionNavigation(
     options: ViewTransitionNavigationOptions = {},
 ): (to: string, sourceEl?: HTMLElement | null) => Promise<void> {
     const skip = options.skip ?? (() => false);
+    const ready = options.ready ?? (() => true);
 
     return async (to: string, sourceEl?: HTMLElement | null): Promise<void> => {
+        // 目标路由未预热完毕时不做过渡：回调里等 chunk / 会话校验会把旧快照冻住
+        const canAnimate = () => canAnimateViewTransition() && !skip() && ready();
+
         // 让被点的按钮临时成为共享元素；动画结束/异常都要还原，避免残留同名节点
-        if (sourceEl && canAnimateViewTransition() && !skip()) {
+        if (sourceEl && canAnimate()) {
             sourceEl.style.viewTransitionName = MORPH_NAME;
         }
 
         try {
-            if (!canAnimateViewTransition() || skip()) {
+            if (!canAnimate()) {
                 await router.push(to);
                 return;
             }

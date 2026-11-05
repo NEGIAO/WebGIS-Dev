@@ -54,7 +54,8 @@ frontend/src/
 │       ├── useLazyModules.ts  # CesiumContainer / SidePanel 懒加载 + 重试逻辑（**重试必须复用同一静态字面量 specifier**：带 `?t=${Date.now()}` 的运行时变量 specifier 无法被 Vite 分析，dev 抛 Unknown variable dynamic import、prod 指向不存在路径；瞬态失败判据覆盖 Chromium/Firefox/Safari 三种措辞 + 150ms×n 退避）
 │       ├── useRingPatternStyle.ts  # 轨道环旋转纹样 PNG 注入（文档级 `<style>` 承载相对 url()，绕开 scoped CSS 的 /assets/ 解析基准；Landing / 认证页共用，**单图源** `d-bg2_1.png` 桌面与移动共用（原 webp 双图源已合并），图源由 ASSET_BASE_URL 派生）
 │       ├── useSpinBoost.ts  # 悬停加速：对已有 CSS 动画改 playbackRate，4× 起手、按停留时长线性递增（1.5/s、16× 封顶）、指数平滑跟随、页面隐藏归位；按动画名 `ring-spin` 过滤，解决「按钮与背景环是兄弟分支，CSS `:hover` 跨不过去」与「改 animation-duration 会跳帧」两个问题
-│       └── useViewTransitionNavigation.ts  # 跨页形变跳转：包 `document.startViewTransition` → `router.push` → `nextTick`（懒加载页必须等挂载，否则新快照是空白）；不支持 / reduced-motion / skip() 时降级为普通跳转
+│       ├── useViewTransitionNavigation.ts  # 跨页形变跳转：包 `document.startViewTransition` → `router.push` → `nextTick`（懒加载页必须等挂载，否则新快照是空白）；不支持 / reduced-motion / skip() 时降级为普通跳转
+│       └── useRoutePrefetch.ts  # 注册页资源预取：落地页空闲时预取 `RegisterView` chunk、入口 pointerenter/focusin/touchstart 上补会话校验，并向过渡层暴露 `isRegisterRouteReady()`；解决的问题是「过渡回调里等 chunk / `/api/auth/me` 会冻结旧快照」导致的首次点击卡顿
 ├── assets/
 │   ├── cesium-tool-theme.css
 │   ├── logo.svg

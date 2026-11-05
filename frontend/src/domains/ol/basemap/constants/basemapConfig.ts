@@ -261,13 +261,42 @@ export const LAYER_SOURCE_DEFINITIONS: LayerSourceDefinition[] = [
         name: '图新注记',
         category: 'label',
         group: '注记',
-        url: 'https://tiles.geovisearth.com/base/v1/cia/{z}/{x}/{y}?token=26ee8d8d392b1cc49d91cd81ef1c802b6a63651541ac9c3d3d1359d8bf844228',
+        url: 'https://tiles.geovisearth.com/base/v1/cia/{z}/{x}/{y}?token=0aeb02f29320b060c2e2d0c04eb4887c6b8d5a8ed479b3aacff2b6a273b0d38d',
         serviceType: 'xyz',
         createSource: () =>
             withSkipHighResTile(
                 prioritizeTileSourceRequest(
                     new XYZ({
-                        url: 'https://tiles.geovisearth.com/base/v1/cia/{z}/{x}/{y}?token=26ee8d8d392b1cc49d91cd81ef1c802b6a63651541ac9c3d3d1359d8bf844228',
+                        url: 'https://tiles.geovisearth.com/base/v1/cia/{z}/{x}/{y}?token=0aeb02f29320b060c2e2d0c04eb4887c6b8d5a8ed479b3aacff2b6a273b0d38d',
+                    }),
+                ),
+            ),
+    },
+    {
+        id: 'label_minedata',
+        name: 'MineMap注记',
+        category: 'label',
+        group: '注记',
+        // MineMap（四维图新）标准标注。服务上限 z=18（z≥19 实测返回 404）。
+        // 坐标基准为 GCJ-02 加偏源——同网格与「WGS84 对齐的高德纠偏瓦片」实测比对，
+        // 「杭州站」东向差约 25px（z13 下 ≈480m），符合 GCJ 偏移量级与方向，故与
+        // 高德/腾讯/谷歌中国同样走 gcj2wgs 逐瓦片纠偏。若日后该服务改为无偏，
+        // 去掉 gcj2wgsProxyUrl 包裹即可（url 与 createSource 两处必须同改）。
+        // key 与 URL 耦合且前端请求必然可见，按 dev-conventions「底图源 URL 例外」硬编码。
+        url: gcj2wgsProxyUrl(
+            'https://map-api.minedata.cn/service/data/raster-label?style=standard&z={z}&x={x}&y={y}&key=5c6cb47b45c746de9e4e9135a725d857',
+        ),
+        serviceType: 'xyz',
+        maxZoom: 18,
+        // 与其他注记图层一致地跳过 zDirection 高清瓦片优化：
+        // 否则非整数 zoom 时注记会取上层瓦片，文字被缩得比同屏其它标注小
+        createSource: () =>
+            withSkipHighResTile(
+                prioritizeTileSourceRequest(
+                    new XYZ({
+                        url: gcj2wgsProxyUrl(
+                            'https://map-api.minedata.cn/service/data/raster-label?style=standard&z={z}&x={x}&y={y}&key=5c6cb47b45c746de9e4e9135a725d857',
+                        ),
                     }),
                 ),
             ),
@@ -378,12 +407,12 @@ export const LAYER_SOURCE_DEFINITIONS: LayerSourceDefinition[] = [
         name: '图新影像',
         category: 'imagery',
         group: '影像',
-        url: 'https://tiles.geovisearth.com/base/v1/img/{z}/{x}/{y}?token=26ee8d8d392b1cc49d91cd81ef1c802b6a63651541ac9c3d3d1359d8bf844228',
+        url: 'https://tiles.geovisearth.com/base/v1/img/{z}/{x}/{y}?token=0aeb02f29320b060c2e2d0c04eb4887c6b8d5a8ed479b3aacff2b6a273b0d38d',
         serviceType: 'xyz',
         createSource: () =>
             prioritizeTileSourceRequest(
                 new XYZ({
-                    url: 'https://tiles.geovisearth.com/base/v1/img/{z}/{x}/{y}?token=26ee8d8d392b1cc49d91cd81ef1c802b6a63651541ac9c3d3d1359d8bf844228',
+                    url: 'https://tiles.geovisearth.com/base/v1/img/{z}/{x}/{y}?token=0aeb02f29320b060c2e2d0c04eb4887c6b8d5a8ed479b3aacff2b6a273b0d38d',
                 }),
             ),
     },
@@ -1355,12 +1384,12 @@ export const LAYER_SOURCE_DEFINITIONS: LayerSourceDefinition[] = [
         name: '图新矢量',
         category: 'vector',
         group: '矢量',
-        url: 'https://tiles.geovisearth.com/base/v1/vec/{z}/{x}/{y}?token=26ee8d8d392b1cc49d91cd81ef1c802b6a63651541ac9c3d3d1359d8bf844228',
+        url: 'https://tiles.geovisearth.com/base/v1/vec/{z}/{x}/{y}?token=0aeb02f29320b060c2e2d0c04eb4887c6b8d5a8ed479b3aacff2b6a273b0d38d',
         serviceType: 'xyz',
         createSource: () =>
             prioritizeTileSourceRequest(
                 new XYZ({
-                    url: 'https://tiles.geovisearth.com/base/v1/vec/{z}/{x}/{y}?token=26ee8d8d392b1cc49d91cd81ef1c802b6a63651541ac9c3d3d1359d8bf844228',
+                    url: 'https://tiles.geovisearth.com/base/v1/vec/{z}/{x}/{y}?token=0aeb02f29320b060c2e2d0c04eb4887c6b8d5a8ed479b3aacff2b6a273b0d38d',
                 }),
             ),
     },

@@ -335,6 +335,14 @@ export const BASEMAP_PRESETS: BasemapPresetDefinition[] = [
         label: 'Sentinel无云2025',
         stack: ['imagery_s2_cloudless_2025', 'label_tianditu'],
     },
+    // MineMap（四维图新）纯注记：源为 GCJ-02 加偏，已在图层定义处走 gcj2wgs 逐瓦片纠偏；
+    // 仅标注无底图，选中后需再叠加影像（与 Stamen 注记 preset 同形态）。
+    // 追加在列表末尾——URL 参数 l 为 1-based 索引契约，插在中间会改变既有预设编号、破坏已分享链接。
+    {
+        id: 'label_minedata_preset',
+        label: 'MineMap注记',
+        stack: ['label_minedata'],
+    },
 ];
 
 /** Preset labels use the public 1-based URL layer number. */

@@ -6,6 +6,56 @@
 
 ## 版本记录
 
+### V3.6.41 (2026-11-05) — 过渡首次卡顿修复（预取 + 门控）｜MineMap 注记图层 + 图新 token 轮换
+
+> **一句话**：`startViewTransition` 的回调期间浏览器冻结旧快照，而首次点击时回调内要先等「路由守卫的会话校验」和「注册页 36 KB JS + 35.6 KB CSS 的惰性 chunk」。把这两项挪到点击之前，并在未就绪时优雅降级为普通跳转。
+
+#### 根因
+
+| 回调内的串行依赖 | 说明 |
+|---|---|
+| 会话校验 | `router/index.js:181` 的 `await authStore.ensureValidSession()`；已登录用户会 `import('@/api/backend/auth')` + `GET /api/auth/me`。落地页从不触发该校验，首次导航必然现取 |
+| 注册页 chunk | `router/index.js:6` 的惰性 import；构建产物 36 KB JS（gzip 9.87 KB）+ 35.6 KB CSS（gzip 6.67 KB），点击时才取、才解析 |
+
+两条依赖都在被冻结的那一帧里等待，所以"第一次卡、第二次不卡"——第二次 chunk 已进模块缓存、`validatedToken` 已置位。
+
+#### 修法（三层）
+
+| 层 | 实现 |
+|---|---|
+| **A 空闲预取** | 新增 `composables/useRoutePrefetch.ts`：落地页 `onMounted` → `armRegisterPrefetch()`，在 `requestIdleCallback`（3s 超时兜底）里预取 chunk；卸载时取消。**不做会话校验**，避免落地页出现鉴权副作用 |
+| **B 意图预取** | 三个入口绑定 `pointerenter` / `focusin` / `touchstart.passive` → `prefetchRegisterRoute({ withSession: true })`，顺带完成会话校验 |
+| **C 就绪门控** | `useViewTransitionNavigation` 新增 `ready?: () => boolean`；未就绪时**不启动过渡**，直接 `router.push`——宁可这次没有动画，也不给冻结帧 |
+
+就绪判据：`chunkReady && (!getAuthToken() || sessionChecked)`（游客只差 chunk）。
+
+#### 边界
+
+- `navigator.connection.saveData` 为真时完全不预取；
+- 预取失败静默，不标记就绪，下次触发重试；
+- 移动端 `touchstart → click` 只有约 100ms，首次点击通常走降级（无形变但不卡）。
+
+#### 验证（Agent 已执行）
+
+ESLint 0 problems；`tsc --noEmit` 本模块无报错；`vite build` 通过且 `RegisterView` 仍为独立 chunk（未被拉进入口）；浏览器实测：落地页空闲后确实发出 `RegisterView.vue` 及其 scoped CSS 请求；`isRegisterRouteReady()` 初始 `false`、预取后 `true`；点击后 `startViewTransition` 调用 1 次且正常进入 `#/register`。门控的"未就绪"分支依据静态审查（本地模块解析过快，未构造出该运行时态）。
+
+#### 同版并入：MineMap 注记图层 + 图新 token 轮换
+
+> 同一暂存批次里的另一项改动（日志：[2026-11-03-minedata-label-basemap.md](../LLM_record/26-11/2026-11-03/2026-11-03-minedata-label-basemap.md)），按用户「合并为版本 3.6.41」指令并入本版本。
+
+| 项 | 内容 |
+|---|---|
+| 新增图层 | `label_minedata`（MineMap / 四维图新标准标注）。实测 z≤18（z≥19 返回 404）；同网格与「经 gcj2wgs 重采样的高德注记」比对，杭州站东向差约 25 px（z13 ≈ 480 m），判定为 **GCJ-02 加偏源**，故走 `gcj2wgsProxyUrl` 逐瓦片纠偏（`url` 与 `createSource` 两处同改） |
+| 新增预设 | `label_minedata_preset`，**追加在 `BASEMAP_PRESETS` 末尾**——`?l=` 是 1-based 索引契约，插在中间会改变既有预设编号、破坏已分享链接 |
+| token 轮换 | 图新（GeovisEarth）`cia` / `img` / `vec` 三个图层的 token 同步替换，全仓无旧值残留 |
+| 代码复查修正 | 该注记图层原先漏了 `withSkipHighResTile(...)`，与其他注记图层（`amap_label` / `tianditu_ibo_w` / 图新 `cia`）不一致；已补齐，避免非整数 zoom 时注记取上层瓦片、文字被缩小 |
+
+#### 遗留
+
+1. 空闲预取会多下载约 16.5 KB（gzip），已用 `saveData` 跳过省流用户；
+2. 意图预取中的会话校验失败会清理本地会话——本就是点击时的结果，只是提前到 hover；
+3. 新增到 `/register` 的入口需同样接 `warmRegisterOnIntent`。
+
 ### V3.6.40 (2026-11-02 ~ 11-03 整合发布) — iOS 装饰层黑块修复 + 首屏交互升级 + 安全/质量收口
 
 > **整合说明**：V3.6.39 之后的多轮未提交改动按 Force_command §5 整合为单一版本发布，不再占用中间版本号。分期细节见 `Docs/LLM_record/26-11/2026-11-02/` 与 `26-11/2026-11-03/` 三份日志。
@@ -65,7 +115,16 @@ ESLint 10.13.0 将 `no-useless-assignment` / `preserve-caught-error` 纳入 reco
 - `Guide/handover.md` §8：tsc 存量错误结论更正为实测 0 错误。
 - `Guide/frontend-structure.md`：登记 `blobError.ts` / `useSpinBoost.ts` / `useViewTransitionNavigation.ts`，纹样图源注释同步为 PNG 单图源。
 
-#### 9. 验证（Agent 已执行）
+#### 9. 新增底图标注源：MineMap 注记（GCJ-02 纠偏接入）
+
+| 项 | 结论（实测） |
+|---|---|
+| 瓦片可用性 | z=5 / 13 / 18 均 200 + `image/png`；**z=19 / 20 返回 404** → `maxZoom: 18` |
+| 坐标基准 | **GCJ-02 加偏**：同网格（z13/x6830/y3373）与「经 `gcj2wgs` 重采样到 WGS84 的高德注记」比对，共同地标「杭州站」横向差 ~25 px（≈480 m），与 GCJ 偏移量级/方向一致 → 与高德/腾讯/谷歌中国同样走逐瓦片纠偏 |
+| 接入点 | `LAYER_SOURCE_DEFINITIONS` 新增 `label_minedata`（`category: 'label'`，自动进 LABEL z 分带、下载面板自动排除）+ `BASEMAP_PRESETS` **末尾**追加纯注记 preset（`?l=N` 为 1-based 索引契约，插中间会破坏已分享链接） |
+| 回退路径 | 若实机确认源其实无偏，去掉 `basemapConfig.ts` 中两处 `gcj2wgsProxyUrl(...)` 包裹即可（注释已标注） |
+
+#### 10. 验证（Agent 已执行）
 
 `eslint src` **0 problems**（此前 30 条 / 23 文件）；`tsc --noEmit` 0 错误；`CheckStructureTree` 525:525；`CheckConfigRegistry` 7 项全通过；`npm run build` 成功，产物核对：`dist/fontawesome/` 不存在、`webkit-touch-callout` 规则进入认证页 CSS、`gis.negiao.cn:8443` 0 命中、纹样 PNG 预加载为 png。**待用户实机验证**：iPad Safari/Chrome 登录页（无金点、无黑块）、桌面三浏览器装饰回归、底图下载提交出现 404 明确报错、Landing→注册页形变过渡（支持的浏览器）。
 #### ① CORS 白名单显式化

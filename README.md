@@ -127,7 +127,7 @@
 
 ## 🎯 项目简介
 
-**NEGIAO's WebGIS** 是一个功能完整、架构清晰的前后端分离 WebGIS 平台（当前版本 V3.6.40），前端托管于 GitHub Pages（正式域名 webgis.negiao.cn），后端以 Docker 部署在 Hugging Face Spaces，通过 RESTful API 通信，支持独立扩展。
+**NEGIAO's WebGIS** 是一个功能完整、架构清晰的前后端分离 WebGIS 平台（当前版本 V3.6.41），前端托管于 GitHub Pages（正式域名 webgis.negiao.cn），后端以 Docker 部署在 Hugging Face Spaces，通过 RESTful API 通信，支持独立扩展。
 
 > 📚 本 README 仅保留核心概览与导航。完整文档已模块化至 [`Docs/Guide/`](Docs/Guide/)，详见下方「文档导航」。
 >
@@ -614,7 +614,8 @@ tiles.negiao.cc.cd"]
 
 | 版本 | 日期 | 概要 |
 |------|------|------|
-| **V3.6.40** | 2026-11-02 ~ 11-03 | **iOS 装饰层黑块修复 + 首屏交互升级 + 安全/质量收口（整合发布）**。① 落地页/认证页公转点触发 iOS WebKit 合成黑块（「整块透明+圆角裁剪+绕圆心自转」三条件，真机 9 次二分锁定）：手机 ≤768px 隐藏、iPad 经 `@supports (-webkit-touch-callout: none)` 能力判据隐藏（仅 iOS WebKit 解析），桌面公转照旧；沉淀架构文档与 dev-conventions 第 16 条。② 首屏交互：新增 `useSpinBoost`（hover 驱动背景环 playbackRate 平滑倍速，防跳帧）与 `useViewTransitionNavigation`（View Transitions 形变跳转，六类能力降级）、注册页展开扫光、纹样图源合并单张 PNG。③ 下载失败提示修复：抽出 `api/blobError.ts`，blob 错误体读文本解析 detail，替代 `Request failed with status code 4xx`。④ 管理端「默认 AI API Key」由 password 改 text + CSS 遮蔽 + 自动填充抑制（防密码管理器污染 L2 密钥表）。⑤ `eslint src` 存量 30 条清零（19 文件），可作 CI 棘轮基线。⑥ 删除零引用 `public/fontawesome/`（-396 KB）；底图下载节点停用（提交假成功 → 恢复 404 报错）；架构文档纠正天地图坐标系归属。详见[完整更新日志](Docs/Guide/CHANGELOG.md) |
+| **V3.6.41** | 2026-11-05 | **过渡首次卡顿修复 + 底图增补**。① Landing → 注册页的形变过渡首次点击会先卡一瞬：`startViewTransition` 回调期间冻结旧快照，而回调内要先等「路由守卫的会话校验」与「注册页 36 KB JS + 35.6 KB CSS 的惰性 chunk」；改为空闲预取 chunk、入口 `pointerenter/focusin/touchstart` 补会话校验、未就绪时不启动过渡直接跳转。② 新增 MineMap 注记图层（GCJ-02 逐瓦片纠偏，z≤18）与预设，图新三图层 token 轮换。详见[完整更新日志](Docs/Guide/CHANGELOG.md) |
+| **V3.6.40** | 2026-11-02 ~ 11-03 | **iOS 装饰层黑块修复 + 首屏交互升级 + 安全/质量收口（整合发布）**。① 落地页/认证页公转点触发 iOS WebKit 合成黑块（「整块透明+圆角裁剪+绕圆心自转」三条件，真机 9 次二分锁定）：手机 ≤768px 隐藏、iPad 经 `@supports (-webkit-touch-callout: none)` 能力判据隐藏（仅 iOS WebKit 解析），桌面公转照旧；沉淀架构文档与 dev-conventions 第 16 条。② 首屏交互：新增 `useSpinBoost`（hover 驱动背景环 playbackRate 平滑倍速，防跳帧）与 `useViewTransitionNavigation`（View Transitions 形变跳转，六类能力降级）、注册页展开扫光、纹样图源合并单张 PNG。③ 下载失败提示修复：抽出 `api/blobError.ts`，blob 错误体读文本解析 detail，替代 `Request failed with status code 4xx`。④ 管理端「默认 AI API Key」由 password 改 text + CSS 遮蔽 + 自动填充抑制（防密码管理器污染 L2 密钥表）。⑤ `eslint src` 存量 30 条清零（19 文件），可作 CI 棘轮基线。⑥ 删除零引用 `public/fontawesome/`（-396 KB）；底图下载节点停用（提交假成功 → 恢复 404 报错）；架构文档纠正天地图坐标系归属；⑦ 新增 **MineMap 注记**底图（四维图新源，实测为 GCJ-02 加偏，走 `gcj2wgs` 逐瓦片纠偏接入，`maxZoom: 18`）。详见[完整更新日志](Docs/Guide/CHANGELOG.md) |
 更早版本（V3.6.39 及以前）请查阅 [完整更新日志 →](Docs/Guide/CHANGELOG.md)。
 
 ---
@@ -637,6 +638,6 @@ tiles.negiao.cc.cd"]
 |:------:|:--------:|:--------:|
 | [GitHub](https://github.com/NEGIAO/WebGIS-Dev) | [webgis.negiao.cn](https://webgis.negiao.cn)（正式域名，GitHub Pages 托管） | [Hugging Face](https://NEGIAO-WebGIS.hf.space) |
 
-<sub>V3.6.40 · 开发中 · 最后更新 2026-11-03</sub>
+<sub>V3.6.41 · 开发中 · 最后更新 2026-11-05</sub>
 
 </div>

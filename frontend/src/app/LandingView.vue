@@ -108,6 +108,9 @@
                         href="#/register"
                         class="btn-primary"
                         :aria-label="t('landing.navLogin')"
+                        @pointerenter="warmRegisterOnIntent"
+                        @focusin="warmRegisterOnIntent"
+                        @touchstart.passive="warmRegisterOnIntent"
                         @click="onRegisterClick"
                     >
                         <LogIn :size="16" />
@@ -192,6 +195,9 @@
                         <a
                             href="#/register"
                             class="btn-large"
+                            @pointerenter="warmRegisterOnIntent"
+                            @focusin="warmRegisterOnIntent"
+                            @touchstart.passive="warmRegisterOnIntent"
                             @click="onRegisterClick"
                         >
                             <Rocket :size="18" />
@@ -543,6 +549,9 @@
                         @mouseleave="ctaSpin.stop()"
                         @focus="ctaSpin.start()"
                         @blur="ctaSpin.stop()"
+                        @pointerenter="warmRegisterOnIntent"
+                        @focusin="warmRegisterOnIntent"
+                        @touchstart.passive="warmRegisterOnIntent"
                         @click="onRegisterClick"
                     >
                         <Send :size="16" />
@@ -862,6 +871,11 @@ import { useUserPreferencesStore } from '@common/user/stores/useUserPreferencesS
 import { useRingPatternStyle } from './composables/useRingPatternStyle';
 import { useSpinBoost } from './composables/useSpinBoost';
 import { useViewTransitionNavigation } from './composables/useViewTransitionNavigation';
+import {
+    armRegisterPrefetch,
+    isRegisterRouteReady,
+    prefetchRegisterRoute,
+} from './composables/useRoutePrefetch';
 import { fetchVisitorStats, formatVisitorNumber, formatUpdatedAt } from '@common/app/visitorStats';
 import { ASSET_BASE_URL, GITHUB_STATS_WORKER_URL } from '../config/publicRuntime';
 import {
@@ -1128,8 +1142,19 @@ const heroSpin = useSpinBoost(() => heroBgEl.value);
 const ctaSpin = useSpinBoost(() => ctaBgEl.value);
 
 // 「立即体验」：带装饰层形变的跨页过渡（不支持的浏览器自动降级为普通跳转）
+// ready 门控：注册页 chunk / 会话校验未预热完时不启动过渡，避免回调里等网络
+// 把旧快照冻住（表现为"首次点击卡一下"，详见 composables/useRoutePrefetch）
 const router = useRouter();
-const goRegister = useViewTransitionNavigation(router);
+const goRegister = useViewTransitionNavigation(router, { ready: isRegisterRouteReady });
+
+// 三个入口的意图预取：hover / 键盘聚焦 / 触摸按下时把注册页资源提前拉起来
+// （幂等，重复触发只会有一次实际加载；省流模式下内部直接跳过）
+function warmRegisterOnIntent() {
+    prefetchRegisterRoute({ withSession: true });
+}
+
+/** 空闲预取的取消函数（组件卸载时清理，避免回调打到已卸载页面） */
+let cancelRegisterPrefetch = null;
 
 /**
  * 三个入口（导航「登录」/ 首屏「立即体验」/ 底部「开始使用」）共用：
@@ -1693,6 +1718,8 @@ async function fetchViaWorker() {
 
 onMounted(() => {
     applyLocalCaches(); // 本地缓存秒开，首屏不等待任何网络
+    // 空闲时段预取注册页 chunk：把首次点击时的网络等待挪到用户阅读首屏的空档
+    cancelRegisterPrefetch = armRegisterPrefetch();
     observeAnchors(); // 导航锚点 scroll spy（IntersectionObserver）
     observeStats(); // Hero 统计条数字滚动（进入视口触发）
     observeFeatures(); // 核心功能卡：三栏分左右对称入场
@@ -1710,6 +1737,10 @@ onMounted(() => {
 });
 
 onBeforeUnmount(() => {
+    if (cancelRegisterPrefetch) {
+        cancelRegisterPrefetch();
+        cancelRegisterPrefetch = null;
+    }
     if (anchorObserver) {
         anchorObserver.disconnect();
         anchorObserver = null;

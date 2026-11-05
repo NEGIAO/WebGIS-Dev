@@ -16,7 +16,7 @@
 
 ## 1. 功能定位
 
-本功能为 WebGIS 3.0 提供 **20+ 内置瓦片图源**（天地图、高德、Google、Esri/ArcGIS、OSM、CartoDB、Stamen/StadiaMaps、MapTiler、Mapbox、Yandex、腾讯、GeoQ、Windy、Maps-for-Free、Wikipedia、OpenTopoMap、欧空局 EMODnet、图新 GeovisEarth 等），并支持用户通过自定义 XYZ URL 接入任意外部瓦片服务。
+本功能为 WebGIS 3.0 提供 **20+ 内置瓦片图源**（天地图、高德、Google、Esri/ArcGIS、OSM、CartoDB、Stamen/StadiaMaps、MapTiler、Mapbox、Yandex、腾讯、GeoQ、Windy、Maps-for-Free、Wikipedia、OpenTopoMap、欧空局 EMODnet、图新 GeovisEarth、四维图新 MineMap 等），并支持用户通过自定义 XYZ URL 接入任意外部瓦片服务。
 
 **核心设计目标**：2D（OpenLayers）与 3D（Cesium）双引擎共享同一套底图描述元数据，一次配置、双端渲染。
 
