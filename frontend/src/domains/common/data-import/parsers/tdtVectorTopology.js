@@ -460,8 +460,14 @@ function topoPoints(records, zoom, layer) {
         let key;
         if (layer === 'respt') key = `e:${String(record.props?.elemid ?? '?')}`;
         else if (layer === 'BI') key = `f:${String(record.props?.F5 ?? record.props?.f5 ?? '?')}`;
+        else if (layer === 'CA') key = `c:${String(record.props?.F5 ?? record.props?.f5 ?? '?')}`;
+        else if (layer === 'AF') key = `g:${[record.props?.B7, record.props?.O4].map((v) => String(v ?? '')).join('|')}`;
+        else if (layer === 'BN') key = `b:${[record.props?.B7, record.props?.S8].map((v) => String(v ?? '')).join('|')}`;
+        else if (layer === 'AX') key = `x:${[record.props?.Z5, record.props?.A6].map((v) => String(v ?? '')).join('|')}`;
         else key = `a:${['Z5', 'H7', 'L1', 'A6'].map((k) => String(record.props?.[k] ?? '')).join('|')}`;
-        if (key.endsWith('?') || key.includes('undefined')) {
+        // 无稳定 id 的层（AF/BN/AX）名称可能重名，必须叠加坐标；AD/BI/respt/CA 按 id 或名称去重即可
+        // （AD 不能叠加坐标：同一点在相邻瓦的量化坐标不等，会重复计数）
+        if (['AF', 'BN', 'AX'].includes(layer) || key.endsWith('?') || key.includes('undefined')) {
             key += `@${pts.map((p) => p.map((v) => v.toFixed(7)).join(',')).join(';')}`;
         }
         if (seen.has(key)) {
@@ -763,9 +769,10 @@ export function topoTdtVectorLayers(perLayer, zoom) {
             result = { features, stats: { in: records.length, out: features.length, union: unionCount, fallback: fallbackCount, fused: 0, dedup: 0, review: 0 } };
         } else if (name === 'CK' || name === 'BM') {
             result = fuseByS8(records, zoom);
-        } else if (name === 'BV') {
+        } else if (name === 'BV' || name === 'AR') {
+            // BV 行政区划/国界面、AR 低 zoom 面状水体：原样直出，不裁剪不融合
             result = topoPassthrough(records, zoom);
-        } else if (name === 'BI' || name === 'AD' || name === 'respt') {
+        } else if (['BI', 'AD', 'respt', 'AF', 'CA', 'BN', 'AX'].includes(name)) {
             result = topoPoints(records, zoom, name);
         } else {
             result = topoLines(records, zoom, name);

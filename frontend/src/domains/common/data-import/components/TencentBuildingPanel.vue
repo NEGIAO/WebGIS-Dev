@@ -306,7 +306,7 @@
                         ? t('shell.buildings.vectorResult', { count: result.featureCount, seconds: (result.elapsedMs / 1000).toFixed(1), layers: vectorLayerCount })
                         : t('shell.buildings.result', { count: result.featureCount, seconds: (result.elapsedMs / 1000).toFixed(1) }) }}
                 </div>
-                <!-- 全量分层明细：每层要素数（供用户核对 12 层产出） -->
+                <!-- 全量分层明细：每层要素数（供用户核对各层产出，层数由字典决定） -->
                 <ul
                     v-if="isTiandituVectorResult"
                     class="txb-vector-stats"
@@ -782,7 +782,7 @@ async function onFetch() {
     cursor: not-allowed;
 }
 
-/* 全量多选：全选行 + 12 层两列勾选（与范围表单同语言） */
+/* 全量多选：全选行 + 图层两列勾选（层数由 tdtVectorLayers 字典决定，与范围表单同语言） */
 .txb-layers {
     display: flex;
     flex-direction: column;

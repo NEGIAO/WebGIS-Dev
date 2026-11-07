@@ -89,8 +89,8 @@ CDN 方案下，`preconnect` 能在 HTML 解析早期完成 DNS+TCP+TLS，与 CS
 | 文件 | 说明 |
 |---|---|
 | `frontend/index.html` | Font Awesome 由自托管改回 BootCDN，恢复 preconnect 与异步加载 |
-| `README.md` | 版本号三处同步至 V3.6.51 |
-| `Docs/Guide/CHANGELOG.md` | 顶部新增 V3.6.51 条目 |
+| `README.md` | 版本号三处同步至 V3.6.42 |
+| `Docs/Guide/CHANGELOG.md` | 顶部新增 V3.6.42 条目 |
 | `Docs/LLM_record/26-11/2026-11-02/2026-11-02-fontawesome-cdn-revert.md` | 本日志 |
 
 ## 遗留与风险

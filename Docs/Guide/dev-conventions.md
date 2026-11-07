@@ -161,7 +161,7 @@ box-shadow:
 一律显式列出属性：`box-shadow` / `transform` / `background-color` / `color` / `border-color`。
 `all` 会把 `width` / `height` 一并纳入过渡，触发不必要的重排，且是模板化代码的显著指纹。存量约 115 处 / 41 个文件，**随改动逐步收敛，不为收敛而单独重构**。
 
-#### 七、实测取值基线（源自 V3.6.46 `LandingView.vue`）
+#### 七、实测取值基线（源自 V3.6.42 `LandingView.vue`）
 
 下列数值是已验证的成品配方，新页面直接套用，**不要再自行调参**（`--shadow-rgb` 见第五条，绿主题 `20, 45, 25`）：
 

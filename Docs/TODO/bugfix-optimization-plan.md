@@ -385,3 +385,8 @@ Sprint 3（穿插）：P3-1 容器二轮（O1/O2 交替）→ P2-1 bundle 分析
   - [x] (记录过时·已更正) **`handover.md` §8「存量 tsc 错误」已不成立** ✅ 2026-11-03：`npx tsc --noEmit` 实测 0 错误，文档已改为实测结论 + 复现判据
   - [ ] (门禁缺口) **`eslint src` 未进 CI，缺「不再新增告警」棘轮**：~~当前 30 条散在 23 个文件~~ **30 条已于 V3.6.40 清零**（见上），基线已就绪；剩余动作是把 `eslint src`（不加 `--fix`）接入 CI workflow——涉及部署面（`.github/workflows/`），按 Force_command §2.3 需单独批准
   - [ ] (构建告警·既有) **`ol/layer/WebGLTile.js` 被 `tifUtils.js` 动态 import、同时被 `useLayerDataImport.js` 静态 import**：Vite 报 `INEFFECTIVE_DYNAMIC_IMPORT`，动态导入无法独立分块。若 TIF 懒加载确有体积诉求，需把静态侧改为动态或抽出共享入口
+
+- [ ] **前端天地图拓扑的属性白名单与 CLI 不一致**（2026-11-05 · V3.6.42 顺带发现，按 §2.5 只记不改，日志 [2026-11-05-tdt-vector-layer-list.md](../LLM_record/26-11/2026-11-05/2026-11-05-tdt-vector-layer-list.md)）：
+  - [ ] (现象) 同日 CLI `tdt_vector_fetch.mjs` 已改为「原始键全保留 + 派生键追加」（CE 输出 `elemid/A6/h/floor/Z5/I8` + `height_m/floors/name`），而前端 `tdtVectorTopology.js` 的 CE 分支仍只输出 `{_layer, height_m, floors, A6, name}`，AP 分支只输出 `{_layer, objectid}`；CK/BM 的 `fuseByS8` 同样只留 `S8`。
+  - [ ] (影响) 同一范围「前端抓取」与「CLI 抓取」得到的属性表不一致；用户在面板里看不到 `Z5` 楼名原键、`I8`（如「无底座」）等字段，也无法与 CLI 产物做字段级对拍。
+  - [ ] (建议) 按 CLI 同一策略改造：`extra.raw = {...record.props}`，`props(ex)` 以 raw 为基底再追加派生键；CK/BM 环片携带 props 后取并集。属 L2，估算 1 人日含回归。
