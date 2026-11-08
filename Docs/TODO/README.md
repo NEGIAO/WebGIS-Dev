@@ -33,6 +33,7 @@
 | 文件 | 状态 | 一句话 | 已完成 / 待做 |
 |---|:---:|---|---|
 | `bugfix-optimization-plan.md` | 🟢 活跃 | **滚动修复主规划**（P0–P3 分级），所有「顺带发现」的登记处 | 136 项待办，持续勾选 |
+| `2026-11-08-per-model-terrain-clamp-plan.md` | 🟡 待批准 | 3D Tiles 与多模型 GLB 逐体按真实地形高程贴地引擎（L3 架构） | 待用户批准后施工 |
 | `account-panel-ui-optimization.md` | 🔵 实施中 | 账号面板 UI 优化 | 2 项已做 / 8 项待做 |
 | `loading-performance-optimization-plan.md` | 🔵 实施中 | 登录页 / 首屏加载性能 | 1 项已做 / 4 项待做 |
 | `plan-download-async-l2-ttl.md` | 🔵 实施中 | 下载服务异步化 + L2 缓存 TTL | 7 项已做 / 5 项待做 |

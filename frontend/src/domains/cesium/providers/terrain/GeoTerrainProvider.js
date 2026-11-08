@@ -42,20 +42,13 @@ export default function createGeoTerrainProvider(Cesium) {
     } = Cesium;
 
     function createAvailability(provider) {
-        const overallAvailability = [[[0, 0, 1, 0]]];
+        const maxLevel = Math.max(0, (Number(provider?._bottomLevel) || 11) - 1);
         const availability = new TileAvailability(provider.tilingScheme, 19);
-        for (let level = 0; level < overallAvailability.length; level++) {
-            const levelRanges = overallAvailability[level];
-            for (let i = 0; i < levelRanges.length; i++) {
-                const range = levelRanges[i];
-                availability.addAvailableTileRange(
-                    level,
-                    range[0],
-                    range[1],
-                    range[2],
-                    range[3],
-                );
-            }
+        const ts = provider.tilingScheme;
+        for (let level = 0; level <= maxLevel; level++) {
+            const maxX = ts ? ts.getNumberOfXTilesAtLevel(level) - 1 : (2 << level) - 1;
+            const maxY = ts ? ts.getNumberOfYTilesAtLevel(level) - 1 : (1 << level) - 1;
+            availability.addAvailableTileRange(level, 0, 0, maxX, maxY);
         }
         return availability;
     }
@@ -227,7 +220,8 @@ export default function createGeoTerrainProvider(Cesium) {
                         view.setInt8(3, data[offset + 3]);
                         value = view.getFloat32(0, true);
                     } else {
-                        value = data[offset] + 256 * data[offset + 1];
+                        const raw = data[offset] | (data[offset + 1] << 8);
+                        value = (raw << 16) >> 16;
                     }
 
                     if (value > 10000 || value < -2000) {

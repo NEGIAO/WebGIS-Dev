@@ -8,7 +8,6 @@ import {
     transform,
     transformExtent,
 } from 'ol/proj';
-import WebGLTileLayer from 'ol/layer/WebGLTile';
 import ImageLayer from 'ol/layer/Image';
 import ImageStatic from 'ol/source/ImageStatic';
 import {
@@ -915,6 +914,7 @@ export function useLayerDataImport({
             };
         }
 
+        const { default: WebGLTileLayer } = await import('ol/layer/WebGLTile.js');
         const layer = new WebGLTileLayer(layerOptions);
 
         mapInstance.value.addLayer(layer);

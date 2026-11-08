@@ -39,7 +39,8 @@ function transformBuffer(data, dataType, width, height) {
                 view.setInt8(3, data[offset + 3]);
                 value = view.getFloat32(0, true);
             } else {
-                value = data[offset] + 256 * data[offset + 1];
+                const raw = data[offset] | (data[offset + 1] << 8);
+                value = (raw << 16) >> 16;
             }
 
             if (value > 10000 || value < -2000) {

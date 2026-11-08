@@ -95,14 +95,17 @@ export default function createArcGISTerrainProvider(Cesium) {
 
         /**
          * 初始化 TileAvailability
-         * 只标记 level 0，更高层级在瓦片加载成功后增量标记。
-         * 仅供 sampleTerrainMostDetailed 查询最高精度层级。
+         * 预先标记 0 ~ maxLevel 全范围可用，供 sampleTerrainMostDetailed 查询最高精度层级。
          */
         _initAvailability() {
             const ts = this._inner.tilingScheme;
             if (!ts) return;
             this._availability = new TileAvailability(ts, this._maxLevel);
-            this._availability.addAvailableTileRange(0, 0, 0, 0, 0);
+            for (let level = 0; level <= this._maxLevel; level++) {
+                const maxX = ts.getNumberOfXTilesAtLevel(level) - 1;
+                const maxY = ts.getNumberOfYTilesAtLevel(level) - 1;
+                this._availability.addAvailableTileRange(level, 0, 0, maxX, maxY);
+            }
         }
 
         /** availability — sampleTerrainMostDetailed 依赖此属性 */

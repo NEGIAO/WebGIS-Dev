@@ -49,6 +49,8 @@ export async function loadGLTF({ file, getCesium, getViewer, message, loadedData
         const model = await loadGltfWithCoords(Cesium, viewer, blobUrl, file.name, coords);
         const id = `gltf_${++nextId.current}`;
 
+        const isEllipsoidal = coords?.heightSemantics === 'ellipsoidal';
+        const initialOffset = isEllipsoidal ? 0 : Math.max(0, Number(coords?.height) || 0);
         const record = {
             id,
             name: file.name,
@@ -57,8 +59,8 @@ export async function loadGLTF({ file, getCesium, getViewer, message, loadedData
             blobUrl,
             position: { ...coords },
             // 高程滑杆的初值与 reset 基准：导入时的语义高度（0 = 贴地）
-            modelHeightOffset: Math.max(0, Number(coords?.height) || 0),
-            modelBaseHeight: Math.max(0, Number(coords?.height) || 0),
+            modelHeightOffset: initialOffset,
+            modelBaseHeight: initialOffset,
         };
         loadedDataSources.value = [...loadedDataSources.value, record];
 
@@ -161,7 +163,12 @@ export async function loadGltfFromUrl({ url, name, getCesium, getViewer, message
 export async function loadGltfWithCoords(Cesium, viewer, blobUrl, name, coords) {
     const { lng, lat } = coords;
 
-    const semanticHeight = Number.isFinite(coords.height) ? coords.height : 0;
+    const isEllipsoidal = coords?.heightSemantics === 'ellipsoidal';
+    // 当带有绝对椭球高程（如 CESIUM_RTC 或地固矩阵）：
+    // 若开启了贴地/地面模型，使用 CLAMP_TO_GROUND，避免把绝对海拔（如 400m）
+    // 误作为 RELATIVE_TO_GROUND 的离地偏移叠加上去，导致模型悬浮于高空；
+    // 仅当用户显式指定相对高度（非绝对椭球高）且 > 0 时才使用 RELATIVE_TO_GROUND。
+    const semanticHeight = (!isEllipsoidal && Number.isFinite(coords.height)) ? coords.height : 0;
     const heightReference = semanticHeight > 0
         ? Cesium.HeightReference.RELATIVE_TO_GROUND
         : Cesium.HeightReference.CLAMP_TO_GROUND;
@@ -228,6 +235,7 @@ export async function extractGlbEmbeddedCoords(file, getCesium) {
                     lng: Cesium.Math.toDegrees(cartographic.longitude),
                     lat: Cesium.Math.toDegrees(cartographic.latitude),
                     height: cartographic.height,
+                    heightSemantics: 'ellipsoidal',
                 };
             }
         }
@@ -263,6 +271,7 @@ export async function extractGlbEmbeddedCoords(file, getCesium) {
                             lng: Cesium.Math.toDegrees(cartographic.longitude),
                             lat: Cesium.Math.toDegrees(cartographic.latitude),
                             height: cartographic.height,
+                            heightSemantics: 'ellipsoidal',
                         };
                     } catch { /* 转换失败，忽略 */ }
                 }

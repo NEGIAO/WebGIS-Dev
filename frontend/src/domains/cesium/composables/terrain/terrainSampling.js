@@ -40,8 +40,18 @@ export async function sampleTerrainBatch(viewer, Cesium, cartographics) {
     if (provider?.availability) {
         try {
             const results = await Cesium.sampleTerrainMostDetailed(provider, cartographics);
-            if (enough(results)) return results;
-            console.warn('[地形采样] mostDetailed 有效高程不足，转显式层级兜底');
+            if (enough(results)) {
+                // 防御：若返回全部高程严格为 0，且 provider 存在占位层级（如天地图 < 5 级返回平高程），
+                // 说明 availability 可能仍命中低层级占位，转显式层级复核
+                const allZero = results.every((c) => Number(c?.height) === 0);
+                const hasPlaceholderLevels = Number(provider?._topLevel) > 0;
+                if (!allZero || !hasPlaceholderLevels) {
+                    return results;
+                }
+                console.warn('[地形采样] mostDetailed 全部返回 0 高程且存在占位层级，转显式层级兜底');
+            } else {
+                console.warn('[地形采样] mostDetailed 有效高程不足，转显式层级兜底');
+            }
         } catch (e) {
             console.warn('[地形采样] mostDetailed 采样异常，转显式层级兜底:', e.message || e);
         }
@@ -51,10 +61,17 @@ export async function sampleTerrainBatch(viewer, Cesium, cartographics) {
     //    层级线索：_bottomLevel−1（天地图私有字段启发式）> maximumLevel > 12，失败每次降 3 级
     if (!Cesium || typeof Cesium.sampleTerrain !== 'function') return null;
     const bottomLevel = Number(provider?._bottomLevel);
+    const topLevel = Number(provider?._topLevel) || 0;
     const preferred = Number.isFinite(bottomLevel)
         ? Math.max(0, bottomLevel - 1)
         : Math.min(Number(provider?.maximumLevel) || DEFAULT_EXPLICIT_LEVEL, DEFAULT_EXPLICIT_LEVEL);
-    const ladder = [...new Set([preferred, Math.max(preferred - 3, 0), Math.max(preferred - 6, 0)])];
+    const ladder = [
+        ...new Set([
+            preferred,
+            Math.max(preferred - 3, topLevel),
+            Math.max(preferred - 6, topLevel),
+        ]),
+    ];
 
     for (const level of ladder) {
         try {
