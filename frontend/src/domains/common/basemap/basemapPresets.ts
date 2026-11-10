@@ -35,6 +35,11 @@ export const BASEMAP_PRESETS: BasemapPresetDefinition[] = [
         label: '天地图矢量',
         stack: ['vector_tianditu', 'label_tianditu'],
     },
+    {
+        id: 'vector_tianditu_mvt_preset',
+        label: '天地图MVT矢量',
+        stack: ['vector_tianditu_mvt'],
+    },
 
     // 星图系列
     { id: 'imagery_tuxin_preset', label: '星图影像', stack: ['imagery_tuxin', 'label_tuxin'] },

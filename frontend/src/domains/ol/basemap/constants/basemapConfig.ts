@@ -95,6 +95,8 @@ export type LayerSourceDefinition = {
     subdomains?: string[];
     /** 运行时需要替换的占位符列表 */
     needsContext?: ('tiandituTk' | 'ovitalTdtkey' | 'customUrl')[];
+    /** 矢量切片专属：Mapbox 样式表地址（可选） */
+    styleUrl?: string;
     /** 非标准适配器 ID（如 maps-for-free） */
     nonStandardAdapter?: string;
     /** WMS 专属参数 */
@@ -1378,6 +1380,22 @@ export const LAYER_SOURCE_DEFINITIONS: LayerSourceDefinition[] = [
                     ),
                 }),
             ),
+    },
+    {
+        id: 'vector_tianditu_mvt',
+        name: '天地图矢量(MVT)',
+        category: 'vector',
+        group: '矢量',
+        url: 'https://vpn.negiao.cn/tdt-mvt/mvt/{z}/{x}/{y}',
+        styleUrl: 'https://vpn.negiao.cn/tdt-mvt/style-direct-amap.json',
+        serviceType: 'vector-tile',
+        createSource: () => {
+            const source = createVectorTileSourceFromUrl(
+                'https://vpn.negiao.cn/tdt-mvt/mvt/{z}/{x}/{y}',
+            );
+            source.set('styleUrl', 'https://vpn.negiao.cn/tdt-mvt/style-direct-amap.json');
+            return source;
+        },
     },
     {
         id: 'vector_tuxin',

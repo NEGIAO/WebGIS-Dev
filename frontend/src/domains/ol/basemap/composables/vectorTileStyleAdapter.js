@@ -14,6 +14,7 @@
  */
 
 import { Stroke, Fill, Style, Circle as CircleStyle } from 'ol/style';
+import { applyStyle } from 'ol-mapbox-style';
 
 /** 样式请求超时（ms）：超时/失败一律静默回退兜底样式 */
 const STYLE_FETCH_TIMEOUT_MS = 8000;
@@ -81,6 +82,14 @@ export function matchesMapboxFilter(filter, props) {
             if (op === '>') return a > b;
             return a >= b;
         }
+        case 'has':
+            return props[args[0]] !== undefined && props[args[0]] !== null;
+        case '!has':
+            return props[args[0]] === undefined || props[args[0]] === null;
+        case 'in':
+            return args.slice(1).some((val) => looseEquals(props[args[0]], val));
+        case '!in':
+            return !args.slice(1).some((val) => looseEquals(props[args[0]], val));
         case 'all':
             return args.every((sub) => matchesMapboxFilter(sub, props));
         case 'any':
@@ -221,17 +230,29 @@ export function createVectorTileStyleFunction(styleJson, fallbackStyleFn) {
         if (!entriesBySourceLayer.has(sourceLayer)) {
             entriesBySourceLayer.set(sourceLayer, []);
         }
-        entriesBySourceLayer.get(sourceLayer).push({ filter: sl.filter, styles });
+        entriesBySourceLayer.get(sourceLayer).push({
+            filter: sl.filter,
+            styles,
+            minzoom: typeof sl.minzoom === 'number' ? sl.minzoom : null,
+            maxzoom: typeof sl.maxzoom === 'number' ? sl.maxzoom : null,
+        });
     }
 
-    return function vectorTileStyleFn(feature) {
+    return function vectorTileStyleFn(feature, resolution) {
         const props = typeof feature?.getProperties === 'function' ? feature.getProperties() : {};
         const sourceLayer = props.layer;
         const entries = sourceLayer != null ? entriesBySourceLayer.get(sourceLayer) : null;
 
         if (entries && entries.length) {
+            const zoom = typeof resolution === 'number' && resolution > 0
+                ? Math.round(Math.log2(156543.03392804097 / resolution))
+                : null;
             const matched = [];
             for (const entry of entries) {
+                if (zoom !== null) {
+                    if (entry.minzoom !== null && zoom < entry.minzoom) continue;
+                    if (entry.maxzoom !== null && zoom > entry.maxzoom) continue;
+                }
                 if (matchesMapboxFilter(entry.filter, props)) {
                     matched.push(...entry.styles);
                 }
@@ -256,9 +277,10 @@ export function createVectorTileStyleFunction(styleJson, fallbackStyleFn) {
  * @param {import('ol/source/VectorTile').default} source - 图层 source（取 URL 模板用）
  * @param {Function} fallbackStyleFn - 兜底样式函数（未命中要素的回退）
  */
-export function applyVectorTileServerStyleAsync(layer, source, fallbackStyleFn) {
+export function applyVectorTileServerStyleAsync(layer, source, fallbackStyleFn, explicitStyleUrl) {
     const urls = typeof source?.getUrls === 'function' ? source.getUrls() : [];
-    const styleUrl = deriveArcgisVectorTileStyleUrl(urls[0] || '');
+    const sourceStyleUrl = typeof source?.get === 'function' ? source.get('styleUrl') : source?.styleUrl;
+    const styleUrl = explicitStyleUrl || sourceStyleUrl || deriveArcgisVectorTileStyleUrl(urls[0] || '');
     if (!styleUrl) return;
 
     const controller = new AbortController();
@@ -269,7 +291,27 @@ export function applyVectorTileServerStyleAsync(layer, source, fallbackStyleFn) 
             if (!resp.ok) throw new Error(`style http ${resp.status}`);
             return resp.json();
         })
-        .then((styleJson) => {
+        .then(async (styleJson) => {
+            // 1. 设置背景色（例如天地图海蓝 background-color: rgba(170, 198, 238, 1)）
+            // VectorTileLayer 支持 setBackground，确保海洋背景面不出现镂空透明
+            const bgLayer = Array.isArray(styleJson?.layers)
+                ? styleJson.layers.find((l) => l.type === 'background')
+                : null;
+            const bgColor = bgLayer?.paint?.['background-color'];
+            if (bgColor && typeof layer.setBackground === 'function') {
+                layer.setBackground(bgColor);
+            }
+
+            // 2. 方案 B：使用官方 ol-mapbox-style 渲染全量 Mapbox 样式（529 层，含 symbol/text/雪碧图/表达式）
+            try {
+                // updateSource: false 保持现有 VectorTileSource 的 URL 与 MVT 解码配置
+                await applyStyle(layer, styleJson, { updateSource: false, styleUrl });
+                return;
+            } catch (olmsErr) {
+                console.warn('[vectorTileStyleAdapter] ol-mapbox-style 渲染异常，降级回退到内置解析器:', olmsErr);
+            }
+
+            // 3. 降级回退路径：内置轻量样式编译器
             const styleFn = createVectorTileStyleFunction(styleJson, fallbackStyleFn);
             if (styleFn) layer.setStyle(styleFn);
         })

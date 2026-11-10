@@ -11,6 +11,18 @@
 > 零散升号、整合后即废弃，号段均高于当前版本）统一归并为 **V3.6.42**。
 > 条目所述功能与修复内容、发布日期、整合结论均不变，仅版本号表述归一，便于全文检索不再出现倒挂号。
 
+### V3.6.43 (2026-11-10) — 天地图标准 MVT 矢量底图接入（OpenLayers 2D 引擎）
+
+> **一句话**：在 OpenLayers 2D 底图系统中正式接入天地图标准 OGC/Mapbox MVT 矢量瓦片，集成 `ol-mapbox-style` 渲染全部 529 个 Mapbox GL 图层（含背景色、线面与符号避让），提供高保真矢量底衬与高清注记叠加。详见维护日志 [`Docs/LLM_record/26-11/2026-11-10/2026-11-10-tianditu-mvt-openlayers.md`](../LLM_record/26-11/2026-11-10/2026-11-10-tianditu-mvt-openlayers.md)。
+
+- **SSOT 底图配置与预设**：
+  - `basemapConfig.ts`：在矢量分组新增 `vector_tianditu_mvt` 定义，绑定标准 MVT 切片端点 `https://vpn.negiao.cn/tdt-mvt/mvt/{z}/{x}/{y}` 与样式表 `https://vpn.negiao.cn/tdt-mvt/style.json`；
+  - `basemapPresets.ts`：在「天地图系列」追加 `vector_tianditu_mvt_preset`（`stack: ['vector_tianditu_mvt', 'label_tianditu_vector']`），实现矢量底衬 + 官方中文注记组合。
+- **图层工厂与全量样式渲染**：
+  - `basemapLayerFactory.js`：`createVectorTileBasemapLayer` 开启 `declutter: true` 启用注记符号避让，支持透传显式 `styleUrl`；
+  - `vectorTileStyleAdapter.js`：引入 `ol-mapbox-style`，优先提取 `background` 图层颜色刷上海蓝色背景（消除镂空透明），全量编译 529 个图层样式；异常时安全降级至内置通用几何样式；
+  - `basemapProviderFactory.ts`：在 Cesium 侧建立 `CESIUM_SOURCE_FALLBACK_MAP` 智能映射，遇到 `vector_tianditu_mvt` 时平滑回退至经典天地图栅格矢量（`vector_tianditu` + `label_tianditu`），保证三维地球无报错白屏。
+
 ### V3.6.42 (2026-11-05) — 天地图矢量抓取清单扩至 20 层 + 图层语义修正
 
 > **一句话**：官方样式审计（487 样式层 → 73 源层，9 城 z4~z18 实测）完成后，把前端天地图图层字典由 12 码扩到 20 码（与 CLI `tdt_vector_fetch.mjs` 的 `DEFAULT_LAYERS` 严格对齐），补齐 8 类图斑与对应拓扑分派，并修正 5 条被实测推翻的旧语义。

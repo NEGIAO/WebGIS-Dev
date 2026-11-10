@@ -67,6 +67,7 @@ export function createVectorTileBasemapLayer(source, options = {}) {
         visible = true,
         zIndex = Z_BAND.BASEMAP,
         opacity = 1,
+        styleUrl,
     } = options;
 
     const layer = new VectorTileLayer({
@@ -74,14 +75,16 @@ export function createVectorTileBasemapLayer(source, options = {}) {
         visible,
         zIndex,
         opacity,
+        declutter: true,
         style: resolveVectorTileStyle,
     });
 
     layer.set('basemapLayerKind', VECTOR_TILE_LAYER_KIND);
 
-    // 渐进增强：异步拉取 ArcGIS VectorTileServer 服务端样式（resources/styles/root.json）
+    // 渐进增强：异步拉取服务端样式（支持显式 styleUrl 或从 ArcGIS VectorTileServer 推导 root.json）
     // 并编译为 StyleFunction 应用；成功前/失败时保持上方通用兜底样式渲染，不阻塞不报错
-    applyVectorTileServerStyleAsync(layer, source, resolveVectorTileStyle);
+    const explicitStyleUrl = styleUrl || (typeof source?.get === 'function' ? source.get('styleUrl') : source?.styleUrl);
+    applyVectorTileServerStyleAsync(layer, source, resolveVectorTileStyle, explicitStyleUrl);
 
     return layer;
 }

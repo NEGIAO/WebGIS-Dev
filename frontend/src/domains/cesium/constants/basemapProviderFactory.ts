@@ -225,6 +225,14 @@ export function createCesiumImageryProvider(
         url = mffUrl;
     }
 
+    // 单源调用降级（直接传入 vector_tianditu_mvt 时降级为栅格天地图矢量）
+    if (descriptor.id === 'vector_tianditu_mvt') {
+        const fallbackDesc = getDescriptorById('vector_tianditu');
+        if (fallbackDesc) {
+            return createCesiumImageryProvider(Cesium, fallbackDesc, ctx);
+        }
+    }
+
     // Cesium 不支持的图源类型
     if (serviceType === 'vector-tile') {
         console.warn(`[CesiumProvider] 图源 "${descriptor.id}" 是矢量瓦片(PBF)，Cesium 不支持，已跳过。`);
@@ -391,6 +399,15 @@ export function createCesiumImageryProvidersFromStack(
 // ========== 便捷出口函数 ==========
 
 /**
+ * Cesium 专属降级源映射表：
+ * 针对 Cesium 暂不支持的服务类型（如 MVT 矢量瓦片），自动映射到对应的经典栅格切片源
+ */
+const CESIUM_SOURCE_FALLBACK_MAP: Record<string, string[]> = {
+    // 天地图 MVT 矢量切片降级为经典天地图栅格矢量 + 高清注记
+    vector_tianditu_mvt: ['vector_tianditu', 'label_tianditu'],
+};
+
+/**
  * 根据预设 ID 和堆叠的源 ID 列表创建 Cesium 底图
  * 这是从 useCesiumLayers 调用时的主要入口
  *
@@ -406,9 +423,19 @@ export function buildCesiumImageryProvidersForPreset(
 ): ImageryProviderInstance[] {
     if (!Cesium || !Array.isArray(sourceIds)) return [];
 
+    // 处理 Cesium 不支持源的降级映射（如 vector_tianditu_mvt -> vector_tianditu + label_tianditu）
+    const effectiveSourceIds: string[] = [];
+    for (const id of sourceIds) {
+        if (CESIUM_SOURCE_FALLBACK_MAP[id]) {
+            effectiveSourceIds.push(...CESIUM_SOURCE_FALLBACK_MAP[id]);
+        } else {
+            effectiveSourceIds.push(id);
+        }
+    }
+
     const providers: ImageryProviderInstance[] = [];
 
-    for (const sourceId of sourceIds) {
+    for (const sourceId of effectiveSourceIds) {
         const descriptor = getDescriptorById(sourceId);
         if (!descriptor) {
             console.warn(`[CesiumProvider] 未找到描述符: ${sourceId}`);
