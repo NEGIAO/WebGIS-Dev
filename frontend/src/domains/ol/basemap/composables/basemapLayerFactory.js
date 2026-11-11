@@ -180,7 +180,14 @@ export function createBasemapLayerFromSource(source, options = {}) {
  * @param {import('ol/Map').default|null} [options.map] - 地图实例，用于类型不一致时替换图层；缺省时仅做轻量 setSource
  * @returns {import('ol/layer/Base').default|null} 重建后的新图层实例；未发生替换时返回 null
  */
-export function applyBasemapSourceToLayer({ layer, source, map = null }) {
+export function applyBasemapSourceToLayer({
+    layer,
+    source,
+    map = null,
+    visible = null,
+    zIndex = null,
+    opacity = null,
+}) {
     if (!layer) return null;
 
     if (!source) {
@@ -196,15 +203,25 @@ export function applyBasemapSourceToLayer({ layer, source, map = null }) {
     if (needVectorLayer === layerIsVector) {
         // 类型一致：轻量路径，直接换 source 即可
         layer.setSource(source);
+        if (needVectorLayer) {
+            const explicitStyleUrl = typeof source?.get === 'function' ? source.get('styleUrl') : source?.styleUrl;
+            if (explicitStyleUrl) {
+                applyVectorTileServerStyleAsync(layer, source, resolveVectorTileStyle, explicitStyleUrl);
+            }
+        }
         return null;
     }
 
     // 类型不一致：setSource 无法跨图层类型（TileLayer 挂 VectorTileSource 会渲染空白），
-    // 必须整体重建图层实例，并继承旧图层的显示状态
+    // 必须整体重建图层实例，并继承旧图层的显示状态（或由调用方显式指定）
+    const effectiveVisible = visible !== null ? visible : (typeof layer.getVisible === 'function' ? layer.getVisible() : true);
+    const effectiveZIndex = zIndex !== null ? zIndex : (typeof layer.getZIndex === 'function' ? layer.getZIndex() : Z_BAND.BASEMAP);
+    const effectiveOpacity = opacity !== null ? opacity : (typeof layer.getOpacity === 'function' ? (layer.getOpacity() ?? 1) : 1);
+
     const nextLayer = createBasemapLayerFromSource(source, {
-        visible: typeof layer.getVisible === 'function' ? layer.getVisible() : true,
-        zIndex: typeof layer.getZIndex === 'function' ? layer.getZIndex() : Z_BAND.BASEMAP,
-        opacity: typeof layer.getOpacity === 'function' ? (layer.getOpacity() ?? 1) : 1,
+        visible: effectiveVisible,
+        zIndex: effectiveZIndex,
+        opacity: effectiveOpacity,
     });
 
     // 地图内替换：移除旧图层、加入新图层（无 map 时由调用方自行挂载）

@@ -1,5 +1,5 @@
 import { prioritizeTileSourceRequest } from '@ol/tile-source';
-import { createBasemapLayerFromSource } from './basemapLayerFactory';
+import { createBasemapLayerFromSource, createVectorTileBasemapLayer } from './basemapLayerFactory';
 import { resolvePresetLayerIds } from '../constants/basemapResolver';
 import { Z_BAND } from '@ol/layer/zIndexBands';
 
@@ -44,11 +44,19 @@ export function createBasemapLayerBootstrap({
             // zIndex 按显示带分配（与 refreshLayerInstances 同构）：标注类底图归标注带，其余归底图带
             // 带内顺序与面板 UI 对齐：列表顶部（index 0）= 面板"置顶"目标 → 反向映射拿带内最高 z
             const zBand = config?.category === 'label' ? Z_BAND.LABEL : Z_BAND.BASEMAP;
-            const layer = createBasemapLayerFromSource(source, {
-                visible: item.visible,
-                zIndex: zBand + (list.length - 1 - index),
-                opacity: typeof item.opacity === 'number' ? item.opacity : 1,
-            });
+            const isVectorTile = config?.serviceType === 'vector-tile';
+            const layer = isVectorTile
+                ? createVectorTileBasemapLayer(source, {
+                      visible: item.visible,
+                      zIndex: zBand + (list.length - 1 - index),
+                      opacity: typeof item.opacity === 'number' ? item.opacity : 1,
+                      styleUrl: config?.styleUrl,
+                  })
+                : createBasemapLayerFromSource(source, {
+                      visible: item.visible,
+                      zIndex: zBand + (list.length - 1 - index),
+                      opacity: typeof item.opacity === 'number' ? item.opacity : 1,
+                  });
 
             if (item.visible && source) {
                 // 仅对非默认预设图层启用容灾监控（默认底图瓦片不完整，报错无意义）

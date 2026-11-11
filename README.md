@@ -127,7 +127,7 @@
 
 ## 🎯 项目简介
 
-**NEGIAO's WebGIS** 是一个功能完整、架构清晰的前后端分离 WebGIS 平台（当前版本 V3.6.43），前端托管于 GitHub Pages（正式域名 webgis.negiao.cn），后端以 Docker 部署在 Hugging Face Spaces，通过 RESTful API 通信，支持独立扩展。
+**NEGIAO's WebGIS** 是一个功能完整、架构清晰的前后端分离 WebGIS 平台（当前版本 V3.6.44），前端托管于 GitHub Pages（正式域名 webgis.negiao.cn），后端以 Docker 部署在 Hugging Face Spaces，通过 RESTful API 通信，支持独立扩展。
 
 > 📚 本 README 仅保留核心概览与导航。完整文档已模块化至 [`Docs/Guide/`](Docs/Guide/)，详见下方「文档导航」。
 >
@@ -614,6 +614,7 @@ tiles.negiao.cc.cd"]
 
 | 版本 | 日期 | 概要 |
 |------|------|------|
+| **V3.6.44** | 2026-11-11 | **修复天地图 MVT 矢量底图切换白屏缺陷（OpenLayers 2D）**。解决从其他底图动态切换至天地图 MVT 矢量底图时无法渲染的缺陷：① 引导期不可见图层按 `serviceType === 'vector-tile'` 原生实例化为 `VectorTileLayer`，杜绝类型错配与图层置换；② 修复图层置换后闭包变量指向已注销实例导致的可见性丢失与层叠错乱；③ 图层源重挂时补全样式异步编译链路。详见[完整更新日志](Docs/Guide/CHANGELOG.md) |
 | **V3.6.43** | 2026-11-10 | **天地图标准 MVT 矢量底图接入（OpenLayers 2D）**。在 OpenLayers 2D 底图体系中新增天地图标准 MVT 矢量切片图层 `vector_tianditu_mvt` 与预设 `vector_tianditu_mvt_preset`（MVT 矢量线面底衬 + 官方高清矢量注记）；引入 `ol-mapbox-style` 完整编译渲染 529 个 Mapbox GL 图层样式，开启符号文字避让，提取背景层海蓝色消除镂空透明，并保留异常安全降级机制。详见[完整更新日志](Docs/Guide/CHANGELOG.md) |
 | **V3.6.42** | 2026-11-05 | **天地图矢量清单扩至 20 层 + 语义修正**。前端图层字典由 12 码扩到 20 码（与 CLI `DEFAULT_LAYERS` 对齐），新增铁路 `BA`、水面轮廓 `AN`、低 zoom 水面 `AR`/水系线 `AW`、行政地名 `AF`、街道地名 `CA`、河流注记 `BN`、补充 POI `AX`，并补齐对应拓扑分派（新点层入 `topoPoints`、`AR` 走面层直出，未补则勾选也出不了数据）；同时按官方样式审计修正 `AP`（街区/地块单元，非区级区划）、`BI`（B1=POI 分类码）、`CK`（绿地覆盖）、`BV`（含国界/外国）、`AA`（A6=数据生产批次码）的过时描述。详见[完整更新日志](Docs/Guide/CHANGELOG.md) |
 | **V3.6.41** | 2026-11-05 | **过渡首次卡顿修复 + 底图增补**。① Landing → 注册页的形变过渡首次点击会先卡一瞬：`startViewTransition` 回调期间冻结旧快照，而回调内要先等「路由守卫的会话校验」与「注册页 36 KB JS + 35.6 KB CSS 的惰性 chunk」；改为空闲预取 chunk、入口 `pointerenter/focusin/touchstart` 补会话校验、未就绪时不启动过渡直接跳转。② 新增 MineMap 注记图层（GCJ-02 逐瓦片纠偏，z≤18）与预设，图新三图层 token 轮换。详见[完整更新日志](Docs/Guide/CHANGELOG.md) |
@@ -639,6 +640,6 @@ tiles.negiao.cc.cd"]
 |:------:|:--------:|:--------:|
 | [GitHub](https://github.com/NEGIAO/WebGIS-Dev) | [webgis.negiao.cn](https://webgis.negiao.cn)（正式域名，GitHub Pages 托管） | [Hugging Face](https://NEGIAO-WebGIS.hf.space) |
 
-<sub>V3.6.43 · 开发中 · 最后更新 2026-11-10</sub>
+<sub>V3.6.44 · 开发中 · 最后更新 2026-11-11</sub>
 
 </div>

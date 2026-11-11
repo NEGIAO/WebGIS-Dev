@@ -736,27 +736,30 @@ export function useMapState(mapInstance, options = {}) {
      * @param {Array} configs - 图层配置数组
      * @private
      */
-    function ensureLayerSourceById(layerId, instanceMap = layerInstances, configs = layerConfigs) {
-        if (!instanceMap || !layerId) return;
+    function ensureLayerSourceById(layerId, instanceMap = layerInstances, configs = layerConfigs, isVisible = true) {
+        if (!instanceMap || !layerId) return null;
         const layer = instanceMap[layerId];
-        if (!layer || layer.getSource?.()) return;
+        if (!layer || layer.getSource?.()) return layer;
         const cfg = findLayerConfigById(layerId, configs);
-        if (!cfg || typeof cfg.createSource !== 'function') return;
+        if (!cfg || typeof cfg.createSource !== 'function') return layer;
         // cfg.createSource() 已内含 prioritizeTileSourceRequest，再走 buildRasterBasemapSource 套 zDirection
         const newSource = buildRasterBasemapSource(cfg.createSource());
-        if (!newSource) return;
+        if (!newSource) return layer;
 
         // 类型安全挂载：启动引导期不可见图层以 TileLayer(null) 占位，若配置产出
-        // VectorTileSource（如 HENU 边界矢量），直接 setSource 会因图层类型错配渲染空白，
+        // VectorTileSource（如 HENU 边界矢量/天地图 MVT），直接 setSource 会因图层类型错配渲染空白，
         // 需整体重建图层实例并同步 instanceMap
         const replacedLayer = applyBasemapSourceToLayer({
             layer,
             source: newSource,
             map: mapInstance?.value ?? null,
+            visible: isVisible,
         });
         if (replacedLayer) {
             instanceMap[layerId] = replacedLayer;
+            return replacedLayer;
         }
+        return layer;
     }
 
     /**
@@ -775,11 +778,11 @@ export function useMapState(mapInstance, options = {}) {
         if (!Array.isArray(layerList) || !instanceMap) return;
 
         layerList.forEach((item, index) => {
-            const layer = instanceMap[item.id];
+            let layer = instanceMap[item.id];
             if (!layer) return;
 
             if (item.visible) {
-                ensureLayerSourceById(item.id, instanceMap, configs);
+                layer = ensureLayerSourceById(item.id, instanceMap, configs, true) || instanceMap[item.id] || layer;
             }
 
             // 只在值实际变化时才调用 OL 方法，避免触发内部重排序

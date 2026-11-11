@@ -11,6 +11,17 @@
 > 零散升号、整合后即废弃，号段均高于当前版本）统一归并为 **V3.6.42**。
 > 条目所述功能与修复内容、发布日期、整合结论均不变，仅版本号表述归一，便于全文检索不再出现倒挂号。
 
+### V3.6.44 (2026-11-11) — 修复天地图 MVT 矢量底图切换无法渲染缺陷（OpenLayers 2D 引擎）
+
+> **一句话**：彻底解决从其他底图动态切换至天地图 MVT 矢量底图时无法渲染的缺陷（刷新正常、切换白屏）。引导期按 `serviceType === 'vector-tile'` 原生实例化 `VectorTileLayer`，消除类型错配与图层置换开销；同时修复图层置换闭包变量未同步导致的可见性丢失与层叠错乱。详见维护日志 [`Docs/LLM_record/26-11/2026-11-11/2026-11-11-fix-mvt-basemap-switch.md`](../LLM_record/26-11/2026-11-11/2026-11-11-fix-mvt-basemap-switch.md)。
+
+- **底图引导期原生矢量类型匹配**：
+  - `useBasemapLayerBootstrap.js`：对不可见底图初始化时，依据 `config.serviceType === 'vector-tile'` 直接创建 `VectorTileLayer`（挂载 `styleUrl` 配置），避免因 `source=null` 错误回退为普通 `TileLayer` 占位，消除后续切换时的图层跨类型强制置换开销。
+- **图层状态管理与实例引用同步**：
+  - `useMapState.js`：在 `refreshLayerInstances` 中，`ensureLayerSourceById` 执行后立即将循环引用 `layer` 重同步为最新实例；修复此前因局部闭包变量指向已被从 Map 中注销的旧 `TileLayer`，导致新建的 `VectorTileLayer` 遗留 `visible=false` 且 zIndex/opacity 未生效的缺陷。
+- **图层工厂挂载能力加固**：
+  - `basemapLayerFactory.js`：`applyBasemapSourceToLayer` 支持可选透传 `visible`、`zIndex`、`opacity`，并在同类型轻量重设源（`setSource`）时，对存在 `styleUrl` 的矢量源自动触发 `applyVectorTileServerStyleAsync` 样式编译。
+
 ### V3.6.43 (2026-11-10) — 天地图标准 MVT 矢量底图接入（OpenLayers 2D 引擎）
 
 > **一句话**：在 OpenLayers 2D 底图系统中正式接入天地图标准 OGC/Mapbox MVT 矢量瓦片，集成 `ol-mapbox-style` 渲染全部 529 个 Mapbox GL 图层（含背景色、线面与符号避让），提供高保真矢量底衬与高清注记叠加。详见维护日志 [`Docs/LLM_record/26-11/2026-11-10/2026-11-10-tianditu-mvt-openlayers.md`](../LLM_record/26-11/2026-11-10/2026-11-10-tianditu-mvt-openlayers.md)。
