@@ -1,8 +1,59 @@
 import { TOC_MENU_COMMANDS, normalizeTocLayerIdList } from '../protocol';
+import type {
+    TocMenuCapabilities,
+    TocMenuItem,
+    TocMenuNode,
+    TocSelectionState,
+} from './types';
 import { RSVC_NODE_PREFIX } from '@common/basemap/remoteServices';
 
-function flattenMenuGroups(groups = []) {
-    const flattened = [];
+/**
+ * 导出格式清单（图层级 / 批量级共用一份）
+ * 用途：把「能力开关 → 展示名 → 命令 key」收在一处，避免图层菜单与批量菜单
+ *      各自维护一份格式列表而出现漏项、顺序不一致。
+ */
+const EXPORT_FORMAT_SPECS = [
+    {
+        capability: 'canExportCSV',
+        label: 'CSV（坐标 + 属性）',
+        layerCommand: TOC_MENU_COMMANDS.EXPORT_CSV,
+        batchCommand: TOC_MENU_COMMANDS.BATCH_EXPORT_CSV,
+    },
+    {
+        capability: 'canExportTXT',
+        label: 'TXT（WKT 文本）',
+        layerCommand: TOC_MENU_COMMANDS.EXPORT_TXT,
+        batchCommand: TOC_MENU_COMMANDS.BATCH_EXPORT_TXT,
+    },
+    {
+        capability: 'canExportGeoJSON',
+        label: 'GeoJSON',
+        layerCommand: TOC_MENU_COMMANDS.EXPORT_GEOJSON,
+        batchCommand: TOC_MENU_COMMANDS.BATCH_EXPORT_GEOJSON,
+    },
+    {
+        capability: 'canExportKML',
+        label: 'KML',
+        layerCommand: TOC_MENU_COMMANDS.EXPORT_KML,
+        batchCommand: TOC_MENU_COMMANDS.BATCH_EXPORT_KML,
+    },
+];
+
+/**
+ * 构建「导出数据」子菜单的子项
+ * @param {Object} capabilities 菜单能力对象（含 canExportCSV / canExportTXT / canExportGeoJSON / canExportKML）
+ * @param {boolean} [batch=false] true 取批量命令 key，false 取单图层命令 key
+ * @returns {Array<{key: string, label: string}>} 当前可用格式的子项；全部不可用时返回空数组
+ */
+function buildExportSubmenuChildren(capabilities, batch = false) {
+    return EXPORT_FORMAT_SPECS.filter((spec) => !!capabilities[spec.capability]).map((spec) => ({
+        key: batch ? spec.batchCommand : spec.layerCommand,
+        label: spec.label,
+    }));
+}
+
+function flattenMenuGroups(groups: TocMenuItem[][] = []): TocMenuItem[] {
+    const flattened: TocMenuItem[] = [];
     groups.forEach((group, index) => {
         if (!Array.isArray(group) || !group.length) return;
         if (flattened.length > 0 && index > 0) {
@@ -13,11 +64,19 @@ function flattenMenuGroups(groups = []) {
     return flattened;
 }
 
-export function buildContextMenuItems({ node, capabilities = {}, selectionState = {} } = {}) {
+export function buildContextMenuItems({
+    node,
+    capabilities = {},
+    selectionState = {},
+}: {
+    node?: TocMenuNode | null;
+    capabilities?: TocMenuCapabilities;
+    selectionState?: TocSelectionState;
+} = {}): TocMenuItem[] {
     if (!node) return [];
 
     const nodeType = String(node.type || '').toLowerCase();
-    const groups = [];
+    const groups: TocMenuItem[][] = [];
 
     const selectedLayerIds = normalizeTocLayerIdList(selectionState.selectedLayerIds);
     const currentNodeId = String(selectionState.currentNodeId || node.id || '').trim();
@@ -41,7 +100,7 @@ export function buildContextMenuItems({ node, capabilities = {}, selectionState 
                   ? [currentNodeId]
                   : [];
 
-        const selection = [
+        const selection: TocMenuItem[] = [
             {
                 key: isCurrentLayerSelected
                     ? TOC_MENU_COMMANDS.MULTI_SELECT_REMOVE
@@ -57,7 +116,7 @@ export function buildContextMenuItems({ node, capabilities = {}, selectionState 
         }
         groups.push(selection);
 
-        const batch = [];
+        const batch: TocMenuItem[] = [];
         if (batchTargetIds.length > 1) {
             batch.push({
                 key: TOC_MENU_COMMANDS.BATCH_SHOW,
@@ -68,27 +127,14 @@ export function buildContextMenuItems({ node, capabilities = {}, selectionState 
                 label: `批量隐藏 (${batchTargetIds.length})`,
             });
 
-            if (capabilities.canExportData) {
-                if (capabilities.canExportCSV)
-                    batch.push({
-                        key: TOC_MENU_COMMANDS.BATCH_EXPORT_CSV,
-                        label: `批量导出坐标(CSV) (${batchTargetIds.length})`,
-                    });
-                if (capabilities.canExportTXT)
-                    batch.push({
-                        key: TOC_MENU_COMMANDS.BATCH_EXPORT_TXT,
-                        label: `批量导出坐标(TXT) (${batchTargetIds.length})`,
-                    });
-                if (capabilities.canExportGeoJSON)
-                    batch.push({
-                        key: TOC_MENU_COMMANDS.BATCH_EXPORT_GEOJSON,
-                        label: `批量导出坐标(GeoJSON) (${batchTargetIds.length})`,
-                    });
-                if (capabilities.canExportKML)
-                    batch.push({
-                        key: TOC_MENU_COMMANDS.BATCH_EXPORT_KML,
-                        label: `批量导出坐标(KML) (${batchTargetIds.length})`,
-                    });
+            // 导出：四种格式收进「导出数据」子菜单，避免主菜单被 4 个同质项占满
+            const batchExportChildren = buildExportSubmenuChildren(capabilities, true);
+            if (batchExportChildren.length) {
+                batch.push({
+                    key: TOC_MENU_COMMANDS.BATCH_EXPORT_SUBMENU,
+                    label: `批量导出数据 (${batchTargetIds.length})`,
+                    children: batchExportChildren,
+                });
             }
 
             if (capabilities.canRemove) {
@@ -101,13 +147,13 @@ export function buildContextMenuItems({ node, capabilities = {}, selectionState 
         }
         if (batch.length) groups.push(batch);
 
-        const primary = [];
+        const primary: TocMenuItem[] = [];
         if (capabilities.canView) primary.push({ key: TOC_MENU_COMMANDS.VIEW, label: '查看图层' });
         if (capabilities.canSolo)
             primary.push({ key: TOC_MENU_COMMANDS.SOLO, label: '仅显示此图层' });
         if (primary.length) groups.push(primary);
 
-        const edit = [];
+        const edit: TocMenuItem[] = [];
         if (capabilities.canEdit)
             edit.push({ key: TOC_MENU_COMMANDS.EDIT, label: '编辑要素' });
         edit.push({ key: TOC_MENU_COMMANDS.RENAME, label: '重命名' });
@@ -133,21 +179,19 @@ export function buildContextMenuItems({ node, capabilities = {}, selectionState 
             edit.push({ key: TOC_MENU_COMMANDS.CONVERT_GCJ02_TO_WGS84, label: 'GCJ-02 =>WGS-84' });
         }
 
-        if (capabilities.canExportData) {
+        // 导出：四种格式收进「导出数据」子菜单（点击后展开），主菜单只留一项
+        const exportChildren = buildExportSubmenuChildren(capabilities);
+        if (exportChildren.length) {
             edit.push({ divider: true, key: 'divider_export' });
-            if (capabilities.canExportCSV)
-                edit.push({ key: TOC_MENU_COMMANDS.EXPORT_CSV, label: '导出坐标(CSV)' });
-            if (capabilities.canExportTXT)
-                edit.push({ key: TOC_MENU_COMMANDS.EXPORT_TXT, label: '导出坐标(TXT)' });
-            if (capabilities.canExportGeoJSON)
-                edit.push({ key: TOC_MENU_COMMANDS.EXPORT_GEOJSON, label: '导出坐标(GeoJSON)' });
-            if (capabilities.canExportKML) {
-                edit.push({ key: TOC_MENU_COMMANDS.EXPORT_KML, label: '导出为 KML' });
-            }
+            edit.push({
+                key: TOC_MENU_COMMANDS.EXPORT_SUBMENU,
+                label: '导出数据',
+                children: exportChildren,
+            });
         }
         if (edit.length) groups.push(edit);
 
-        const ops = [];
+        const ops: TocMenuItem[] = [];
         if (capabilities.canZoom) ops.push({ key: TOC_MENU_COMMANDS.ZOOM, label: '缩放至图层' });
         if (capabilities.canImportTo3D)
             ops.push({ key: TOC_MENU_COMMANDS.IMPORT_TO_3D, label: '导入到 3D' });
@@ -161,7 +205,7 @@ export function buildContextMenuItems({ node, capabilities = {}, selectionState 
 
         // 三维数据专属（cesium:* 节点）：高程滑杆/材质切换/重定位/拉伸
         // 高程滑杆复用菜单内嵌滑杆模式（同透明度），min/max 来自节点 heightRange
-        const threeD = [];
+        const threeD: TocMenuItem[] = [];
         if (capabilities.canSetHeight) {
             threeD.push({
                 key: TOC_MENU_COMMANDS.SET_HEIGHT,
@@ -205,7 +249,7 @@ export function buildContextMenuItems({ node, capabilities = {}, selectionState 
         const folderNodeId = String(node?.id || '').trim();
         if (totalCount <= 0 && !capabilities.canRemove) return [];
 
-        const selection = [];
+        const selection: TocMenuItem[] = [];
         if (totalCount > 0) {
             if (folderSelectionState.isAllSelected) {
                 selection.push({

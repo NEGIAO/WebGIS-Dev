@@ -1800,15 +1800,35 @@ function handleExportLayerData(payload) {
 async function handleImportOlLayerTo3D(payload = {}) {
     const layerId = String(payload?.layerId || '').trim();
     if (!layerId) return;
+
+    // 快照先取：导出只依赖 OL 侧的受管图层。放在切换之前，既避免「切过去又失败」
+    // 白切一次视图，也让「没有矢量要素」的提示留在用户当前所在的 2D 上下文里。
     const snapshot = mapContainerRef.value?.exportUserLayerGeoJSON?.({ layerId });
     if (!snapshot?.text) {
         message.warning('该图层没有可导入 3D 的矢量要素');
         return;
     }
+
+    // 菜单动作的语义就是「导入到 3D」，不应再要求用户手动切视图：
+    // 未在 3D 时先切换，再等场景真正就绪后导入。
     if (!is3DMode.value || !cesiumContainerRef.value) {
-        message.warning('请先切换到 3D 视图，再导入该图层');
+        const switched = await setMapView(MAP_VIEW_CESIUM);
+        if (!switched) {
+            message.error('3D 视图加载失败，无法导入该图层');
+            return;
+        }
+    }
+
+    // setMapView 只等到 Cesium 组件模块加载完成；viewer 由 CesiumContainer 挂载后
+    // 异步创建（影像/地形首帧资源），必须等到相机可用再导入，
+    // 否则 importUserData 会因场景未就绪直接抛错。
+    // 已在 3D 时同样走这一步：轮询幂等，就绪即刻返回。
+    const ready = await waitForAgentMapViewReady(MAP_VIEW_CESIUM, { timeoutMs: 30000 });
+    if (!ready || !cesiumContainerRef.value) {
+        message.error('3D 视图尚未就绪，请稍后重试');
         return;
     }
+
     const safeName = String(snapshot.name || 'layer').replace(/[\\/:*?"<>|]+/g, '_') || 'layer';
     const file = new File([snapshot.text], `${safeName}.geojson`, {
         type: 'application/geo+json',

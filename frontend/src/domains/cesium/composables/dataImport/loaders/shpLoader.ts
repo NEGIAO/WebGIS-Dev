@@ -3,7 +3,7 @@
  * Shapefile 格式加载器
  */
 
-import { ensureGisParsers, getExtension, flyToEntity, applyGroundStackingZIndex } from './utils.js';
+import { ensureGisParsers, getExtension, flyToEntity, applyGroundStackingZIndex, pickVectorImportColors } from './utils';
 import { VECTOR_GROUND_LOAD_OPTIONS } from '../../terrain/groundPlacementCapabilities';
 
 /**
@@ -34,7 +34,7 @@ export async function loadSHP({
 
     const { parseShpPartsToGeoJSON } = await ensureGisParsers();
 
-    const parts = { shp: await file.arrayBuffer() };
+    const parts: Record<string, ArrayBuffer> = { shp: await file.arrayBuffer() };
 
     for (const sidecar of sidecarFiles) {
         const ext = getExtension(sidecar.name);
@@ -57,12 +57,14 @@ export async function loadSHP({
         features: featureCollections.flatMap((fc) => fc?.features || []),
     };
 
+    // 与 GeoJSON 导入同一白模口径：纯色不透明 + 按批次随机色相
+    const { fill, stroke, markerColor } = pickVectorImportColors(Cesium);
     const dataSource = await Cesium.GeoJsonDataSource.load(payload, {
         // 贴地决策归策略（groundPlacementCapabilities），loader 只消费
         ...VECTOR_GROUND_LOAD_OPTIONS,
-        stroke: Cesium.Color.fromCssColorString('#ffcc00'),
-        fill: Cesium.Color.fromCssColorString('#ffcc00').withAlpha(0.25),
-        markerColor: Cesium.Color.fromCssColorString('#ffcc00'),
+        stroke,
+        fill,
+        markerColor,
         markerSize: 20,
     });
 

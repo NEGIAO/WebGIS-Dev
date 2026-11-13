@@ -3,7 +3,7 @@
  * GeoJSON/JSON 格式加载器
  */
 
-import { flyToEntity, applyGroundStackingZIndex, raiseClampedBillboards } from './utils.js';
+import { flyToEntity, applyGroundStackingZIndex, raiseClampedBillboards, pickVectorImportColors } from './utils';
 import { VECTOR_GROUND_LOAD_OPTIONS } from '../../terrain/groundPlacementCapabilities';
 import {
     detectGeoJSONProjectionDetailed,
@@ -201,12 +201,15 @@ export async function loadGeoJSON({
         geojsonData = rest;
     }
 
+    // 白模口径：纯色不透明 + 按批次随机色相（建筑抓取产物同样走这里，
+    // 半透明会让相邻建筑互相透色、读不出体块关系）
+    const { fill, stroke, markerColor } = pickVectorImportColors(Cesium);
     const dataSource = await Cesium.GeoJsonDataSource.load(geojsonData, {
         // 贴地决策归策略（groundPlacementCapabilities），loader 只消费
         ...VECTOR_GROUND_LOAD_OPTIONS,
-        stroke: Cesium.Color.fromCssColorString('#3ddc84'),
-        fill: Cesium.Color.fromCssColorString('#3ddc84').withAlpha(0.3),
-        markerColor: Cesium.Color.fromCssColorString('#3ddc84'),
+        stroke,
+        fill,
+        markerColor,
         markerSize: 24,
     });
 

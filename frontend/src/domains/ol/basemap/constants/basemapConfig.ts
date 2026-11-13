@@ -1387,13 +1387,13 @@ export const LAYER_SOURCE_DEFINITIONS: LayerSourceDefinition[] = [
         category: 'vector',
         group: '矢量',
         url: 'https://vpn.negiao.cn/tdt-mvt/mvt/{z}/{x}/{y}',
-        styleUrl: 'https://vpn.negiao.cn/tdt-mvt/style-amap.json',
+        styleUrl: 'https://vpn.negiao.cn/tdt-mvt/style-tech-blue.json',
         serviceType: 'vector-tile',
         createSource: () => {
             const source = createVectorTileSourceFromUrl(
                 'https://vpn.negiao.cn/tdt-mvt/mvt/{z}/{x}/{y}',
             );
-            source.set('styleUrl', 'https://vpn.negiao.cn/tdt-mvt/style-amap.json');
+            source.set('styleUrl', 'https://vpn.negiao.cn/tdt-mvt/style-tech-blue.json');
             return source;
         },
     },

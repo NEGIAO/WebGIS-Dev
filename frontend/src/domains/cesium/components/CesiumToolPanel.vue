@@ -1014,7 +1014,7 @@ function closeSceneSampleMenu(e) {
 }
 
 const supportedFormats =
-    '.geojson,.json,.kml,.kmz,.shp,.dbf,.shx,.prj,.cpg,.glb,.gltf,.czml,.zip';
+    '.geojson,.json,.kml,.kmz,.shp,.dbf,.shx,.prj,.cpg,.glb,.gltf,.czml,.zip,.csv,.txt,.wkt';
 
 const isPanelOpen = computed(() => props.embedded || props.open);
 const sceneModule = computed(() => props.modules.find(m => m.id === 'scene') || null);

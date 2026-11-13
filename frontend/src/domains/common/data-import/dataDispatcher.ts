@@ -10,6 +10,7 @@
 import { decompressBuffer, detectMagicType } from './decompressFile.js';
 import { detectGeoJsonProjection, detectKmlProjectionHint, resolveProjectionOrDefault } from './crsAware.js';
 import { buildArchivePackets, decodeBufferToText, parseGeoJsonContent, setDispatchGisData } from './archiveProcessor.js';
+import { parseCsvToGeoJSON, parseWktToGeoJSON } from './parsers/tabularParser';
 
 export { revokeAllBlobUrls } from './archiveProcessor.js';
 export { buildShpPacketsFromBrowserFiles } from './shpPacketBuilder.js';
@@ -27,10 +28,23 @@ function normalizeType(type, name = '') {
     if (ext === 'shp') return 'shp';
     if (ext === 'tif' || ext === 'tiff') return ext;
     if (ext === 'geojson' || ext === 'json') return ext;
+    // 本系统导出的表格 / WKT 文本
+    if (ext === 'csv') return 'csv';
+    if (ext === 'txt' || ext === 'wkt') return 'wkt';
     return normalizedType;
 }
 
-export async function dispatchGisData(input = {}) {
+export interface GisDispatchInput {
+    /** 文件内容（二进制或文本） */
+    content?: any;
+    /** 声明的数据格式（缺省按文件名/魔数推断） */
+    type?: string;
+    /** 文件名（含扩展名） */
+    name?: string;
+    [key: string]: any;
+}
+
+export async function dispatchGisData(input: GisDispatchInput = {}) {
     const { content, type, name = '' } = input;
     const warnings = [];
     const blobUrls = [];
@@ -115,6 +129,41 @@ export async function dispatchGisData(input = {}) {
         throw new Error(
             '检测到单独 .shp 文件。请按同名文件组上传（至少 .shp，可选 .dbf/.shx/.prj/.cpg）或使用 ZIP。',
         );
+    }
+
+    // CSV / WKT：本系统导出的产物，解析成 GeoJSON 后走同一条入库链路
+    if (normalizedType === 'csv' || normalizedType === 'wkt') {
+        const text = typeof content === 'string' ? content : decodeBufferToText(content);
+        const geojsonData =
+            normalizedType === 'csv' ? parseCsvToGeoJSON(text) : parseWktToGeoJSON(text);
+        if (!geojsonData?.features?.length) {
+            throw new Error(
+                normalizedType === 'csv'
+                    ? 'CSV 中没有可识别的坐标数据（需包含 lng/lat 或 经度/纬度 列）'
+                    : 'TXT 中没有可识别的 WKT 几何（应为 POINT / LINESTRING / POLYGON 等）',
+            );
+        }
+        const packet = {
+            kind: 'geojson',
+            sourceType: normalizedType,
+            entryName: name,
+            geojsonData,
+            dataProjection: 'EPSG:4326',
+            needsReprojection: false,
+        };
+        return {
+            packet,
+            packets: [packet],
+            warnings,
+            errors,
+            blobUrls,
+            summary: {
+                detectedDatasets: 1,
+                importedDatasets: 1,
+                failedDatasets: 0,
+                byType: { kml: 0, kmz: 0, shp: 0, tiff: 0, geojson: 1 },
+            },
+        };
     }
 
     if (normalizedType === 'geojson' || normalizedType === 'json') {

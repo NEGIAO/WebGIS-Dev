@@ -4,8 +4,15 @@ import {
     normalizeTocLayerIdList,
     resolveTocExportFormatFromCommand,
 } from '../protocol';
+import type { TocMenuNode } from './types';
 
-function resolveBatchTargets(nodeId, selectedLayerIds = []) {
+/** 菜单命令产生的 UI 事件（由 TOC 面板消费） */
+export interface TocMenuEvent {
+    type: string;
+    payload: Record<string, any>;
+}
+
+function resolveBatchTargets(nodeId: string, selectedLayerIds: string[] = []): string[] {
     const normalizedNodeId = normalizeTocLayerId(nodeId);
     const normalizedSelected = normalizeTocLayerIdList(selectedLayerIds);
     const selectedSet = new Set(normalizedSelected);
@@ -17,13 +24,21 @@ function resolveBatchTargets(nodeId, selectedLayerIds = []) {
     return normalizedNodeId ? [normalizedNodeId] : [];
 }
 
-function pushConfiguredEvent(bucket, eventName, payload) {
+function pushConfiguredEvent(bucket: TocMenuEvent[], eventName: string, payload?: Record<string, any>): void {
     const normalized = String(eventName || '').trim();
     if (!normalized) return;
     bucket.push({ type: normalized, payload: payload || {} });
 }
 
-export function dispatchContextMenuCommand({ key, node, selectedLayerIds = [] } = {}) {
+export function dispatchContextMenuCommand({
+    key,
+    node,
+    selectedLayerIds = [],
+}: {
+    key?: string;
+    node?: TocMenuNode | null;
+    selectedLayerIds?: string[];
+} = {}): TocMenuEvent[] {
     const commandKey = String(key || '')
         .trim()
         .toLowerCase();
@@ -31,9 +46,19 @@ export function dispatchContextMenuCommand({ key, node, selectedLayerIds = [] } 
 
     const actions = node?.actions || {};
     const nodeId = normalizeTocLayerId(node?.id);
-    const events = [];
+    const events: TocMenuEvent[] = [];
 
     const batchTargets = resolveBatchTargets(nodeId, selectedLayerIds);
+
+    // 子菜单容器项（「导出数据」/「批量导出数据」）只负责展开格式子项，不承载命令。
+    // 必须先于下面 startsWith('export-') / startsWith('batch-export-') 前缀判定返回：
+    // 容器 key 同样命中前缀，若继续向下走会被兜底成 CSV 导出（静默导错格式）。
+    if (
+        commandKey === TOC_MENU_COMMANDS.EXPORT_SUBMENU ||
+        commandKey === TOC_MENU_COMMANDS.BATCH_EXPORT_SUBMENU
+    ) {
+        return events;
+    }
 
     if (commandKey === TOC_MENU_COMMANDS.MULTI_SELECT_ADD) {
         events.push({ type: 'multi-select-add-layer', payload: { layerId: nodeId } });

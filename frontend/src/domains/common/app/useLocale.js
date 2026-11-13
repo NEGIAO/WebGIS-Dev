@@ -8,8 +8,8 @@ const FALLBACK_LANG = 'en-US';
 
 // 新增语言：在此注册 loader 即可，无需改其它逻辑
 const LOCALE_LOADERS = {
-    'en-US': () => import('../../../locales/en-US.js'),
-    'zh-CN': () => import('../../../locales/zh-CN.js'),
+    'en-US': () => import('../../../locales/en-US'),
+    'zh-CN': () => import('../../../locales/zh-CN'),
 };
 
 /**

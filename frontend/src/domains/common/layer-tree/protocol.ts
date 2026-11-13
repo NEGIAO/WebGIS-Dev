@@ -18,6 +18,8 @@ export const TOC_MENU_COMMANDS = Object.freeze({
     BATCH_SHOW: 'batch-show',
     BATCH_HIDE: 'batch-hide',
     BATCH_REMOVE: 'batch-remove',
+    // 子菜单容器项：仅展开格式子项，不承载命令（分发器对其直接返回空事件）
+    BATCH_EXPORT_SUBMENU: 'batch-export-submenu',
     BATCH_EXPORT_CSV: 'batch-export-csv',
     BATCH_EXPORT_TXT: 'batch-export-txt',
     BATCH_EXPORT_GEOJSON: 'batch-export-geojson',
@@ -32,6 +34,7 @@ export const TOC_MENU_COMMANDS = Object.freeze({
     COPY: 'copy',
     CONVERT_WGS84_TO_GCJ02: 'convert-wgs84-to-gcj02',
     CONVERT_GCJ02_TO_WGS84: 'convert-gcj02-to-wgs84',
+    EXPORT_SUBMENU: 'export-submenu',
     EXPORT_CSV: 'export-csv',
     EXPORT_TXT: 'export-txt',
     EXPORT_GEOJSON: 'export-geojson',

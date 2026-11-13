@@ -4,6 +4,7 @@ import { flattenUploadInput } from '@common/data-import/decompressor';
 import { loadJsZip } from '@common/data-import/loadJsZip';
 import { groupShpDatasets } from '@common/data-import/parsers/shpParser';
 import { parseKmlBuffer } from '@common/data-import/parsers/kmlParser';
+import { parseCsvToGeoJSON, parseWktToGeoJSON } from '@common/data-import/parsers/tabularParser';
 import { loadTifBuffer } from '@common/data-import/parsers/tifLoader';
 import type { FlattenedResource } from '@common/data-import/decompressor';
 import {
@@ -73,6 +74,10 @@ function isSupportedExt(ext = ''): boolean {
         'tiff',
         'zip',
         'kmz',
+        // 本系统导出的表格 / WKT 文本（导出→导入闭环）
+        'csv',
+        'txt',
+        'wkt',
     ].includes(normalized);
 }
 
@@ -156,6 +161,30 @@ function buildSingleUploadPayload(
     if (ext === 'tif' || ext === 'tiff') {
         const parsed = loadTifBuffer(resource.content);
         return { content: parsed.arrayBuffer, type: ext, name: resource.path };
+    }
+
+    // 本系统导出的 CSV / WKT：解析成 GeoJSON 后再交给统一分派，
+    // 保证「导出 → 导入」闭环（原实现此处返回 null，文件被静默丢弃）。
+    if (ext === 'csv' || ext === 'txt' || ext === 'wkt') {
+        const text = decodeMaybeText(resource.content as ArrayBuffer);
+        let geojson;
+        try {
+            geojson = ext === 'csv' ? parseCsvToGeoJSON(text) : parseWktToGeoJSON(text);
+        } catch (error: any) {
+            warningSink?.push(`${resource.path}: ${error?.message || '解析失败'}，已跳过。`);
+            return null;
+        }
+        if (!geojson.features.length) {
+            warningSink?.push(
+                `${resource.path}: 未识别到坐标数据（CSV 需含 lng/lat 列，TXT 需为 WKT），已跳过。`,
+            );
+            return null;
+        }
+        return {
+            content: JSON.stringify(geojson),
+            type: 'geojson',
+            name: resource.path,
+        };
     }
 
     if (ext === 'zip' || ext === 'kmz') {

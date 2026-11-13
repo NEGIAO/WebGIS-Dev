@@ -16,6 +16,24 @@ export function getExtension(filename) {
     return lastDot === -1 ? '' : filename.slice(lastDot + 1).toLowerCase();
 }
 
+/** 三维矢量导入的默认色板：纯色不透明（白模口径），按导入批次随机取一色。 */
+const VECTOR_IMPORT_PALETTE = ['#4caf50', '#26a69a', '#42a5f5', '#7e57c2', '#ffa726'];
+
+/**
+ * 功能：为一次三维矢量导入生成描边 / 填充 / 点标记颜色。
+ * 参数：Cesium —— 运行时命名空间（沿用 loader 的按需注入约定，不在模块顶层静态依赖）。
+ * 返回：{ fill, stroke, markerColor }，三者 alpha 均为 1（不透明）。
+ * 核心逻辑：白模口径要求「纯色实体」——半透明填充会让相邻建筑互相透色，
+ *   叠在一起读不出体块边界，因此不再使用 withAlpha(0.2~0.3)；
+ *   色相按导入批次随机，同一次导入的所有要素共用一色，便于在图层树中区分来源。
+ */
+export function pickVectorImportColors(Cesium) {
+    const hex = VECTOR_IMPORT_PALETTE[Math.floor(Math.random() * VECTOR_IMPORT_PALETTE.length)];
+    // fromCssColorString 对 6 位 hex 返回 alpha=1，此处不再叠加 withAlpha
+    const fill = Cesium.Color.fromCssColorString(hex);
+    return { fill, stroke: fill, markerColor: fill };
+}
+
 /**
  * 从 DataSource 或 Tileset 中计算相机定位目标
  * @param {Cesium.Viewer} viewer - Cesium 场景
@@ -151,7 +169,7 @@ export async function ensureGisParsers() {
 
     const [{ decompressBuffer }, { parseShpPartsToGeoJSON }] = await Promise.all([
         import('@common/data-import/decompressFile.js'),
-        import('@common/data-import/parsers/shpParser.ts'),
+        import('@common/data-import/parsers/shpParser'),
     ]);
 
     gisParserCache = { decompressBuffer, parseShpPartsToGeoJSON };
@@ -256,7 +274,7 @@ export function raiseClampedBillboards(dataSource, Cesium) {
  * @param {string} kmlText - 归一化（去 kml: 前缀）后的 KML 文本
  * @returns {number[]} 每个地面几何 Placemark 的 run 序号，与文档中地面要素顺序一一对应
  */
-export function parseKmlPolygonStackingRanks(kmlText) {
+export function parseKmlPolygonStackingRanks(kmlText: string) {
     if (!kmlText) return [];
 
     const xml = new DOMParser().parseFromString(kmlText, 'text/xml');
@@ -266,7 +284,7 @@ export function parseKmlPolygonStackingRanks(kmlText) {
     let currentFolder = null;
     let currentRank = -1;
 
-    const visit = (node, folderStack) => {
+    const visit = (node: Element, folderStack: string[]) => {
         if (node.tagName === 'Folder') {
             // 无 name 的 Folder 用路径序号占位，保证不同 Folder 恒定产生不同 run
             const nameNode = Array.from(node.children).find((child) => child.tagName === 'name');

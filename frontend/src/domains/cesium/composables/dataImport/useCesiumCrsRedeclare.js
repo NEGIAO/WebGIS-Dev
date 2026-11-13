@@ -17,7 +17,7 @@
 import { getSourceSnapshot, updateSnapshotCrs } from '@common/data-import/crs/sourceSnapshot';
 import { ensureProjectionAvailable } from '@common/data-import/crs/crsUtils';
 import { loadGeoJSON } from './loaders/geojsonLoader';
-import { flyToEntity } from './loaders/utils.js';
+import { flyToEntity } from './loaders/utils';
 
 /** TOC 三维节点 id 前缀（与 cesiumLayerNodeBuilder 的 CESIUM_NODE_PREFIX 同值） */
 const CESIUM_NODE_PREFIX = 'cesium:';

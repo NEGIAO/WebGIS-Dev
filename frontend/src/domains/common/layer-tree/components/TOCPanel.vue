@@ -6,7 +6,7 @@
             type="file"
             multiple
             class="hidden-input"
-            accept="."
+            accept=".geojson,.json,.kml,.kmz,.zip,.shp,.dbf,.shx,.prj,.cpg,.tif,.tiff,.csv,.txt,.wkt"
             @change="handleFileUpload"
         />
         <input

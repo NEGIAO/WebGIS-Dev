@@ -66,7 +66,7 @@ export { useCesiumWind } from '../modules/wind/useCesiumWind.js';
 export { useCesiumModelManager, ModelState } from './models/useCesiumModelManager.js';
 
 // === dataImport ===
-export { useCesiumDataImport } from './dataImport/useCesiumDataImport.js';
+export { useCesiumDataImport } from './dataImport/useCesiumDataImport';
 export {
     TILESET_JSON_INDICATOR, getExtension, createBlobUrl, revokeBlobUrl, flyToEntity,
     processLargeGeoJson, processLargeGeoJsonStream,

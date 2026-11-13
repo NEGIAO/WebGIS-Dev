@@ -11,6 +11,157 @@
 > 零散升号、整合后即废弃，号段均高于当前版本）统一归并为 **V3.6.42**。
 > 条目所述功能与修复内容、发布日期、整合结论均不变，仅版本号表述归一，便于全文检索不再出现倒挂号。
 
+### V3.6.45 (2026-11-13) — 三维白模 + TOC 菜单可达性与导出项收敛 + 暂存区 JS→TS 与文件瘦身
+
+> **一句话**：三维矢量导入改纯色白模；TOC 菜单加视口约束并修复「导入到 3D」；InfoBox 高度自适应；导出补齐属性且可原样回读；菜单四个导出项收敛为「导出数据」子菜单；暂存区 14 个 JS 逻辑文件全部转 TS，并把超 500 行的文件按职责拆分。
+
+#### ① 三维导入默认样式改为白模口径
+
+| 文件 | 改动 |
+|---|---|
+| `loaders/utils.js` | 新增 `pickVectorImportColors(Cesium)`：5 色板按批次随机取一，`fill / stroke / markerColor` 同色且 alpha=1 |
+| `loaders/geojsonLoader.js` | `fill` 由 `#3ddc84` + `withAlpha(0.3)` 改为随机纯色；`markerSize` 24 不变 |
+| `loaders/shpLoader.js` | 由 `#ffcc00` + `withAlpha(0.25)` 改为同一口径；`markerSize` 20 不变 |
+
+> **为什么去掉透明度**：半透明填充在建筑密集区会互相透色，相邻体块边界糊成一片，读不出「白模」的体块关系；透明度本身已由图层面板的透明度滑杆（`dataSourceDisplay.js`）按图层实时调整，导入默认值不应预设半透明。
+> 建筑抓取产物（`天地图建筑白模_*.geojson`）经 `importUserData → loadDataFiles → loadGeoJSON` 入库，因此同批生效；`extrudePolygonsByHeight` 的高度属性拉伸逻辑未改动。
+
+#### ② 移动端 TOC 菜单底部命令不可达
+
+**根因**：`.toc-context-menu` 为 `position: fixed` 且**无高度约束**；`normalizeMenuPosition()` 只做「越界平移」——当菜单本身高于视口时 `viewportHeight - rect.height - gap` 为负，`Math.max(gap, 负数)` 只能把菜单贴到顶部，溢出部分仍在视口外，底部 action 永远点不到。触屏档此前只限制了 `max-width`。
+
+**修法**：
+
+- 容器加 `max-height: calc(100vh - 16px)`（兜底）与 `max-height: calc(100dvh - 16px)`（跟随移动端可视区）+ `overflow-y: auto` + `overscroll-behavior: contain` + `-webkit-overflow-scrolling: touch` —— 菜单超高时手指在菜单内上下拖动即可看全；
+- 触屏档再扣 `env(safe-area-inset-bottom)`，避免最后一项被 Home Indicator 压住；
+- 定位计算改用 `window.visualViewport?.height ?? innerHeight`（地址栏收放 / 软键盘时更准），并在注释中写明「上移对高于视口的菜单无效，溢出交给滚动」。
+
+#### ③ 图层「导入到 3D」改为自动切换并导入
+
+**根因**：`handleImportOlLayerTo3D` 在 `!is3DMode || !cesiumContainerRef` 时只弹「请先切换到 3D 视图，再导入该图层」并 return —— 菜单动作的语义是「导入到 3D」，却把切换视图的负担交回用户。
+
+**修法**：
+
+- 快照仍**先于**切换获取（`exportUserLayerGeoJSON` 只依赖 OL 侧受管图层），避免「切过去又失败」白切一次视图；
+- 未在 3D 时 `await setMapView(MAP_VIEW_CESIUM)`，失败则提示「3D 视图加载失败」；
+- 切换成功后 `await waitForAgentMapViewReady(MAP_VIEW_CESIUM, { timeoutMs: 30000 })` —— `setMapView` 只等到 Cesium **组件模块**加载完，viewer 由 `CesiumContainer` 挂载后异步创建（影像/地形首帧资源），不等就绪直接 `importUserData` 会抛错；该轮询幂等，已在 3D 时也会立即返回；
+- 超时未就绪则提示「3D 视图尚未就绪，请稍后重试」，此时已切到 3D，用户再点一次即可直接导入。
+#### ④ InfoBox 属性卡片高度自适应
+
+**根因**：Cesium 的 `InfoBox.css` 与 `InfoBox.js` **都没有**给 `.cesium-infoBox-iframe` 设高度，iframe 因此落回 HTML 元素默认的 **150px**；内容超出时在 iframe 内部滚动。卡片外层 `.cesium-infoBox` 同样没有 `height` —— 所以「高度固定」不是项目样式写的，而是浏览器对 iframe 的默认值。
+
+**修法**（`composables/core/useCesiumInfoBoxTheme.js`，与既有主题注入同职责，不新建文件）：
+
+| 机制 | 作用 |
+|---|---|
+| `syncFrameHeight()` | 读 `contentDocument` 的 `scrollHeight`（documentElement / body 取大值），回写 `frame.style.height`；上限 `min(内容高度, 视口 × 60%)`，超出部分仍由 iframe 内部滚动承载 |
+| `MutationObserver`（iframe body） | 描述异步写入 / 表格展开时重算 |
+| `ResizeObserver`（iframe） | **只对宽度变化**重算（宽度决定换行）；忽略高度变化，避免「写高度 → 触发 observer → 再写高度」的自激循环 |
+| `load` 统一收尾 | 注入主题 + 重绑内容监听 + 重算高度；`cleanup` 中逐一 `disconnect` 并移除 `load` / `resize` 监听 |
+| 注入样式补 `html, body { overflow-x: hidden }` | 长表格不产生横向滚动条 |
+
+**边界**：`bodyless`（无描述）时 iframe 为 `display:none`，跳过测量；上限按 `visualViewport.height` 计算，移动端地址栏收放时更准。
+#### ⑤ 图层数据导出补齐属性（CSV / TXT / GeoJSON / KML）
+
+**根因：2D 与 3D 是两套独立导出链路，各有一处丢字段。**
+
+| 链路 | 文件 | 原行为 |
+|---|---|---|
+| 2D | `layer-tree/actions/layerExportService.js` | **CSV / TXT 只输出 8 个固定列**（ID/经度/纬度/名称/几何类型/部件/环/点序号），要素属性全部丢弃；GeoJSON 已全量、KML 走 OL writer 写 `ExtendedData`（核对 OL 10.11 源码：非保留键无条件写入） |
+| 3D | `cesium/utils/cesiumLayerSerialization.ts` | `LayerShape` 只有 `type + lonLats`，**CSV / TXT / GeoJSON / KML 四种格式全部只输出几何**，`entity.properties` 从未被读取 |
+
+**修法：**
+
+- **2D**：CSV / TXT 改为「8 个固定列 + 全部要素属性的并集列」（首次出现顺序；`name / 名称 / ID / geometry` 与固定列去重）；对象值 JSON 化、`null` 空串；TXT 额外把制表符 / 换行压成空格防错列。
+- **3D**：`LayerShape` 新增 `properties`（已字符串化）；`collectEntityShapes` 逐实体读取（`resolveValue` 兼容 PropertyBag / 动态属性 / 普通对象），四个 builder 分别输出：
+  - CSV：前四列 `shape,seq,lng,lat` 不变，其后追加属性并集（含逗号 / 引号转义）；
+  - TXT：块头后追加 `# @键=值` 注释行（保持「块内全是坐标」的既有约定）；
+  - GeoJSON：业务属性先铺、元信息后覆盖；
+  - KML：`<ExtendedData><Data name="…"><value>…</value></Data>`（XML 转义）。
+- 无属性时四种格式输出与改动前逐字一致（向后兼容）。
+#### ⑥ 导出标准化与「导出 → 导入」闭环
+
+**用户反馈**：导出的 CSV / TXT 无法再导入本系统（提示「文件解析失败」），且 TXT 是纯坐标文本，外部工具也不认。
+
+**根因（三处）**：
+
+| # | 位置 | 事实 |
+|---|---|---|
+| 1 | 2D `layerExportService.js` | CSV 表头为中文固定列（`ID,经度,纬度,名称,几何类型,部件,环,点序号`），TXT 是纯坐标文本 |
+| 2 | 3D `cesiumLayerSerialization.ts` | CSV 表头为 `shape,seq,lng,lat`，TXT 是分块坐标文本 |
+| 3 | **导入侧** | 2D 与 3D **都没有 CSV / TXT 分支**：`dataDispatcher` / `getNormalizedUploadType` / `useCesiumDataImport` 均未覆盖；2D 的 `buildSingleUploadPayload` 对 csv/txt 直接返回 `null`（静默丢弃） |
+
+**修法**：
+
+- **导出标准化**（2D 与 3D 共用同一列契约，导出侧与解析器互为契约）：
+  - CSV：`id,lng,lat,name,geometry_type,part,ring,vertex,<业务属性列…>`；QGIS / ArcGIS / Excel 按 `lng` / `lat` 可直接识别为经纬度列；
+  - TXT：改为 **WKT**（OGC 标准文本，QGIS / ArcGIS / PostGIS 可读），属性以 `# @键=值` 注释行附在几何之前；
+  - GeoJSON / KML 本就是标准格式，未改。
+- **导入闭环**：新增 `parsers/tabularParser.ts`（`parseCsvToGeoJSON` / `parseWktToGeoJSON`），并接到四条路径：
+  - 共用分派 `dataDispatcher.dispatchGisData`：CSV / WKT → `geojson` packet，复用既有重投影与入库链路；
+  - `vectorUtils.getNormalizedUploadType` 与 `useGisLoader.isSupportedExt` 白名单；
+  - 2D 直传 `parseUploadedVector` 与单文件载荷 `buildSingleUploadPayload`（原为返回 `null` 静默丢弃）；
+  - 3D `useCesiumDataImport.loadDataFile`：转 GeoJSON 后复用 `loadGeoJSON`（沿用白模配色、贴地与 TOC 登记）。
+- **文件选择器修复**：`TOCPanel` 的 `accept="."`（非法值，原完整列表被注释）改回完整列表并补 `.csv,.txt,.wkt`；3D 面板 `supportedFormats` 同步。
+
+**解析器能力**：CSV 支持引号内逗号 / BOM / 中文列名别名（经度/纬度/名称/几何类型/部件/环/点序号）；WKT 支持 `POINT / MULTIPOINT / LINESTRING / MULTILINESTRING / POLYGON / MULTIPOLYGON`、跨行几何、`# @k=v` 注释属性。
+#### 验证
+
+| 项 | 结果 |
+|---|---|
+| `pickVectorImportColors` 单测（30 次抽样） | 5 色全部出现、`fill.alpha === 1`、三色引用一致 |
+| 半透明残留扫描 | `withAlpha` 仅剩图层透明度滑杆与绘制工具，导入默认样式 0 残留 |
+| ESLint（4 文件） | 0 problems |
+| Vue SFC 模板编译 | `TOCTreeItem.vue` 通过 |
+| 图层导入到 3D | ESLint / tsc / `HomeView` 模板编译 | 0 problems / 0 报错 / 通过；旧提示「请先切换到 3D」已移除 |
+| InfoBox 高度自适应 | ESLint + 监听器成对性静态检查 | 0 problems；6 个新函数各定义 1 次；`load`/`resize` 增删成对、Observer 均 `disconnect` |
+| 导出属性完整性 | Node 直跑 `cesiumLayerSerialization.ts` + rolldown 打包 `layerExportService.js` | 3D：CSV 表头 `shape,seq,lng,lat,height_m,floors,name,extra,A6`、KML `ExtendedData` 命中、GeoJSON `properties.height_m="32.5"`、TXT `# @height_m=32.5`；2D：属性列并集含 `height_m/floors/A6/_layer` 且排除 `name/名称/geometry`，对象值 JSON 化 |
+| 导出 → 导入闭环 | Node 直跑 `cesiumLayerSerialization.ts` + `tabularParser.ts` | 3D 导出 2 个 shape（polygon + point）→ CSV / WKT 各回读 2 个要素，几何类型与 `height_m` / `name` 全部一致；CSV 引号内逗号、BOM、跨行 WKT、MULTIPOINT 均通过 |
+| 门禁 | `CheckStructureTree` 527/527；`CheckConfigRegistry` 全绿 |
+| 待用户实机 | 3D 导入建筑 GeoJSON 看体块是否不透明且颜色随机；手机 TOC 打开数据图层菜单，手指上下拖动确认底部 action 可达；2D 下对图层点「导入到 3D」应自动切视图并落图，无需手动切换；3D 点选要素看 InfoBox 高度是否随属性条目数变化（少则贴合、多则封顶 60vh 并内部滚动）；导出 2D 与 3D 的建筑图层各一份 CSV/KML，确认 `height_m`/`floors` 等字段在列头或 ExtendedData 中；把导出的 CSV 与 TXT 重新拖入导入区，应能生成同名图层且属性完整 |
+
+#### 遗留
+
+- 点要素（billboard）与线要素共用同一色：一色到底便于识别批次，但同批次内点线面无法再按类型分色；如需分色另开。
+- 贴地服务（`terrainClampService`）对 polygon 设 `heightReference=CLAMP_TO_GROUND`，与 `extrudedHeight` 的共存行为未在本次验证；若实机发现建筑未拉伸，属既有的贴地/拉伸交互问题，另开处理。
+
+---
+
+#### ⑦ 四格式平铺改子菜单
+
+| 文件 | 改动 |
+|---|---|
+| `layer-tree/protocol.ts` | 新增容器命令 key `EXPORT_SUBMENU` / `BATCH_EXPORT_SUBMENU` |
+| `layer-tree/menu/contextMenu.ts` | 新增 `EXPORT_FORMAT_SPECS`（格式 → 能力开关 → 图层/批量命令 key，两处共用一份）+ `buildExportSubmenuChildren()`；图层编辑区 4 项 → 1 个「导出数据」+ 4 子项；批量区 4 项 → 1 个「批量导出数据 (n)」+ 4 子项 |
+| `layer-tree/components/TOCTreeItem.vue` | 新增分组项渲染分支（父项 + `ChevronRight` 旋转 + `aria-expanded`）、`openSubmenuKey` 单展开态、`toggleSubmenu()` 及其视口补偿 |
+| `layer-tree/menu/commandDispatcher.ts` | 容器 key 在 `export-` / `batch-export-` 前缀判定**之前**返回空事件 |
+
+**为何选就地展开（手风琴）而非右侧浮层**：菜单容器是 `overflow-y: auto` 的滚动区（V3.6.45 为移动端可达性所加），绝对定位浮层会被裁切；触屏无 hover，浮层触发不成立。手风琴复用容器既有 `max-height` / 44px 触屏规则，桌面与真机行为一致。
+
+**必须拦截容器 key**：`export-submenu` 命中 `startsWith('export-')`、`batch-export-submenu` 命中 `startsWith('batch-export-')`，若走到分发尾部会被 `resolveTocExportFormatFromCommand` 兜底成 **csv**——表现为「点一下分组标题就静默导出了 CSV」。
+
+#### ⑧ 展开后的视口补偿
+
+展开使菜单变高：`nextTick` 内重跑 `normalizeMenuPosition()` 重新贴边，再由 `ensureSubmenuVisible()` **只调菜单自身 `scrollTop`** 把新增子项滚入可视区（不用 `scrollIntoView`，避免连带滚动页面）。打开与关闭菜单均重置 `openSubmenuKey`，防止上次展开态把菜单撑高。
+
+> **文案同步**：`locales/zh-CN.ts` / `en-US.ts` 的「复制坐标失败」提示改为指向「导出数据 → CSV」——旧提示引用的「导出坐标」已不是菜单项名。
+
+> 导出实现、命令 key、文件名与内容均未改动——子项沿用改造前的 `export-csv/txt/geojson/kml` 与 `batch-export-*`，仅入口层级变化。详见[日志](LLM_record/26-11/2026-11-13/2026-11-13-toc-export-submenu.md)。
+
+#### ⑨ 暂存区 JS→TS 与超长文件拆分（本批统一整理）
+
+**约束**：库/逻辑文件单文件不超过 500 行；暂存区 JS 一律转 TS。据此处理 26 个暂存文件中的 17 个 js/ts。
+
+| 处理 | 文件（拆分后） | 说明 |
+|---|---|---|
+| 重命名 .js→.ts | `layer-tree/{protocol,menu/contextMenu,menu/commandDispatcher,actions/layerExportService}`、`data-import/{dataDispatcher,vectorUtils}`、`cesium/.../loaders/{geojsonLoader,shpLoader,utils}`、`core/useCesiumInfoBoxTheme`、`ol/.../useLayerDataImport`、`cesium/.../useCesiumDataImport` | 补齐显式 `.js` 导入后缀；对外导出签名不变 |
+| 拆分（原 501 行） | `actions/exportFormatting.ts` + `layerExportService.ts` | 纯格式化/下载函数下沉，服务只保留图层定位与格式分支 |
+| 拆分（原 904 行） | `dataImport/{gltfReposition,rasterHeightMesh,dataSourceLifecycle,dataSourceOps}.ts` + `useCesiumDataImport.ts` | 工厂注入闭包依赖，主入口只留状态、地形监听与格式分派 |
+| 拆分（原 1772 行） | `ol/data-import/raster/{rasterSamplers,rasterLayerFactory,nonGeorefTiffLayer}.ts`、`ol/data-import/vector/{kmlTextHelpers,vectorImportPipeline}.ts` + `useLayerDataImport.ts` | 栅格采样/图层构造/TIFF 兜底/KML 预处理/矢量管线分离；`activeOverrideCrs`、`importInFlight` 仍由主入口独占 |
+| 拆分（原 2396/2179 行） | `locales/zh-CN.ts` + `locales/zh-CN/*.ts`（8 片）、`locales/en-US.ts` + `locales/en-US/*.ts`（8 片） | 按命名空间分片，入口仅做合并；AST 切分，键路径零改动 |
+
+**等价性**：新旧语言包经 esbuild 打包后逐键比对——键集合、值、层级一致（仅键顺序变化）；拆分类模块用 `tsc --noEmit` 捕获漏注入的闭包变量，生产构建通过。详见[日志](LLM_record/26-11/2026-11-13/2026-11-13-js-ts-refactor-and-500line-split.md)。
+
 ### V3.6.44 (2026-11-11) — 修复天地图 MVT 矢量底图切换无法渲染缺陷（OpenLayers 2D 引擎）
 
 > **一句话**：彻底解决从其他底图动态切换至天地图 MVT 矢量底图时无法渲染的缺陷（刷新正常、切换白屏）。引导期按 `serviceType === 'vector-tile'` 原生实例化 `VectorTileLayer`，消除类型错配与图层置换开销；同时修复图层置换闭包变量未同步导致的可见性丢失与层叠错乱。详见维护日志 [`Docs/LLM_record/26-11/2026-11-11/2026-11-11-fix-mvt-basemap-switch.md`](../LLM_record/26-11/2026-11-11/2026-11-11-fix-mvt-basemap-switch.md)。

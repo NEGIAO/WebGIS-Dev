@@ -217,6 +217,43 @@
                             </option>
                         </select>
                     </div>
+                    <!-- 分组项（如「导出数据」）：点击就地展开格式子项，不占主菜单常驻空间 -->
+                    <template v-else-if="item.children?.length">
+                        <button
+                            class="menu-item has-submenu"
+                            :class="{ 'is-open': openSubmenuKey === item.key }"
+                            :aria-expanded="openSubmenuKey === item.key ? 'true' : 'false'"
+                            @click="toggleSubmenu(item.key)"
+                        >
+                            <component
+                                :is="item.icon"
+                                v-if="item.icon"
+                                class="menu-icon"
+                                :size="13"
+                                :stroke-width="1.8"
+                            />
+                            <span class="menu-item-text">{{ item.label }}</span>
+                            <ChevronRight
+                                class="submenu-chevron"
+                                :size="13"
+                                :stroke-width="2"
+                            />
+                        </button>
+                        <div
+                            v-if="openSubmenuKey === item.key"
+                            class="menu-subitems"
+                        >
+                            <button
+                                v-for="child in item.children"
+                                :key="child.key"
+                                class="menu-item menu-subitem"
+                                :class="{ danger: !!child.danger }"
+                                @click="handleMenuCommand(child.key)"
+                            >
+                                <span>{{ child.label }}</span>
+                            </button>
+                        </div>
+                    </template>
                     <button
                         v-else
                         class="menu-item"
@@ -294,6 +331,8 @@ const menuVisible = ref(false);
 const menuX = ref(0);
 const menuY = ref(0);
 const menuRef = ref(null);
+/** 展开中的子菜单容器 key：同一时刻只允许一个，避免多个子菜单同时把菜单撑高 */
+const openSubmenuKey = ref('');
 const isRenaming = ref(false);
 const renameValue = ref('');
 const renameInputRef = ref(null);
@@ -448,6 +487,7 @@ function emitAction(type, payload = {}) {
 
 function closeContextMenu() {
     menuVisible.value = false;
+    openSubmenuKey.value = '';
 }
 
 function normalizeMenuPosition() {
@@ -455,15 +495,22 @@ function normalizeMenuPosition() {
     if (!el) return;
     const rect = el.getBoundingClientRect();
     const gap = 8;
+    // 移动端地址栏收放 / 软键盘弹出会改变可视区，visualViewport 比 innerHeight 准确；
+    // 不支持时回退 window.innerWidth/Height（桌面端两者等价）。
+    const viewportWidth = window.visualViewport?.width ?? window.innerWidth;
+    const viewportHeight = window.visualViewport?.height ?? window.innerHeight;
 
     let x = menuX.value;
     let y = menuY.value;
 
-    if (rect.right > window.innerWidth - gap) {
-        x = Math.max(gap, window.innerWidth - rect.width - gap);
+    if (rect.right > viewportWidth - gap) {
+        x = Math.max(gap, viewportWidth - rect.width - gap);
     }
-    if (rect.bottom > window.innerHeight - gap) {
-        y = Math.max(gap, window.innerHeight - rect.height - gap);
+    // 高度已被 CSS max-height 钳在视口内，这里只做「贴边」；
+    // 若仍越界（极矮视口 / 未支持 dvh），贴顶并把溢出交给菜单自身滚动，
+    // 而不是继续上移 —— 上移对「比视口还高」的菜单无效。
+    if (rect.bottom > viewportHeight - gap) {
+        y = Math.max(gap, viewportHeight - rect.height - gap);
     }
 
     menuX.value = x;
@@ -475,6 +522,8 @@ function openContextMenuAt(x, y) {
 
     menuX.value = Number(x) || 0;
     menuY.value = Number(y) || 0;
+    // 每次打开都从「全部收起」开始，避免上一次的展开态带进来把菜单撑高
+    openSubmenuKey.value = '';
     menuVisible.value = true;
 
     nextTick(() => {
@@ -493,6 +542,39 @@ function openContextMenuFromButton(event) {
         return;
     }
     openContextMenuAt(event.clientX, event.clientY);
+}
+
+/**
+ * 展开 / 收起分组项（如「导出数据」）的子选项
+ * @param {string} key 分组项的命令 key
+ * 为何就地展开而非右侧浮层：菜单容器是 overflow-y:auto 的滚动区，浮层会被容器裁切；
+ * 触屏没有 hover，浮层触发方式也不成立。手风琴在桌面与真机上行为一致。
+ */
+function toggleSubmenu(key) {
+    openSubmenuKey.value = openSubmenuKey.value === key ? '' : key;
+    // 展开后菜单变高，需重新贴边；否则靠近视口底部打开时新增子项会落到视口外
+    nextTick(() => {
+        normalizeMenuPosition();
+        ensureSubmenuVisible();
+    });
+}
+
+/**
+ * 保证展开的子项落在菜单滚动视口内
+ * 逻辑：菜单被 max-height 钳住时内部滚动，新增子项可能整体在可视区下方；
+ *      这里只调整菜单自身的 scrollTop（不用 scrollIntoView，避免连带滚动页面）。
+ */
+function ensureSubmenuVisible() {
+    const menuEl = menuRef.value;
+    const subEl = menuEl?.querySelector?.('.menu-subitems');
+    if (!menuEl || !subEl) return;
+
+    const menuRect = menuEl.getBoundingClientRect();
+    const subRect = subEl.getBoundingClientRect();
+    const overflowBottom = subRect.bottom - menuRect.bottom + 8;
+    if (overflowBottom > 0) {
+        menuEl.scrollTop += overflowBottom;
+    }
 }
 
 function handleMenuCommand(key) {
@@ -946,6 +1028,15 @@ defineExpose({ closeContextMenu });
     position: fixed;
     z-index: var(--z-popover);
     min-width: 190px;
+    /* 视口高度约束：图层 action 较多时菜单会高于屏幕，若不约束，
+       「移回视口」也无处可移，底部命令永远落在视口外（移动端必现）。
+       约束后由菜单自身滚动承载溢出内容，手指在菜单内上下拖动即可看全。
+       先 vh 兜底再 dvh：移动端地址栏收放时 dvh 跟随可视区变化，更准。 */
+    max-height: calc(100vh - 30px);
+    max-height: calc(100dvh - 30px);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
     border: 1px solid var(--toc-border-light);
     border-radius: var(--toc-radius-lg);
     background: var(--toc-bg-menu);
@@ -996,6 +1087,66 @@ defineExpose({ closeContextMenu });
 .menu-item.danger:hover {
     background: var(--toc-danger-bg);
     color: var(--toc-danger-hover);
+}
+
+/* 分组项（如「导出数据」）：文字占满剩余宽度，箭头贴右表达「可展开」 */
+.menu-item-text {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.menu-item.has-submenu .submenu-chevron {
+    flex-shrink: 0;
+    margin-left: auto;
+    color: var(--toc-text-light);
+    transition:
+        transform var(--toc-transition-fast),
+        color var(--toc-transition-fast);
+}
+
+.menu-item.has-submenu.is-open {
+    color: var(--toc-primary);
+}
+
+.menu-item.has-submenu.is-open .submenu-chevron {
+    transform: rotate(90deg);
+    color: var(--toc-primary);
+}
+
+/* 子选项容器：左缩进 + 竖线表达从属关系；子项复用 .menu-item 的点击态，
+   仅降低文字权重，触屏档的 44px 最小高度由 .menu-item 统一提供 */
+.menu-subitems {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    margin: 2px 0 var(--toc-spacing-xs) 10px;
+    padding-left: 6px;
+    border-left: 1px solid var(--toc-border-light);
+    animation: tocSubmenuIn 0.14s ease-out;
+}
+
+.menu-subitem {
+    color: var(--toc-text-secondary);
+}
+
+@keyframes tocSubmenuIn {
+    from {
+        opacity: 0;
+        transform: translateY(-3px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .menu-subitems {
+        animation: none;
+    }
 }
 
 .menu-divider {
@@ -1086,6 +1237,9 @@ defineExpose({ closeContextMenu });
 
     .toc-context-menu {
         max-width: calc(100vw - 32px);
+        /* 扣除底部安全区：菜单接近满屏时，最后一项不被 Home Indicator 压住 */
+        max-height: calc(100dvh - 16px - env(safe-area-inset-bottom, 0px));
+        padding-bottom: calc(var(--toc-spacing-sm) + env(safe-area-inset-bottom, 0px));
     }
 
     /* 触屏无 hover，拖拽把手永不浮现，隐藏以省出横向空间 */

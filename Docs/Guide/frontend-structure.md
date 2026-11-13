@@ -94,24 +94,28 @@ frontend/src/
 │   │   │   │   ├── cesiumRuntime.js  # Cesium 运行时加载（await ensureCesiumLoaded()）
 │   │   │   │   ├── cesiumStorage.js  # Cesium 状态持久化
 │   │   │   │   ├── cesiumTimeSystem.js  # 时间系统
-│   │   │   │   ├── useCesiumInfoBoxTheme.js  # InfoBox 主题化（向描述 iframe 注入白底深字样式，跟随 data-theme 切换）
+│   │   │   │   ├── useCesiumInfoBoxTheme.ts  # InfoBox 主题化（向描述 iframe 注入白底深字样式，跟随 data-theme 切换）
 │   │   │   │   └── useCesiumNavigation.js  # 导航控件集成（罗盘/缩放）
 │   │   │   ├── dataImport/
 │   │   │   │   ├── dataSourceDisplay.js  # 显隐/透明度类型适配器（统一图层管理·句柄侧）
 │   │   │   │   ├── geoTiffUtils.js  # GeoTIFF 工具函数
 │   │   │   │   ├── importUtils.js  # 导入工具函数
+│   │   │   │   ├── dataSourceLifecycle.ts  # 数据源移除/清空（对象级宿主探测优先、type 分支兜底）
+│   │   │   │   ├── dataSourceOps.ts  # 外部数据源注册/远程 GLB/定位/3D Tiles 贴地高度
+│   │   │   │   ├── gltfReposition.ts  # GLTF 坐标弹窗与位置调整（失败回滚）
+│   │   │   │   ├── rasterHeightMesh.ts  # 单波段 GeoTIFF → 高程网格
 │   │   │   │   ├── useCesiumCrsRedeclare.js  # 三维图层「重设源坐标系」：把快照原始数值按新 CRS 重新解释，重建走 loadGeoJSON 以复用贴地/拔高/样式链路（三维侧仅 GeoJSON 留存快照）
-│   │   │   │   ├── useCesiumDataImport.js  # 数据导入主逻辑（移除/清空走对象级宿主探测卸载 detachEntityFromScene，防 type 错配静默残留）
+│   │   │   │   ├── useCesiumDataImport.ts  # 数据导入主逻辑（移除/清空走对象级宿主探测卸载 detachEntityFromScene，防 type 错配静默残留）
 │   │   │   │   ├── useCesiumDataOpsHandlers.js  # 数据操作事件转发层（面板/拖拽/GLTF 弹窗 → dataImport，自容器抽离）
 │   │   │   │   └── loaders/
 │   │   │   │       ├── czmlLoader.js  # CZML 时序数据加载器
-│   │   │   │       ├── geojsonLoader.js  # GeoJSON 流式加载器
+│   │   │   │       ├── geojsonLoader.ts  # GeoJSON 流式加载器
 │   │   │   │       ├── geotiffLoader.js  # GeoTIFF 影像加载器
 │   │   │   │       ├── gltfLoader.js  # GLTF/GLB 三维模型加载器
 │   │   │   │       ├── kmlLoader.js  # KML/KMZ 格式加载器
-│   │   │   │       ├── shpLoader.js  # Shapefile 格式加载器
+│   │   │   │       ├── shpLoader.ts  # Shapefile 格式加载器
 │   │   │   │       ├── tilesetLoader.js  # 3D Tiles 数据集加载器
-│   │   │   │       └── utils.js  # 加载器共享工具函数（flyTo/clamp/blobUrl + 数据源句柄对象级宿主探测卸载 detachEntityFromScene）
+│   │   │   │       └── utils.ts  # 加载器共享工具函数（flyTo/clamp/blobUrl + 数据源句柄对象级宿主探测卸载 detachEntityFromScene）
 │   │   │   ├── interaction/
 │   │   │   │   ├── useCesiumFrameRate.js  # FPS 采样
 │   │   │   │   ├── useCesiumInteractions.js  # 交互管理
@@ -421,7 +425,7 @@ frontend/src/
 │   │   │   ├── cesiumWarmup.js  # Cesium 主脚本空闲预热（首屏就绪 6s + idle 后显式调用 ensureCesiumLoaded() 后台预载，saveData 跳过）
 │   │   │   ├── crsAware.js  # ⚠️ 转发壳（canonical 在 crs/crsAware.js）
 │   │   │   ├── crs-engine.ts  # ⚠️ 转发壳（canonical 在 crs/crs-engine.ts）
-│   │   │   ├── dataDispatcher.js  # 数据格式分发
+│   │   │   ├── dataDispatcher.ts  # 数据格式分发
 │   │   │   ├── decompressFile.js  # ZIP 解压
 │   │   │   ├── decompressor.ts  # 通用解压器
 │   │   │   ├── yieldUi.js  # 导入 UI 让步与遮罩握手（nextPaint 双 rAF / yieldSlice / withImportMask 统一 GlobalLoading 导入遮罩）
@@ -442,7 +446,7 @@ frontend/src/
 │   │   │   ├── useAmapBuildingFetch.js  # 高德建筑白模抓取编排（管理端 amap_key + 固定 z14 + 框选裁剪，V3.6.12）
 │   │   │   ├── useTdtBuildingFetch.js  # 天地图抓取编排（建筑单层 + 全量多选分层 startVectorFetch + 分层出包，V3.6.17）
 │   │   │   ├── useTencentBuildingFetch.js  # 腾讯建筑白模抓取编排（范围→抓取→GeoJSON→包File入库，V3.6.11）
-│   │   │   ├── vectorUtils.js  # 矢量工具（文本解码/类型归一）
+│   │   │   ├── vectorUtils.ts  # 矢量工具（文本解码/类型归一）
 │   │   │   ├── webglRasterRenderer.js  # WebGL 栅格渲染
 │   │   │   ├── crs/
 │   │   │   │   ├── coordTransform.js  # 坐标转换（GCJ-02/WGS84）
@@ -458,6 +462,7 @@ frontend/src/
 │   │   │   │   ├── kmlParser.ts  # KML/KMZ 解析
 │   │   │   │   ├── kmlStyleParser.js  # KML 样式解析
 │   │   │   │   ├── shpParser.ts  # Shapefile 解析
+│   │   │   │   ├── tabularParser.ts  # CSV / WKT → GeoJSON（本系统导出的 CSV/TXT 回读入口；列名与导出侧共用同一契约）
 │   │   │   │   ├── tdtBuildingFetcher.js  # 天地图建筑矢量抓取（浏览器 VTS 解码、权限错误处理）
 │   │   │   │   ├── tdtBuildingTopology.js  # 天地图建筑跨瓦片 Union（无第三方依赖、接缝窄带优化；clipRingToRectMulti 半平面多环裁剪，V3.6.17）
 │   │   │   │   ├── tdtVectorFetcher.js  # 天地图全量 12 层矢量抓取（浏览器三编码解码 + 分层输出，V3.6.17）
@@ -474,7 +479,7 @@ frontend/src/
 │   │   ├── layer-tree/
 │   │   │   ├── factory.js  # 标准节点工厂
 │   │   │   ├── index.js  # 路由与守卫
-│   │   │   ├── protocol.js  # 图层树协议常量
+│   │   │   ├── protocol.ts  # 图层树协议常量
 │   │   │   ├── actions/
 │   │   │   │   ├── contextActionManager.js  # 右键菜单动作调度
 │   │   │   │   └── unifiedActionRouter.js  # 统一图层操作路由器（OL/Cesium 双引擎处理器注册 + 按引擎分发）
@@ -484,7 +489,8 @@ frontend/src/
 │   │   │   │   ├── useSharedResources.js  # 共享资源扫描/加载（包装 useSharedResourceLoader）
 │   │   │   │   ├── useFileUpload.js  # 文件/文件夹上传触发与进度视图（已接线）
 │   │   │   │   ├── exportService.js  # KML 导出
-│   │   │   │   ├── layerExportService.js  # 图层导出服务
+│   │   │   │   ├── exportFormatting.ts  # 导出格式化工具（顶点展开/CSV 单元/下载）
+│   │   │   │   ├── layerExportService.ts  # 图层导出服务
 │   │   │   │   ├── selectionManager.js  # 选择状态管理
 │   │   │   │   └── useLayerContextMenuActions.js
 │   │   │   ├── components/
@@ -494,8 +500,9 @@ frontend/src/
 │   │   │   │   ├── TOCPanel.vue  # TOC 宿主面板（P2 拆分后 ~2330 行：接线 composables + 属性表 + 样式编辑）
 │   │   │   │   └── TOCTreeItem.vue  # 递归树节点
 │   │   │   ├── menu/
-│   │   │   │   ├── commandDispatcher.js  # 菜单命令分发
-│   │   │   │   └── contextMenu.js  # 右键菜单项构建
+│   │   │   │   ├── commandDispatcher.ts  # 菜单命令分发
+│   │   │   │   ├── contextMenu.ts  # 右键菜单项构建
+│   │   │   │   └── types.ts  # 菜单项/能力/多选上下文类型
 │   │   │   └── stores/
 │   │   │       ├── layerRemovalHandler.ts  # 图层移除回调注册表（跨域解耦：引擎域注册、common 触发）
 │   │   │       └── useTOCStore.ts  # TOC 元数据状态
@@ -628,8 +635,15 @@ frontend/src/
 │       ├── constants/
 │       │   └── mapStyles.js  # 地图样式常量
 │       ├── data-import/
-│       │   └── composables/
-│       │       └── useLayerDataImport.js
+│       │   ├── composables/
+│       │   │   └── useLayerDataImport.ts  # 导入主入口（串行闸门/格式分派/图层登记）
+│       │   ├── raster/
+│       │   │   ├── nonGeorefTiffLayer.ts  # 无坐标参考 TIF 兜底落图
+│       │   │   ├── rasterLayerFactory.ts  # 受管 GeoTIFF 图层构造（波段合成/拉伸/登记）
+│       │   │   └── rasterSamplers.ts  # 栅格采样/投影换算/geotiff 源与 Worker 池缓存
+│       │   └── vector/
+│       │       ├── kmlTextHelpers.ts  # KML 命名空间归一/绘制顺序/要素解析
+│       │       └── vectorImportPipeline.ts  # 矢量单文件解析入库 + dispatch 逐包入库
 │       ├── drawing/
 │       │   ├── composables/
 │       │   │   ├── useAdvancedDrawing.js
@@ -724,8 +738,26 @@ frontend/src/
 │               └── index.js  # 路由与守卫
 ├── locales/
 │   ├── core.js  # 同步核心语言包（common + 登录 auth 首屏键 + preferences.language）
-│   ├── en-US.js  # 英文完整语言包（懒加载 chunk）
-│   └── zh-CN.js  # 中文完整语言包（懒加载 chunk）
+│   ├── en-US.ts  # 英文语言包入口（合并 en-US/* 命名空间分片）
+│   ├── en-US/
+│   │   ├── account.ts
+│   │   ├── admin.ts
+│   │   ├── cesium-basic.ts
+│   │   ├── cesium-module-1.ts
+│   │   ├── cesium-module-2.ts
+│   │   ├── misc.ts
+│   │   ├── search-shell.ts
+│   │   └── ui.ts
+│   ├── zh-CN.ts  # 中文语言包入口（合并 zh-CN/* 命名空间分片）
+│   └── zh-CN/
+│       ├── account.ts
+│       ├── admin.ts
+│       ├── cesium-basic.ts
+│       ├── cesium-module-1.ts
+│       ├── cesium-module-2.ts
+│       ├── misc.ts
+│       ├── search-shell.ts
+│       └── ui.ts
 ├── router/
 │   ├── index.js  # 路由与守卫
 │   └── lazyHomeViewLoader.js  # HomeView 二段式懒加载

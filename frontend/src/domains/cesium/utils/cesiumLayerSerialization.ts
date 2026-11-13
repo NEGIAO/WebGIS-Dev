@@ -14,6 +14,11 @@
 export interface LayerShape {
     type: 'point' | 'line' | 'polygon';
     lonLats: Array<[number, number]>;
+    /**
+     * 实体属性快照（已字符串化）。
+     * 必须随几何一起带出：原实现只序列化几何，建筑的高度 / 楼层等字段在导出时全部丢失。
+     */
+    properties?: Record<string, string>;
 }
 
 /** 序列化元信息（写入 properties / Placemark 名） */
@@ -80,6 +85,29 @@ function toLonLats(Cesium: any, positions: any): Array<[number, number]> {
 }
 
 /**
+ * 功能：读取单个实体的属性快照。
+ * 参数：entity —— Cesium 实体；time —— 求值时刻（动态属性按当前时刻取）。
+ * 返回：键值均已字符串化的属性表；对象值走 JSON，避免出现 [object Object]。
+ * 核心逻辑：与属性表（collectEntityProperties）保持同一取值口径，
+ *   但这里要随几何一起进入导出文件，因此转成可直接写单元格的字符串。
+ */
+function readEntityProperties(entity: any, time: any): Record<string, string> {
+    const out: Record<string, string> = {};
+    try {
+        const raw = resolveValue(entity?.properties, time);
+        if (!raw || typeof raw !== 'object') return out;
+        Object.keys(raw).forEach((key) => {
+            const value = raw[key];
+            if (value === null || value === undefined) return;
+            out[key] = typeof value === 'object' ? JSON.stringify(value) : String(value);
+        });
+    } catch {
+        /* 属性解析失败不阻断几何导出 */
+    }
+    return out;
+}
+
+/**
  * 实体集合 → 几何形状清单。
  * @param Cesium Cesium 命名空间
  * @param entities 实体数组
@@ -92,10 +120,12 @@ export function collectEntityShapes(Cesium: any, entities: any[]): LayerShape[] 
     for (const entity of entities) {
         if (!entity) continue;
         try {
+            // 属性与几何同源同刻：先取一次，供所有分支复用
+            const properties = readEntityProperties(entity, time);
             if (entity.polygon) {
                 const hierarchy = resolveValue(entity.polygon.hierarchy, time);
                 const lonLats = toLonLats(Cesium, hierarchy?.positions);
-                if (lonLats.length >= 3) shapes.push({ type: 'polygon', lonLats });
+                if (lonLats.length >= 3) shapes.push({ type: 'polygon', lonLats, properties });
                 continue;
             }
             if (entity.rectangle) {
@@ -113,6 +143,7 @@ export function collectEntityShapes(Cesium: any, entities: any[]): LayerShape[] 
                             [e, n],
                             [w, n],
                         ],
+                        properties,
                     });
                 }
                 continue;
@@ -120,14 +151,14 @@ export function collectEntityShapes(Cesium: any, entities: any[]): LayerShape[] 
             if (entity.polyline) {
                 const positions = resolveValue(entity.polyline.positions, time);
                 const lonLats = toLonLats(Cesium, positions);
-                if (lonLats.length >= 2) shapes.push({ type: 'line', lonLats });
+                if (lonLats.length >= 2) shapes.push({ type: 'line', lonLats, properties });
                 continue;
             }
             if (entity.point) {
                 // 位置只挂在 Entity 上（PointGraphics 无 position 字段），动态属性按当前时刻求值
                 const position = resolveValue(entity.position, time);
                 const lonLats = toLonLats(Cesium, position ? [position] : []);
-                if (lonLats.length) shapes.push({ type: 'point', lonLats });
+                if (lonLats.length) shapes.push({ type: 'point', lonLats, properties });
             }
         } catch {
             /* 单个实体失败不影响整体导出 */
@@ -168,6 +199,8 @@ export function buildGeoJSONFeatureCollection(
             type: 'Feature',
             id: `${meta.id || 'feature'}-${index + 1}`,
             properties: {
+                // 业务属性优先落位（建筑 height_m / floors 等），元信息随后覆盖同名键
+                ...(shape.properties || {}),
                 layerId: meta.id || null,
                 layerName: meta.name || null,
                 shapeType: shape.type,
@@ -184,25 +217,95 @@ export function buildGeoJSONFeatureCollection(
     };
 }
 
-/** 形状清单 → CSV（shape,seq,lng,lat 四列，一行一个顶点） */
+/** CSV 单元格转义：仅当值含逗号 / 引号 / 换行时加引号，保持既有前四列原样 */
+function csvCell(value: unknown): string {
+    const text = String(value ?? '');
+    return /[",\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+}
+
+/** 名称类属性已占用固定列 `name`，不再重复成属性列 */
+const NAME_PROPERTY_KEYS = new Set(['name', 'Name', 'NAME', '名称']);
+
+/** 内部几何类型 → GeoJSON 几何类型名（与导入解析器契约一致） */
+const GEOMETRY_LABELS: Record<string, string> = {
+    point: 'Point',
+    line: 'LineString',
+    polygon: 'Polygon',
+};
+
+/** 取要素名：优先业务属性，回退「类型_序号」 */
+function resolveShapeName(shape: LayerShape, index: number): string {
+    const props = shape.properties || {};
+    const hit = props.name ?? props.Name ?? props['名称'];
+    return String(hit || `${shape.type}_${index + 1}`).replace(/[\r\n]+/g, ' ');
+}
+
+/**
+ * 形状清单 → CSV。
+ * 列契约与 2D 导出、`parsers/tabularParser.ts` 完全一致：
+ *   id,lng,lat,name,geometry_type,part,ring,vertex,<属性列…>
+ * 这样导出的文件可被本系统原样导入，QGIS / Excel 也能按 lng/lat 直接识别。
+ */
 export function buildCoordinateCSV(shapes: LayerShape[] | null | undefined): string {
-    const lines = ['shape,seq,lng,lat'];
-    (shapes || []).forEach((shape, shapeIndex) => {
+    const list = shapes || [];
+    const columns: string[] = [];
+    const seen = new Set<string>();
+    list.forEach((shape) => {
+        Object.keys(shape.properties || {}).forEach((key) => {
+            if (seen.has(key) || NAME_PROPERTY_KEYS.has(key)) return;
+            seen.add(key);
+            columns.push(key);
+        });
+    });
+
+    const header = ['id', 'lng', 'lat', 'name', 'geometry_type', 'part', 'ring', 'vertex', ...columns];
+    const lines = [header.map(csvCell).join(',')];
+    list.forEach((shape, shapeIndex) => {
+        const name = resolveShapeName(shape, shapeIndex);
+        const geometryType = GEOMETRY_LABELS[shape.type] || 'Point';
         shape.lonLats.forEach(([lon, lat], i) => {
-            lines.push(`${shape.type}_${shapeIndex + 1},${i + 1},${lon.toFixed(6)},${lat.toFixed(6)}`);
+            lines.push(
+                [
+                    shapeIndex + 1,
+                    lon.toFixed(6),
+                    lat.toFixed(6),
+                    name,
+                    geometryType,
+                    0,
+                    0,
+                    i + 1,
+                    ...columns.map((key) => shape.properties?.[key] ?? ''),
+                ]
+                    .map(csvCell)
+                    .join(','),
+            );
         });
     });
     return lines.join('\n');
 }
 
-/** 形状清单 → TXT（按形状分块，块内每行一个 "lng,lat"） */
+/** 单个形状 → WKT（OGC 文本，QGIS / ArcGIS / PostGIS 可直接识别） */
+function shapeToWkt(shape: LayerShape): string {
+    const format = ([lon, lat]: [number, number]) => `${lon.toFixed(6)} ${lat.toFixed(6)}`;
+    if (shape.type === 'point') return `POINT(${format(shape.lonLats[0])})`;
+    if (shape.type === 'line') return `LINESTRING(${shape.lonLats.map(format).join(',')})`;
+    return `POLYGON((${closeRing(shape.lonLats).map(format).join(',')}))`;
+}
+
+/**
+ * 形状清单 → TXT（内容为标准 WKT，每要素一段）。
+ * 属性以 `# @键=值` 注释行附在几何之前（与 2D 导出、导入解析器同一约定）。
+ * 不再输出纯坐标：纯坐标没有几何类型与属性，外部工具与本系统都无法回读。
+ */
 export function buildCoordinateTXT(shapes: LayerShape[] | null | undefined): string {
     const blocks = (shapes || []).map((shape, index) => {
-        const header = `# ${shape.type}_${index + 1} (${shape.lonLats.length} points)`;
-        const body = shape.lonLats
-            .map(([lon, lat]) => `${lon.toFixed(6)},${lat.toFixed(6)}`)
-            .join('\n');
-        return `${header}\n${body}`;
+        const lines = [`# @name=${resolveShapeName(shape, index)}`];
+        Object.entries(shape.properties || {}).forEach(([key, value]) => {
+            if (NAME_PROPERTY_KEYS.has(key)) return;
+            lines.push(`# @${key}=${String(value).replace(/[\r\n]+/g, ' ')}`);
+        });
+        lines.push(shapeToWkt(shape));
+        return lines.join('\n');
     });
     return blocks.join('\n\n');
 }
@@ -240,10 +343,17 @@ export function buildKML(shapes: LayerShape[] | null | undefined, meta: Serializ
         } else {
             geometry = `      <Polygon><outerBoundaryIs><LinearRing><coordinates>${kmlCoordinates(shape.lonLats, true)}</coordinates></LinearRing></outerBoundaryIs></Polygon>`;
         }
+        // ExtendedData 承载业务属性（建筑高度等）；无属性时不写空块
+        const dataLines = Object.entries(shape.properties || {})
+            .map(([key, value]) => `        <Data name="${escapeXml(key)}"><value>${escapeXml(value)}</value></Data>`)
+            .join('\n');
+        const extended = dataLines
+            ? `      <ExtendedData>\n${dataLines}\n      </ExtendedData>\n`
+            : '';
         return `    <Placemark>
       <name>${escapeXml(name)}</name>
       <styleUrl>#cesium-layer-style</styleUrl>
-${geometry}
+${extended}${geometry}
     </Placemark>`;
     });
 

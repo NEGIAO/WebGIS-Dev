@@ -46,6 +46,9 @@ export function getNormalizedUploadType(type, name = '') {
     if (ext === 'geojson' || ext === 'json') return ext;
     if (ext === 'tif' || ext === 'tiff') return ext;
     if (ext === 'zip' || ext === 'shp') return ext;
+    // 本系统导出的表格 / WKT 文本：统一归到可解析类型
+    if (ext === 'csv') return 'csv';
+    if (ext === 'txt' || ext === 'wkt') return 'wkt';
     return normalizedType;
 }
 
