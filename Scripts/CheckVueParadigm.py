@@ -64,9 +64,11 @@ def check(root):
             if re.search(r'\b%s\b' % macro, text):
                 problems.append('%s: 视图层出现编译宏 %s（应移入 .ts 的运行时声明）' % (rel, macro))
 
-        # 2. 视图层不得 import
+        # 2. 视图层不得 import，且 <style> 必须内联在 .vue 内（禁止外置 <style src="...">）
         if re.search(r'^\s*import\s', text, re.M):
             problems.append('%s: 视图层出现 import（应全部移入 .ts）' % rel)
+        if re.search(r'<style[^>]*\bsrc\s*=', text):
+            problems.append('%s: 视图层禁止使用 <style src="..."> 外置样式（.vue 承担 DOM 组织与样式内聚，仅剥离 <script> 到 .ts）' % rel)
 
         # 2.5 实例层不得暴露 _ / $ 前缀的公有属性（Vue 3 保留前缀），且公有方法须为箭头属性而非原型方法
         cls_m = re.search(r'export\s+class\s+Instance\b(.*)$', ts_text, re.S)

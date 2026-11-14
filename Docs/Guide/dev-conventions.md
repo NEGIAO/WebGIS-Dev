@@ -38,11 +38,7 @@
 | `utils/` | 纯函数 + 解析 | 副作用 |
 | `services/` | 外部 SDK 集成 | UI 逻辑 |
 
-**组件范式化（V3.6.60 起）**：有效逻辑行 > 150 的复杂组件采用「视图 / 实例」物理分离——`X.vue` 只保留 `<template>` + `<style>` + 单行 `<script lang="ts" src="./X.ts">`；`X.ts` 用 `defineComponent` 桥接 `class Instance`。单文件目标 **500–600 行（软上限，非硬性）**，超限按**功能逻辑**（请求 / 派生 / 手势 / 渲染副作用 / 持久化）拆为多个 composable，禁止按行数机械对半切。判据、模板与批次见 [`2026-11-13-vue-component-refactor-plan.md`](../TODO/2026-11-13-vue-component-refactor-plan.md)。
-
-**样式外置（V3.6.57 起）**：样式主导型组件（`<style>` 超 500 行）改为
-`<style scoped lang="scss" src="./styles/X.scss"></style>`，文件放组件同级 `styles/` 目录；
-非 scoped 块命名 `X.global.scss` 以保留全局作用域。工具：`python Scripts/ExtractVueStyles.py <vue 路径>`。
+**组件范式化（视图/样式 vs 逻辑二元分离）**：有效逻辑行 > 150 的复杂组件采用「视图与样式（`X.vue`）/ 逻辑实例（`X.ts`）」物理分离——`X.vue` 完整承担 DOM 结构（`<template>`）与组件样式（内联 `<style scoped>`）的组织，外加单行 `<script lang="ts" src="./X.ts"></script>` 代理；**严禁将 `<style>` 剥离为外部 `.scss` 文件**（若连样式也剥离则退化为裸 HTML，失去 Vue 单文件组件聚合视图与样式的意义）。`X.ts` 用 `defineComponent` 桥接 `class Instance`。`X.ts` 单文件目标 **500–600 行（软上限，非硬性）**，超限按**功能逻辑**（请求 / 派生 / 手势 / 渲染副作用 / 持久化）拆为多个 composable，禁止按行数机械对半切。判据、模板与批次见 [`2026-11-13-vue-component-refactor-plan.md`](../TODO/2026-11-13-vue-component-refactor-plan.md)。
 
 **领域单向依赖门禁（V3.6.57 起）**：`common` 不得 import `ol` / `cesium`，`ol` 与 `cesium` 互不 import。
 跨引擎互通必须经 `common` 的协议层——已落地的四个接缝：

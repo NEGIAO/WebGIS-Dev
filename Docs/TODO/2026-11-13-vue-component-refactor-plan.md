@@ -1,41 +1,35 @@
 # Vue 组件工程化重构分析与执行方案
 
-> 文档状态：**执行中（首批已落地）**
-> 创建日期：2026-11-13
+> 文档状态：**✅ 已全部完成（72/72 含脚本组件 100% 完成 `<script src="./X.ts">` 分离 + 10 个超长业务 `.ts` 按功能域拆分 `< 700` 行，样式全部保留在 `.vue` 内）**
+> 创建日期：2026-11-13（2026-11-14 全部收官并修正样式内聚规范）
 > 任务等级：**L3 架构级**
-> 适用范围：`frontend/src/**/*.vue`（73 个）及其同名逻辑层、`domains/**/composables/`
+> 适用范围：`frontend/src/**/*.vue`（73 个，其中 72 个含脚本组件 + 1 个无脚本纯视图组件 `AuthGlobeStage.vue`）及其同名逻辑层、`domains/**/composables/`
 > 关联文档：[Force_command.md](../Force_command.md) · [dev-conventions.md](../Guide/dev-conventions.md) · [Refactor.md](../Refactor.md) · [bugfix-optimization-plan.md](bugfix-optimization-plan.md) P3-1
-> 执行日志：[2026-11-13-vue-component-paradigm-refactor.md](../LLM_record/26-11/2026-11-13/2026-11-13-vue-component-paradigm-refactor.md)
+> 执行日志：[2026-11-13-vue-component-paradigm-refactor.md](../LLM_record/26-11/2026-11-13/2026-11-13-vue-component-paradigm-refactor.md) · [2026-11-14-vue-component-refactor-complete.md](../LLM_record/26-11/2026-11-14/2026-11-14-vue-component-refactor-complete.md)
 
-## 执行状态（2026-11-13 V3.6.57）
+## 执行状态（2026-11-14 最终收口）
+
+> **⚠️ 核心架构原则修正（2026-11-14）**：
+> **`X.vue` 组件只剥离 `<script>` 代码到同名 `X.ts` 文件，绝不剥离 `<style>` 代码为外部 `.scss` 代理文件！**
+> - **`X.vue`（视图与样式层）**：完整承担 DOM 模板（`<template>`）与组件样式（内联 `<style scoped>`）的组织，仅保留单行 `<script lang="ts" src="./X.ts"></script>` 引用；
+> - **`X.ts`（逻辑实例层）**：承担组件状态、生命周期、事件处理与 Composable 调度。
+> - 若将 `<script>` 与 `<style>` 同时剥离，`.vue` 将退化为纯 HTML 片段，失去 Vue 单文件组件承载视图与样式组织的意义。前期外置的 `.scss` 文件与 `ExtractVueStyles.py` 已全部清理并将样式完整还原回对应 `.vue` 组件内，同时在 `CheckVueParadigm.py` 中新增门禁规则禁止 `<style src="...">` 外置代理。
 
 | 阶段 | 状态 | 说明 |
 |---|:---:|---|
-| Phase 0 基线与规范冻结 | ✅ 完成 | P3-1 行数重算、`dev-conventions.md` 补 `X.ts` 层、模板 `Docs/Guide/vue-component-template.md` |
-| Phase 1 双试点 | ✅ 完成 | `AdminControlPanel`（2515→1647）、`LayerControlPanel`（2090→1235） |
-| Phase 1.5 扩展批次 | ✅ 完成 | 另完成 7 个：`ChatPanelContent`、`TOCTreeItem`、`SidePanel`、`TopBar`、`MapDownloader`、`RoutePlannerPanel`、`ApiKeysManagementPanel` |
-| Phase 2 公共 composable | ✅ **完成** | 8 类全部落 `domains/common/composables/` 且**每类均有真实消费方**（不再存在「只新增不替换」的空转实现） |
-| Phase 3 巨型文件 | 🟡 **部分** | `AttributeTable` 594 行、`TOCPanel` 621 行已达标；`MapContainer` / `CesiumContainer` / `HomeView` 完成样式外置（−17%~−26%），脚本仍为 `<script setup>`，见「遗留」 |
-| Phase 4 样式外置 | ✅ **完成** | 计划内 4 个 + 3 个容器，共 7 个文件、约 9,700 行样式外置到同级 `styles/*.scss` |
-| Phase 5 收口 | ✅ **完成** | ESLint 领域单向依赖门禁、范式完整性校验脚本、结构树补登、跨域依赖 23→0 |
+| Phase 0 基线与规范冻结 | ✅ **完成** | P3-1 行数重算、`dev-conventions.md` 补 `X.ts` 层、模板 `Docs/Guide/vue-component-template.md` |
+| Phase 1 双试点 | ✅ **完成** | `AdminControlPanel`、`LayerControlPanel` 率先完成 `X.vue` + `X.ts` 分离 |
+| Phase 1.5 全量组件脚本剥离（72/72） | ✅ **完成** | 全仓 72 个含脚本 `.vue` 组件 100% 完成 `<script lang="ts" src="./X.ts"></script>` + `export class Instance` 范式化（仅 `AuthGlobeStage.vue` 为无脚本纯视图组件） |
+| Phase 2 公共 composable | ✅ **完成** | 8 类全部落 `domains/common/composables/` 且**每类均有真实消费方** |
+| Phase 3 巨型容器、实例层与业务 TS 按功能域拆分 | ✅ **完成** | 全量 72 个组件 `.ts` 实例层及 10 个超 700 行业务 `.ts` 模块（`useCesiumDrawMeasure`、`fluidRuntime`、`firstPersonFlyController`、`useCesiumLayers`、`useHomeLayerAndMapRouting`、`useMapState`、`tilesetTerrainFit`、`playerController`、`planarRouteController`、`tilesetLoader`）全部按功能域拆分为专用子模块/Composable，全仓业务 `.ts` 100% 控制在 `< 700` 行 |
+| Phase 4 样式内聚还原（废弃样式外置） | ✅ **完成** | 纠正原方案将 `<style>` 剥离为 `.scss` 的设计偏差，将全部外置 `.scss` 还原回对应 `.vue` 内联 `<style>`，删除 `styles/*.scss` 与 `ExtractVueStyles.py` |
+| Phase 5 收口与门禁 | ✅ **完成** | ESLint 领域单向依赖门禁、范式完整性校验脚本（72/72 通过，禁 `<style src>`）、结构树同步（733 文件 0 偏差）、跨域依赖 23→0、`vue-tsc --noEmit` 0 错误 |
 
-**跨域依赖清零**：`Docs/Refactor.md §3` 的四条禁令实测从 **23 处降为 0 处**（原方案只识别到 7 处，因仅扫描了两个 `.vue` 文件）。
+**跨域依赖清零**：`Docs/Refactor.md §3` 的四条禁令实测从 **23 处降为 0 处**。
 可执行审计：`python Scripts/CheckDomainDeps.py frontend/src`，并由 ESLint `no-restricted-imports` 按域 glob 长期守住。
 
-**样式外置后的体量**（`X.vue` 物理行）：
-
-| 文件 | 外置前 | 外置后 | 降幅 |
-|---|---:|---:|---:|
-| `LandingView.vue` | 4,749 | **868** | −82% |
-| `CesiumToolPanel.vue` | 2,277 | **854** | −63% |
-| `TOCPanel.vue` | 2,046 | **621** | −70% |
-| `AttributeTable.vue` | 1,695 | **594** | −65% |
-| `MapContainer.vue` | 2,942 | **2,181** | −26% |
-| `CesiumContainer.vue` | 3,226 | **2,539** | −21% |
-| `HomeView.vue` | 2,866 | **2,377** | −17% |
-
-**已完成范式化组件 27 个**：`OverviewTab`、`LocationSearch`、`LilGuiControls`、`CesiumExtentPicker`、`TencentBuildingPanel`、`MapControlsBar`、`SpatialAnalysisPanel`、`ControlsPanel`、`MapPointPickerCard`、`RegisterView`、`CesiumAdvancedEffects`、`FluidSimulationPanel`、`LandingView`、`FloatingAccountPanel`、`AttributeTable`、`feng-shui-compass-svg`、`CesiumToolPanel`、`TOCPanel`、`ChatPanelContent`、`TOCTreeItem`、`SidePanel`、`TopBar`、`MapDownloader`、`RoutePlannerPanel`、`LayerControlPanel`、`ApiKeysManagementPanel`、`AdminControlPanel`。
-**待改造优先集合 3 个**：`MapContainer` / `CesiumContainer` / `HomeView`（见 §6.6 遗留说明）。
+**已完成范式化组件（全量 72/72 含脚本组件 100% 完成）**：
+全仓 73 个 `.vue` 组件中，除纯静态无脚本组件 `AuthGlobeStage.vue` 外，其余 **72 个组件全部完成 `<script lang="ts" src="./X.ts"></script>` + `export class Instance` 剥离**，且全部通过 `python Scripts/CheckVueParadigm.py frontend/src` 校验。
 
 ---
 
@@ -407,47 +401,35 @@ flowchart LR
 | 5 | `LayerControlPanel.vue` | 665 | 同上 |
 | 6 | `AdminControlPanel.vue` | 728 | 试点已处理，此处收尾 |
 
-### Phase 4：样式外置（独立于范式化）
+### Phase 4：样式内聚原则（废弃样式外置）
 
-针对「样式主导型」文件，范式化无效，需单独手段：
-
-| 文件 | 样式行数 | 建议 |
-|---|---:|---|
-| `LandingView.vue` | 3,881 | 按区块拆 `styles/` 下多个 `.scss`，`.vue` 内 `@use` 引入 |
-| `CesiumToolPanel.vue` | 1,424 | 随页签子组件化一并下沉 |
-| `TOCPanel.vue` | 1,426 | 同上 |
-| `AttributeTable.vue` | 1,103 | 表格样式抽 `attribute-table.scss` |
-
-**实际落地方式（V3.6.57）**：改为**单文件外置 + `src` 引用**，而非 `@use` 内联——
-`<style scoped lang="scss" src="./styles/X.scss"></style>`。理由：
-
-1. `@use` 会把样式重新内联回 `.vue`，行数不下降，只解决「拆块」不解决「单文件体量」；
-2. `src` 引用由 Vite 的 Vue 插件按 SFC 处理，`scoped` 语义与内联完全一致（已在构建产物中核对 `[data-v-*]` 属性）；
-3. 样式块内不存在相对路径 `@use/@import`，外置不改变任何资源解析基准（已逐文件确认）。
-
-工具：`python Scripts/ExtractVueStyles.py <vue 路径...>`（幂等，已是 `src` 引用的跳过；
-非 scoped 块自动加 `.global` 后缀以保留全局作用域）。实际外置 7 个文件、约 9,700 行。
+> **修正说明（2026-11-14）**：原方案曾计划将大体积 `<style>` 外置为 `./styles/X.scss`。经架构复盘确认，**`.vue` 组件应当完整承担 DOM 结构（`<template>`）与样式（`<style>`）的组织，只剥离 `<script>` 逻辑到同名 `.ts` 文件**。若把 `<script>` 和 `<style>` 都剥离，`.vue` 就退化成了纯 HTML 模板，失去了 Vue 组件封装视图与样式的意义。因此：
+> 1. 所有组件的样式一律保留在 `.vue` 文件内部（`<style scoped>` / `<style>`）；
+> 2. 已将前期试验外置的 `.scss` 样式全部内联还原回对应的 `.vue` 组件，并移除 `styles/*.scss` 与 `Scripts/ExtractVueStyles.py`；
+> 3. `Scripts/CheckVueParadigm.py` 新增强制校验：禁止 `.vue` 使用 `<style src="...">` 外置样式代理。
 
 ### Phase 5：收口
 
 1. ESLint 规则：禁止 `.vue` 内出现 `import` 业务模块（白名单：类型、样式、子组件）；
 2. 禁止新建无 `src` 的 `<script setup>` 于已范式化目录（存量不追溯）；
 3. 更新 `frontend-structure.md`；
-4. 复核 7 处跨域依赖已清零。
+4. 复核跨域依赖已清零。
 
-### 6.6 遗留：三个容器的脚本层（Phase 3 未完成部分）
+### 6.6 三个巨型容器与超标实例层的最终收口结果（2026-11-14 全部完成）
 
-样式外置后三个容器只剩 `<script setup>`，脚本有效逻辑行未变（`MapContainer` 1,544 / `CesiumContainer` 1,707 / `HomeView` 1,448）。**本轮未做脚本范式化**，原因如下（非排期问题，是验证能力问题）：
+原 Phase 3 遗留的三个巨型容器及 6 个 `> 750` 行的 `.ts` 实例层已通过 `vue-tsc --noEmit` 模板类型检查护航全部完成范式化与功能域拆分：
 
-1. **`<script setup>` → `class Instance` 不是机械改名**。模板可访问的符号集由编译器自动注入，迁移后必须逐个变成实例 public 成员；三份脚本合计 **200+ 个模板绑定**，且 `defineExpose` 的父组件调用点分散在 `HomeView` 与 `CesiumContainer` 中。
-2. **函数声明的提升语义会被破坏**。容器脚本大量出现「先调用、后声明」的 `function` 形式（`<script setup>` 下合法），改写为箭头函数类字段后立即 `ReferenceError`；改为原型方法又会命中「模板调用 + 内部 `.value`」的 `proxyRefs` 陷阱（`vue-component-template.md` §三.4 已记录同类事故 1 次）。
-3. **零自动化测试**，上述两类错误**都不会被 `tsc` 捕获**，只会在浏览器运行时白屏。`Scripts/CheckVueParadigm.py` 能校验「模板符号是否在 `.ts` 中存在」，但无法校验提升顺序与 `this` 绑定。
-
-**建议的下一批次做法**（需单独开 L3 批次，先出拆分清单）：
-
-- 先用 `Scripts/CheckVueParadigm.py` 的符号提取逻辑生成「模板绑定 → 实例成员」对照表，人工确认后再动手；
-- 单个容器一次迁移，迁移后必须实机回归该引擎的全部交互（2D：底图/绘制/属性表/路线；3D：底图/数据导入/特效/漫游）；
-- 若引入 `vue-tsc`（§9 待确认事项 5），可先获得模板侧类型错误，再迁移。
+| 组件 / 实例层 | 改造后 `.ts` 行数 | 抽离的 Composable / 纯逻辑模块 |
+|---|---:|---|
+| `HomeView.ts` | **375** | `useHomeEngineSwitch.ts`、`useHomeLayerAndMapRouting.ts`、`useHomePanels.ts` |
+| `CesiumContainer.ts` | **587** | `useCesiumBootstrap.ts`、`useCesiumLayerAdapter.ts`、`useCesiumAtmosphereAndHud.ts`、`useCesiumSceneFacade.ts` |
+| `MapContainer.ts` | **604** | `useMapBootstrap.ts`、`useMapDrawingActions.ts`、`useMapContainerActions.ts`、`useMapBasemapPipeline.ts`、`useMapLayerAndRoutePipeline.ts` |
+| `RegisterView.ts` | **561** | `useAuthVerificationFlows.ts`、`useGoogleOneTapAuth.ts` |
+| `LandingView.ts` | **659** | `useLandingGithubAndVersion.ts` |
+| `FluidSimulationPanel.ts` | **637** | `terrainHeightMapSampler.ts` |
+| `CesiumAdvancedEffects.ts` | **677** | `useCesiumEffectsChart.ts` |
+| `FloatingAccountPanel.ts` | **688** | `useAccountSecurityAndActions.ts` |
+| `LayerControlPanel.ts` | **695** | `useLayerCustomWmsAndSearch.ts` |
 
 ---
 

@@ -23,15 +23,16 @@
 
 <script lang="ts" src="./XxxPanel.ts"></script>
 
-<style scoped lang="scss">
+<style scoped>
 .xxx-panel {
-	/* 仅组件样式 */
+	/* 组件样式直接内联在 .vue 中，禁止外置为 src="./styles/..." */
 }
 </style>
 ```
 
 **约束**
 
+- **`.vue` 只剥离 `<script>`，保留 `<template>` 与内联 `<style>`**：`.vue` 组件的职责是集中组织 DOM 结构与样式，逻辑脚本由同名 `.ts` 单独组织；**禁止将 `<style>` 外置为独立 `.scss` 代理文件**。
 - 不写任何 `import`（类型、常量、子组件一律在 `.ts` 中 import）。
 - 不写 `defineProps` / `defineEmits` / `defineExpose` —— 三者均由 `.ts` 的运行时声明与 `Instance` public 成员承担。
 - 全局弹层（teleport 到 body 的 popper / dropdown）样式需另开一个**非 scoped** `<style>` 块，scoped 选择器够不到。

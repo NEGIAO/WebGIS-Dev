@@ -11,6 +11,21 @@
 > 零散升号、整合后即废弃，号段均高于当前版本）统一归并为 **V3.6.42**。
 > 条目所述功能与修复内容、发布日期、整合结论均不变，仅版本号表述归一，便于全文检索不再出现倒挂号。
 
+### V3.7.1 (2026-11-14) — Vue 组件样式内聚还原（移除外置 `.scss`）、全量 72 个组件 `<script>` 剥离与业务 `.ts` 功能域拆分全面收官
+
+> **一句话**：纠正 Vue 组件重构中将 `<style>` 外置为 `.scss` 的设计偏差，将全部 9 个组件的 10 份 `.scss` 样式完整还原回对应 `.vue` 组件内部（确立「`X.vue` 承载 DOM 模板与组件样式、`X.ts` 承载业务逻辑」的二元分离规范），完成全仓全部 72 个含脚本 `.vue` 组件的 `<script lang="ts" src="./X.ts">` 剥离，并将 10 个超 700 行业务 `.ts` 模块按功能域拆分为专用子模块，实现全仓业务 `.ts` 文件 100% 控制在 `< 700` 行以内。
+
+1. **恢复 `.vue` 样式内聚，全面清理 `.scss` 外置代理**：
+   - 将 `HomeView.vue`、`LandingView.vue`、`CesiumContainer.vue`、`CesiumToolPanel.vue`、`TOCPanel.vue`、`ApiManagementPanel.vue`、`LogMonitor.vue`、`MapContainer.vue`、`AttributeTable.vue` 共 9 个组件的 10 个外置 `.scss` 文件完整还原为 `.vue` 内联 `<style scoped>`（及 `AttributeTable.vue` 的全局 `<style>`），彻底删除 `styles/*.scss` 目录与 `Scripts/ExtractVueStyles.py`。
+   - `Scripts/CheckVueParadigm.py` 新增门禁校验：严禁 `.vue` 出现 `<style src="...">` 外置样式代理；同步修正 `dev-conventions.md`、`vue-component-template.md` 与 `2026-11-13-vue-component-refactor-plan.md`。
+2. **全量 72/72 含脚本 `.vue` 组件完成 `<script>` 剥离**：
+   - 将其余 36 个 `.vue` 组件的 `<script setup>` 全部剥离为同名 `.ts`（`defineComponent` + `export class Instance`），全仓 73 个 `.vue` 组件中除无脚本纯视图 `AuthGlobeStage.vue` 外，72 个含脚本组件 100% 统一为 `<script lang="ts" src="./X.ts"></script>`。
+3. **实例层（`X.ts`）与 10 个超长业务 `.ts` 模块按功能域拆分全面收官**：
+   - 组件实例层：`LayerControlPanel.ts`（811→695 行，抽离 `useLayerCustomWmsAndSearch.ts`）、`FloatingAccountPanel.ts`（792→688 行，抽离 `useAccountSecurityAndActions.ts`）、`MapContainer.ts`（604 行）、`LandingView.ts`（659 行）。
+   - 业务 `.ts` 模块：按功能域拆分 `useCesiumDrawMeasure.ts`（+`drawHandleRegistry.ts`）、`fluidRuntime.ts`（+`fluid/fluidRenderPrimitives.ts`）、`firstPersonFlyController.ts`（+`routeFlyTimelineAndIo.ts`）、`useCesiumLayers.ts`（+`imageryProviderBuilders.ts`）、`useHomeLayerAndMapRouting.ts`（+`useHomeTocAndAttributeActions.ts`）、`useMapState.ts`（+`useMapBasemapInstances.ts`）、`tilesetTerrainFit.ts`（+`tilesetLeafSampling.ts`）、`playerController.ts`（+`utils/playerModelLoader.ts`）、`planarRouteController.ts`（+`utils/planarControllerSetup.ts`）、`tilesetLoader.ts`（+`tileset/tilesetSampleLoaders.ts`），全仓业务 `.ts` 文件 100% `< 700` 行。
+
+---
+
 ### V3.7.0 (2026-11-14) — 前端全面从 JavaScript 过渡到 TypeScript 严格模式 + Vue 组件范式化架构升级 + 全仓 Code Review 收口
 
 > **一句话**：前端彻底告别旧 JavaScript（业务 `.js` 文件归零，全量 636 个 `.ts` + 1 个 `.mts` + 73 个 `.vue`），开启 `tsconfig.json` 完整严格编译模式（`strict: true` / `noImplicitAny: true`），完成 36 个复杂 Vue 组件「`X.vue` 视图层 + `X.ts` `class Instance` 实例层」物理分离、7 个巨型组件样式外置、8 类通用能力 composable 沉淀、23 处跨域依赖清零，并修复全仓 Code Review 检出的潜在运行时 Bug 与后端降级 503 掩盖 CORS 预检缺陷。

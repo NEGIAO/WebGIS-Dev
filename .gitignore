@@ -12,6 +12,7 @@ Docs/Demo/data
 Docs/Demo/textures
 # 瓦片
 frontend/public/tiles/
+frontend/stats.html
 
 # ========== 后端依赖与缓存 ==========
 backend/__pycache__/

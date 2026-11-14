@@ -53,8 +53,7 @@ WebGIS_Dev/
 │   ├── CheckConfigRegistry.py         # 配置登记门禁（裸 getenv / 未登记 key / 散落 VITE_ / 硬编码域名）
 │   ├── CheckDomainDeps.py             # 前端领域单向依赖门禁（禁止 common→ol/cesium、ol↔cesium）
 │   ├── CheckStructureTree.py          # 结构树漂移门禁（structure 文件 ⇄ 磁盘双向 diff）
-│   ├── CheckVueParadigm.py            # Vue 视图/实例分离范式完整性门禁（单 script src / 零宏 / 零保留前缀 / 零原型公有方法）
-│   ├── ExtractVueStyles.py            # 巨型 Vue 组件样式外置辅助脚本（幂等）
+│   ├── CheckVueParadigm.py            # Vue 视图/实例分离范式完整性门禁（单 script src / 样式内聚禁外置 src / 零宏 / 零保留前缀 / 零原型公有方法）
 │   ├── SyncStructureTree.py           # 结构树文档 .js → .ts 批量同步辅助脚本
 │   └── archive/                       # 已废弃脚本，仅留档不执行
 │       └── UpdateReadmeTree.py        # [已废弃 V3.6.37] 生成 FileTree.md（该文件已不存在）

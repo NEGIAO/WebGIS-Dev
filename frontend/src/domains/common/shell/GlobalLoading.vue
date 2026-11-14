@@ -53,60 +53,7 @@
     </Teleport>
 </template>
 
-<script setup lang="ts">
-import { computed, onBeforeUnmount, ref, watch } from 'vue';
-import { storeToRefs } from 'pinia';
-// 深导入：GlobalLoading 随 App.vue 常驻首屏，禁止经 '@/stores' 聚合桶取 store
-import { useAppStore } from '@common/app/stores/useAppStore';
-import { useLocale } from '@common/app/useLocale';
-
-const appStore = useAppStore();
-const { loading, loadingText } = storeToRefs(appStore);
-const { t } = useLocale();
-
-const dotFrame = ref(0);
-let dotTimer: number | null = null;
-
-const resolvedLoadingText = computed(() => {
-    const text = String(loadingText.value || '').trim();
-    return text || t('common.loadingPleaseWait');
-});
-
-const loadingHint = computed(() => {
-    // 点号由模板 dots span 动画追加；此处只返回基底文案
-    return t('common.loadingHard');
-});
-
-function startHintAnimation() {
-    if (dotTimer !== null) return;
-    dotTimer = window.setInterval(() => {
-        dotFrame.value = (dotFrame.value + 1) % 4;
-    }, 360);
-}
-
-function stopHintAnimation() {
-    if (dotTimer === null) return;
-    window.clearInterval(dotTimer);
-    dotTimer = null;
-    dotFrame.value = 0;
-}
-
-watch(
-    loading,
-    (visible) => {
-        if (visible) {
-            startHintAnimation();
-        } else {
-            stopHintAnimation();
-        }
-    },
-    { immediate: true },
-);
-
-onBeforeUnmount(() => {
-    stopHintAnimation();
-});
-</script>
+<script lang="ts" src="./GlobalLoading.ts"></script>
 
 <style scoped>
 .global-loading-mask {

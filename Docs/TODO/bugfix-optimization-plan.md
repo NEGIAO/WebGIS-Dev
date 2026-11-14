@@ -129,26 +129,9 @@
 
 ## P3 — 可维护性债（穿插进行，每次只拆一个）
 
-### P3-1 巨型文件渐进拆分（规范 6 单一职责）
-> **行数基线已按 2026-11-13 实测重算**（原表 2026-07 数据已全面过期，最大偏差 +2311 行）。
-> 度量口径与完整分析见 [`2026-11-13-vue-component-refactor-plan.md`](2026-11-13-vue-component-refactor-plan.md)。
-
-| 文件 | 行数（实测） | 有效逻辑行 | 拆分方向 |
-|------|------|------|----------|
-| `CesiumContainer.vue` | 3226 | 1707 | 启动簇 / 大气簇 / 导航簇外移，目标 ~800 行 |
-| `MapContainer.vue` | 2942 | 1552 | 持续外移到 composables（既有方向，禁新增功能代码） |
-| `HomeView.vue` | 2866 | 1448 | 面板编排层拆 useHomePanels 类 composable |
-| `RegisterView.vue` | 2714 | 793 | 表单步骤组件化（登录/注册/重置/绑定四段） |
-| `CesiumToolPanel.vue` | 2703 | 371 | 各页签拆子组件（DataTab/ModulesTab…），模块渲染已是 LilGuiControls 可直接搬 |
-| `TOCPanel.vue` | 2518 | 397 | 动作处理层已外移一部分（contextActionManager/cesiumTocActions），继续拆上传/搜索区块 |
-| `AttributeTable.vue` | 2516 | 644 | 虚拟滚动 / 单元格编辑 / 面板拖拽已抽 composable，剩余为编排 |
-| `AdminControlPanel.vue` | 2515 | 728 | 已范式化；表格 CRUD 与页签拖拽已外移 |
-| `LayerControlPanel.vue` | 2090 | 665 | 已范式化；拖拽排序 / 右键定位 / 长按 / 请求令牌已外移 |
-| `LandingView.vue` | 5639 | 667 | **样式主导**（3881 行样式），需样式外置而非脚本拆分 |
-- **原则**：只搬不改逻辑、每次一个文件一份日志、拆后 ESLint+回归；与功能迭代穿插，不集中大爆改。
-- **容器二轮既有路线图**（V3.4.29 日志 `2026-07-26-container-components-slimming-round1.md`，factory 注入模式照抄一轮）：
-  MapContainer：`runDeferredStartupTasks`(~170) → `activateInteraction`(~121) → `syncAttributeTableMapExtent` 段 → 尾部 `getMapExtent` 簇，目标 ~1200 行；
-  CesiumContainer（实测 3226，原记录 ~915 已失效）：`bootCesium/initViewer/reset` 启动簇 → `applyAtmosphereParams` 簇 → `handleNavTargetSelect` 簇，目标 ~800 行。
+### P3-1 巨型文件渐进拆分与 Vue 组件视图/逻辑分离（✅ 2026-11-14 已完成）
+> **状态**：**✅ 已完成**。全仓 36 个有效逻辑行 `> 150` 的 Vue 组件均已完成「`X.vue`（DOM 模板 + 内联样式）+ `X.ts`（`class Instance` 逻辑实例层）」物理分离，且所有 `.ts` 实例层经功能域 Composable 拆分后全部控制在 `< 700` 行以内（`HomeView.ts` 375 行、`RegisterView.ts` 561 行、`CesiumContainer.ts` 587 行、`MapContainer.ts` 604 行、`FluidSimulationPanel.ts` 637 行、`LandingView.ts` 659 行、`CesiumAdvancedEffects.ts` 677 行、`FloatingAccountPanel.ts` 688 行、`LayerControlPanel.ts` 695 行）。
+> **规范强调**：`.vue` 组件完整承担 DOM 组织（`<template>`）与样式（内联 `<style>`），仅剥离 `<script>` 到同名 `.ts` 文件，**不将 `<style>` 剥离为外部 `.scss` 文件**。详见 [`2026-11-13-vue-component-refactor-plan.md`](2026-11-13-vue-component-refactor-plan.md)。
 
 ### P3-2 cesium-navigation 内嵌包上游 TODO（tracking 场景 2 处 bug 注释）
 - **定性**：上游遗留、仅实体追踪模式触发（项目暂未用 tracking）→ 挂起观察，触发时再修。

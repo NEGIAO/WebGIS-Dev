@@ -146,61 +146,7 @@
     </div>
 </template>
 
-<script setup lang="ts">
-// ⚠️ 底图下载依赖 /api/download/*，后端 V3.6.5 已删除该模块，当前 HF Space 返回 404
-import { useLocale } from '@common/app/useLocale';
-import { useDownloadStore } from '@common/data-import/stores/useDownloadStore';
-import { copyToClipboard } from '@common/utils/clipboard';
-
-const { t } = useLocale();
-const store = useDownloadStore();
-
-defineEmits(['download', 'view', 'cancel']);
-
-/** 复制 Task ID */
-async function copyTaskId(taskId?: string) {
-    await copyToClipboard(taskId || '');
-}
-
-/** 判断是否需要渲染进度条 */
-function shouldShowProgress(task: any) {
-    return ['downloading', 'pending', 'stitching'].includes(task.status) || (task.status === 'success' && task.progress < 100);
-}
-
-/** 解析任务状态标签文本 */
-function resolveTaskStatus(task: any) {
-    const statusMap: Record<string, string> = {
-        pending: t('mapDownload.statusPending'),
-        downloading: t('mapDownload.statusDownloading'),
-        stitching: t('mapDownload.statusStitching'),
-        success: t('mapDownload.statusSuccess'),
-        failed: t('mapDownload.statusFailed'),
-        cancelled: t('mapDownload.statusCancelled'),
-        expired: t('mapDownload.statusExpired'),
-    };
-    return statusMap[task.status] || task.status || '';
-}
-
-/** 解析时间/倒计时提示信息 */
-function resolveTaskRemaining(task: any) {
-    if (task.status === 'success') {
-        if (task.expires_in_seconds > 0) {
-            const minutes = Math.max(1, Math.ceil(task.expires_in_seconds / 60));
-            return t('mapDownload.expiresIn', { minutes });
-        }
-        return '';
-    }
-    if (task.estimated_remaining_seconds > 0) {
-        const minutes = Math.max(1, Math.ceil(task.estimated_remaining_seconds / 60));
-        return t('mapDownload.remainingApprox', { minutes });
-    }
-    if (task.estimated_total_seconds > 0) {
-        const minutes = Math.max(1, Math.ceil(task.estimated_total_seconds / 60));
-        return t('mapDownload.estimatedTotal', { minutes });
-    }
-    return '';
-}
-</script>
+<script lang="ts" src="./MyDownloadTasks.ts"></script>
 
 <style scoped>
 .my-tasks-section {

@@ -10,6 +10,7 @@
 ```text
 frontend/src/
 ├── App.vue
+├── App.ts  # 根组件实例层（全局壳组件挂载）
 ├── cesium-shim.ts  # Cesium ESM 垫片（CDN window.Cesium 桥接）
 ├── cesium.d.ts  # Cesium CDN 模块类型声明（桥接 TypeScript 与 CDN 全局 window.Cesium）
 ├── main.ts  # 应用入口（挂载 Router/Pinia）
@@ -45,20 +46,27 @@ frontend/src/
 │   ├── LandingView.vue  # 根路径宣传主页（南师大风格重构：SectionTitle 三件套 + 三环轨道纹样 + 数字滚动 + 三层技术栈卡 + 锚点导航/scrollspy + 移动端全屏菜单；自持滚动容器）
 │   ├── LandingView.ts  # 落地页实例层（数据缓存先行 + 数字滚动 + 入场动效 + 锚点 scroll spy + 移动端菜单）
 │   ├── NotFoundView.vue  # 404 页面（notFound.* i18n）
+│   ├── NotFoundView.ts  # 404 页面实例层（倒计时与返回首页跳转）
 │   ├── OAuthCallbackView.vue  # Google/GitHub/Hugging Face OAuth 回调会话落地
+│   ├── OAuthCallbackView.ts  # OAuth 回调落地页实例层（token 解析、会话恢复与路由重定向）
 │   ├── PrivacyPolicy.vue  # 隐私政策
+│   ├── PrivacyPolicy.ts  # 隐私政策页面实例层（返回导航与国际化文案）
 │   ├── RegisterView.ts  # 注册页逻辑脚本（从 RegisterView.vue 抽取的 setup 状态与方法，经 render proxy 调用）
 │   ├── RegisterView.vue  # 注册/登录（邮箱 + Google/GitHub/Hugging Face OAuth，全量 i18n + 语言切换；背景装饰挂 AuthDecorBackground + AuthGlobeStage）
 │   ├── TermsOfService.vue  # 服务条款
+│   ├── TermsOfService.ts  # 服务条款页面实例层（返回导航与国际化文案）
 │   ├── components/
 │   │   ├── AuthDecorBackground.vue  # 认证页装饰层（底纹渐变 + 经纬网 + 等高线×2 + 散点/点位 + 天光 + 双轨异径逆向椭圆，每轨内套「外/中/核」三环综合圆环（同一 PNG 按 124%/96%/90% 缩放落在不同半径）+ 动态 SVG（流动轨迹 / 定位脉冲 / 自绘星座 / 漂浮宇航员：纯白填充 + 白色包边与落地投影，与脚下线框地球形成材质差）+ 光斑×3；`boost` prop 可加速双轨 PNG 圆环；≤768px 整层关闭）
+│   │   ├── AuthDecorBackground.ts  # 认证页装饰背景实例层（轨道环加速与星轨动画参数）
 │   │   ├── AuthGlobeStage.vue  # 认证页线框地球（3 条 rx 递减椭圆自转伪造球体 + 2 条纬线 ±5° 慢摆 + conic 扫掠光 + 三层脉冲环 + 差速轨道环 20s / 卫星 13s + 九道流星 3.8~6.7s 错峰；线稿走 --brand-primary-rgb alpha 以适配浅色底，整层透明度由 --globe-opacity 单一开关收敛，球底贴屏幕底边（left 9% + bottom 0 + translateX(-50%)，直径 min(230px,24vw,40vh)），≤1100px 收一档、≤768px 整层关闭）
 │   │   └── SectionTitle.vue  # 通用节标题三件套（印章 + 衬线标题 + 罗盘水印；LandingView 各节复用）
+│   │   └── SectionTitle.ts  # 通用节标题三件套实例层（印章/标题/副标题 Props）
 │   └── composables/
 │       ├── useAuthVerificationFlows.ts  # 注册/认证验证码与邮件确认倒计时状态机
 │       ├── useGoogleOneTapAuth.ts  # Google One Tap 鉴权初始化与 SDK 轮询加载
 │       ├── useHomeEngineSwitch.ts  # HomeView 2D/3D 引擎切换与 Agent 运行时状态适配器
 │       ├── useHomeLayerAndMapRouting.ts  # HomeView 图层操作桥接、底图与地图路由编排
+│       ├── useHomeTocAndAttributeActions.ts  # HomeView TOC 图层、行政区边界与属性表动作分发及访问记录上报
 │       ├── useHomePanels.ts  # HomeView 面板互斥开关与响应式布局交互
 │       ├── useLandingGithubAndVersion.ts  # 落地页 GitHub 开源指标、Star 趋势图降级与 README 版本号拉取/本地缓存
 │       ├── useLazyModules.ts  # CesiumContainer / SidePanel 懒加载 + 重试逻辑（**重试必须复用同一静态字面量 specifier**：带 `?t=${Date.now()}` 的运行时变量 specifier 无法被 Vite 分析，dev 抛 Unknown variable dynamic import、prod 指向不存在路径；瞬态失败判据覆盖 Chromium/Firefox/Safari 三种措辞 + 150ms×n 退避）
@@ -93,6 +101,7 @@ frontend/src/
 │   │   │   ├── CesiumContainer.vue  # Cesium 容器（底图/地形 + URL 追踪 + 工具面板 + 拖拽导入；场景 Loading i18n；属性表改为注入 attrStore 复用 2D 组件）
 │   │   │   ├── CesiumContainer.ts  # Cesium 容器实例层（引擎就绪、工具挂载、视图状态导出）
 │   │   │   ├── CesiumDataImportDialog.vue  # GLTF/GLB 模型放置坐标输入弹窗
+│   │   │   ├── CesiumDataImportDialog.ts  # GLTF/GLB 模型放置坐标弹窗实例层（表单校验与提交）
 │   │   │   ├── CesiumDrawMeasurePanel.vue  # 3D 绘制/测量面板（引擎感知：variant=draw 绘制工具+样式 / measure 测量工具；测量项开关、结果读数、记录、GeoJSON 导出；触屏档 pointer:coarse 目标≥40px）
 │   │   │   ├── CesiumDrawMeasurePanel.ts  # 3D 绘制/测量面板实例层（工具激活、样式事件、测量记录）
 │   │   │   ├── CesiumToolPanel.vue  # 统一控制面板（场景/数据/特效/风场/流体/漫游）
@@ -136,6 +145,8 @@ frontend/src/
 │   │   │   │       │   └── tileset/  # 3D Tiles 加载分层
 │   │   │   │       │       ├── tilesetMaterial.ts  # 材质模式（白模/高度伪色/自定义 shader，MATERIAL_MODES+applyTilesetMaterial）
 │   │   │   │       │       ├── tilesetPath.ts  # 路径与目录递归工具（相对路径/Blob URL 重写/层级推断）
+│   │   │   │       │       ├── tilesetLeafSampling.ts  # 瓦片树叶子包围盒基底采样与面积加权分位数计算
+│   │   │   │       │       ├── tilesetSampleLoaders.ts  # 内置与 Cesium Ion 样例 3D Tiles 数据集加载器
 │   │   │   │       │       └── tilesetTerrainFit.ts  # 地形自适应（贴地 2.0：叶子包围盒×地形中位数配准，fit/refit 契约）
 
 │   │   │   │       └── utils.ts  # 加载器共享工具函数（flyTo/clamp/blobUrl + 数据源句柄对象级宿主探测卸载 detachEntityFromScene）
@@ -149,6 +160,7 @@ frontend/src/
 │   │   │   │   ├── useCesiumLayerAdapter.ts  # Cesium 宿主图层适配器（叠加层/矢量/3D Tiles 与 Agent 对接）
 │   │   │   │   ├── useCesiumBasemapSwitcher.ts  # 底图熔断/降级切换
 │   │   │   │   ├── useCesiumLayers.ts  # 底图/地形/叠加层编排
+│   │   │   │   ├── imageryProviderBuilders.ts  # Cesium 底图/WMS/ArcGIS/XYZ ImageryProvider 与 ViewModel 构建器
 │   │   ├── layers/
 │   │   │   ├── arcgisIdentify.ts  # ArcGIS identify 查询适配
 │   │   │   ├── customIonLayer.ts  # 自定义 Ion 资源图层管理
@@ -195,6 +207,7 @@ frontend/src/
 │   │   │       ├── drawMeasureSpec.ts  # 绘制/测量类型元数据（TS：DrawType/MeasureType/ShapeType/InteractionModel/TypeMeta；DRAW_TYPES/MEASURE_TYPES、三态交互模型 multi|anchor|two-point|single、MIN_POINTS、CircleOutline→Circle 别名、**EDITABLE_TYPES 可编辑判据唯一事实来源**，管理器与 TOC 能力位共用）
 │   │   │       ├── scenePicker.ts  # 场景取点工具（pickEarthPoint 两级取点链 pickPosition→pickEllipsoid 兜底 + Cartesian3↔经纬度换算；绘制/测量与路线选点共用）
 │   │   │       ├── drawMeasureCalc.ts  # 绘制测量读数计算层（测地线/测面/测高距/方位角载荷组装，Cesium 与测量开关工厂注入）
+│   │   │       ├── drawHandleRegistry.ts  # 绘制与测量实体句柄构建、动态预览与 TOC 注册辅助
 │   │   │       └── useCesiumDrawMeasure.ts  # 绘制/测量管理器（三态交互状态机：逐点/锚点两点/两点即完成；9 类型 Point/LineString/Polygon/Rectangle/Circle/MeasureDistance/MeasureArea/MeasureHeight/MeasureAzimuth；测距 EllipsoidGeodesic、测面 ENU shoelace、矩形/圆/方位角走 drawGeometry；测量开关实时重算标注；cancelActive 同步摘除预览 Label 防泄漏，removeHandle 带 contains 回执强校验）
 
 │   │   │       └── useCesiumRouteRendering.ts  # P2 公交/驾车路线渲染（消费路线载荷 → 贴地折线/站点，含透明度缩放）
@@ -254,6 +267,7 @@ frontend/src/
 │   │   │   ├── fluid-simulation/
 │   │   │   │   ├── fluidShaders.ts  # 流体着色器源码拼装
 │   │   │   │   ├── fluidRuntime.ts  # WebGL 流体渲染引擎
+│   │   │   │   ├── fluid/fluidRenderPrimitives.ts  # WebGL 自定义绘制/计算图元、帧缓冲与高度图着色器派生
 │   │   │   │   ├── terrainHeightMapSampler.ts  # 基于 Cesium 地形采样生成流体高度场矩阵
 │   │   │   │   ├── FluidSimulationPanel.vue  # 流体控制面板（高度请求 Loading i18n）
 │   │   │   │   └── FluidSimulationPanel.ts  # 流体控制面板实例层（高度请求 Loading i18n）
@@ -288,6 +302,7 @@ frontend/src/
 │   │   │   │   │   ├── planarLine.ts  # 航线实体构建（弓字形折线 + 专用 handler 起飞点拾取）
 │   │   │   │   │   ├── planarRouteKmzIO.ts  # 航线 KMZ 读写编排（面板侧入口）
 │   │   │   │   │   ├── planarRoutePlanner.ts  # 航线规划纯计算（正射/倾斜航线生成）
+│   │   │   │   │   ├── planarControllerSetup.ts  # 面状航线子处理器装配与数值参数应用辅助
 │   │   │   │   │   ├── planarRouteTurn.ts  # 转弯圆角处理（预览）
 │   │   │   │   │   ├── planarTerrain.ts  # 地形采样（AGL 仿地 + 最大地形高度）
 │   │   │   │   │   ├── wayLine/  # 航线规划算法分层
@@ -304,10 +319,13 @@ frontend/src/
 │   │   │   │   ├── dynamicObject.ts  # 动态物体
 │   │   │   │   ├── index.ts  # 路由与守卫
 │   │   │   │   ├── NavGuideHUD.vue  # 漫游导航 HUD（方向箭头+距离）
+│   │   │   │   ├── NavGuideHUD.ts  # 漫游导航 HUD 实例层（方位角箭头与目标距离实时计算）
 │   │   │   │   ├── NavTargetPicker.vue  # 导航目标选择器
+│   │   │   │   ├── NavTargetPicker.ts  # 导航目标选择器实例层（预设目标切换与地图选点）
 │   │   │   │   ├── playerController.ts  # 核心控制器类
 │   │   │   │   ├── playerDefaults.ts  # 默认配置
 │   │   │   │   ├── PlayerGuidePanel.vue  # 键位说明面板
+│   │   │   │   ├── PlayerGuidePanel.ts  # 键位说明面板实例层（展开收起与按键映射展示）
 │   │   │   │   ├── types.ts  # 类型定义
 │   │   │   │   ├── usePlayerController.ts  # Vue composable（启停/状态/地形碰撞）
 │   │   │   │   ├── systems/
@@ -322,12 +340,15 @@ frontend/src/
 │   │   │   │       ├── gltfGeometry.ts  # glTF 几何提取
 │   │   │   │       ├── math.ts  # lerp + smoothDamp 平滑阻尼
 │   │   │   │       ├── mobileControls.ts  # 移动端触控
+│   │   │   │       ├── playerModelLoader.ts  # 玩家 glTF 模型加载、包围盒归一化缩放与头部世界坐标解算
 │   │   │   │       └── terrainHelper.ts  # 地形 provider 检测
 │   │   │   ├── route-fly/
 │   │   │   │   ├── firstPersonFlyController.ts  # 路线漫游无头控制器（手绘贴地线路/表面三级采样/CZML 时间轴/camera.lookAt 第一·第三人称跟随）
+│   │   │   │   ├── routeFlyTimelineAndIo.ts  # 路线漫游三级高程采样、CZML 时间轴构建、相机跟随与路线导入导出
 │   │   │   │   └── routeSerialize.ts  # 路线数据序列化（导入/导出与本地持久化）
 │   │   │   ├── shallow-water/
 │   │   │   │   ├── ShallowWaterOverlay.vue  # 叠加层组件
+│   │   │   │   ├── ShallowWaterOverlay.ts  # 热带浅水叠加层实例层（Three.js 渲染画布挂载与销毁）
 │   │   │   │   ├── lightning.ts  # 闪电子系统（随机闪络几何 + 曝光脉冲）
 │   │   │   │   ├── composables/
 │   │   │   │   │   └── useShallowWater.ts  # 热带浅水场景生命周期（Three.js）
@@ -438,11 +459,15 @@ frontend/src/
 │   │   │   │   └── mapContextSnapshot.ts  # 发送时地图状态快照协议（runtime 主源 + URL 安全回退）
 │   │   │   ├── components/
 │   │   │   │   ├── ChatConfigPanel.vue
+│   │   │   │   ├── ChatConfigPanel.ts  # AI 对话配置面板实例层（通道切换、API Key 校验与模型选择）
 │   │   │   │   ├── ChatInputBar.vue
+│   │   │   │   ├── ChatInputBar.ts  # 对话输入栏实例层（快捷键发送、高度自适应与停止生成）
 │   │   │   │   ├── ChatMessageList.vue
+│   │   │   │   ├── ChatMessageList.ts  # 对话消息列表实例层（Markdown 渲染、代码复制与自动滚底）
 │   │   │   │   ├── ChatPanelContent.vue
 │   │   │   │   ├── ChatPanelContent.ts  # 对话容器实例层（发送编排/工具两轮调用/打字机/软取消）
 │   │   │   │   └── ChatServiceStatus.vue
+│   │   │   │   └── ChatServiceStatus.ts  # 对话服务状态栏实例层（模式徽标、额度展示与面板唤醒）
 │   │   │   ├── composables/
 │   │   │   │   ├── chatIntentFallback.ts
 │   │   │   │   ├── useAgentConfig.ts
@@ -463,7 +488,9 @@ frontend/src/
 │   │   ├── compass/
 │   │   │   ├── components/
 │   │   │   │   ├── CompassControlPanel.vue
+│   │   │   │   ├── CompassControlPanel.ts  # 罗盘控制面板实例层（主题切换、旋转锁与透明度调节）
 │   │   │   │   └── PalaceExplanationPanel.vue
+│   │   │   │   └── PalaceExplanationPanel.ts  # 罗盘宫位详解面板实例层（二十四山/二十八宿释义展示）
 │   │   │   ├── services/
 │   │   │   │   ├── CompassManager.ts  # 罗盘管理器（生命周期/事件/URL 同步薄壳）
 │   │   │   │   ├── compassCanvasStyle.ts  # 罗盘原生 Canvas 渲染样式（像素量测/视口判定/分层绘制）
@@ -617,8 +644,11 @@ frontend/src/
 │   │   │   │   └── useLayerContextMenuActions.ts
 │   │   │   ├── components/
 │   │   │   │   ├── LayerPanel.vue
+│   │   │   │   ├── LayerPanel.ts  # 图层列表面板实例层（显隐切换、透明度滑杆与顺序调整）
 │   │   │   │   ├── LayerPropertiesDialog.vue  # 图层属性弹窗
+│   │   │   │   ├── LayerPropertiesDialog.ts  # 图层属性弹窗实例层（元数据、坐标系与范围信息展示）
 │   │   │   │   ├── SharedResourceTreeItem.vue  # 共享资源树节点
+│   │   │   │   ├── SharedResourceTreeItem.ts  # 共享资源树节点实例层（目录递归展开与一键加载）
 │   │   │   │   ├── TOCPanel.vue  # TOC 宿主面板（仅模板与样式；逻辑见 TOCPanel.ts）
 │   │   │   │   ├── TOCPanel.ts  # TOC 实例层（页签/样式应用/属性表打开/生命周期编排）
 │   │   │   │   ├── TOCTreeItem.vue  # 递归树节点
@@ -631,6 +661,7 @@ frontend/src/
 │   │   │       ├── layerRemovalHandler.ts  # 图层移除回调注册表（跨域解耦：引擎域注册、common 触发）
 │   │   │       └── useTOCStore.ts  # TOC 元数据状态
 │   │   │   ├── components/AmapAoiInjectDialog.vue  # 高德 AOI 注入弹窗（引擎无关，自 ol/search 上移）
+│   │   │   ├── components/AmapAoiInjectDialog.ts  # 高德 AOI 注入弹窗实例层（JSON 解析校验与注入触发）
 │   │   │   ├── style/
 │   │   │   │   └── useStyleEditor.ts  # 样式模板目录 + 表单态 + 载荷构建（引擎无关，TOC 与 OL/Cesium 双侧消费）
 │   │   ├── map-view/
@@ -647,10 +678,15 @@ frontend/src/
 │   │   │       └── userPositionCache.ts  # 用户位置缓存
 │   │   ├── shell/
 │   │   │   ├── GlobalLoading.vue  # 全局 Loading 遮罩
+│   │   │   ├── GlobalLoading.ts  # 全局 Loading 遮罩实例层（进度文案与显隐动画过渡）
 │   │   │   ├── MagicCursor.vue  # 鼠标特效（粒子跟随）
+│   │   │   ├── MagicCursor.ts  # 鼠标粒子特效实例层（六种物理/流体粒子效果切换与 Canvas 循环）
 │   │   │   ├── Message.vue  # 消息提示 UI 组件
+│   │   │   ├── Message.ts  # 全局消息提示灵动岛实例层（队列管理、脉冲动效与详情展开）
 │   │   │   ├── PersistentAnnouncementBar.vue  # 持久公告条
+│   │   │   ├── PersistentAnnouncementBar.ts  # 持久公告条实例层（跑马灯轮播与已读折叠）
 │   │   │   ├── ResizeHandle.vue  # 面板拖拽调整手柄
+│   │   │   ├── ResizeHandle.ts  # 面板拖拽手柄实例层（指针捕获与宽度阈值钳制）
 │   │   │   ├── SidePanel.vue  # 侧边面板（Chat/工具箱/路线/罗盘/天气）
 │   │   │   ├── SidePanel.ts  # 侧边面板实例层（新闻双通道竞速/缓存兜底/页签懒挂载）
 │   │   │   ├── TopBar.vue  # 顶栏（Logo + 搜索 + 用户菜单 + 引擎切换）
@@ -690,6 +726,7 @@ frontend/src/
 │   │   │   │       ├── PreferencesTab.vue
 │   │   │   │       ├── PreferencesTab.ts  # 用户偏好设置页实例层（主题、头像与偏好草稿同步）
 │   │   │   │       └── SecurityTab.vue
+│   │   │   │       └── SecurityTab.ts  # 账户安全设置页实例层（密码修改、邮箱换绑与验证码倒计时）
 │   │   │   ├── composables/
 │   │   │   │   ├── adminTableFormat.ts  # 表格纯函数（单元格格式化/高亮/定位键/CSV 构建）
 │   │   │   │   ├── useAccountPreferences.ts  # 账户面板偏好草稿、主题切换与头像同步
@@ -729,8 +766,11 @@ frontend/src/
 │   │   └── weather/
 │   │       ├── components/
 │   │       │   ├── WeatherChartPanel.vue
+│   │       │   ├── WeatherChartPanel.ts  # 天气图表面板实例层（气温趋势与风力仪表盘挂载）
 │   │       │   ├── WeatherForecastTable.vue
+│   │       │   ├── WeatherForecastTable.ts  # 天气预报表格实例层（多日昼夜天气与风向展示）
 │   │       │   └── WeatherLiveCards.vue
+│   │       │   └── WeatherLiveCards.ts  # 实时天气卡片实例层（温湿度、风力与更新时间展示）
 │   │       ├── composables/
 │   │       │   ├── charts/  # 图表规格与运行时分层（纯 option 构建 + 实例生命周期）
 │   │       │   │   ├── layoutMetrics.ts  # 容器尺寸 → 字号/边距/仪表半径换算
@@ -769,10 +809,13 @@ frontend/src/
 │       │       └── useBasemapResilience.ts  # 底图熔断回退（超时/错误自动切换）
 │       ├── components/
 │       │   ├── AdministrativeDivisionPanel.vue
+│       │   ├── AdministrativeDivisionPanel.ts  # 行政区划面板实例层（省市区树检索、面包屑与边界定位）
 │       │   ├── AdministrativeDivisionTreeNode.vue
+│       │   ├── AdministrativeDivisionTreeNode.ts  # 行政区划树节点实例层（递归展开与双击聚焦）
 │       │   ├── ControlsPanel.vue  # 侧栏 shell（新增 engine prop：3D 时绘制/测量子面板切换为 CesiumDrawMeasurePanel，2D 保持 OL DrawPanel/MeasurePanel；cesium-draw-action 动作上抛 HomeView）
 │       │   ├── ControlsPanel.ts  # 控制面板实例层（菜单分发/子面板互斥/卷帘配置）
 │       │   ├── DrawPanel.vue
+│       │   ├── DrawPanel.ts  # 2D 绘制面板实例层（几何类型选择、样式联动与撤销清空）
 │       │   ├── LogMonitor.vue
 │       │   ├── LogMonitor.ts  # 日志监控实例层（SSE 流式接收后端日志，rAF 批量冲刷 + 超限裁剪，断线 3s 自动重连、按级别着色）
 │       │   ├── MapContainer.vue  # OL 地图容器（底图/图层/绘制/测量/启动任务）。**跨引擎契约**：`urlSyncEnabled` prop 控制是否随 moveend 写回 URL（引擎切换窗口内由父级置 false 冻结）；`isStartupViewSettled()` 暴露「启动恢复已完成且无动画/交互」判据，是 OL→Cesium 换算取实时视图的唯一前提（未稳定须改用 URL 语义参数，否则读到默认 zoom 4 或动画插值）
@@ -782,9 +825,11 @@ frontend/src/
 │       │   ├── MapDownloader.vue  # 底图下载器（框选范围 + 任务提交）⚠️ /api/download/* 后端 V3.6.5 已删，HF 404；见 Docs/TODO/plan-download-feature-git-marker.md
 │       │   ├── MapDownloader.ts  # 下载器实例层（配额估算/底图预设解析/倒计时/可视化传输）
 │       │   ├── MyDownloadTasks.vue  # 我的下载任务列表（查看/取消/下载）⚠️ 同上，接口暂不可用
+│       │   ├── MyDownloadTasks.ts  # 下载任务列表实例层（状态轮询、取消任务与文件下载）
 │       │   ├── MapSwipeController.vue  # 卷帘对比控制器
 │       │   ├── MapSwipeController.ts  # 卷帘对比控制器实例层（分屏分割位置与图层同步）
 │       │   ├── MeasurePanel.vue  # OL 测量子面板（2D：测距/测面；3D 由 CesiumDrawMeasurePanel 接管）
+│       │   ├── MeasurePanel.ts  # 2D 测量子面板实例层（测距/测面激活与单位切换）
 │       │   └── SpatialAnalysisPanel.vue
 │       │   └── SpatialAnalysisPanel.ts# 空间分析实例层（8 类工具参数与可运行判定）
 │       ├── composables/
@@ -798,6 +843,7 @@ frontend/src/
 │       │   ├── useMapState.ts  # 2D 地图状态（URL 同步/图层切换/视图动画编排）
 │       │   ├── useMapStateHelpers.ts  # 纯工具（debounce/参数解析格式化/默认底图序号）
 │       │   ├── useMapDecorations.ts  # 地图装饰图层（经纬网 + 中心点标记）
+│       │   ├── useMapBasemapInstances.ts  # 2D 底图图层实例管理（按需挂载源、显隐/ZIndex 刷新与隐藏层清理）
 │       │   ├── useMapSwipe.ts
 │       │   ├── useMapSwipeTest.ts
 │       │   ├── useMapUIEventHandlers.ts

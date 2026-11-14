@@ -117,62 +117,7 @@
   </div>
 </template>
 
-<script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from 'vue';
-import { useRouter, useRoute } from 'vue-router';
-import { useLocale } from '@common/app/useLocale';
-
-const { t } = useLocale();
-const router = useRouter();
-const route = useRoute();
-const countdown = ref(5);
-const totalCountdown = 5;
-let timer: ReturnType<typeof setInterval> | null = null;
-
-// 获取当前路径用于显示
-const currentPath = computed(() => route.fullPath || '/unknown');
-
-// 计算 SVG 环形进度条的 stroke-dashoffset
-// 半径 r = 52, 周长 = 2 * Math.PI * 52 ≈ 326.73
-const circumference = 2 * Math.PI * 52;
-
-const strokeDashoffset = computed(() => {
-  const ratio = countdown.value / totalCountdown;
-  return circumference * (1 - ratio);
-});
-
-// 返回首页
-function goHome() {
-  if (timer) {
-    clearInterval(timer);
-    timer = null;
-  }
-  router.push('/');
-}
-
-// 启动倒计时
-onMounted(() => {
-  timer = setInterval(() => {
-    countdown.value--;
-    if (countdown.value <= 0) {
-      const activeTimer = timer;
-      if (activeTimer !== null) {
-        clearInterval(activeTimer);
-      }
-      timer = null;
-      router.push('/');
-    }
-  }, 1000);
-});
-
-// 清理定时器
-onUnmounted(() => {
-  if (timer) {
-    clearInterval(timer);
-    timer = null;
-  }
-});
-</script>
+<script lang="ts" src="./NotFoundView.ts"></script>
 
 <style scoped>
 /* 核心容器 */
