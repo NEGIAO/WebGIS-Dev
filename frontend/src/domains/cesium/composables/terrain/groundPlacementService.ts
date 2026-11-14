@@ -153,8 +153,8 @@ export interface ReapplySummary {
  */
 export async function reapplyAllOnTerrainChange(params: {
     records: any[];
-    viewer: any;
-    Cesium: any;
+    viewer?: any;
+    Cesium?: any;
     dataImport?: any;
     onApplied?: (record: any, result: GroundResult) => void;
 }): Promise<ReapplySummary> {
@@ -190,8 +190,8 @@ export async function reapplyAllOnTerrainChange(params: {
  * 由地形就绪事件调用；未就绪时直接返回，不清队列（等地形真的起来再补）。
  */
 export async function flushPendingGroundFits(params: {
-    viewer: any;
-    Cesium: any;
+    viewer?: any;
+    Cesium?: any;
     dataImport?: any;
     onApplied?: (record: any, result: GroundResult) => void;
 }): Promise<ReapplySummary> {

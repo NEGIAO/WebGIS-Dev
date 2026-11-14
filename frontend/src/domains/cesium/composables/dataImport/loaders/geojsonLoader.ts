@@ -23,7 +23,7 @@ const MAX_EXTRUDE_METERS = 1500;
  * @param {Cesium} Cesium - 命名空间（取当前时间求值）
  * @returns {number|null} 合法正高度，无则 null
  */
-function readFeatureHeightMeters(entity, Cesium) {
+function readFeatureHeightMeters(entity: any, Cesium: any): number | null {
     const bag = entity?.properties;
     if (!bag) return null;
     for (const key of HEIGHT_PROPERTY_KEYS) {
@@ -48,7 +48,7 @@ function readFeatureHeightMeters(entity, Cesium) {
  * 此处显式 height=0 走 Primitive 体渲染，挤出才有保障）。无高度的要素保持贴地原样。
  * @returns {number} 被拉伸的要素数
  */
-function extrudePolygonsByHeight(dataSource, Cesium) {
+function extrudePolygonsByHeight(dataSource: any, Cesium: any): number {
     const entities = dataSource?.entities?.values;
     if (!entities) return 0;
     let count = 0;
@@ -76,6 +76,22 @@ function extrudePolygonsByHeight(dataSource, Cesium) {
  * @param {{ current: number }} ctx.nextId
  * @returns {Promise<{id: string, name: string, type: string, entity: Cesium.GeoJsonDataSource}>}
  */
+export interface GeoJsonLoadOptions {
+    file: File;
+    overrideCrs?: string;
+    rememberSnapshot?: boolean;
+    silent?: boolean;
+    getCesium: () => any;
+    getViewer: () => any;
+    message?: {
+        success?: (msg: string) => any;
+        warning?: (msg: string, opts?: any) => any;
+        error?: (msg: string, opts?: any) => any;
+    };
+    loadedDataSources: { value: any[] };
+    nextId: { current: number };
+}
+
 export async function loadGeoJSON({
     file,
     overrideCrs = '',
@@ -95,7 +111,7 @@ export async function loadGeoJSON({
     message,
     loadedDataSources,
     nextId,
-}) {
+}: GeoJsonLoadOptions) {
     const Cesium = getCesium();
     const viewer = getViewer();
     if (!Cesium || !viewer) throw new Error('Cesium 未初始化');
@@ -159,7 +175,7 @@ export async function loadGeoJSON({
         // 后端 /api/proxy/geo/epsg 兜底；否则 reprojectGeoJSON 会直接抛 UNSUPPORTED_PROJECTED_CRS。
         const available = await ensureProjectionAvailable(projection.sourceCrs);
         if (!available) {
-            message.error(
+            message?.error?.(
                 `"${file.name}" 的源坐标系 ${projection.sourceCrs} 无法解析，请在导入区「源坐标系」中手动指定后重试`,
                 { closable: true, duration: 0 },
             );
@@ -183,14 +199,14 @@ export async function loadGeoJSON({
               : 0;
         const allDropped = isCollection ? remain === 0 : dropped > 0;
         if (!remain || allDropped) {
-            message.error(
+            message?.error?.(
                 `"${file.name}" 按 ${available} 转换后没有有效要素，已放弃导入（未加载任何数据）`,
                 { closable: true, duration: 0 },
             );
             throw new Error('投影转换后无有效要素');
         }
         if (dropped > 0) {
-            message.warning(
+            message?.warning?.(
                 `"${file.name}" 有 ${dropped} 个要素落在有效范围外，已跳过（其余 ${remain} 个已导入）`,
                 { duration: 5200 },
             );
@@ -246,7 +262,7 @@ export async function loadGeoJSON({
     }
 
     if (!silent) {
-        message.success(
+        message?.success?.(
             extrudedCount > 0
                 ? `GeoJSON "${file.name}" 加载成功，已按高度拉伸 ${extrudedCount} 栋`
                 : `GeoJSON "${file.name}" 加载成功`,

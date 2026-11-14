@@ -1,7 +1,7 @@
 // bundle-shaders.mjs — 体积云 shader bundle 生成器（真源 → 副本单向同步）
 //
 // 真源:src/domains/cesium/modules/cloud/lib/AtmosphereFromThreeGeospatial/Shaders/
-// 副本①:src/domains/cesium/modules/cloud/lib/shaders/bundledShaders.js(运行时唯一真源,
+// 副本①:src/domains/cesium/modules/cloud/lib/shaders/bundledShaders.ts(运行时唯一真源,
 //        shaderLoader.js bundle 优先命中,fetch 仅回退)
 // 副本②:public/cloud-atmosphere/shaders/(fetch 回退镜像)
 //
@@ -29,7 +29,7 @@ function resolveFrontendRoot() {
 }
 
 const SHADERS_REL = 'src/domains/cesium/modules/cloud/lib/AtmosphereFromThreeGeospatial/Shaders';
-const BUNDLE_REL = 'src/domains/cesium/modules/cloud/lib/shaders/bundledShaders.js';
+const BUNDLE_REL = 'src/domains/cesium/modules/cloud/lib/shaders/bundledShaders.ts';
 const MIRROR_REL = 'public/cloud-atmosphere/shaders';
 const SHADER_EXT = /\.(glsl|frag|vert)$/;
 

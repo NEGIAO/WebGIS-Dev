@@ -3,48 +3,28 @@
  *
  * 从浮层页方案 PlanarRoute.ts 迁移：剥离 Vue 组件与 Element Plus UI，
  * 由 toolPanel 模块卡片（PlanarRouteModule.js + LilGuiControls）驱动。
- * 职责：参考起飞点拾取 / 测区绘制交互 / 航线规划计算 / Cesium 渲染 /
- *       KMZ 导入导出 / 测区顶点拖拽与删除浮层 / 状态快照上报。
+ * 职责：装配子处理器 + 生命周期 / 参数下发 / 状态快照；
+ *       测区交互见 composables/usePolygonAreaEditor、航线计算见 utils/planarRoutePlanner、
+ *       KMZ 存取见 utils/planarRouteKmzIO。
  */
 import { ref } from 'vue';
 import Cesium from 'cesium';
-import Subscriber from '@cesium-extends/subscriber';
 import { useMessage } from '@common/shell/useMessage';
 import { translate as t } from '@common/app/useLocale';
-import { calculateCameraFieldOfView, M3TD_WIDE_CAMERA } from './config/cameraConfig';
-import globeConfig, { applyFlightSpeedLimit, PLANAR_SPEED_HARD_MAX } from './config/planarConfig';
-import { drawPolygon, movePolygon, PolygonDrawingResult } from './utils/drawPolygon';
-import { calculateFiveDirectionRoutes, FiveDirectionRouteKey, FiveDirectionRoutePlan } from './utils/obliqueRoute';
-import { buildPlanarKmz, PlanarKmzRoute } from './utils/planarKmzExport';
+import globeConfig, { PLANAR_SPEED_HARD_MAX } from './config/planarConfig';
+import { PolygonDrawingResult } from './utils/drawPolygon';
 import { addStartPoint, calculateArea, cancelStartPointPick, hideStartPointTip } from './utils/planarLine';
-import { roundPlanarRouteSegments } from './utils/planarRouteTurn';
-import { calculateMaximumLineSpacing, calculatePhotoDistance, calculatePlanarRoute, LocalPoint } from './utils/wayLineCalc';
-import {
-	calculateCartesianRouteLength,
-	createCartesianRouteSegments,
-	createLocalCoordinateFrame,
-	LocalRouteSegment,
-	sampleMaximumTerrainHeightAlongSegments,
-} from './utils/planarTerrain';
-import { downloadBlobFile } from './utils/comm';
+import type { FiveDirectionRouteKey } from './utils/obliqueRoute';
 import { LineAngleHandler } from './composables/useLineAngle';
 import { KmzImportHandler, PlannedRouteData as KmzPlannedRouteData } from './composables/useKmzImport';
 import { RouteRenderer } from './composables/useCesiumRenderer';
-import {
-	connectTakeoffToFirstWaypoint,
-	getFirstLocalRoutePoint,
-	getFirstCartesianRoutePoint,
-	calculateRoutePhotoCount,
-	flattenRouteCoordinates,
-	resolveFlightHeight,
-} from './composables/useRouteCalc';
+import { connectTakeoffToFirstWaypoint, calculateRoutePhotoCount, flattenRouteCoordinates } from './composables/useRouteCalc';
+import { PolygonAreaEditor } from './composables/usePolygonAreaEditor';
+import { PlanarRouteKmzIO } from './utils/planarRouteKmzIO';
+import { planPlanarRoutes } from './utils/planarRoutePlanner';
 
 /** 全局消息提示（项目自有 toast，替代源工程 ElMessage） */
 const message = useMessage();
-
-interface PickedEntityResult {
-	id?: Cesium.Entity & { customData?: number };
-}
 
 interface RouteSummary {
 	id: number;
@@ -89,9 +69,9 @@ export interface PlanarRouteControllerOptions {
 	onWorkingSetChange?: (info: { present: boolean; name: string; dataSource: Cesium.CustomDataSource | null }) => void;
 }
 
-const DELETE_BUTTON_ID = 'planar-delete-area-btn';
-
 export class PlanarRouteController {
+
+
 	private options: PlanarRouteControllerOptions;
 
 	// ========== 响应式状态（上报源） ==========
@@ -108,28 +88,54 @@ export class PlanarRouteController {
 	private routeCalculationVersion = 0;
 	private photoDistance = 0;
 	private plannedRoutes: PlannedRouteData[] = [];
-	private stopPolygonDrawing: (() => void) | null = null;
-	private polygonRightClickEnableTimer: ReturnType<typeof setTimeout> | null = null;
-	private isPolygonRightClickEnabled = false;
 	private entityObjPolygonObj: PolygonDrawingResult | null = null;
 	private drawDataSource: Cesium.CustomDataSource | null = null;
-	private subscriber: Subscriber | null = null;
 	/** 方向指示器绝对高度（略高于航线），重规划期间保留以免指示器掉到地面或消失 */
 	private lineAngleIndicatorHeight = 0;
 	/** 已绑定的宿主 Viewer（bind 幂等判断用） */
 	private boundViewer: Cesium.Viewer | null = null;
-	/** 测区删除浮层按钮（自管理 DOM，挂宿主 Viewer 容器） */
-	private deleteButtonEl: HTMLDivElement | null = null;
 	/** 工作集是否已登记到统一图层管理 */
 	private workingSetRegistered = false;
 
+	private areaEditor: PolygonAreaEditor;
+	private kmzIO: PlanarRouteKmzIO;
 	private kmzImporter!: KmzImportHandler;
 	private lineAngleHandler!: LineAngleHandler;
 	private routeRenderer!: RouteRenderer;
 
 	constructor(options: PlanarRouteControllerOptions) {
 		this.options = options;
+		this.areaEditor = new PolygonAreaEditor({
+			getViewer: () => window.mainViewer ?? null,
+			getEntity: () => this.entityObjPolygonObj,
+			setEntity: (value) => {
+				this.entityObjPolygonObj = value;
+			},
+			onAreaUpdated: () => this.updatePolygonArea(),
+			onStateChange: () => this.emitState(),
+			requestRecalculate: () => {
+				void this.recalculateRoute();
+			},
+			requestDelete: () => this.delPoy(),
+			resetLineAngleManual: () => {
+				this.lineAngleHandler.isLineAngleManual = false;
+			},
+		});
 		this.initSubHandlers();
+		this.kmzIO = new PlanarRouteKmzIO({
+			isImporting: this.isImporting,
+			hasRoute: this.hasRoute,
+			kmzImporter: this.kmzImporter,
+			getPolygonPositions: () => this.entityObjPolygonObj?.polygonPositions ?? null,
+			getPlannedRoutes: () => this.plannedRoutes,
+			getPhotoDistance: () => this.photoDistance,
+			getRouteName: () => this.routeName.value,
+			setRouteName: (name) => {
+				this.routeName.value = name;
+			},
+			isObliqueMode: () => this.isObliqueMode,
+			onStateChange: () => this.emitState(),
+		});
 	}
 
 	/** 是否为倾斜采集（五向航线）模式 */
@@ -163,9 +169,9 @@ export class PlanarRouteController {
 			},
 			bumpVersion: () => ++self.routeCalculationVersion,
 			clearCurrentRouteState: (p) => self.clearCurrentRouteState(p),
-			setupPolygonSubscriber: () => self.setupPolygonSubscriber(),
+			setupPolygonSubscriber: () => self.areaEditor.setupSubscriber(),
 			enablePolygonRightClick: () => {
-				self.isPolygonRightClickEnabled = true;
+				self.areaEditor.enableRightClick();
 			},
 			applyPlannedRoutes: (r, p) => self.applyPlannedRoutes(r, p),
 			waitForRoutePreviewReady: (v) => self.routeRenderer.waitForRoutePreviewReady(v),
@@ -219,7 +225,7 @@ export class PlanarRouteController {
 		this.drawDataSource = new Cesium.CustomDataSource('drawDataSource');
 		void viewer.dataSources.add(this.drawDataSource);
 		this.drawDataSource.show = true;
-		this.ensureDeleteButton(viewer);
+		this.areaEditor.ensureDeleteButton(viewer);
 		viewer.scene.requestRender();
 		this.emitState();
 	}
@@ -232,24 +238,15 @@ export class PlanarRouteController {
 		this.routeCalculationVersion++;
 		this.routeRenderer.cancelRoutePreviewReadyWait();
 		this.kmzImporter.cancelImportedTerrainCorrection();
-		this.stopPolygonDrawing?.();
-		this.stopPolygonDrawing = null;
-		if (this.polygonRightClickEnableTimer) {
-			clearTimeout(this.polygonRightClickEnableTimer);
-			this.polygonRightClickEnableTimer = null;
-		}
+		this.areaEditor.dispose();
 		this.lineAngleHandler.teardownSliderInteraction();
 		this.lineAngleHandler.cancelIndicatorHide();
 		this.cancelTakeoffPointSelection();
-		this.subscriber?.destroy();
-		this.subscriber = null;
 		const viewer = window.mainViewer ?? this.boundViewer;
 		if (viewer && this.drawDataSource) {
 			void viewer.dataSources.remove(this.drawDataSource, true);
 		}
 		this.drawDataSource = null;
-		this.deleteButtonEl?.remove();
-		this.deleteButtonEl = null;
 		document.getElementById('planar-kinks-tip')?.remove();
 		this.entityObjPolygonObj = null;
 		this.plannedRoutes = [];
@@ -330,17 +327,9 @@ export class PlanarRouteController {
 		this.routeCalculationVersion++;
 		this.kmzImporter.cancelImportedTerrainCorrection();
 		this.cancelTakeoffPointSelection();
-		this.stopPolygonDrawing?.();
-		this.stopPolygonDrawing = null;
-		if (this.polygonRightClickEnableTimer) {
-			clearTimeout(this.polygonRightClickEnableTimer);
-			this.polygonRightClickEnableTimer = null;
-		}
+		this.areaEditor.reset();
 		this.lineAngleHandler.teardownSliderInteraction();
 		this.lineAngleHandler.hideIndicator();
-		this.subscriber?.destroy();
-		this.subscriber = null;
-		this.hideDeleteButton();
 		document.getElementById('planar-kinks-tip')?.remove();
 
 		this.entityObjPolygonObj = null;
@@ -388,7 +377,7 @@ export class PlanarRouteController {
 			this.cancelTakeoffPointSelection();
 			// 取消重设：恢复测区绘制或顶点编辑
 			if (this.entityObjPolygonObj) {
-				this.setupPolygonSubscriber();
+				this.areaEditor.setupSubscriber();
 			} else if (this.flyPot) {
 				this.drawWay(this.flyPot);
 			}
@@ -396,16 +385,13 @@ export class PlanarRouteController {
 			return;
 		}
 
-		const wasDrawingPolygon = !!this.stopPolygonDrawing;
 		// 暂停未完成的测区绘制监听（独立 ScreenSpaceEventHandler，会与起飞点拾取抢点击）
-		this.stopPolygonDrawing?.();
-		this.stopPolygonDrawing = null;
+		const wasDrawingPolygon = this.areaEditor.suspendDrawing();
 		if (wasDrawingPolygon) {
 			this.drawDataSource?.entities.removeAll();
 		}
 		// 已完成测区时暂停顶点点击订阅，同样避免抢 LEFT_CLICK
-		this.subscriber?.destroy();
-		this.subscriber = null;
+		this.areaEditor.destroySubscriber();
 
 		addStartPoint(window.mainViewer!, (position?: Cesium.Cartesian3) => {
 			this.pickingTakeoff.value = false;
@@ -413,7 +399,7 @@ export class PlanarRouteController {
 				this.flyPot = position;
 			}
 			if (this.entityObjPolygonObj) {
-				this.setupPolygonSubscriber();
+				this.areaEditor.setupSubscriber();
 				this.emitState();
 				void this.recalculateRoute();
 				return;
@@ -445,55 +431,6 @@ export class PlanarRouteController {
 	//#region 业务逻辑 - 测区绘制与编辑
 
 	/**
-	 * 注册测区删除浮层和顶点拖动交互。
-	 */
-	private setupPolygonSubscriber(): void {
-		this.subscriber?.destroy();
-		const viewer = window.mainViewer;
-		if (!viewer) {
-			return;
-		}
-		this.subscriber = new Subscriber(viewer, { pickResult: { enable: true, moveDebounce: 3000 } });
-		this.subscriber.addExternal(() => {
-			this.hideDeleteButton();
-		}, 'LEFT_DOWN');
-		this.subscriber.addExternal(() => {
-			this.hideDeleteButton();
-		}, 'MIDDLE_DOWN');
-		this.subscriber.addExternal((movement) => {
-			if (!this.isPolygonRightClickEnabled) {
-				this.hideDeleteButton();
-				return;
-			}
-			const pick = movement.position;
-			const pickedObject = window.mainViewer!.scene.pick(pick) as PickedEntityResult | undefined;
-			if (!pick || pickedObject?.id?.name !== 'polygon') {
-				this.hideDeleteButton();
-				return;
-			}
-			this.showDeleteButtonAtCanvasPosition(pick);
-			window.mainViewer!.scene.requestRender();
-		}, 'RIGHT_CLICK');
-		this.subscriber.addExternal((movement) => {
-			if (!this.entityObjPolygonObj) {
-				return;
-			}
-			const pickedObject = window.mainViewer!.scene.pick(movement.position) as PickedEntityResult | undefined;
-			if (pickedObject?.id?.name !== 'polygonPoint' || pickedObject.id.customData === undefined) {
-				this.hideDeleteButton();
-				return;
-			}
-
-			this.entityObjPolygonObj.pointTndex = pickedObject.id.customData;
-			movePolygon(this.entityObjPolygonObj, window.mainViewer!, (value) => {
-				this.entityObjPolygonObj = value as PolygonDrawingResult;
-				this.updatePolygonArea();
-				void this.recalculateRoute();
-			});
-		}, 'LEFT_CLICK');
-	}
-
-	/**
 	 * 设置绘制测区所需的地图交互（拾取起飞点成功后自动进入）。
 	 */
 	drawWay = (position?: Cesium.Cartesian3) => {
@@ -503,34 +440,7 @@ export class PlanarRouteController {
 		}
 
 		this.flyPot = position;
-		this.lineAngleHandler.isLineAngleManual = false;
-		this.isPolygonRightClickEnabled = false;
-		if (this.polygonRightClickEnableTimer) {
-			clearTimeout(this.polygonRightClickEnableTimer);
-			this.polygonRightClickEnableTimer = null;
-		}
-		this.stopPolygonDrawing?.();
-		this.stopPolygonDrawing = null;
-		this.setupPolygonSubscriber();
-
-		this.stopPolygonDrawing = drawPolygon(
-			window.mainViewer,
-			(value) => {
-				this.stopPolygonDrawing = null;
-				this.entityObjPolygonObj = value as PolygonDrawingResult;
-				this.polygonRightClickEnableTimer = setTimeout(() => {
-					this.isPolygonRightClickEnabled = true;
-					this.polygonRightClickEnableTimer = null;
-				}, 0);
-				this.updatePolygonArea();
-				this.emitState();
-				void this.recalculateRoute();
-			},
-			() => {
-				this.stopPolygonDrawing = null;
-				this.delPoy();
-			},
-		);
+		this.areaEditor.startDrawing(window.mainViewer);
 	};
 
 	/**
@@ -551,19 +461,10 @@ export class PlanarRouteController {
 		this.routeCalculationVersion++;
 		this.kmzImporter.cancelImportedTerrainCorrection();
 		this.cancelTakeoffPointSelection();
-		this.isPolygonRightClickEnabled = false;
-		if (this.polygonRightClickEnableTimer) {
-			clearTimeout(this.polygonRightClickEnableTimer);
-			this.polygonRightClickEnableTimer = null;
-		}
-		this.stopPolygonDrawing?.();
-		this.stopPolygonDrawing = null;
+		this.areaEditor.reset();
 		this.lineAngleHandler.teardownSliderInteraction();
 		this.lineAngleHandler.hideIndicator();
 		this.drawDataSource?.entities.removeAll();
-		this.hideDeleteButton();
-		this.subscriber?.destroy();
-		this.subscriber = null;
 		this.entityObjPolygonObj = null;
 		this.routeRenderer.clearRoutePreview();
 		this.plannedRoutes = [];
@@ -594,91 +495,13 @@ export class PlanarRouteController {
 	 * 更新测区面积和共享测区坐标。
 	 */
 	private updatePolygonArea(): void {
-		if (!this.entityObjPolygonObj) {
+		const entity = this.entityObjPolygonObj;
+		if (!entity) {
 			return;
 		}
-		const positions = this.entityObjPolygonObj.polygonPositions;
+		const positions = entity.polygonPositions;
 		globeConfig.polygonPositions = positions;
 		globeConfig.area = Number(calculateArea(positions).toFixed(2));
-	}
-
-	/**
-	 * 确保测区删除浮层按钮存在（挂宿主 Viewer 容器，内联样式自管理）。
-	 */
-	private ensureDeleteButton(viewer: Cesium.Viewer): void {
-		if (this.deleteButtonEl) {
-			return;
-		}
-		const host = (viewer.container as HTMLElement | undefined) ?? document.body;
-		const btn = document.createElement('div');
-		btn.id = DELETE_BUTTON_ID;
-		btn.textContent = t('cesium.module.planarRoute.msg.deleteAreaBtn');
-		Object.assign(btn.style, {
-			display: 'none',
-			position: 'absolute',
-			zIndex: '30',
-			color: '#fff',
-			cursor: 'pointer',
-			padding: '8px 12px',
-			background: '#1f1f1f',
-			borderRadius: '4px',
-			minWidth: '196px',
-			fontSize: '14px',
-			lineHeight: '22px',
-			textAlign: 'center',
-			boxShadow: '0 0 8px rgba(0, 0, 0, 0.15)',
-		});
-		btn.addEventListener('mouseenter', () => {
-			btn.style.background = '#0075ff';
-		});
-		btn.addEventListener('mouseleave', () => {
-			btn.style.background = '#1f1f1f';
-		});
-		btn.addEventListener('click', () => {
-			this.hideDeleteButton();
-			this.delPoy();
-		});
-		host.appendChild(btn);
-		this.deleteButtonEl = btn;
-	}
-
-	/**
-	 * 将 Cesium 画布坐标换算为相对宿主容器坐标后显示删除按钮。
-	 */
-	private showDeleteButtonAtCanvasPosition(canvasPosition: { x: number; y: number }): void {
-		const btn = this.deleteButtonEl;
-		const viewer = window.mainViewer;
-		if (!btn || !viewer) {
-			return;
-		}
-		const canvas = viewer.canvas;
-		const canvasRect = canvas.getBoundingClientRect();
-		const host = (viewer.container as HTMLElement | undefined) ?? btn.parentElement;
-		if (!(host instanceof HTMLElement)) {
-			btn.style.left = `${canvasPosition.x}px`;
-			btn.style.top = `${canvasPosition.y}px`;
-			btn.style.display = 'block';
-			return;
-		}
-		const hostRect = host.getBoundingClientRect();
-		const canvasScaleX = canvas.clientWidth > 0 ? canvasRect.width / canvas.clientWidth : 1;
-		const canvasScaleY = canvas.clientHeight > 0 ? canvasRect.height / canvas.clientHeight : 1;
-		const visualX = canvasRect.left + canvasPosition.x * canvasScaleX;
-		const visualY = canvasRect.top + canvasPosition.y * canvasScaleY;
-		const hostScaleX = hostRect.width > 0 ? host.clientWidth / hostRect.width : 1;
-		const hostScaleY = hostRect.height > 0 ? host.clientHeight / hostRect.height : 1;
-		btn.style.left = `${(visualX - hostRect.left) * hostScaleX}px`;
-		btn.style.top = `${(visualY - hostRect.top) * hostScaleY}px`;
-		btn.style.display = 'block';
-	}
-
-	/**
-	 * 隐藏测区删除浮层。
-	 */
-	private hideDeleteButton(): void {
-		if (this.deleteButtonEl) {
-			this.deleteButtonEl.style.display = 'none';
-		}
 	}
 
 	//#endregion 业务逻辑 - 测区绘制与编辑 END
@@ -781,135 +604,24 @@ export class PlanarRouteController {
 
 	/**
 	 * 打开系统文件选择器选择 KMZ 并导入（替代原 el-upload）。
-	 * change/cancel 后移除临时 input，避免取消选择时残留游离 DOM。
 	 */
 	pickAndImportKmz(): void {
-		const input = document.createElement('input');
-		input.type = 'file';
-		input.accept = '.kmz';
-		input.style.display = 'none';
-		const cleanup = () => input.remove();
-		input.addEventListener('cancel', cleanup);
-		input.addEventListener('change', () => {
-			cleanup();
-			const file = input.files?.[0];
-			if (file) {
-				void this.importKmzFile(file);
-			}
-		});
-		document.body.appendChild(input);
-		input.click();
+		this.kmzIO.pickAndImportKmz();
 	}
 
 	/**
 	 * 选择 KMZ 文件后启动面状航线导入。
+	 * @param file 用户选择的 KMZ 文件
 	 */
 	async importKmzFile(file: File): Promise<void> {
-		if (this.isImporting.value) {
-			return;
-		}
-		this.recordImportedWaylineName(file.name);
-		await this.kmzImporter.importPlanarKmz(file);
-		this.syncRouteNameFromSession();
-		this.emitState();
-	}
-
-	/**
-	 * 记录导入文件名，供保存航线时回填默认名称。
-	 * @param fileName 原始文件名
-	 */
-	private recordImportedWaylineName(fileName: string): void {
-		const raw = (fileName || '').trim();
-		if (!raw) return;
-		const name = raw.replace(/\.kmz$/i, '');
-		if (name) {
-			sessionStorage.setItem('aircraftName', name);
-			this.routeName.value = name;
-		}
-	}
-
-	/** 导入完成后从会话缓存同步默认文件名。 */
-	private syncRouteNameFromSession(): void {
-		const cached = (sessionStorage.getItem('aircraftName') || '').trim();
-		if (cached && !this.routeName.value.trim()) {
-			this.routeName.value = cached;
-		}
+		await this.kmzIO.importKmzFile(file);
 	}
 
 	/**
 	 * 保存航线：校验后由当前地图航线生成 KMZ 并下载（替代原 SaveAirlineDialog）。
 	 */
 	async saveKmz(): Promise<void> {
-		if (!this.hasRoute.value) {
-			message.warning(t('cesium.module.planarRoute.msg.saveNeedRoute'));
-			return;
-		}
-		if (!globeConfig.flyPosition) {
-			message.warning(t('cesium.module.planarRoute.err.setTakeoffFirst'));
-			return;
-		}
-		const name = this.resolveSaveName();
-		try {
-			const blob = await this.buildCurrentWaylineKmz();
-			downloadBlobFile(blob, `${name}.kmz`);
-			message.success(t('cesium.module.planarRoute.msg.savedOk', { name }));
-		} catch (error) {
-			const msg = error instanceof Error ? error.message : t('cesium.module.planarRoute.msg.exportFailed');
-			message.error(msg);
-		}
-	}
-
-	/** 解析保存文件名：面板输入 > 会话缓存 > 本地化默认名。 */
-	private resolveSaveName(): string {
-		let name = this.routeName.value.trim();
-		if (!name) {
-			name = (sessionStorage.getItem('aircraftName') || '').trim();
-		}
-		if (!name) {
-			name = t('cesium.module.planarRoute.msg.defaultRouteName');
-		}
-		sessionStorage.setItem('aircraftName', name);
-		this.routeName.value = name;
-		return name;
-	}
-
-	/** 由当前地图航线生成 KMZ Blob。 */
-	private async buildCurrentWaylineKmz(): Promise<Blob> {
-		const polygonPositions = this.entityObjPolygonObj?.polygonPositions;
-		if (!polygonPositions || polygonPositions.length < 3 || this.plannedRoutes.length === 0 || !this.hasRoute.value) {
-			throw new Error(t('cesium.module.planarRoute.msg.saveNeedBoth'));
-		}
-		if (!globeConfig.flyPosition) {
-			throw new Error(t('cesium.module.planarRoute.err.setTakeoffFirst'));
-		}
-
-		const routes: PlanarKmzRoute[] = [];
-		for (let routeIndex = 0; routeIndex < this.plannedRoutes.length; routeIndex++) {
-			const route = this.plannedRoutes[routeIndex];
-			routes.push({
-				id: route.id,
-				headingDegrees: route.headingDegrees,
-				gimbalPitchDegrees: route.gimbalPitchDegrees,
-				segments: route.exportSegments,
-			});
-		}
-
-		return await buildPlanarKmz({
-			isOblique: this.isObliqueMode,
-			polygonPositions,
-			takeoffPosition: globeConfig.flyPosition,
-			routes,
-			lineAngle: Number(globeConfig.lineAngle),
-			lineHeight: Number(globeConfig.lineHeight),
-			heightType: Number(globeConfig.heightType),
-			flightSpeed: applyFlightSpeedLimit(this.photoDistance),
-			transitionalSpeed: Number(globeConfig.takeoffSpeed),
-			overlapW: Number(globeConfig.overlapW),
-			overlapH: Number(globeConfig.overlapH),
-			gimbalPitchDegrees: Number(globeConfig.smartObliqueGimbalPitch),
-			photoTriggerMode: globeConfig.photoTriggerMode,
-			photoDistance: this.photoDistance,
-		});
+		await this.kmzIO.saveKmz();
 	}
 
 	//#endregion 业务逻辑 - KMZ 导入导出 END
@@ -930,6 +642,7 @@ export class PlanarRouteController {
 
 	/**
 	 * 根据当前测区、地形、相机和面板参数重新生成正射或五向倾斜航线。
+	 * 计算本体在 utils/planarRoutePlanner（纯计算 + 版本过期即中断），此处只做编排与状态收敛。
 	 */
 	recalculateRoute = async (): Promise<void> => {
 		const polygonPositions = this.entityObjPolygonObj?.polygonPositions;
@@ -943,157 +656,19 @@ export class PlanarRouteController {
 		this.routeRenderer.clearRoutePreview();
 
 		try {
-			const frame = createLocalCoordinateFrame(polygonPositions);
-			const localPolygon: LocalPoint[] = [];
-			for (let index = 0; index < polygonPositions.length; index++) {
-				localPolygon.push(frame.toLocal(polygonPositions[index]));
-			}
-
-			const heightResult = await resolveFlightHeight(window.mainViewer, frame, localPolygon);
-			if (version !== this.routeCalculationVersion) {
+			const result = await planPlanarRoutes({
+				viewer: window.mainViewer,
+				polygonPositions,
+				isObliqueMode: this.isObliqueMode,
+				isLineAngleManual: this.lineAngleHandler.isLineAngleManual,
+				previousPhotoDistance: this.photoDistance,
+				isStale: () => version !== this.routeCalculationVersion,
+			});
+			if (!result) {
 				return;
 			}
-
-			const minimumGroundClearance = heightResult.minimumGroundClearance;
-			if (minimumGroundClearance <= 0) {
-				throw new Error(t('cesium.module.planarRoute.err.insufficientFlightHeight'));
-			}
-
-			const cameraFieldOfView = calculateCameraFieldOfView(M3TD_WIDE_CAMERA);
-			const crossTrackFov = cameraFieldOfView.horizontalDegrees;
-			const halfFovRadians = (crossTrackFov * Math.PI) / 360;
-			const footprintWidth = 2 * minimumGroundClearance * Math.tan(halfFovRadians);
-			const maximumLineSpacing = calculateMaximumLineSpacing(minimumGroundClearance, crossTrackFov, Number(globeConfig.overlapW));
-			const photoDistance = calculatePhotoDistance(minimumGroundClearance, cameraFieldOfView.verticalDegrees, Number(globeConfig.overlapH));
-			// 建议限速随拍照间距更新；仅间距变化时同步为建议值，手动调速（最高 15）不被压回
-			const previousPhotoDistance = this.photoDistance;
-			const syncToSuggested = !(previousPhotoDistance > 0 && Math.abs(previousPhotoDistance - photoDistance) < 1e-6);
-			applyFlightSpeedLimit(photoDistance, syncToSuggested);
-			const takeoffPoint = globeConfig.flyPosition ? frame.toLocal(globeConfig.flyPosition) : undefined;
-			let localRoutes: FiveDirectionRoutePlan[];
-			if (this.isObliqueMode) {
-				const manualAngle = this.lineAngleHandler.isLineAngleManual ? Number(globeConfig.lineAngle) : undefined;
-				const result = calculateFiveDirectionRoutes({
-					polygon: localPolygon,
-					maximumLineSpacing,
-					footprintWidth,
-					minimumGroundClearance,
-					gimbalPitchDegrees: Number(globeConfig.smartObliqueGimbalPitch),
-					takeoffPoint,
-					manualAngle,
-				});
-				localRoutes = result.routes;
-				if (!this.lineAngleHandler.isLineAngleManual) {
-					globeConfig.lineAngle = Number(result.angle.toFixed(1));
-				}
-				globeConfig.spacing = Number(result.lineSpacing.toFixed(2));
-			} else {
-				const manualAngle = this.lineAngleHandler.isLineAngleManual ? Number(globeConfig.lineAngle) : undefined;
-				const plan = calculatePlanarRoute({
-					polygon: localPolygon,
-					maximumLineSpacing,
-					footprintWidth,
-					takeoffPoint,
-					manualAngle,
-				});
-				if (!this.lineAngleHandler.isLineAngleManual) {
-					globeConfig.lineAngle = Number(plan.angle.toFixed(1));
-				}
-				globeConfig.spacing = Number(plan.lineSpacing.toFixed(2));
-				localRoutes = [
-					{
-						id: 1,
-						key: 'nadir',
-						label: t('cesium.module.planarRoute.option.nadir'),
-						gimbalPitchDegrees: -90,
-						segments: plan.segments,
-					},
-				];
-			}
-
-			if (Number(globeConfig.heightType) !== 3) {
-				const allSegments: LocalRouteSegment[] = [];
-				for (let routeIndex = 0; routeIndex < localRoutes.length; routeIndex++) {
-					for (let segmentIndex = 0; segmentIndex < localRoutes[routeIndex].segments.length; segmentIndex++) {
-						allSegments.push(localRoutes[routeIndex].segments[segmentIndex]);
-					}
-					const firstLocalWaypoint = getFirstLocalRoutePoint(localRoutes[routeIndex].segments);
-					if (takeoffPoint && firstLocalWaypoint) {
-						allSegments.push({ type: 'transit', points: [takeoffPoint, firstLocalWaypoint] });
-					}
-				}
-				const maximumRouteTerrainHeight = await sampleMaximumTerrainHeightAlongSegments(window.mainViewer, frame, allSegments);
-				if (version !== this.routeCalculationVersion) {
-					return;
-				}
-				if (!Number.isFinite(heightResult.absoluteFlightHeight) || heightResult.absoluteFlightHeight! <= maximumRouteTerrainHeight) {
-					throw new Error(t('cesium.module.planarRoute.err.terrainTooHighForPlan'));
-				}
-			}
-
-			const plannedRoutes: PlannedRouteData[] = [];
-			for (let routeIndex = 0; routeIndex < localRoutes.length; routeIndex++) {
-				const localRoute = localRoutes[routeIndex];
-				const rawCartesianSegments = await createCartesianRouteSegments(window.mainViewer, frame, localRoute.segments, {
-					heightType: Number(globeConfig.heightType),
-					lineHeight: Number(globeConfig.lineHeight),
-					absoluteFlightHeight: heightResult.absoluteFlightHeight,
-				});
-				if (version !== this.routeCalculationVersion) {
-					return;
-				}
-				const previewLocalSegments = roundPlanarRouteSegments(localRoute.segments);
-				const roundedCartesianSegments = await createCartesianRouteSegments(window.mainViewer, frame, previewLocalSegments, {
-					heightType: Number(globeConfig.heightType),
-					lineHeight: Number(globeConfig.lineHeight),
-					absoluteFlightHeight: heightResult.absoluteFlightHeight,
-				});
-				if (version !== this.routeCalculationVersion) {
-					return;
-				}
-				if (Number(globeConfig.heightType) === 3 && takeoffPoint) {
-					const firstLocalWaypoint = getFirstLocalRoutePoint(localRoute.segments);
-					const firstCartesianWaypoint = getFirstCartesianRoutePoint(rawCartesianSegments);
-					if (firstLocalWaypoint && firstCartesianWaypoint) {
-						const maximumEntryTerrainHeight = await sampleMaximumTerrainHeightAlongSegments(window.mainViewer, frame, [
-							{ type: 'transit', points: [takeoffPoint, firstLocalWaypoint] },
-						]);
-						if (version !== this.routeCalculationVersion) {
-							return;
-						}
-						const firstWaypointCartographic = Cesium.Cartographic.fromCartesian(firstCartesianWaypoint);
-						if (!firstWaypointCartographic || firstWaypointCartographic.height <= maximumEntryTerrainHeight) {
-							throw new Error(t('cesium.module.planarRoute.err.entryTerrainTooHigh'));
-						}
-					}
-				}
-				// 圆角仅用于地图预览；导出使用原始折线航点，由司空 coordinateTurn 在转弯处平滑过点。
-				const exportConnection = connectTakeoffToFirstWaypoint(rawCartesianSegments);
-				const previewConnection = connectTakeoffToFirstWaypoint(roundedCartesianSegments);
-				const totalLength = calculateCartesianRouteLength(exportConnection.segments);
-				plannedRoutes.push({
-					id: localRoute.id,
-					key: localRoute.key,
-					label: localRoute.label,
-					headingDegrees: localRoute.headingDegrees,
-					gimbalPitchDegrees: localRoute.gimbalPitchDegrees,
-					segments: previewConnection.segments,
-					exportSegments: rawCartesianSegments,
-					coordinates: flattenRouteCoordinates(previewConnection.segments),
-					totalLength,
-					climbLength: exportConnection.climbLength,
-					photoCount: calculateRoutePhotoCount(rawCartesianSegments, photoDistance, this.isObliqueMode),
-				});
-			}
-			if (plannedRoutes.length === 0) {
-				throw new Error(t('cesium.module.planarRoute.err.noValidRouteGenerated'));
-			}
-
-			this.applyPlannedRoutes(plannedRoutes, photoDistance);
+			this.applyPlannedRoutes(result.routes, result.photoDistance);
 			await this.routeRenderer.waitForRoutePreviewReady(version);
-			if (version !== this.routeCalculationVersion) {
-				return;
-			}
 		} catch (error) {
 			if (version !== this.routeCalculationVersion) {
 				return;

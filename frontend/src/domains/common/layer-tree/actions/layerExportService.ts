@@ -32,11 +32,17 @@ export function isVectorManagedLayer(layerData: any): boolean {
  * CSV/TXT：折点导出（每条顶点一行）
  * GeoJSON/KML：保持原始几何导出（Point/LineString/Polygon等）
  */
-export function createLayerExporter({ message, _gcj02ToWgs84, _wgs84ToGcj02 }) {
-    return function exportLayerCoordinates(payload, { userDataLayers }) {
+export interface LayerExporterDeps {
+    message: any;
+    gcj02ToWgs84?: (...args: any[]) => any;
+    wgs84ToGcj02?: (...args: any[]) => any;
+}
+
+export function createLayerExporter({ message }: LayerExporterDeps) {
+    return function exportLayerCoordinates(payload: any, { userDataLayers }: { userDataLayers: any[] }) {
         if (!payload?.layerId) return;
 
-        const layerData = userDataLayers.find((item) => item.id === payload.layerId);
+        const layerData = userDataLayers.find((item: any) => item.id === payload.layerId);
         if (!layerData) {
             message.warning('未找到目标图层');
             return;
@@ -95,7 +101,7 @@ export function createLayerExporter({ message, _gcj02ToWgs84, _wgs84ToGcj02 }) {
         // GeoJSON 保持原始几何导出
         if (format === 'geojson') {
             const geojsonFeatures: any[] = [];
-            features.forEach((feature, index) => {
+            features.forEach((feature: any, index: number) => {
                 const featureId = index + 1;
                 const name = getFeatureNameForExport(feature, `${layerData.name}_${featureId}`);
                 const geometry = feature?.getGeometry?.();
@@ -169,7 +175,7 @@ export function createLayerExporter({ message, _gcj02ToWgs84, _wgs84ToGcj02 }) {
         // 原实现只写固定 8 列，建筑的高度 / 楼层等业务属性全部丢失。
         const attributeColumns = collectAttributeColumns(features);
         const exportRows: any[] = [];
-        features.forEach((feature, index) => {
+        features.forEach((feature: any, index: number) => {
             const rowId = index + 1;
             const name = getFeatureNameForExport(feature, `${layerData.name}_${rowId}`);
             const vertices = collectFeatureVertices(feature);
@@ -225,7 +231,7 @@ export function createLayerExporter({ message, _gcj02ToWgs84, _wgs84ToGcj02 }) {
             // 不再输出纯坐标 —— 纯坐标没有几何类型与属性，外部工具与本系统都无法回读。
             const wktFormat = new WKT();
             const lines: string[] = [];
-            features.forEach((feature, index) => {
+            features.forEach((feature: any, index: number) => {
                 const geometry = feature?.getGeometry?.();
                 if (!geometry) return;
                 const name = getFeatureNameForExport(feature, `${layerData.name}_${index + 1}`);

@@ -249,7 +249,7 @@
     </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { computed, reactive, ref } from 'vue';
 import {
     X,
@@ -364,7 +364,7 @@ const hint = computed(() => {
  * 选择绘制/编辑工具
  * @param {string} type
  */
-function selectTool(type) {
+function selectTool(type: string) {
     activeType.value = type;
     emit('draw-type', type);
 }
@@ -381,7 +381,7 @@ function emitStyleChange() {
  * @param {string} color
  * @param {'stroke'|'fill'} target
  */
-function selectPreset(color, target) {
+function selectPreset(color: string, target: 'stroke' | 'fill') {
     if (target === 'stroke') styleForm.strokeColor = color;
     if (target === 'fill') styleForm.fillColor = color;
     emitStyleChange();

@@ -319,7 +319,7 @@ export const useDownloadStore = defineStore('downloadStore', () => {
             lastError.value = detail;
             status.value = 'failed';
             // 额度不足时刷新余额显示
-            if (error?.isQuotaInsufficient) {
+            if ((error as { isQuotaInsufficient?: boolean })?.isQuotaInsufficient) {
                 lastError.value = 'mapDownload.quotaInsufficient';
             }
             // 调用方 MapDownloader 依据 lastError 展示 message.error,此处不重复 console.error

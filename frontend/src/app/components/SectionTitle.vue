@@ -21,7 +21,7 @@
     </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 /**
  * 通用节标题「三件套」组件（借鉴南京师大 .d-title1）：
  *   印章（::before）+ 标题 + 水印底纹（::after），全站复用。

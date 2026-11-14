@@ -68,7 +68,6 @@ export interface FengShuiCompassConfig {
 export interface LatticeClickEvent {
     latticeIndex: number;
     layerIndex: number;
-    data: any;
 }
 
 // 文本位置信息

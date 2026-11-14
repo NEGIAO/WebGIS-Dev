@@ -113,7 +113,7 @@
     </transition>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { computed, ref, watch } from 'vue';
 import { Globe, Search, X } from '@lucide/vue';
 import { useTOCStore } from '@/stores';
@@ -134,14 +134,14 @@ const tocStore = useTOCStore();
 const searchKeyword = ref('');
 const selectedAdcode = ref('');
 
-function filterTreeNodes(nodes = [], keyword = '') {
+function filterTreeNodes(nodes: any[] = [], keyword = ''): any[] {
     const query = String(keyword || '')
         .trim()
         .toLowerCase();
     if (!query) return nodes;
 
-    const result = [];
-    nodes.forEach((node) => {
+    const result: any[] = [];
+    nodes.forEach((node: any) => {
         const label = String(node.label || '').toLowerCase();
         const value = String(node.value || '').toLowerCase();
         const childMatches = filterTreeNodes(node.children || [], query);
@@ -158,7 +158,7 @@ function filterTreeNodes(nodes = [], keyword = '') {
     return result;
 }
 
-function countTreeNodes(nodes = []) {
+function countTreeNodes(nodes: any[] = []): number {
     let total = 0;
     for (const node of nodes) {
         total += 1;
@@ -178,7 +178,7 @@ const filteredTreeData = computed(() => filterTreeNodes(tocStore.districtTree, k
 const matchedNodeCount = computed(() => countTreeNodes(filteredTreeData.value));
 const autoExpand = computed(() => keywordLower.value.length > 0);
 
-function handleNodeSelect(payload) {
+function handleNodeSelect(payload: any) {
     const adcode = String(payload?.value || '').trim();
     if (!adcode) return;
 

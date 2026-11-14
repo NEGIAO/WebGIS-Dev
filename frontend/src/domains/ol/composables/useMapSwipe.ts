@@ -40,8 +40,8 @@ interface SwipeHandlers {
 type SwipeSide = 'left' | 'right';
 
 interface SwipeLayerDescriptor {
-    layer: any;
     side?: SwipeSide;
+    layer: any;
 }
 
 export function useMapSwipe() {

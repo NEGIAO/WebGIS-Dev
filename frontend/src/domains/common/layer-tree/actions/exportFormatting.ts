@@ -18,9 +18,9 @@ export interface ExportVertex {
  * 递归收集 WGS84 几何体的所有顶点
  * 支持 Point/MultiPoint/LineString/MultiLineString/Polygon/MultiPolygon/GeometryCollection
  */
-export function collectVerticesFromLonLatGeometry(geometry) {
+export function collectVerticesFromLonLatGeometry(geometry: any) {
     const type = String(geometry?.getType?.() || 'Unknown');
-    const vertices = [];
+    const vertices: any[] = [];
 
     const pushVertex = (
         coord: any,
@@ -48,7 +48,7 @@ export function collectVerticesFromLonLatGeometry(geometry) {
 
     if (type === 'MultiPoint') {
         const coords = geometry.getCoordinates?.() || [];
-        coords.forEach((coord, idx) => {
+        coords.forEach((coord: any, idx: number) => {
             pushVertex(coord, { partIndex: idx + 1, ringIndex: 0, vertexIndex: 1 });
         });
         return vertices;
@@ -56,7 +56,7 @@ export function collectVerticesFromLonLatGeometry(geometry) {
 
     if (type === 'LineString') {
         const coords = geometry.getCoordinates?.() || [];
-        coords.forEach((coord, idx) => {
+        coords.forEach((coord: any, idx: number) => {
             pushVertex(coord, { partIndex: 1, ringIndex: 0, vertexIndex: idx + 1 });
         });
         return vertices;
@@ -64,8 +64,8 @@ export function collectVerticesFromLonLatGeometry(geometry) {
 
     if (type === 'MultiLineString') {
         const lines = geometry.getCoordinates?.() || [];
-        lines.forEach((lineCoords, lineIdx) => {
-            (lineCoords || []).forEach((coord, coordIdx) => {
+        lines.forEach((lineCoords: any, lineIdx: number) => {
+            (lineCoords || []).forEach((coord: any, coordIdx: number) => {
                 pushVertex(coord, {
                     partIndex: lineIdx + 1,
                     ringIndex: 0,
@@ -78,8 +78,8 @@ export function collectVerticesFromLonLatGeometry(geometry) {
 
     if (type === 'Polygon') {
         const rings = geometry.getCoordinates?.() || [];
-        rings.forEach((ringCoords, ringIdx) => {
-            (ringCoords || []).forEach((coord, coordIdx) => {
+        rings.forEach((ringCoords: any, ringIdx: number) => {
+            (ringCoords || []).forEach((coord: any, coordIdx: number) => {
                 pushVertex(coord, {
                     partIndex: 1,
                     ringIndex: ringIdx + 1,
@@ -92,9 +92,9 @@ export function collectVerticesFromLonLatGeometry(geometry) {
 
     if (type === 'MultiPolygon') {
         const polygons = geometry.getCoordinates?.() || [];
-        polygons.forEach((polygonCoords, polygonIdx) => {
-            (polygonCoords || []).forEach((ringCoords, ringIdx) => {
-                (ringCoords || []).forEach((coord, coordIdx) => {
+        polygons.forEach((polygonCoords: any, polygonIdx: number) => {
+            (polygonCoords || []).forEach((ringCoords: any, ringIdx: number) => {
+                (ringCoords || []).forEach((coord: any, coordIdx: number) => {
                     pushVertex(coord, {
                         partIndex: polygonIdx + 1,
                         ringIndex: ringIdx + 1,
@@ -109,7 +109,7 @@ export function collectVerticesFromLonLatGeometry(geometry) {
     if (type === 'GeometryCollection') {
         const geometries = geometry.getGeometriesArray?.() || [];
         let partCursor = 1;
-        geometries.forEach((subGeometry) => {
+        geometries.forEach((subGeometry: any) => {
             const subVertices = collectVerticesFromLonLatGeometry(subGeometry);
             if (!subVertices.length) {
                 partCursor += 1;

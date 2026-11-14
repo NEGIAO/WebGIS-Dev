@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 /**
  * ResizeHandle.vue - 可拖拽的分割条组件
  *
@@ -17,23 +17,23 @@
  * Emits:
  * - resize: 拖拽时触发，返回新的比例值 (0-100)
  */
-import { ref, computed, onMounted, onUnmounted } from 'vue';
+import { ref, computed, onMounted, onUnmounted, type CSSProperties } from 'vue';
 
 const props = defineProps({
     direction: {
         type: String,
         default: 'horizontal',
-        validator: (value) => ['horizontal', 'vertical'].includes(value)
+        validator: (value: string) => ['horizontal', 'vertical'].includes(value)
     },
     minSize: {
         type: Number,
         default: 20,
-        validator: (value) => value >= 0 && value <= 100
+        validator: (value: number) => value >= 0 && value <= 100
     },
     maxSize: {
         type: Number,
         default: 80,
-        validator: (value) => value >= 0 && value <= 100
+        validator: (value: number) => value >= 0 && value <= 100
     },
     initialRatio: {
         type: Number,
@@ -45,10 +45,10 @@ const emit = defineEmits(['resize', 'resize-end']);
 
 const isDragging = ref(false);
 const isHovered = ref(false);
-const containerRef = ref(null);
+const containerRef = ref<HTMLElement | null>(null);
 
 // 计算分割条样式
-const handleStyle = computed(() => ({
+const handleStyle = computed<CSSProperties>(() => ({
     cursor: props.direction === 'horizontal' ? 'col-resize' : 'row-resize',
     userSelect: isDragging.value ? 'none' : 'auto'
 }));
@@ -66,7 +66,7 @@ function onMouseLeave() {
 }
 
 // 鼠标按下 - 开始拖拽
-function onMouseDown(event) {
+function onMouseDown(event: MouseEvent) {
     if (event.button !== 0) return; // 只响应左键
     
     isDragging.value = true;
@@ -85,7 +85,7 @@ function onMouseDown(event) {
 }
 
 // 鼠标移动 - 处理拖拽
-function onMouseMove(event) {
+function onMouseMove(event: MouseEvent) {
     if (!isDragging.value || !containerRef.value) return;
     
     // 获取父容器（content-section）

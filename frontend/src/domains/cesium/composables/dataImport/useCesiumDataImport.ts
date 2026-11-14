@@ -16,15 +16,15 @@ import {
     clearPendingGroundFits,
     dropPendingGroundFit,
 } from '../terrain/terrainReadiness';
-import { withImportMask } from '@common/data-import/yieldUi.js';
+import { withImportMask } from '@common/data-import/yieldUi';
 import { loadGeoJSON } from './loaders/geojsonLoader';
 import { parseCsvToGeoJSON, parseWktToGeoJSON } from '@common/data-import/parsers/tabularParser';
-import { loadKML, loadKMZ } from './loaders/kmlLoader.js';
+import { loadKML, loadKMZ } from './loaders/kmlLoader';
 import { loadSHP } from './loaders/shpLoader';
-import { loadGLTF } from './loaders/gltfLoader.js';
-import { loadCZML } from './loaders/czmlLoader.js';
-import { loadGeoTIFF } from './loaders/geotiffLoader.js';
-import { loadTilesetJSON, loadTilesetFromZip, importTilesetFromDirectory, TILESET_JSON_INDICATOR, MATERIAL_MODES, applyTilesetMaterial, loadSampleTileset, loadSampleBaimoTileset, loadSampleIonTileset, loadSampleI3sTileset, loadSampleDiscreteLODTileset } from './loaders/tilesetLoader.js';
+import { loadGLTF } from './loaders/gltfLoader';
+import { loadCZML } from './loaders/czmlLoader';
+import { loadGeoTIFF } from './loaders/geotiffLoader';
+import { loadTilesetJSON, loadTilesetFromZip, importTilesetFromDirectory, TILESET_JSON_INDICATOR, MATERIAL_MODES, applyTilesetMaterial, loadSampleTileset, loadSampleBaimoTileset, loadSampleIonTileset, loadSampleI3sTileset, loadSampleDiscreteLODTileset } from './loaders/tilesetLoader';
 import { createGltfRepositionTools } from './gltfReposition';
 import { createRasterHeightMeshBuilder } from './rasterHeightMesh';
 import { createDataSourceLifecycle } from './dataSourceLifecycle';
@@ -41,16 +41,26 @@ import { createDataSourceOps } from './dataSourceOps';
  *    stretchRasterToHeight, importTilesetFromDirectory, setTilesetHeight,
  *    MATERIAL_MODES, applyTilesetMaterial, loadSampleTileset }}
  */
-export function useCesiumDataImport({ getViewer, getCesium, message, heightSampler }) {
+export function useCesiumDataImport({
+    getViewer,
+    getCesium,
+    message,
+    heightSampler,
+}: {
+    getViewer: any;
+    getCesium: any;
+    message: any;
+    heightSampler?: any;
+}) {
     /** @type {import('vue').Ref<Array>} */
     // shallowRef：记录内持有 Cesium DataSource/tileset/entity 原生句柄，
     // 深代理会让同一对象在场景与 Vue 侧出现双身份（下游被迫处处 toRaw），
     // 且所有写入点均为整组替换（loaders/filter/同步），无深度响应依赖
-    const loadedDataSources = shallowRef([]);
-    const pendingGltfFile = ref(null);
-    const repositionTarget = ref(null);
+    const loadedDataSources = shallowRef<any[]>([]);
+    const pendingGltfFile = ref<any>(null);
+    const repositionTarget = ref<any>(null);
 
-    const nextId = { current: 0 };
+    const nextId: { current: number } = { current: 0 };
     /** @type {Map<string, { data: Float32Array, width: number, height: number, bbox: object, heightMesh?: any, canvas?: HTMLCanvasElement }>} */
     const rasterCache = new Map();
 
@@ -177,7 +187,7 @@ export function useCesiumDataImport({ getViewer, getCesium, message, heightSampl
             const viewer = getViewer();
             if (!Cesium || !viewer) return;
 
-            const alive = new Set();
+            const alive = new Set<string>();
             for (const record of list || []) {
                 alive.add(record.id);
                 if (groundAppliedIds.has(record.id)) continue;
@@ -279,8 +289,8 @@ export function useCesiumDataImport({ getViewer, getCesium, message, heightSampl
                     message.error(`不支持的文件格式: .${ext}。支持的格式: GeoJSON, KML/KMZ, SHP, GLB/GLTF, CZML, 3D Tiles, GeoTIFF`);
                     throw new Error(`不支持的格式: .${ext}`);
             }
-        } catch (error) {
-            message.error(`加载 "${file.name}" 失败: ${error.message || error}`);
+        } catch (error: any) {
+            message.error(`加载 "${file.name}" 失败: ${error?.message || error}`);
             throw error;
         }
     }
@@ -302,8 +312,8 @@ export function useCesiumDataImport({ getViewer, getCesium, message, heightSampl
     async function importFilesInternal(files: File[], options: { overrideCrs?: string; silent?: boolean } = {}) {
         // 人工指定的源坐标系，逐文件透传（空串=自动识别）
         const overrideCrs = String(options?.overrideCrs || '').trim();
-        const shpGroups = new Map();
-        const standalone = [];
+        const shpGroups = new Map<string, { shp: File | null; sidecars: File[] }>();
+        const standalone: File[] = [];
 
         for (const file of files) {
             const ext = getExtension(file.name);
@@ -313,6 +323,7 @@ export function useCesiumDataImport({ getViewer, getCesium, message, heightSampl
                     shpGroups.set(baseName, { shp: null, sidecars: [] });
                 }
                 const group = shpGroups.get(baseName);
+                if (!group) continue;
                 if (ext === 'shp') group.shp = file;
                 else group.sidecars.push(file);
             } else {
@@ -320,7 +331,7 @@ export function useCesiumDataImport({ getViewer, getCesium, message, heightSampl
             }
         }
 
-        const results = [];
+        const results: any[] = [];
         const baseCtx = loaderCtx();
 
         for (const [, group] of shpGroups) {

@@ -122,7 +122,7 @@
     </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 /**
  * WeatherChartPanel.vue
  * 天气看板主面板（编排层）
@@ -184,6 +184,8 @@ const {
     isMobile,
     isCompact,
 });
+void trendChartRef;
+void windChartRef;
 
 /* ------------------------------------------------------------ */
 /*  数据 Composable（传入图表操作回调）                                */

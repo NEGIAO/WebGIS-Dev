@@ -37,7 +37,7 @@
     </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 /**
  * ChatInputBar - 对话输入栏（对标网页版输入区）
  *
@@ -67,7 +67,7 @@ const props = defineProps({
 
 const emit = defineEmits(['update:modelValue', 'send', 'stop']);
 
-const textareaRef = ref(null);
+const textareaRef = ref<HTMLTextAreaElement | null>(null);
 
 const text = computed({
     get: () => props.modelValue,
@@ -85,7 +85,7 @@ function autoResize() {
 }
 
 /** Enter 发送 / Shift+Enter 换行；输入法组合期间放行 */
-function onKeydown(event) {
+function onKeydown(event: KeyboardEvent) {
     if (event.key !== 'Enter') return;
     if (event.shiftKey) return; // Shift+Enter 换行
     if (event.isComposing || event.keyCode === 229) return; // 输入法候选确认

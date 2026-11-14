@@ -13,8 +13,9 @@ import { isCesiumStyleSupportedType, isCesiumVectorType } from './cesiumLayers';
 import { getGroundCapability } from '../composables/terrain/groundPlacementCapabilities';
 import { EDITABLE_TYPES } from '../composables/draw/drawMeasureSpec';
 
-/** TOC 节点 id 前缀（动作分流依据） */
-export const CESIUM_NODE_PREFIX = 'cesium:';
+/** TOC 节点 id 前缀（动作分流依据）；单一真相源在 @common/layer-tree/protocol */
+export { CESIUM_NODE_PREFIX } from '@common/layer-tree/protocol';
+import { CESIUM_NODE_PREFIX } from '@common/layer-tree/protocol';
 
 /** 「三维数据」分组节点 id（展开态持久化键） */
 export const CESIUM_GROUP_NODE_ID = 'cesium-data-group';

@@ -11,7 +11,7 @@ import { ref } from 'vue';
  * @param {Object} deps.compassStore - 罗盘 Store
  * @param {Object} deps.message - 消息系统
  */
-export function useSidePanel({ compassStore, message }) {
+export function useSidePanel({ compassStore, message }: { compassStore: any; message: any }) {
     const isSidePanelCollapsed = ref(true);
     const shouldLoadSidePanel = ref(false);
     const activeSidePanelTab = ref('chat');
@@ -87,7 +87,7 @@ export function useSidePanel({ compassStore, message }) {
      * 处理侧边面板 Tab 切换
      * @param {string} tab - Tab 名称
      */
-    function handleSwitchSidePanelTab(tab) {
+    function handleSwitchSidePanelTab(tab: any) {
         if (tab === 'compass') {
             openCompassPanel();
         } else if (tab === 'chat') {
@@ -111,7 +111,7 @@ export function useSidePanel({ compassStore, message }) {
      * 处理控制面板打开 Tab 的请求
      * @param {string} tab - Tab 名称
      */
-    function handleControlsOpenTab(tab) {
+    function handleControlsOpenTab(tab: any) {
         if (tab === 'compass') {
             openCompassPanel();
         } else if (tab === 'chat') {
@@ -127,7 +127,7 @@ export function useSidePanel({ compassStore, message }) {
      * 处理控制面板打开工具箱 Tab 的请求
      * @param {string} tab - 工具箱内的 Tab
      */
-    function handleControlsOpenToolboxTab(_tab) {
+    function handleControlsOpenToolboxTab(_tab: any) {
         openToolbox();
         // 可以进一步切换工具箱内的 Tab
     }

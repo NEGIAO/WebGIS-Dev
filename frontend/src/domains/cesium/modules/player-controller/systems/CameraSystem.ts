@@ -5,6 +5,8 @@ import type { playerController } from "../playerController";
 import { lerp, smoothDamp } from "../utils/math";
 
 export class CameraSystem {
+
+
     private ctrl: playerController; // 主控制器引用
 
     collisionLerp = 0.12; // 碰撞恢复插值速度（降低以减少微抖）

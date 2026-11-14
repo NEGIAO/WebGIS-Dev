@@ -95,7 +95,7 @@
     </Transition>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { FolderOpen, MapPin, Search } from '@lucide/vue';
 defineProps({
     visible: {
@@ -106,7 +106,7 @@ defineProps({
 
 const emit = defineEmits(['close', 'select']);
 
-function handleOption(type) {
+function handleOption(type: string) {
     emit('select', type);
     emit('close');
 }

@@ -27,6 +27,8 @@ export interface CesiumRendererContext {
  * 管理航线实体的绘制、预览等待与清理。
  */
 export class RouteRenderer {
+
+
 	private ctx: CesiumRendererContext;
 	private routeEntityIds: string[] = [];
 	private routePreviewReadyRemoveListener: (() => void) | null = null;

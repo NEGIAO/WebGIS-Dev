@@ -350,7 +350,7 @@ export function resolveDatasetProjection(input: {
     const targetCrs = input?.targetCrs || 'EPSG:4326';
     const prjText = sanitizeWktText(input?.prjText || '');
     const prjResolved = registerWktProjection(prjText);
-    const base = {
+    const base: Pick<ProjectionResult, 'targetCrs' | 'prjProvided' | 'prjName' | 'prjError'> = {
         targetCrs,
         prjProvided: !!prjText.trim(),
         prjName: prjResolved.prjName,

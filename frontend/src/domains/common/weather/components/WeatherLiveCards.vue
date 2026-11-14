@@ -69,7 +69,7 @@
     </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 /**
  * 实况天气卡片与降雨聚焦面板
  * 所有数据由父组件通过 props 传入

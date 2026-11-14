@@ -91,7 +91,7 @@ export function addStartPoint(viewer: Cesium.Viewer, cb?: (cartesian?: any, opti
 
 	const handler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
 	startPointHandler = handler;
-	handler.setInputAction((e) => {
+	handler.setInputAction((e: any) => {
 		// 从相机位置和鼠标事件位置生成射线
 		const ray: any = viewer.camera.getPickRay(e.position);
 		// 地球表面拾取点
@@ -166,7 +166,7 @@ export function drawFlyStartLine(viewer: Cesium.Viewer, cartesian: Cesium.Cartes
  * @param {Cesium.Cartesian3} point
  * @param {object} [container] 承载数据源（缺省退回 viewer 实体层）
  */
-export function drawStartPoint(point, container?: { entities: any }) {
+export function drawStartPoint(point: any, container?: { entities: any }) {
 	const host: any = container ?? window.mainViewer;
 	host?.entities?.removeById(`air_start_point`);
 	const pointEntity: any = {
@@ -191,7 +191,7 @@ export function drawStartPoint(point, container?: { entities: any }) {
  * 获取起飞点及起飞点地面坐标
  * @param {Cesium.Cartesian3} point
  */
-export function getStartPointHeight(point): Array<Cesium.Cartesian3> {
+export function getStartPointHeight(point: any): Array<Cesium.Cartesian3> {
 	const points: Array<Cesium.Cartesian3> = [];
 
 	const ellipsoid = window.mainViewer.scene.globe.ellipsoid;
@@ -231,7 +231,7 @@ export function calculateArea(positions: Array<Cesium.Cartesian3>) {
  * @param {Cesium.Cartesian3} points
  * @param sidePoint
  */
-export function handleLineOutOfBoundary(points: Array<[]>, sidePoint) {
+export function handleLineOutOfBoundary(points: Array<[]>, sidePoint: any) {
 	const outPoint: any[] = [];
 
 	const polygon = turf.polygon([sidePoint]);
@@ -282,7 +282,7 @@ export function handleLineOutOfBoundary(points: Array<[]>, sidePoint) {
 /**
  * 将 linesArrs 转换为经纬度格式
  */
-export function convertToPositions(flatArray) {
+export function convertToPositions(flatArray: any) {
 	let positions: any = [];
 	let i = 0;
 	while (i < flatArray.length) {
@@ -290,7 +290,7 @@ export function convertToPositions(flatArray) {
 		i += 3;
 	}
 
-	positions = positions.map((res) => {
+	positions = positions.map((res: any) => {
 		let height;
 		if (globeConfig.heightType == 1) {
 			height = globeConfig.lineHeight;
@@ -310,7 +310,7 @@ export function convertToPositions(flatArray) {
  * @param {number} latitude
  * @returns {number} 高度
  */
-function getHeight(longitude, latitude) {
+function getHeight(longitude: number, latitude: number) {
 	const c3 = Cesium.Cartesian3.fromDegrees(longitude, latitude);
 
 	// 笛卡尔转为弧度

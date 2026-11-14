@@ -14,9 +14,9 @@ const MAX_MESH_SIZE = 200;
 export interface RasterHeightDeps {
     getCesium: () => any;
     getViewer: () => any;
-    message: any;
     loadedDataSources: { value: any[] };
     rasterCache: Map<string, any>;
+    message: any;
 }
 
 /**

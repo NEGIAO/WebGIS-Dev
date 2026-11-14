@@ -3,8 +3,8 @@ import { defineStore } from 'pinia';
 import { useTOCStore } from '@common/layer-tree/stores/useTOCStore';
 import { useSwipeConfigStore } from './useSwipeConfigStore';
 import { useFeatureStyleStore } from './useFeatureStyleStore';
-import { useCesiumLayersStore, isCesiumStyleSupportedType } from '@cesium-domain/stores/cesiumLayers';
-import { buildCesiumDataGroup, CESIUM_NODE_PREFIX } from '@cesium-domain/stores/cesiumLayerNodeBuilder';
+import { CESIUM_NODE_PREFIX } from '@common/layer-tree/protocol';
+import { getEngineTreePort } from '@common/layer-tree/engineTreePort';
 import { useRemoteServices } from '@common/basemap/remoteServices';
 import { buildRemoteServiceGroup } from '@common/basemap/remoteServiceNodeBuilder';
 import type { LayerHandlers, LayerStoreLayer } from './layer';
@@ -20,8 +20,12 @@ import {
 
 export const useLayerStore = defineStore('layerStore', () => {
     const tocStore = useTOCStore();
-    // Cesium 三维数据元数据店（统一图层管理：树顶拼「三维数据」分组）
-    const cesiumLayersStore = useCesiumLayersStore();
+    /**
+     * 三维记录读取（统一图层管理：树顶拼「三维数据」分组）。
+     * 经 common 的引擎端口读取，ol 域不 import cesium 实现；未注册时返回空数组，
+     * 2D-only 场景因此不会加载任何三维代码。
+     */
+    const cesiumPortRecords = () => getEngineTreePort(CESIUM_NODE_PREFIX)?.listRecords() || [];
     const remoteServicesStore = useRemoteServices();
     const userLayers = ref<LayerStoreLayer[]>([]);
     const overview = ref<any>({ drawCount: 0, uploadCount: 0, layers: [] });
@@ -108,17 +112,14 @@ export const useLayerStore = defineStore('layerStore', () => {
          * id 带 `cesium:` 前缀，样式页签据此把补丁路由到 CesiumContainer，
          * 与 TOC 节点的 id 形式保持一致，避免两套寻址。
          */
-        ...cesiumLayersStore.records
-            .filter((record) => isCesiumStyleSupportedType(record.type))
+        ...cesiumPortRecords()
+            .filter((record) => getEngineTreePort(CESIUM_NODE_PREFIX)?.isStyleSupported?.(record.type))
             .map((record) => ({ id: `${CESIUM_NODE_PREFIX}${record.id}`, name: `[3D] ${record.name}` })),
     ]);
 
     const layerTree = computed(() => {
         // 「三维数据」分组置顶：容器卸载即清档 → records 为空时分组自动消失（2D 模式天然隐藏）
-        const cesiumGroup = buildCesiumDataGroup(
-            cesiumLayersStore.records,
-            layerTreeExpandedState.value,
-        );
+        const cesiumGroup = getEngineTreePort(CESIUM_NODE_PREFIX)?.buildGroup(layerTreeExpandedState.value) || [];
         // 「在线服务」分组：WMS / ArcGIS / XYZ / WMTS 注册表记录（会话态，刷新即清；见 remoteServices.ts 生命周期说明）
         const remoteServiceGroup = buildRemoteServiceGroup(
             remoteServicesStore.records.value,

@@ -21,6 +21,8 @@ const viewIcon = svgIcon('<circle cx="12" cy="12" r="3"/><path d="M2 12s3.5-7 10
 
 // 虚拟摇杆
 class VirtualJoystick {
+
+
     private baseEl: HTMLDivElement; // 外环
     private stickEl: HTMLDivElement; // 内点
     private pointerId: number | null = null; // 当前跟踪的指针 id
@@ -131,6 +133,8 @@ class VirtualJoystick {
 }
 
 export class MobileControls {
+
+
     setInput: SetInputFn; // 输入派发回调（接到 InputSystem.setInput）
 
     // 摇杆状态

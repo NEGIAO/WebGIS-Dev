@@ -36,7 +36,7 @@
     </Transition>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { Plane, Mouse, X } from '@lucide/vue';
 defineProps({
     visible: { type: Boolean, default: false },

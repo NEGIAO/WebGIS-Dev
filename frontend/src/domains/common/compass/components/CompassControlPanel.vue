@@ -126,7 +126,7 @@
                 :disabled="!compassStore.enabled"
                 :value="compassStore.physicalRadiusMeters"
                 :style="{ '--fill': `${((Number(compassStore.physicalRadiusMeters) - 100) / (20000000 - 100)) * 100}%` }"
-                @input="(e) => compassStore.setPhysicalRadiusMeters(Number(e.target.value))"
+                @input="handleRadiusInput"
             />
         </div>
 
@@ -145,7 +145,7 @@
                 :disabled="!compassStore.enabled"
                 :value="compassStore.opacity"
                 :style="{ '--fill': `${((Number(compassStore.opacity) - 0.1) / 0.9) * 100}%` }"
-                @input="(e) => compassStore.setOpacity(Number(e.target.value))"
+                @input="handleOpacityInput"
             />
         </div>
 
@@ -167,7 +167,7 @@
                 :disabled="!compassStore.enabled"
                 :value="compassStore.hudSizePx"
                 :style="{ '--fill': `${((Number(compassStore.hudSizePx) - 240) / 320) * 100}%` }"
-                @input="(e) => compassStore.setHudSize(Number(e.target.value))"
+                @input="handleHudSizeInput"
             />
         </div>
 
@@ -181,7 +181,7 @@
                 class="swatch-color"
                 :disabled="!compassStore.enabled"
                 :value="compassStore.bgColor"
-                @input="(e) => compassStore.setBgColor(e.target.value)"
+                @input="handleBgColorInput"
             />
             <span class="color-meta">
                 <span class="color-label">{{ t('compass.gradientBase') }}</span>
@@ -259,7 +259,7 @@
     </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 /**
  * WeatherChartPanel 同款设计语言：
  * - 渐变徽章头部 + 幽灵返回钮
@@ -303,7 +303,7 @@ const sensorStatusText = computed(() => {
     return t('compass.sensorUnknown');
 });
 
-function formatMeters(value) {
+function formatMeters(value: any) {
     const n = Number(value) || 0;
     if (n >= 1000) {
         const digits = n >= 100000 ? 0 : 1;
@@ -312,24 +312,40 @@ function formatMeters(value) {
     return `${n} m`;
 }
 
-function handleEnabledChange(event) {
+function handleRadiusInput(event: Event) {
+    compassStore.setPhysicalRadiusMeters(Number((event.target as HTMLInputElement | null)?.value));
+}
+
+function handleOpacityInput(event: Event) {
+    compassStore.setOpacity(Number((event.target as HTMLInputElement | null)?.value));
+}
+
+function handleHudSizeInput(event: Event) {
+    compassStore.setHudSize(Number((event.target as HTMLInputElement | null)?.value));
+}
+
+function handleBgColorInput(event: Event) {
+    compassStore.setBgColor(String((event.target as HTMLInputElement | null)?.value || ''));
+}
+
+function handleEnabledChange(event: any) {
     const checked = Boolean(event?.target?.checked);
     compassStore.setEnabled(checked);
 }
 
-function handlePlacementModeChange(event) {
+function handlePlacementModeChange(event: any) {
     const checked = Boolean(event?.target?.checked);
     compassStore.setPlacementMode(checked);
 }
 
-async function handleThemeChange(event) {
+async function handleThemeChange(event: any) {
     const nextCid = String(event?.target?.value || '').trim();
     if (!nextCid) return;
 
     await compassStore.setCidAndLoad(nextCid);
 }
 
-async function handleSensorToggle(event) {
+async function handleSensorToggle(event: any) {
     const checked = Boolean(event?.target?.checked);
 
     if (!checked) {
@@ -381,7 +397,7 @@ async function useGps() {
 
         compassStore.setPosition(lng, lat);
         compassStore.setEnabled(true);
-    } catch (error) {
+    } catch (error: any) {
         message.warning(t('compass.gpsFailed', { error: String(error?.message || error || 'unknown') }));
     }
 }

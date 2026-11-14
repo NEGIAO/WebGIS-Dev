@@ -38,7 +38,7 @@
  * }
  */
 export function isValidLabel(
-    label: string | null | undefined,
+    label: unknown,
     maxLength: number = 100,
     specialCharThreshold: number = 0.5,
 ): { valid: boolean; reason: string } {
@@ -164,7 +164,7 @@ export function isValidLabel(
  *   renderLabel(featureName);
  * }
  */
-export function isLabelValid(label: string | null | undefined, maxLength: number = 100): boolean {
+export function isLabelValid(label: unknown, maxLength: number = 100): boolean {
     return isValidLabel(label, maxLength).valid;
 }
 

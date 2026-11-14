@@ -12,6 +12,8 @@ type AnimEntry = {
 };
 
 export class AnimationSystem {
+
+
     private ctrl: playerController; // 主控制器引用
     model?: Model; // 当前模型
 

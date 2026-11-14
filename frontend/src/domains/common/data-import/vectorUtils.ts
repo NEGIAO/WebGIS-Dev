@@ -24,7 +24,7 @@ const LABEL_FIELD_CANDIDATES = [
  * @param {string|ArrayBuffer} content - 待解码内容
  * @returns {string} 解码后的文本
  */
-export function decodeTextContent(content) {
+export function decodeTextContent(content: any) {
     return _decodeTextContent(content, { label: 'vectorUtils' });
 }
 
@@ -34,7 +34,7 @@ export function decodeTextContent(content) {
  * @param {string} name - 文件名
  * @returns {string} 标准化后的类型
  */
-export function getNormalizedUploadType(type, name = '') {
+export function getNormalizedUploadType(type: any, name = '') {
     const normalizedType = String(type || '').toLowerCase();
     const filename = String(name || '')
         .trim()
@@ -58,7 +58,7 @@ export function getNormalizedUploadType(type, name = '') {
  * @param {string} fallbackName - 回退名称
  * @returns {string} 图层名称
  */
-export function getLayerNameFromEntry(entryName, fallbackName = '上传图层') {
+export function getLayerNameFromEntry(entryName: any, fallbackName = '上传图层') {
     const normalized = String(entryName || '')
         .replace(/\\/g, '/')
         .trim();
@@ -75,7 +75,7 @@ export function getLayerNameFromEntry(entryName, fallbackName = '上传图层') 
  * @param {Array} features - OpenLayers 要素数组
  * @returns {string|null} 标签字段名
  */
-export function pickFeatureLabelField(features = []) {
+export function pickFeatureLabelField(features: any = []) {
     if (!Array.isArray(features) || !features.length) return null;
 
     for (const key of LABEL_FIELD_CANDIDATES) {

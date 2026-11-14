@@ -74,7 +74,7 @@
     </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import { FolderTree, Search, SearchX, Inbox, X } from '@lucide/vue';
 import { useLayerStore } from '@/stores';
@@ -88,35 +88,35 @@ defineProps({
 const emit = defineEmits(['action']);
 const layerStore = useLayerStore();
 
-const activeLayerId = ref(null);
+const activeLayerId = ref<string | null>(null);
 const searchQuery = ref('');
 const isSearchFocused = ref(false);
 const layerTree = computed(() => layerStore.layerTree);
 
-function countLeaves(nodes) {
-    return nodes.reduce((sum, node) => {
+function countLeaves(nodes: any[]): number {
+    return nodes.reduce((sum: number, node: any) => {
         if (node.type === 'folder') return sum + countLeaves(node.children || []);
         return sum + 1;
     }, 0);
 }
 
-function matchesSearch(node, query) {
+function matchesSearch(node: any, query: string): boolean {
     if (!query) return true;
     const q = query.toLowerCase();
     const name = String(node.displayName || node.name || '').toLowerCase();
     if (name.includes(q)) return true;
     if (node.type === 'folder' && node.children) {
-        return node.children.some((child) => matchesSearch(child, query));
+        return node.children.some((child: any) => matchesSearch(child, query));
     }
     return false;
 }
 
-function filterTree(nodes, query) {
+function filterTree(nodes: any[], query: string): any[] {
     if (!query) return nodes;
-    const result = [];
+    const result: any[] = [];
     for (const node of nodes) {
         if (node.type === 'folder') {
-            const filteredChildren = filterTree(node.children || [], query);
+            const filteredChildren: any[] = filterTree(node.children || [], query);
             const folderMatches = matchesSearch(node, query);
             if (folderMatches || filteredChildren.length > 0) {
                 result.push({
@@ -142,7 +142,7 @@ function clearSearch() {
     searchQuery.value = '';
 }
 
-function handleTreeAction(evt) {
+function handleTreeAction(evt: any) {
     if (!evt?.type) return;
 
     if (evt.type === 'layer-selected') {
@@ -179,11 +179,11 @@ function handleTreeAction(evt) {
 }
 
 // 事件委托：全局监听点击事件，关闭所有右键菜单
-function handleGlobalPointerDown(event) {
+function handleGlobalPointerDown(event: PointerEvent) {
     // 检查点击是否在菜单外部
-    const menuElements = document.querySelectorAll('.toc-context-menu');
+    const menuElements = document.querySelectorAll<HTMLElement>('.toc-context-menu');
     for (const menuEl of menuElements) {
-        if (menuEl.contains(event.target)) {
+        if (event.target instanceof Node && menuEl.contains(event.target)) {
             return; // 点击在菜单内部，不关闭
         }
     }

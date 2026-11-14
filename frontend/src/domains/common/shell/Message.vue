@@ -85,20 +85,20 @@
     </div>
 </template>
 
-<script setup>
-import { toRef } from 'vue';
+<script setup lang="ts">
+import { toRef, type PropType } from 'vue';
 import { AlertTriangle, CheckCircle, Info, Soup } from '@lucide/vue';
 import { useMessageIslandMotion } from '@common/shell/useMessageIslandMotion';
 import { useLocale } from '@common/app/useLocale';
 
 const props = defineProps({
     messages: {
-        type: Array,
+        type: Array as PropType<any[]>,
         default: () => [],
     },
     // 等待队列（MAX_VISIBLE 之外的积压消息）。传数组引用以保持响应式，仅读取 length。
     queued: {
-        type: Array,
+        type: Array as PropType<any[]>,
         default: () => [],
     },
     position: {
@@ -139,18 +139,18 @@ const cssVars = {
 };
 
 // --- 原有逻辑 ---
-function resolveVisualType(type) {
+function resolveVisualType(type: any) {
     if (type === 'soup') return 'info';
     return type;
 }
 
-function shouldShowTitle(item) {
+function shouldShowTitle(item: any) {
     return item?.showTitle !== false && item?.type !== 'soup';
 }
 
 // getTypeIcon 已移除，模板中直接使用 Lucide 组件
 
-function getTypeTitle(type) {
+function getTypeTitle(type: any) {
     if (type === 'success') return t('message.types.success');
     if (type === 'error') return t('message.types.error');
     if (type === 'warning') return t('message.types.warning');
@@ -159,7 +159,7 @@ function getTypeTitle(type) {
 }
 
 // HTML 转义，避免 v-html 注入风险。
-function escapeHtml(input) {
+function escapeHtml(input: any) {
     return String(input)
         .replace(/&/g, '&amp;')
         .replace(/</g, '&lt;')
@@ -169,7 +169,7 @@ function escapeHtml(input) {
 }
 
 // 根据字符类型（中英文）分别包装，以便 CSS 中区分字体
-function formatTextWithFonts(text) {
+function formatTextWithFonts(text: any) {
     const safeText = String(text ?? '');
     return safeText.replace(/([a-zA-Z]+)|([\u4E00-\u9FFF]+)|(.)/g, (match, en, zh) => {
         if (en) {

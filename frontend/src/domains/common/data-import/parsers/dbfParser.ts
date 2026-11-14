@@ -59,19 +59,6 @@ export interface DbfData {
 
 const SUPPORTED_DBF_VERSIONS = new Set([0x03, 0x83, 0x8b, 0xcb, 0x8c, 0xcc]);
 
-const _DBF_FIELD_TYPE_NAMES: Record<string, string> = {
-    'C': '字符串 (Character)',
-    'N': '数值 (Numeric)',
-    'D': '日期 (Date)',
-    'L': '布尔值 (Logical)',
-    'F': '浮点数 (Float)',
-    'M': '备忘 (Memo)',
-    'B': '二进制 (Binary)',
-    'T': '时间戳 (Timestamp)',
-    'I': '整数 (Integer)',
-    'Y': '货币 (Currency)',
-};
-
 const ENCODING_LDID_MAP: Record<number, string> = {
     0x01: 'CP437',
     0x02: 'CP850',
@@ -174,9 +161,6 @@ function decodeString(buffer: Uint8Array, encoding: string): string {
                 if (byte < 0x80) {
                     result += String.fromCharCode(byte);
                 } else if (i + 1 < slice.length) {
-                    // 两字节字符，先转换为 Unicode 代码点
-                    const _byte1 = byte;
-                    const _byte2 = slice[i + 1];
                     // 简单的 GBK 转换（完整的转换需要 iconv-lite）
                     result += `\u25a0`;  // 暂用方块符表示未知字符
                     i++; // 跳过下一个字节
@@ -259,7 +243,6 @@ export function parseDbfHeader(buffer: ArrayBuffer): { header: DbfHeader; warnin
     }
 
     const view = new DataView(buffer);
-    const _headerBytes = new Uint8Array(buffer, 0, 32);
 
     // 解析版本
     const version = view.getUint8(0);
@@ -294,9 +277,6 @@ export function parseDbfHeader(buffer: ArrayBuffer): { header: DbfHeader; warnin
     if (recordLength < 1) {
         throw new Error(`DBF 单条记录长度无效 (${recordLength})`);
     }
-
-    // LDID（逻辑驱动器标识）
-    const _ldid = view.getUint8(29);
 
     return {
         header: {

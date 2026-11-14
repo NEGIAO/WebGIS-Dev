@@ -12,11 +12,11 @@ import { loadGltfFromUrl } from './loaders/gltfLoader';
 export interface DataSourceOpsDeps {
     getCesium: () => any;
     getViewer: () => any;
-    message: any;
     loadedDataSources: { value: any[] };
     nextId: { current: number };
     /** 复用主入口的 loader 上下文（getCesium/getViewer/message/loadedDataSources/nextId/heightSampler） */
     loaderCtx: () => any;
+    message: any;
 }
 
 /**
@@ -32,7 +32,16 @@ export function createDataSourceOps({
     nextId,
     loaderCtx,
 }: DataSourceOpsDeps) {
-    function registerExternalDataSource({ name, entity, type: customType, tilesetGeo, currentBaseHeight, terrainElevation, terrainFitSamples, tilesetOverride }) {
+    function registerExternalDataSource({ name, entity, type: customType, tilesetGeo, currentBaseHeight, terrainElevation, terrainFitSamples, tilesetOverride }: {
+        name?: string;
+        entity?: any;
+        type?: string;
+        tilesetGeo?: any;
+        currentBaseHeight?: number;
+        terrainElevation?: any;
+        terrainFitSamples?: any;
+        tilesetOverride?: any;
+    }) {
         const id = `tileset_${++nextId.current}`;
         const record = {
             id,
@@ -55,11 +64,11 @@ export function createDataSourceOps({
      * @param {string} url - http(s) 直链
      * @param {string} [name] - 显示名
      */
-    async function loadRemoteGlb(url, name) {
+    async function loadRemoteGlb(url: any, name?: string) {
         return await loadGltfFromUrl({ url, name, ...loaderCtx() });
     }
 
-    function flyToDataSource(id) {
+    function flyToDataSource(id: any) {
         const viewer = getViewer();
         const Cesium = getCesium();
         if (!viewer || !Cesium) return;
@@ -80,7 +89,7 @@ export function createDataSourceOps({
      * @param {string} id - 数据源 ID
      * @param {number} targetBaseHeight - 目标底部海拔（米）
      */
-    function setTilesetHeight(id, targetBaseHeight) {
+    function setTilesetHeight(id: any, targetBaseHeight: number) {
         const Cesium = getCesium();
         const viewer = getViewer();
         if (!Cesium || !viewer) return;

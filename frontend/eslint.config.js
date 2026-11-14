@@ -82,6 +82,49 @@ export default [
         },
     },
 
-    // 8. Prettier（最后）
+    // 8. 领域单向依赖门禁（Docs/Refactor.md §3）
+    //    允许：ol -> common、cesium -> common；禁止：common -> ol/cesium、ol <-> cesium。
+    //    跨引擎互通必须经 common 的协议层（如 layer-tree/engineTreePort、basemap/catalogProjection）。
+    //    等价的可执行审计脚本：python Scripts/CheckDomainDeps.py frontend/src
+    {
+        files: ['src/domains/common/**/*.{js,ts,vue}'],
+        rules: {
+            'no-restricted-imports': ['error', {
+                patterns: [{
+                    group: ['@ol/*', '@cesium-domain/*', '**/domains/ol/**', '**/domains/cesium/**'],
+                    message: 'common 不得依赖 ol / cesium 域：请改走 common 的协议层（engineTreePort / catalogProjection / data-protocol）。',
+                }],
+            }],
+        },
+    },
+    {
+        files: ['src/domains/cesium/**/*.{js,ts,vue}'],
+        rules: {
+            'no-restricted-imports': ['error', {
+                patterns: [{
+                    group: ['@ol/*', '**/domains/ol/**'],
+                    message: 'cesium 不得依赖 ol 域：共享能力请上移 common（如 basemap/catalogProjection）。',
+                }],
+            }],
+        },
+    },
+    {
+        files: ['src/domains/ol/**/*.{js,ts,vue}'],
+        rules: {
+            'no-restricted-imports': ['error', {
+                patterns: [{
+                    group: ['@cesium-domain/*', '**/domains/cesium/**'],
+                    message: 'ol 不得依赖 cesium 域：共享能力请上移 common（如 layer-tree/engineTreePort）。',
+                }],
+            }],
+        },
+    },
+
+    // 9. 视图层范式完整性由 python Scripts/CheckVueParadigm.py 校验（ESLint 无法按内容判定）：
+    //    已范式化组件（`X.vue` 内仅一行 `<script lang="ts" src="./X.ts">`）禁止出现任何 import，
+    //    且模板引用的每个符号必须在 `X.ts` 中有同名 public 成员。
+    //    存量未迁移组件不追溯（无 `src` 的 `<script setup>` 继续允许）。
+
+    // 10. Prettier（最后）
     prettier,
 ];

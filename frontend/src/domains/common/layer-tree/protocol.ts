@@ -1,6 +1,15 @@
 export const TOC_EXPORT_FORMATS = Object.freeze(['csv', 'txt', 'geojson', 'kml']);
 
 /**
+ * TOC 三维节点 id 前缀（协议常量，单一真相源）。
+ *
+ * 归属 common 而非 cesium：`cesium:` 前缀是图层树与三维域之间的**节点标识协议**，
+ * 二维域（useLayerStore）与公共域（TOCPanel / useTreeActionDispatcher）都要按它分流。
+ * cesium 侧 `cesiumLayerNodeBuilder` 从这里 re-export，避免同一字符串两处定义。
+ */
+export const CESIUM_NODE_PREFIX = 'cesium:';
+
+/**
  * TOC 图层跨容器拖拽的 DataTransfer 类型（与排序用的 text/plain 并存，互不干扰）。
  * 放置目标（如 Cesium 画布）凭此识别图层拖拽，文件拖拽走 files 通道。
  */
@@ -55,15 +64,15 @@ export const TOC_MENU_COMMANDS = Object.freeze({
     RESET_TERRAIN: 'reset-terrain',
 });
 
-export function normalizeTocLayerId(id) {
+export function normalizeTocLayerId(id: any) {
     return String(id || '').trim();
 }
 
-export function normalizeTocLayerIdList(ids = []) {
+export function normalizeTocLayerIdList(ids: any = []) {
     if (!Array.isArray(ids)) return [];
 
     const seen = new Set();
-    const normalized = [];
+    const normalized: any[] = [];
     ids.forEach((id) => {
         const key = normalizeTocLayerId(id);
         if (!key || seen.has(key)) return;

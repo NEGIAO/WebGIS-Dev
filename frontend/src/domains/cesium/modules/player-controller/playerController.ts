@@ -1,8 +1,5 @@
 import {
     Cartesian3, Matrix3, Matrix4, Model, Transforms, Math as CMath,
-    Primitive, GeometryInstance, Geometry as GeometryClass, GeometryAttribute,
-    ComponentDatatype, PrimitiveType, BoundingSphere, ColorGeometryInstanceAttribute,
-    Color, PerInstanceColorAppearance,
 } from "cesium";
 import type { Viewer } from "cesium";
 
@@ -16,6 +13,7 @@ import { PhysicsSystem } from "./systems/PhysicsSystem";
 import { InputSystem } from "./systems/InputSystem";
 import { CameraSystem } from "./systems/CameraSystem";
 import { AnimationSystem } from "./systems/AnimationSystem";
+import { DebugColliderSystem } from "./systems/DebugColliderSystem";
 import { smoothDamp } from "./utils/math";
 import type { PlayerControllerOptions, PlayerModelOptions, KeyMap } from "./types";
 
@@ -24,6 +22,8 @@ function isMobileDevice() {
 }
 
 export class playerController {
+
+
     // ==================== 场景引用 ====================
     viewer!: Viewer; // Cesium 视图
     model: Model | null = null; // 玩家模型
@@ -88,11 +88,6 @@ export class playerController {
     onGroundChange?: (onGround: boolean) => void; // 落地状态回调
     onTowardChange?: (dx: number, dy: number, speed: number) => void; // 朝向变化回调
 
-    // ==================== 调试 ====================
-    private displayCollider = false; // 显示场景碰撞体
-    private debugStaticPrimitive: any = null; // 静态碰撞体线框(地形/glTF),只建一次
-    private debugCapsulePrimitive: any = null; // 玩家胶囊线框,随角色每帧重建
-
     // ==================== 动态物体 ====================
     private dynamicObjects: DynamicObject[] = []; // 受物理模拟、可被角色推动的物体
 
@@ -102,6 +97,11 @@ export class playerController {
     input = new InputSystem(this); // 输入系统
     cam = new CameraSystem(this); // 相机系统
     animation = new AnimationSystem(this); // 动画系统
+    debugCollider = new DebugColliderSystem({
+        getViewer: () => this.viewer,
+        getPhysics: () => this.physics,
+        getDynamicObjects: () => this.dynamicObjects,
+    }); // 碰撞体线框可视化
 
     // ==================== 初始化 ====================
     async init(opts: PlayerControllerOptions, callback?: () => void) {
@@ -425,7 +425,7 @@ export class playerController {
         this.cam.update(delta);
 
         // 刷新调试线框
-        if (this.displayCollider) { this.updateCapsuleDebug(); this.updateDynamicDebug(); }
+        if (this.debugCollider.isEnabled) { this.debugCollider.updateCapsuleDebug(); this.debugCollider.updateDynamicDebug(); }
     }
 
     // 水平方向远离锚点超过阈值时，重锚 Rapier 局部系（位置在 ECEF 中保持不变）
@@ -486,95 +486,12 @@ export class playerController {
 
     // 切换调试显示
     setDebug(debug: boolean) {
-        this.displayCollider = debug;
-        this.syncDebugVisibility();
+        this.debugCollider.setEnabled(debug);
     }
 
-    // 同步 debug 可见性
+    // 同步 debug 可见性（外部可强制刷新）
     syncDebugVisibility() {
-        if (!this.displayCollider) {
-            this.removeDebugPrimitives();
-            return;
-        }
-        // 静态碰撞体
-        if (!this.debugStaticPrimitive && this.physics.world) {
-            const ecef = this.physics.buildStaticDebugLinesEcef();
-            this.debugStaticPrimitive = this.makeLinePrimitive(ecef, Color.fromCssColorString("#4a90d9"));
-            if (this.debugStaticPrimitive) this.viewer.scene.primitives.add(this.debugStaticPrimitive);
-        }
-        this.updateCapsuleDebug();
-        this.updateDynamicDebug();
-    }
-
-    // 动态物体碰撞线框：几何只建一次（本体局部空间），每帧由物理位姿驱动 modelMatrix。
-    private updateDynamicDebug() {
-        if (!this.displayCollider || !this.physics.world) return;
-        for (const o of this.dynamicObjects) {
-            if (!o.debugPrimitive) {
-                const local = this.physics.buildDynamicDebugLocal(o.body);
-                o.debugPrimitive = this.makeLinePrimitive(local, Color.WHITE);
-                if (o.debugPrimitive) this.viewer.scene.primitives.add(o.debugPrimitive);
-            }
-            if (o.debugPrimitive) this.physics.getDynamicModelMatrix(o.body.body, o.debugPrimitive.modelMatrix);
-        }
-    }
-
-    // 移除某个动态物体的 debug 线框
-    private removeDynamicDebug(o: DynamicObject) {
-        if (o.debugPrimitive) {
-            this.viewer.scene.primitives.remove(o.debugPrimitive);
-            o.debugPrimitive = null;
-        }
-    }
-
-    // 胶囊线框:几何只建一次(ENU 局部空间),每帧只更新 modelMatrix 跟随角色(不重建、不重传 GPU)
-    private updateCapsuleDebug() {
-        if (!this.displayCollider || !this.physics.world) return;
-        if (!this.debugCapsulePrimitive) {
-            const local = this.physics.buildCapsuleDebugLocal();
-            this.debugCapsulePrimitive = this.makeLinePrimitive(local, Color.YELLOW);
-            if (this.debugCapsulePrimitive) this.viewer.scene.primitives.add(this.debugCapsulePrimitive);
-        }
-        if (this.debugCapsulePrimitive) {
-            this.physics.getCapsuleModelMatrix(this.debugCapsulePrimitive.modelMatrix);
-        }
-    }
-
-    // 移除全部调试图元
-    private removeDebugPrimitives() {
-        for (const key of ["debugStaticPrimitive", "debugCapsulePrimitive"] as const) {
-            if (this[key]) {
-                this.viewer.scene.primitives.remove(this[key]);
-                this[key] = null;
-            }
-        }
-        // 动态物体各自的碰撞线框
-        for (const o of this.dynamicObjects) this.removeDynamicDebug(o);
-    }
-
-    // 由扁平 ECEF 顶点(线表)构建一个线段图元;包围盒直接用 typed array 计算(不再 Array.from)
-    private makeLinePrimitive(ecef: Float64Array, color: Color): Primitive | null {
-        if (ecef.length < 6) return null;
-        return new Primitive({
-            geometryInstances: new GeometryInstance({
-                geometry: new GeometryClass({
-                    attributes: {
-                        position: new GeometryAttribute({
-                            componentDatatype: ComponentDatatype.DOUBLE,
-                            componentsPerAttribute: 3,
-                            values: ecef,
-                        }),
-                    } as any,
-                    primitiveType: PrimitiveType.LINES,
-                    boundingSphere: BoundingSphere.fromVertices(ecef as any),
-                }),
-                attributes: {
-                    color: ColorGeometryInstanceAttribute.fromColor(color),
-                },
-            }),
-            appearance: new PerInstanceColorAppearance({ flat: true, translucent: false }),
-            asynchronous: false,
-        });
+        this.debugCollider.syncVisibility();
     }
 
     // 请求一次跳跃（供输入系统调用）
@@ -633,16 +550,7 @@ export class playerController {
             halfHeight: Math.max(0.01, (ch - 2 * cr) / 2),
         });
         // 重建胶囊体 debug
-        this.rebuildCapsuleDebug();
-    }
-
-    // 重建胶囊体 debug
-    private rebuildCapsuleDebug() {
-        if (this.debugCapsulePrimitive) {
-            this.viewer.scene.primitives.remove(this.debugCapsulePrimitive);
-            this.debugCapsulePrimitive = null;
-        }
-        if (this.displayCollider) this.updateCapsuleDebug();
+        this.debugCollider.rebuildCapsule();
     }
 
     // 切换玩家模型
@@ -687,7 +595,7 @@ export class playerController {
         this.yaw = savedYaw;
         this.physics.teleportCharacter(this.posEcef);
         if (wasFirstPerson) this.cam.setFirstPerson();
-        this.setDebug(this.displayCollider);
+        this.setDebug(this.debugCollider.isEnabled);
     }
 
     // ==================== API ====================
@@ -726,7 +634,7 @@ export class playerController {
         const i = this.dynamicObjects.indexOf(obj);
         if (i >= 0) this.dynamicObjects.splice(i, 1);
         this.physics.removeDynamicObject(obj.body);
-        this.removeDynamicDebug(obj);
+        this.debugCollider.removeDynamicObject(obj);
         obj.detachVisual();
     }
 
@@ -734,7 +642,7 @@ export class playerController {
     clearDynamicObjects() {
         for (const o of this.dynamicObjects) {
             this.physics.removeDynamicObject(o.body);
-            this.removeDynamicDebug(o);
+            this.debugCollider.removeDynamicObject(o);
             o.detachVisual();
         }
         this.dynamicObjects = [];
@@ -851,7 +759,7 @@ export class playerController {
         this.mobileControls = null;
 
         // 清理 debug 图元（静态碰撞体 + 动态物体线框）
-        this.removeDebugPrimitives();
+        this.debugCollider.removeAll();
 
         // 清除玩家对象与动画资源（reset 会移除 animationRemoved 监听并清空动作缓存）
         this.animation.reset();

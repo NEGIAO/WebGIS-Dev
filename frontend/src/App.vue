@@ -44,7 +44,7 @@
                     （2）地图组件中，使用openlayers库，进行地图交互与逻辑判断   
                     
 -->
-<script setup>
+<script setup lang="ts">
 import { RouterView } from 'vue-router';
 import GlobalLoading from '@common/shell/GlobalLoading.vue';
 import { useThemeStore } from '@common/app/stores/useThemeStore';

@@ -1,7 +1,7 @@
 /**
  * cesium.d.ts — Cesium 模块类型声明
  *
- * Cesium 通过 CDN + cesium-shim.js 加载（非 npm 包），
+ * Cesium 通过 CDN + cesium-shim.ts 加载（非 npm 包），
  * 本文件为 TypeScript 提供模块解析。
  *
  * 每个导出同时声明 type（作为类型使用时 any）和 const/value（作为值使用时 any），

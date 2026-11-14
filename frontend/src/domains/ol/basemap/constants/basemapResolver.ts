@@ -4,7 +4,8 @@
  */
 
 import type { LayerCategory, LayerGroup, LayerFactoryContext } from './basemapConfig';
-import { LAYER_SOURCE_DEFINITIONS } from './basemapConfig';
+import { LAYER_SOURCE_DEFINITIONS, getDescriptorById, resolveRuntimeTokenPoolKey } from './basemapConfig';
+import { publishBasemapCatalogProjection } from '@common/basemap/catalogProjection';
 import {
     ALL_BASEMAP_PRESETS,
     DEFAULT_BASEMAP_PRESET_ID,
@@ -118,3 +119,14 @@ export function useBasemapManager() {
         getLayerGroup,
     };
 }
+
+// ========== 向 common 发布只读目录投影 ==========
+// 三维域只需要元数据查询，不应静态 import 本目录（其 createSource 直接构造 ol/source）。
+// 本模块作为目录门面，加载即发布投影；任何 import 本模块的入口都会顺带完成发布。
+publishBasemapCatalogProjection({
+    resolvePresetLayerIds,
+    getLayerCategory,
+    getLayerGroup,
+    getDescriptorById,
+    resolveRuntimeTokenPoolKey,
+});

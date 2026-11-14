@@ -92,7 +92,7 @@
                     </div>
                     <div class="progress-meta">
                         <span class="progress-num">{{ Math.round(task.progress || 0) }}%</span>
-                        <span v-if="task.tile_count > 0" class="tile-count-text">
+                        <span v-if="(task.tile_count ?? 0) > 0" class="tile-count-text">
                             {{ task.tiles_downloaded || 0 }}/{{ task.tile_count }}
                         </span>
                         <span v-if="resolveTaskRemaining(task)" class="remaining-text">
@@ -102,7 +102,7 @@
                 </div>
 
                 <!-- 过期提示（独立于进度条，success 状态也显示） -->
-                <div v-if="task.status === 'success' && task.expires_in_seconds > 0" class="task-item-expiry">
+                <div v-if="task.status === 'success' && (task.expires_in_seconds ?? 0) > 0" class="task-item-expiry">
                     {{ resolveTaskRemaining(task) }}
                 </div>
 
@@ -110,7 +110,7 @@
                 <div class="task-item-actions">
                     <!-- 详情/查看进度 -->
                     <button
-                        v-if="['downloading', 'pending', 'stitching'].includes(task.status)"
+                        v-if="['downloading', 'pending', 'stitching'].includes(task.status || '')"
                         class="action-btn"
                         type="button"
                         @click="$emit('view', task)"
@@ -121,7 +121,7 @@
 
                     <!-- 取消任务 -->
                     <button
-                        v-if="['downloading', 'pending'].includes(task.status)"
+                        v-if="['downloading', 'pending'].includes(task.status || '')"
                         class="action-btn danger"
                         type="button"
                         @click="$emit('cancel', task)"
@@ -146,7 +146,7 @@
     </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 // ⚠️ 底图下载依赖 /api/download/*，后端 V3.6.5 已删除该模块，当前 HF Space 返回 404
 import { useLocale } from '@common/app/useLocale';
 import { useDownloadStore } from '@common/data-import/stores/useDownloadStore';
@@ -158,18 +158,18 @@ const store = useDownloadStore();
 defineEmits(['download', 'view', 'cancel']);
 
 /** 复制 Task ID */
-async function copyTaskId(taskId) {
-    await copyToClipboard(taskId);
+async function copyTaskId(taskId?: string) {
+    await copyToClipboard(taskId || '');
 }
 
 /** 判断是否需要渲染进度条 */
-function shouldShowProgress(task) {
+function shouldShowProgress(task: any) {
     return ['downloading', 'pending', 'stitching'].includes(task.status) || (task.status === 'success' && task.progress < 100);
 }
 
 /** 解析任务状态标签文本 */
-function resolveTaskStatus(task) {
-    const statusMap = {
+function resolveTaskStatus(task: any) {
+    const statusMap: Record<string, string> = {
         pending: t('mapDownload.statusPending'),
         downloading: t('mapDownload.statusDownloading'),
         stitching: t('mapDownload.statusStitching'),
@@ -182,21 +182,21 @@ function resolveTaskStatus(task) {
 }
 
 /** 解析时间/倒计时提示信息 */
-function resolveTaskRemaining(task) {
+function resolveTaskRemaining(task: any) {
     if (task.status === 'success') {
         if (task.expires_in_seconds > 0) {
             const minutes = Math.max(1, Math.ceil(task.expires_in_seconds / 60));
-            return t('mapDownload.expiresIn', { minutes }, `${minutes}分钟后过期`);
+            return t('mapDownload.expiresIn', { minutes });
         }
         return '';
     }
     if (task.estimated_remaining_seconds > 0) {
         const minutes = Math.max(1, Math.ceil(task.estimated_remaining_seconds / 60));
-        return t('mapDownload.remainingApprox', { minutes }, `约${minutes}分钟`);
+        return t('mapDownload.remainingApprox', { minutes });
     }
     if (task.estimated_total_seconds > 0) {
         const minutes = Math.max(1, Math.ceil(task.estimated_total_seconds / 60));
-        return t('mapDownload.estimatedTotal', { minutes }, `预计${minutes}分钟`);
+        return t('mapDownload.estimatedTotal', { minutes });
     }
     return '';
 }

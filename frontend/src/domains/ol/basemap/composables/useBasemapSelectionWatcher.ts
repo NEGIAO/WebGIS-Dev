@@ -1,0 +1,439 @@
+import { watch } from 'vue';
+import { abortTileSourceRequests } from '@ol/tile-source/index';
+
+/**
+ * Basemap selection watcher feature
+ *
+ * Responsibilities:
+ * - Listen to selected basemap changes
+ * - Apply layer switch and URL sync
+ * - Validate switched basemap availability
+ * - Skip validation/monitoring for the admin's default basemap preset layers
+ *   (custom tiles only cover China; non-China tile failures are expected noise)
+ */
+export interface BasemapSelectionWatcherDeps {
+    selectedLayerRef: any;
+    switchLayerById: (id: any, options?: any) => void;
+    resolvePresetLayerIds?: (id: any) => string[];
+    isBasemapLayerId?: (id: any) => boolean;
+    emitBaseLayersChange?: () => void;
+    mapInstanceRef?: any;
+    layerInstances?: Record<string, any>;
+    syncUrlFromMap?: () => void;
+    validateBaseLayerSwitch?: (layerId: any, layer: any, checkTimeoutMs?: number, signal?: any) => Promise<any>;
+    onRuntimeTokenFailure?: (payload: any) => any;
+    getBasemapOptionLabel?: (id: any) => string;
+    message?: any;
+    defaultLayerId?: string;
+    validationTimeoutMs?: number;
+    switchDebounceMs?: number;
+    circuitBreakThreshold?: number;
+    onCircuitBreak?: (layerId: string, failures: number) => void;
+    onCircuitReset?: (layerId?: string) => void;
+}
+
+export function createBasemapSelectionWatcher({
+    selectedLayerRef,
+    switchLayerById,
+    resolvePresetLayerIds,
+    isBasemapLayerId,
+    emitBaseLayersChange,
+    mapInstanceRef,
+    layerInstances,
+    syncUrlFromMap,
+    validateBaseLayerSwitch,
+    onRuntimeTokenFailure,
+    getBasemapOptionLabel,
+    message,
+    defaultLayerId = 'google',
+    validationTimeoutMs = 3000,
+    circuitBreakThreshold = 3,
+    onCircuitBreak,
+    onCircuitReset,
+}: BasemapSelectionWatcherDeps) {
+    let isAutoSwitchingLayer = false;
+    let _switchTimer: any = null;
+    let switchSeq = 0;
+    let watchStopHandle: any = null; // [C5] 保存 watch 停止句柄
+
+    const failureStateMap = new Map();
+
+    /**
+     * 运行时读取实际的默认底图预设 ID（管理员 L2 配置，存入 selectedLayerRef）。
+     * defaultLayerId 参数仅为静态 fallback（初始化前使用）。
+     */
+    function getActualDefaultLayerId() {
+        return selectedLayerRef?.value || defaultLayerId;
+    }
+
+    /**
+     * [改进] 添加验证追踪机制，防止验证过程中的状态变化
+     * 当 releasePreviousLayerSources 被调用时，自动 abort 进行中的验证
+     */
+    const ongoingValidations = new Map(); // layerId -> AbortController
+
+    function clearSwitchTimer() {
+        if (_switchTimer) {
+            clearTimeout(_switchTimer);
+            _switchTimer = null;
+        }
+    }
+
+    /**
+     * [改进] 中止进行中的验证，防止资源泄漏
+     * 当切换图层时，如果前一个图层的验证还在进行中，立即 abort
+     */
+    function abortOutstandingValidation(layerId: any) {
+        const normalizedLayerId = String(layerId || '').trim();
+        const controller = ongoingValidations.get(normalizedLayerId);
+        if (controller) {
+            controller.abort();
+            ongoingValidations.delete(normalizedLayerId);
+        }
+    }
+
+    function getFailureState(layerId: any) {
+        const normalizedLayerId = String(layerId || '').trim();
+        if (!normalizedLayerId) {
+            return { failures: 0, circuitOpen: false };
+        }
+
+        if (!failureStateMap.has(normalizedLayerId)) {
+            failureStateMap.set(normalizedLayerId, {
+                failures: 0,
+                circuitOpen: false,
+            });
+        }
+
+        return failureStateMap.get(normalizedLayerId);
+    }
+
+    function markLayerFailure(layerId: any) {
+        const state = getFailureState(layerId);
+        state.failures += 1;
+
+        if (state.failures >= circuitBreakThreshold) {
+            state.circuitOpen = true;
+            onCircuitBreak?.(String(layerId || ''), state.failures);
+        }
+
+        return state.failures;
+    }
+
+    function clearLayerFailure(layerId: any) {
+        const normalizedLayerId = String(layerId || '').trim();
+        if (!normalizedLayerId) return;
+
+        const state = getFailureState(normalizedLayerId);
+        const wasOpen = !!state.circuitOpen;
+
+        state.failures = 0;
+        state.circuitOpen = false;
+
+        if (wasOpen) {
+            onCircuitReset?.(normalizedLayerId);
+        }
+    }
+
+    function releaseLayerSource(layerId: any) {
+        const normalizedLayerId = String(layerId || '').trim();
+        if (!normalizedLayerId || !layerInstances) return;
+
+        const layer = layerInstances[normalizedLayerId];
+        if (!layer) return;
+
+        const source = layer.getSource?.();
+        if (source) {
+            // Abort first so pending tile fetches release browser and OL queue slots.
+            abortTileSourceRequests(source);
+        }
+
+        if (source && typeof source.clear === 'function') {
+            source.clear();
+        }
+
+        if (typeof layer.setSource === 'function') {
+            layer.setSource(null);
+        }
+    }
+
+    function releasePreviousLayerSources(previousLayerId: any, nextLayerId: any) {
+        /**
+         * [改进] 先中止进行中的验证，再释放资源
+         * 防止验证过程中源被销毁导致的内存泄漏和异常
+         */
+        if (previousLayerId !== nextLayerId) {
+            abortOutstandingValidation(previousLayerId);
+        }
+
+        const previousStack = Array.isArray(resolvePresetLayerIds?.(previousLayerId))
+            ? resolvePresetLayerIds(previousLayerId)
+            : [previousLayerId];
+        const nextStack = Array.isArray(resolvePresetLayerIds?.(nextLayerId))
+            ? resolvePresetLayerIds(nextLayerId)
+            : [nextLayerId];
+        const keepSet = new Set(nextStack.map((id: any) => String(id || '').trim()));
+
+        previousStack
+            .map((id: any) => String(id || '').trim())
+            .filter(Boolean)
+            .forEach((id: any) => {
+                if (!keepSet.has(id)) {
+                    releaseLayerSource(id);
+                }
+            });
+    }
+
+    function abortNonCurrentBasemapSources(activeLayerId: any) {
+        if (!layerInstances) return;
+
+        const activeStack = Array.isArray(resolvePresetLayerIds?.(activeLayerId))
+            ? resolvePresetLayerIds(activeLayerId)
+            : [activeLayerId];
+        const keepSet = new Set(activeStack.map((id: any) => String(id || '').trim()).filter(Boolean));
+
+        Object.entries(layerInstances).forEach(([layerId, layer]: [string, any]) => {
+            const normalizedLayerId = String(layerId || '').trim();
+            if (!normalizedLayerId || keepSet.has(normalizedLayerId)) return;
+
+            if (typeof isBasemapLayerId === 'function' && !isBasemapLayerId(normalizedLayerId)) {
+                return;
+            }
+
+            const source = layer?.getSource?.();
+            if (!source) return;
+
+            // Aggressive mode: immediately stop all non-active basemap requests.
+            abortTileSourceRequests(source);
+
+            if (typeof source.clear === 'function') {
+                try {
+                    source.clear();
+                } catch {
+                    // ignore
+                }
+            }
+
+            if (typeof layer?.setSource === 'function') {
+                layer.setSource(null);
+            }
+        });
+    }
+
+    /**
+     * 重置底图切换链路：清除切换定时器、递增竞态序号、复位自动切换标志，并裁剪/清理故障记录。
+     * @param options.targetLayerId 目标图层 ID；缺省时回退到当前选中图层（内部统一 String() 兜底）
+     * @returns 无
+     * 核心逻辑：解构参数默认值 `= {}` 必须配显式类型，否则 TS 会把形参推断为 `{}`，
+     *           访问 targetLayerId 时报 TS2339 —— 这是 .js→.ts 改名后最易复发的类型缺口。
+     */
+    function resetBasemapChain({ targetLayerId }: { targetLayerId?: string } = {}) {
+        clearSwitchTimer();
+        switchSeq += 1;
+        isAutoSwitchingLayer = false;
+
+        /**
+         * [改进] 限制 failureStateMap 大小，防止内存泄漏
+         * 当超过 50 条记录时，删除最旧的（LRU 策略）
+         */
+        const MAX_FAILURE_RECORDS = 50;
+        if (failureStateMap.size > MAX_FAILURE_RECORDS) {
+            const keysToDelete = Array.from(failureStateMap.keys()).slice(
+                0,
+                failureStateMap.size - MAX_FAILURE_RECORDS,
+            );
+            keysToDelete.forEach((key) => failureStateMap.delete(key));
+        }
+
+        // 清理所有故障记录
+        failureStateMap.forEach((state) => {
+            state.failures = 0;
+            state.circuitOpen = false;
+        });
+        onCircuitReset?.(String(targetLayerId || selectedLayerRef?.value || ''));
+
+        const normalizedTarget = String(targetLayerId || selectedLayerRef?.value || '').trim();
+        if (!normalizedTarget) return;
+
+        const targetStack = Array.isArray(resolvePresetLayerIds?.(normalizedTarget))
+            ? resolvePresetLayerIds(normalizedTarget)
+            : [normalizedTarget];
+
+        targetStack.forEach((layerId: any) => {
+            abortOutstandingValidation(layerId);
+            releaseLayerSource(layerId);
+        });
+
+        switchLayerById?.(normalizedTarget, {
+            onUpdated: () => {
+                emitBaseLayersChange?.();
+                if (
+                    mapInstanceRef?.value &&
+                    typeof mapInstanceRef.value.updateSize === 'function'
+                ) {
+                    mapInstanceRef.value.updateSize();
+                }
+            },
+        });
+
+        syncUrlFromMap?.();
+        message?.info?.('底图链路已重置，请重试底图切换。');
+    }
+
+    async function runLayerSwitch(val: any, prevVal: any, currentSeq: number) {
+        const activeStack = resolvePresetLayerIds?.(val) || [];
+
+        if (!isAutoSwitchingLayer && getFailureState(val).circuitOpen) {
+            message?.warning?.('当前网络异常，请尝试手动重试。可点击“重置链路”按钮。');
+            onCircuitBreak?.(String(val || ''), getFailureState(val).failures);
+
+            if (prevVal && prevVal !== val) {
+                isAutoSwitchingLayer = true;
+                selectedLayerRef.value = prevVal;
+            }
+            return;
+        }
+
+        if (prevVal !== undefined) {
+            releasePreviousLayerSources(prevVal, val);
+        }
+
+        abortNonCurrentBasemapSources(val);
+
+        switchLayerById?.(val, {
+            onUpdated: () => {
+                emitBaseLayersChange?.();
+
+                if (isAutoSwitchingLayer && mapInstanceRef?.value) {
+                    if (
+                        mapInstanceRef?.value &&
+                        typeof mapInstanceRef.value.updateSize === 'function'
+                    ) {
+                        mapInstanceRef.value.updateSize();
+                    }
+                }
+            },
+        });
+
+        if (prevVal === undefined) return;
+
+        syncUrlFromMap?.();
+
+        /**
+         * [改进] 验证任何情况都要执行，包括自动降级
+         * 原来的跳过验证代码已删除
+         * [Fix] 默认预设图层跳过验证（管理员 L2 配置的默认底图使用自定义瓦片，
+         * 仅覆盖中国区域，非中国区域瓦片必然 404，验证无意义且产生大量 message 轰炸）
+         */
+        const isDefaultPreset = val === getActualDefaultLayerId();
+        if (isDefaultPreset) {
+            const optionLabel = getBasemapOptionLabel?.(val) || val;
+            if (activeStack.length > 1) {
+                message?.success?.(
+                    `已切换到${optionLabel}组合（${activeStack.join(' + ')}）`,
+                );
+            } else {
+                message?.success?.(`已成功切换到${optionLabel}底图`);
+            }
+            return;
+        }
+
+        const switchedLayer = layerInstances?.[val];
+        if (!switchedLayer) return;
+
+        // 创建 AbortController 用于验证过程中的中止
+        // Start background validation: do not await – render first, validate later
+        (async () => {
+            const controller = new AbortController();
+            ongoingValidations.set(val, controller);
+            try {
+                const result = await validateBaseLayerSwitch?.(
+                    val,
+                    switchedLayer,
+                    validationTimeoutMs,
+                    controller.signal,
+                );
+                ongoingValidations.delete(val);
+                if (currentSeq !== switchSeq) return;
+
+                if (result?.success) {
+                    clearLayerFailure(val);
+                    const optionLabel = getBasemapOptionLabel?.(val) || val;
+                    if (activeStack.length > 1) {
+                        message?.success?.(
+                            `已切换到${optionLabel}组合（${activeStack.join(' + ')}）`,
+                        );
+                    } else {
+                        message?.success?.(`已成功切换到${optionLabel}底图`);
+                    }
+                    isAutoSwitchingLayer = false;
+                    return;
+                }
+
+                // Validation failed: mark failure and notify
+                const reason = result?.reason || '未知错误';
+                const runtimeTokenHandled = onRuntimeTokenFailure?.({
+                    layerId: val,
+                    reason,
+                    isDefaultBaseLayer: false,
+                });
+                if (runtimeTokenHandled) {
+                    isAutoSwitchingLayer = false;
+                    return;
+                }
+
+                const failCount = markLayerFailure(val);
+
+                if (failCount >= circuitBreakThreshold) {
+                    message?.error?.('当前网络异常，请尝试手动重试。可点击”重置链路”按钮。');
+                    return;
+                }
+
+                message?.warning?.(`切换到${val}底图失败：${reason}，请重新选择底图`);
+            } catch { /* ignored */
+
+                controller.abort();
+                ongoingValidations.delete(val);
+            }
+        })();
+    }
+
+    function bindBasemapSelectionWatcher() {
+        // Immediate reaction to selection changes: do not debounce baseline basemap switches
+        watchStopHandle = watch(
+            selectedLayerRef,
+            (val, prevVal, onCleanup) => {
+                clearSwitchTimer();
+                switchSeq += 1;
+                const currentSeq = switchSeq;
+                void runLayerSwitch(val, prevVal, currentSeq);
+                onCleanup(() => {
+                    clearSwitchTimer();
+                });
+            },
+            { immediate: true },
+        );
+        return watchStopHandle;
+    }
+
+    /**
+     * [C5] 停止 watcher 并清理定时器
+     * 组件卸载时调用，防止内存泄漏
+     */
+    function dispose() {
+        clearSwitchTimer();
+        if (watchStopHandle) {
+            watchStopHandle();
+            watchStopHandle = null;
+        }
+        // 中止所有进行中的验证
+        ongoingValidations.forEach((controller) => controller.abort());
+        ongoingValidations.clear();
+    }
+
+    return {
+        bindBasemapSelectionWatcher,
+        resetBasemapChain,
+        dispose,
+    };
+}

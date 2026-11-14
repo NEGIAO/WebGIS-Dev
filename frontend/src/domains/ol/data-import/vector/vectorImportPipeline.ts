@@ -22,7 +22,6 @@ import {
 } from '@common/map-view/geo/index';
 
 export interface VectorImportPipelineDeps {
-    message: any;
     createManagedVectorLayer: (...args: any[]) => any;
     /** 主入口的图层项构造与投影识别 */
     buildStandardLayerItem: (args: any) => any;
@@ -33,11 +32,12 @@ export interface VectorImportPipelineDeps {
     /** 栅格图层工厂 */
     createManagedRasterLayer: (...args: any[]) => Promise<any>;
     /** GIS 加载器（shp/geojson 解析包装） */
-    gisInlet: any;
     /** 本次导入人工声明的源坐标系（空串=自动识别），由主入口串行闸门持有 */
     getActiveOverrideCrs: () => string;
     /** 随机样式（导入数据视觉区分） */
     getRandomStyle: () => any;
+    gisInlet: any;
+    message: any;
 }
 
 /**
@@ -58,7 +58,7 @@ export function createVectorImportPipeline(deps: VectorImportPipelineDeps) {
         getActiveOverrideCrs,
         getRandomStyle,
     } = deps;
-    async function parseUploadedVector({ content, type, name = '' }) {
+    async function parseUploadedVector({ content, type, name = '' }: Record<string, any>) {
         const normalizedType = getNormalizedUploadType(type, name);
 
         if (normalizedType === 'kml') {
@@ -70,7 +70,7 @@ export function createVectorImportPipeline(deps: VectorImportPipelineDeps) {
         if (normalizedType === 'kmz' || normalizedType === 'zip') {
             const dispatched = await gisInlet.dispatch({ content, type: normalizedType, name });
             const vectorPacket = (dispatched.packets || []).find(
-                (item) => item.kind === 'kml' || item.kind === 'geojson' || item.kind === 'shp',
+                (item: any) => item.kind === 'kml' || item.kind === 'geojson' || item.kind === 'shp',
             );
 
             if (!vectorPacket) {
@@ -87,7 +87,7 @@ export function createVectorImportPipeline(deps: VectorImportPipelineDeps) {
             }
 
             if (vectorPacket.kind === 'shp') {
-                let sourceGeometry = null;
+                let sourceGeometry: any = null;
                 let sourceCrs = '';
                 const geojson = await parseShpPartsToGeoJSON(vectorPacket.shpParts, {
                     overrideCrs: getActiveOverrideCrs(),
@@ -155,7 +155,7 @@ export function createVectorImportPipeline(deps: VectorImportPipelineDeps) {
             try {
                 geojsonData =
                     normalizedType === 'csv' ? parseCsvToGeoJSON(text) : parseWktToGeoJSON(text);
-            } catch (error) {
+            } catch (error: any) {
                 throw new Error(`文件解析失败：${error?.message || error}`, { cause: error });
             }
             if (!geojsonData?.features?.length) {
@@ -181,7 +181,7 @@ export function createVectorImportPipeline(deps: VectorImportPipelineDeps) {
                 '[SHP] 检测到单个 .shp 文件上传，属性信息可能不完整。\n' +
                 '建议：请将 .shp, .dbf, .shx, .prj, .cpg 等同名文件一起上传或打包成 ZIP。'
             );
-            let sourceGeometry = null;
+            let sourceGeometry: any = null;
             let sourceCrs = '';
             const geojson = await parseShpPartsToGeoJSON(
                 { shp: content },
@@ -213,7 +213,13 @@ export function createVectorImportPipeline(deps: VectorImportPipelineDeps) {
         throw new Error(`不支持的文件类型: ${normalizedType || type}`);
     }
 
-    async function importDispatchedPackets(dispatched, normalizedType, name, batchLabel, tifFile = null) {
+    async function importDispatchedPackets(
+        dispatched: any,
+        normalizedType: any,
+        name: any,
+        batchLabel: any,
+        tifFile: any = null,
+    ) {
         const packets = Array.isArray(dispatched.packets)
             ? dispatched.packets
             : dispatched.packet
@@ -267,7 +273,7 @@ export function createVectorImportPipeline(deps: VectorImportPipelineDeps) {
                 let features = [];
                 let layerType = packet.kind;
                 // 源几何快照：只在「原始数值尚未被变换」时非空
-                let sourceGeometry = null;
+                let sourceGeometry: any = null;
                 let sourceGeometryCrs = '';
 
                 if (packet.kind === 'kml') {
@@ -376,7 +382,7 @@ export function createVectorImportPipeline(deps: VectorImportPipelineDeps) {
                         importErrors.length,
                     message: `已导入：${layerName}`,
                 });
-            } catch (err) {
+            } catch (err: any) {
                 if (isUnsupportedProjectedCrsError(err) && !unsupportedProjectionDetected) {
                     unsupportedProjectionDetected = true;
                     if (!err?.notified) {
@@ -403,7 +409,7 @@ export function createVectorImportPipeline(deps: VectorImportPipelineDeps) {
         }
 
         const dispatcherErrors = Array.isArray(dispatched.errors)
-            ? dispatched.errors.map((item) => `${item.entryName || item.kind}: ${item.message}`)
+            ? dispatched.errors.map((item: any) => `${item.entryName || item.kind}: ${item.message}`)
             : [];
 
         const mergedErrors = [...dispatcherErrors, ...importErrors];

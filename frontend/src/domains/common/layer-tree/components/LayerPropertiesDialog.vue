@@ -245,7 +245,7 @@
     </teleport>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import {
     CircleDot,
@@ -260,6 +260,7 @@ import {
     Layers,
     Percent,
     Route,
+    Ruler,
     Shapes,
     Table,
     Tag,
@@ -279,7 +280,7 @@ const props = defineProps({
 
 const emit = defineEmits(['close', 'reproject']);
 
-const SOURCE_TYPE_LABELS = {
+const SOURCE_TYPE_LABELS: Record<string, string> = {
     draw: '绘制',
     upload: '上传/导入',
     search: '搜索结果',
@@ -292,7 +293,7 @@ const sourceTypeLabel = computed(() => {
 });
 
 /** 几何类型 → 中文标签 + 图标（未收录类型原样展示原始值） */
-const GEOMETRY_META = {
+const GEOMETRY_META: Record<string, { label: string; icon: any }> = {
     Point: { label: '点要素', icon: CircleDot },
     MultiPoint: { label: '点要素', icon: CircleDot },
     LineString: { label: '线要素', icon: Route },
@@ -385,7 +386,7 @@ const extent = computed(() => {
 });
 
 /** Esc 关闭（与项目其他浮层一致：挂载即监听、卸载即移除） */
-function handleKeydown(event) {
+function handleKeydown(event: KeyboardEvent) {
     if (event.key === 'Escape' && props.visible) {
         emit('close');
     }

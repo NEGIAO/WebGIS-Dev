@@ -81,7 +81,7 @@
     </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 /**
  * ChatServiceStatus - 路由模式/服务状态/额度状态条（从 ChatPanelContent 拆出）
  *

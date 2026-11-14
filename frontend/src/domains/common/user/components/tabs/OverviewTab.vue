@@ -1,228 +1,3 @@
-<!--
-  OverviewTab.vue
-  账号中心「总览」页（重设计版）：
-  - 顶部三张大数字统计卡（登录/访问/API 调用）
-  - API 配额可视化进度条（用量>80% 转警示色）
-  - 紧凑个人信息行 + 全站实时统计双列
-  - 留言板（发布 + 列表卡片）
-  数据由父组件经 props 注入，交互经 emits 上抛。
--->
-<script setup>
-import { computed, onMounted, ref } from 'vue';
-
-import { useLocale } from '@common/app/useLocale';
-import { formatDateTime as formatDateTimeUtil } from '@common/utils/datetime';
-import { fetchVisitorStats, formatVisitorNumber, formatUpdatedAt } from '@common/app/visitorStats';
-
-const props = defineProps({
-    /** Personal statistics object (registered_at, login_count, etc.) */
-    selfStats: {
-        type: Object,
-        default: () => ({}),
-    },
-    /** Quota information object (used, limit, remaining) */
-    quotaInfo: {
-        type: Object,
-        default: () => ({}),
-    },
-    /** Site-wide realtime statistics (online_users, total_visit_count, etc.) */
-    realtimeStats: {
-        type: Object,
-        default: () => ({}),
-    },
-    /** Admin contact string */
-    adminContact: {
-        type: String,
-        default: '',
-    },
-    /** Array of recent message objects */
-    recentMessages: {
-        type: Array,
-        default: () => [],
-    },
-    /** Pre-computed quota display text */
-    quotaText: {
-        type: String,
-        default: '',
-    },
-    /** Pre-computed session duration display text */
-    sessionDurationText: {
-        type: String,
-        default: '',
-    },
-    /** Whether a message post request is in flight */
-    isPostingMessage: {
-        type: Boolean,
-        default: false,
-    },
-    /** 首次统计加载中（骨架屏；30s 轮询刷新不触发） */
-    initialLoading: {
-        type: Boolean,
-        default: false,
-    },
-});
-
-const emit = defineEmits([
-    /** Request parent to submit the message content */
-    'submit-message',
-]);
-
-const newMessageText = ref('');
-const contactCopied = ref(false);
-let contactCopiedTimer = null;
-const { language, t } = useLocale();
-
-const intlLocale = computed(() => (language.value === 'en-US' ? 'en-US' : 'zh-CN'));
-
-/** 留言最大长度 */
-const MESSAGE_MAX_LEN = 200;
-
-/** 数字千分位格式化 */
-function formatNumber(value) {
-    const num = Number(value || 0);
-    return Number.isFinite(num) ? num.toLocaleString(intlLocale.value) : '0';
-}
-
-/** 注册陪伴天数（注册时间无效时返回 null） */
-const daysSinceRegister = computed(() => {
-    const raw = String(props.selfStats?.registered_at || '').trim();
-    if (!raw) return null;
-    const registered = new Date(raw);
-    if (Number.isNaN(registered.getTime())) return null;
-    return Math.max(1, Math.ceil((Date.now() - registered.getTime()) / 86400000));
-});
-
-/** 在线用户数：优先实时 tracker 口径（含游客）；其次统一 online_users；最后 DB 会话数 */
-const displayOnlineUsers = computed(() => {
-    const rt = props.realtimeStats || {};
-    const realtime = rt.realtime_online_users;
-    if (realtime !== null && realtime !== undefined) return realtime;
-    const unified = rt.online_users;
-    if (unified !== null && unified !== undefined) return unified;
-    return rt.online_users_db || 0;
-});
-
-// 第三方口径（51.la）：与上面的后端口径并列展示。
-// 两者统计范围不同（后端只覆盖本站 API 与已登录会话，51.la 覆盖全站 UV/PV），
-// 因此必须分行并标注来源，避免被误读成"同一指标的两个不同数值"
-const visitorSnapshot = ref(null);
-const visitorLine = computed(() => {
-    const metrics = visitorSnapshot.value?.metrics;
-    if (!metrics) return null;
-    const pick = (key) => (Number.isFinite(metrics[key]) ? formatVisitorNumber(metrics[key]) : '-');
-    const line = {
-        todayUsers: pick('todayUsers'),
-        todayPv: pick('todayPv'),
-        totalPv: pick('totalPv'),
-    };
-    // 三个指标全缺时不渲染这一行，避免页面上出现一排「-」
-    return Object.values(line).some((value) => value !== '-') ? line : null;
-});
-// 数据新鲜度：与指标同行展示，让用户知道这组第三方数字是什么时候抓的
-const visitorUpdatedAt = computed(() => formatUpdatedAt(visitorSnapshot.value?.updatedAt));
-onMounted(async () => {
-    visitorSnapshot.value = await fetchVisitorStats();
-});
-
-/** 相对时间：刚刚/x 分钟前/x 小时前/昨天/日期 */
-function formatRelativeTime(value) {
-    const raw = String(value || '').trim();
-    if (!raw) return '-';
-    const parsed = new Date(raw);
-    if (Number.isNaN(parsed.getTime())) return raw;
-
-    const diff = Date.now() - parsed.getTime();
-    if (diff < 60000) return t('overview.justNow');
-    if (diff < 3600000) return t('overview.minutesAgo', { count: Math.floor(diff / 60000) });
-    if (diff < 86400000 && new Date().toDateString() === parsed.toDateString()) {
-        return t('overview.hoursAgo', { count: Math.floor(diff / 3600000) });
-    }
-    const yesterday = new Date(Date.now() - 86400000);
-    if (parsed.toDateString() === yesterday.toDateString()) return t('overview.yesterday');
-    return parsed.toLocaleDateString(intlLocale.value, { month: '2-digit', day: '2-digit' });
-}
-
-/** 留言作者彩色首字头像：按用户名哈希取色 */
-const AUTHOR_COLORS = ['#4caf50', '#2980b9', '#9b59b6', '#e67e22', '#1abc9c', '#e74c3c'];
-function authorColor(name) {
-    const text = String(name || t('overview.anonymousInitial'));
-    let hash = 0;
-    for (let i = 0; i < text.length; i++) {
-        hash = (hash * 31 + text.charCodeAt(i)) % 997;
-    }
-    return AUTHOR_COLORS[hash % AUTHOR_COLORS.length];
-}
-
-function authorInitial(name) {
-    const text = String(name || '').trim();
-    return text ? text.slice(0, 1).toUpperCase() : t('overview.anonymousInitial');
-}
-
-/** 复制成功后的按钮态切换（1.5s 还原） */
-function markContactCopied() {
-    contactCopied.value = true;
-    if (contactCopiedTimer) clearTimeout(contactCopiedTimer);
-    contactCopiedTimer = setTimeout(() => {
-        contactCopied.value = false;
-        contactCopiedTimer = null;
-    }, 1500);
-}
-
-/** 一键复制管理员联系方式（clipboard API 不可用时降级 execCommand） */
-async function copyAdminContact() {
-    const text = String(props.adminContact || '').trim();
-    if (!text) return;
-    try {
-        await navigator.clipboard.writeText(text);
-        markContactCopied();
-    } catch {
-        // 非安全上下文（http 局域网访问）等场景 clipboard API 不可用，降级隐藏 textarea + execCommand
-        try {
-            const helper = document.createElement('textarea');
-            helper.value = text;
-            helper.setAttribute('readonly', '');
-            helper.style.cssText = 'position:fixed;opacity:0;pointer-events:none;';
-            document.body.appendChild(helper);
-            helper.select();
-            document.execCommand('copy');
-            document.body.removeChild(helper);
-            markContactCopied();
-        } catch {
-            /* 双通道均不可用则静默（联系方式仍可手动选中复制） */
-        }
-    }
-}
-
-/** 配额使用百分比（不限额时返回 null） */
-const quotaPercent = computed(() => {
-    const limit = Number(props.quotaInfo?.limit);
-    if (!Number.isFinite(limit) || limit <= 0) return null;
-    const used = Math.max(0, Number(props.quotaInfo?.used || 0));
-    return Math.min(100, Math.round((used / limit) * 100));
-});
-
-/** 配额是否接近耗尽（>80% 转警示色） */
-const quotaWarning = computed(() => quotaPercent.value !== null && quotaPercent.value >= 80);
-
-function formatDateTime(value) {
-    // 空值显示占位符 '-'，非法值原样展示（模板多处引用此名，保留本地包装）
-    return formatDateTimeUtil(value, {
-        locale: intlLocale.value,
-        emptyText: '-',
-        invalidText: null,
-    });
-}
-
-function handleSubmit() {
-    const content = String(newMessageText.value || '').trim();
-    if (!content) return;
-    // 第二参为成功回调：父组件 API 成功后才清空输入框，发布失败时保留草稿（V3.4.62 A1）
-    emit('submit-message', content, () => {
-        newMessageText.value = '';
-    });
-}
-</script>
-
 <template>
     <div class="view-content overview-view">
         <!-- 首载骨架屏（仅首次打开时显示，轮询刷新不闪烁） -->
@@ -378,14 +153,14 @@ function handleSubmit() {
             <textarea
                 v-model="newMessageText"
                 class="user-message-input"
-                :maxlength="MESSAGE_MAX_LEN"
+                :maxlength="messageMaxLen"
                 :placeholder="t('overview.messagePlaceholder')"
             ></textarea>
             <div class="compose-meta">
                 <span
                     class="char-count"
-                    :class="{ nearly: newMessageText.length >= MESSAGE_MAX_LEN - 20 }"
-                >{{ newMessageText.length }}/{{ MESSAGE_MAX_LEN }}</span>
+                    :class="{ nearly: newMessageText.length >= messageMaxLen - 20 }"
+                >{{ newMessageText.length }}/{{ messageMaxLen }}</span>
             </div>
             <button
                 class="btn-primary w-100"
@@ -426,6 +201,8 @@ function handleSubmit() {
         </div>
     </div>
 </template>
+
+<script lang="ts" src="./OverviewTab.ts"></script>
 
 <style scoped>
 .overview-view {

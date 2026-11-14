@@ -10,9 +10,9 @@ import { stretchToByte, isNoDataValue, isRasterUploadLayer } from '@common/data-
 import { normalizeProjectionCode } from '@common/map-view/geo/index';
 
 /** GeoTIFF 库与 Worker 池缓存（模块级：解码器本身无状态，跨实例复用无副作用） */
-let cachedGeotiffFromBlob = null;
-let cachedGeoTIFFSourceCtor = null;
-let cachedPool = null;
+let cachedGeotiffFromBlob: any = null;
+let cachedGeoTIFFSourceCtor: any = null;
+let cachedPool: any = null;
 
 /** 大尺寸 TIF 分块处理的像素阈值（超过此值启用分块模式） */
 const TIF_CHUNK_THRESHOLD = 4000000;
@@ -24,11 +24,11 @@ export interface RasterSamplerDeps {
     /** 当前 OL 地图实例（ref，可能尚未就绪） */
     mapInstance: { value: any };
     /** 消息提示实例 */
-    message: any;
     /** 已导入的用户图层数组 */
     userDataLayers: any[];
     /** 导入进度上报（由主入口透传，写入 GlobalLoading 文案） */
     reportImportProgress: (state?: any) => void;
+    message: any;
 }
 
 /**
@@ -97,7 +97,7 @@ export function createRasterSamplers({
      * @param {string|Object|null} input - 投影代码字符串或 Projection 对象
      * @returns {Object|null} OL Projection 对象，无法解析时返回 null
      */
-    function toProjectionObject(input) {
+    function toProjectionObject(input: any) {
         if (!input) return null;
         if (typeof input?.getUnits === 'function') return input;
         if (typeof input === 'string') return getProjection(input);
@@ -111,7 +111,7 @@ export function createRasterSamplers({
      * @param {string|Object} b - 投影 B
      * @returns {boolean} 是否等价
      */
-    function isEquivalentProjection(a, b) {
+    function isEquivalentProjection(a: any, b: any) {
         const pa = toProjectionObject(a);
         const pb = toProjectionObject(b);
         if (!pa || !pb) return false;
@@ -125,7 +125,7 @@ export function createRasterSamplers({
      * @param {Object|null} stretchRange - 拉伸范围 { min, max }
      * @returns {boolean} 是否应跳过该像素
      */
-    function isAllNoDataOrOutOfRange(values, nodataValue, stretchRange) {
+    function isAllNoDataOrOutOfRange(values: any, nodataValue: any, stretchRange: any) {
         const stretchMin = Number.isFinite(stretchRange?.min) ? stretchRange.min : null;
         const stretchMax = Number.isFinite(stretchRange?.max) ? stretchRange.max : null;
         const outOfStretch =
@@ -135,7 +135,7 @@ export function createRasterSamplers({
             Number.isFinite(values[0]) &&
             (values[0] < stretchMin || values[0] > stretchMax);
         return (
-            (nodataValue !== null && values.every((v) => isNoDataValue(v, nodataValue))) ||
+            (nodataValue !== null && values.every((v: any) => isNoDataValue(v, nodataValue))) ||
             outOfStretch
         );
     }
@@ -163,11 +163,11 @@ export function createRasterSamplers({
         nodataValue = null,
         stretchRange = null,
         readPixelValues,
-    }) {
+    }: Record<string, any>) {
         if (!width || !height || !extent || typeof readPixelValues !== 'function') return null;
         const [minX, minY, maxX, maxY] = extent;
 
-        return async (mapCoordinate, mapProjection) => {
+        return async (mapCoordinate: any, mapProjection: any) => {
             let coord = mapCoordinate;
             if (projection && mapProjection && !isEquivalentProjection(projection, mapProjection)) {
                 coord = transform(mapCoordinate, mapProjection, projection);
@@ -198,7 +198,7 @@ export function createRasterSamplers({
      * 基于 GeoTIFF image 对象的采样器
      * 每次查询通过 readRasters(window) 按需读取单像素，适合大文件
      */
-    function createGeoTiffSampler({ image, projection, nodataValue = null, stretchRange = null }) {
+    function createGeoTiffSampler({ image, projection, nodataValue = null, stretchRange = null }: Record<string, any>) {
         if (!image) return null;
         const width = image.getWidth();
         const height = image.getHeight();
@@ -212,10 +212,10 @@ export function createRasterSamplers({
             projection,
             nodataValue,
             stretchRange,
-            readPixelValues: async (px, py) => {
+            readPixelValues: async (px: any, py: any) => {
                 const raster = await image.readRasters({ window: [px, py, px + 1, py + 1] });
                 const bands = Array.isArray(raster) ? raster : [raster];
-                return bands.map((band) => band?.[0]);
+                return bands.map((band: any) => band?.[0]);
             },
         });
     }
@@ -232,7 +232,7 @@ export function createRasterSamplers({
         projection,
         nodataValue = null,
         stretchRange = null,
-    }) {
+    }: Record<string, any>) {
         if (!bands?.length) return null;
 
         return createRasterSampler({
@@ -242,9 +242,9 @@ export function createRasterSamplers({
             projection,
             nodataValue,
             stretchRange,
-            readPixelValues: (px, py) => {
+            readPixelValues: (px: any, py: any) => {
                 const idx = py * width + px;
-                return bands.map((band) => band?.[idx]);
+                return bands.map((band: any) => band?.[idx]);
             },
         });
     }
@@ -255,7 +255,7 @@ export function createRasterSamplers({
      * @param {number[]} mapCoordinate - 地图坐标 [x, y]
      * @returns {Promise<Object|null>} 包含图层名称、波段值等信息的对象，无结果时返回 null
      */
-    async function queryRasterValueAtCoordinate(mapCoordinate) {
+    async function queryRasterValueAtCoordinate(mapCoordinate: any) {
         if (!mapInstance.value) return null;
         const mapProjection = mapInstance.value.getView().getProjection();
         const rasterLayers = [...userDataLayers]
@@ -274,7 +274,7 @@ export function createRasterSamplers({
                 if (sampled.allNoData) continue;
 
                 const lonlat = toLonLat(mapCoordinate);
-                const payload = {
+                const payload: Record<string, any> = {
                     图层名称: item.name,
                     图层类型: '栅格',
                     像元列行: `${sampled.pixel[0]}, ${sampled.pixel[1]}`,
@@ -282,7 +282,7 @@ export function createRasterSamplers({
                     点击纬度: Number(lonlat[1].toFixed(6)),
                 };
 
-                sampled.values.forEach((v, idx) => {
+                sampled.values.forEach((v: any, idx: number) => {
                     const key = `波段${idx + 1}`;
                     payload[key] =
                         sampled.nodataValue !== null && isNoDataValue(v, sampled.nodataValue)
@@ -293,7 +293,7 @@ export function createRasterSamplers({
                 });
 
                 return payload;
-            } catch (err) {
+            } catch (err: any) {
                 message.warning(`Raster sample failed: ${err?.message || err}`, { duration: 3200 });
             }
         }
@@ -307,15 +307,15 @@ export function createRasterSamplers({
      * @param {string} sourceProjection - 源投影代码
      * @returns {number[]|null} 视图投影下的范围，转换失败时返回原始范围
      */
-    function projectExtentToMapView(extent, sourceProjection) {
-        if (!mapInstance.value || !extent || extent.some((v) => !Number.isFinite(v))) return null;
+    function projectExtentToMapView(extent: any, sourceProjection: any) {
+        if (!mapInstance.value || !extent || extent.some((v: any) => !Number.isFinite(v))) return null;
         const viewProjection = mapInstance.value.getView().getProjection();
         if (!sourceProjection || isEquivalentProjection(sourceProjection, viewProjection)) {
             return extent;
         }
         try {
             return transformExtent(extent, sourceProjection, viewProjection);
-        } catch (err) {
+        } catch (err: any) {
             message.warning(
                 `Extent projection transform failed, fallback to original extent: ${err?.message || err}`,
                 { duration: 3200 },
@@ -350,13 +350,13 @@ export function createRasterSamplers({
         nodataValue,
         bandStats,
         alphaStats,
-    }) {
+    }: Record<string, any>) {
         const rgba = new Uint8ClampedArray(pixelCount * 4);
         const hasRgb = bands.length >= 3;
         const hasAlpha = bands.length >= 4;
         const useChunked = pixelCount > TIF_CHUNK_THRESHOLD;
 
-        const processPixelRange = (start, end) => {
+        const processPixelRange = (start: any, end: any) => {
             for (let i = start; i < end; i++) {
                 const rSrc = hasRgb ? bands[0][i] : bands[0]?.[i];
                 const gSrc = hasRgb ? bands[1][i] : bands[0]?.[i];

@@ -45,7 +45,7 @@ const EXPORT_FORMAT_SPECS = [
  * @param {boolean} [batch=false] true 取批量命令 key，false 取单图层命令 key
  * @returns {Array<{key: string, label: string}>} 当前可用格式的子项；全部不可用时返回空数组
  */
-function buildExportSubmenuChildren(capabilities, batch = false) {
+function buildExportSubmenuChildren(capabilities: any, batch = false) {
     return EXPORT_FORMAT_SPECS.filter((spec) => !!capabilities[spec.capability]).map((spec) => ({
         key: batch ? spec.batchCommand : spec.layerCommand,
         label: spec.label,

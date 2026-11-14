@@ -117,7 +117,7 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { useLocale } from '@common/app/useLocale';
@@ -127,7 +127,7 @@ const router = useRouter();
 const route = useRoute();
 const countdown = ref(5);
 const totalCountdown = 5;
-let timer = null;
+let timer: ReturnType<typeof setInterval> | null = null;
 
 // 获取当前路径用于显示
 const currentPath = computed(() => route.fullPath || '/unknown');
@@ -155,7 +155,10 @@ onMounted(() => {
   timer = setInterval(() => {
     countdown.value--;
     if (countdown.value <= 0) {
-      clearInterval(timer);
+      const activeTimer = timer;
+      if (activeTimer !== null) {
+        clearInterval(activeTimer);
+      }
       timer = null;
       router.push('/');
     }

@@ -1,0 +1,692 @@
+.cesium-container {
+    width: 100%;
+    height: 100%;
+    position: absolute;
+    top: 0;
+    left: 0;
+    z-index: 1;
+}
+
+/* 坐标 HUD（右下角，圆角胶囊）：左侧显隐开关 + 右侧「位置 / 姿态 / 相机海拔」三组数据。
+   桌面端默认显示、触屏默认隐藏；桌面与触屏均可通过开关切换。
+   视觉基线对齐 OL MapControlsBar：同款浅色玻璃外壳 + 内层品牌色胶囊 + 等宽数值字体，
+   两套引擎的坐标面板应看起来几乎无差别。 */
+.coordinate-display {
+    position: absolute;
+    bottom: 35px;
+    right: 8px;
+    z-index: var(--z-panel);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 0;
+    padding: 4px;
+    border: 1px solid rgba(var(--brand-primary-rgb), 0.22);
+    border-radius: 9999px;
+    background: rgba(255, 255, 255, 0.92);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    color: var(--text-brand-dark);
+    font-family: 'JetBrains Mono', 'Fira Code', 'Roboto Mono', monospace;
+    font-size: 13px;
+    line-height: 1.5;
+    box-shadow:
+        var(--toc-shadow-md),
+        inset 0 1px 0 rgba(255, 255, 255, 0.6);
+    user-select: none;
+    max-width: calc(100vw - 48px);
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+/* 显隐开关：与 OL 控制条保持一致的圆形按钮 */
+.coord-toggle-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    border: 1px solid rgba(var(--brand-primary-rgb), 0.22);
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.92);
+    color: var(--brand-accent-dark);
+    cursor: pointer;
+    flex-shrink: 0;
+    transition:
+        transform 0.15s ease,
+        background 0.15s ease,
+        color 0.15s ease;
+}
+
+.coord-toggle-btn:hover {
+    background: var(--toc-primary-bg-hover);
+}
+
+.coord-toggle-btn:active {
+    transform: scale(0.94);
+}
+
+.coord-toggle-btn svg {
+    width: 17px;
+    height: 17px;
+}
+
+/* 坐标段包裹层：与 OL .coordinate-section 同构，负责关闭态整体让位与触屏收缩 */
+.coordinate-section {
+    position: relative;
+    display: flex;
+    align-items: center;
+    min-width: 0;
+}
+
+/* 数据区：内层品牌色胶囊，点击复制当前坐标（对齐 OL .coordinate-display） */
+.coordinate-copy-area {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+    height: 36px;
+    padding: 0 14px;
+    border: 1px solid transparent;
+    border-radius: 9999px;
+    background: rgba(var(--brand-primary-rgb), 0.06);
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+    transition: background 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.coordinate-copy-area:hover {
+    background: rgba(var(--brand-primary-rgb), 0.1);
+}
+
+/* 复制图标：默认隐去，悬停/聚焦浮现；触屏常显（触屏无 hover 态） */
+.coordinate-copy-icon {
+    flex-shrink: 0;
+    color: var(--toc-text-secondary);
+    opacity: 0;
+    transition: opacity 0.15s ease, color 0.15s ease;
+}
+
+.coordinate-copy-area:hover .coordinate-copy-icon,
+.coordinate-copy-area:focus-visible .coordinate-copy-icon {
+    color: var(--brand-accent-dark);
+    opacity: 1;
+}
+
+/* 触屏紧凑坐标文本：经纬度 + 海拔单行展示 */
+.coordinate-mobile-text {
+    min-width: 0;
+    color: var(--text-brand-dark);
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 0.03em;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+/* 漫游态徽标 */
+.coordinate-display-badge {
+    padding: 1px 6px;
+    border: 1px solid rgba(var(--brand-primary-rgb), 0.4);
+    border-radius: 9999px;
+    background: var(--brand-primary-bg);
+    color: var(--brand-primary-dark);
+    font-family: var(--font-zh);
+    font-size: 10px;
+    font-weight: 700;
+    line-height: 1.5;
+    white-space: nowrap;
+}
+
+/* 数据组：桌面横排，组间细竖线分隔；空间不足时收缩并省略，避免撑破胶囊 */
+.coordinate-display-groups {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    min-width: 0;
+    overflow: hidden;
+}
+
+.coordinate-group {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 6px;
+    min-width: 0;
+}
+
+.coordinate-group + .coordinate-group {
+    padding-left: 10px;
+    border-left: 1px solid rgba(var(--brand-primary-rgb), 0.18);
+}
+
+/* 组名用无衬线品牌色，与等宽数值形成主次对比（字重/字距对齐 OL 坐标文本） */
+.coordinate-group-label {
+    flex-shrink: 0;
+    color: var(--brand-primary);
+    font-family: var(--font-zh);
+    font-size: 11px;
+    font-weight: 700;
+    white-space: nowrap;
+}
+
+.coordinate-group-value {
+    /* flex 子项默认 min-width:auto 会拒绝收缩到内容宽度以下，
+       移动端换行时必须显式置 0，否则长坐标会撑破卡片 */
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    color: var(--text-brand-dark);
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 0.03em;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+/* 瓦片请求级别：与 OL .zoom-level-display 同尺寸同配色 */
+.zoom-level-display {
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    background: #ffffff;
+    border: 1px solid rgba(var(--brand-primary-rgb), 0.22);
+    color: var(--brand-accent-dark);
+    font-family: 'JetBrains Mono', 'Roboto Mono', monospace;
+    font-size: 15px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-variant-numeric: tabular-nums;
+    flex-shrink: 0;
+}
+
+/* 竖发丝分隔线：与 OL .divider 同规格 */
+.divider {
+    width: 1px;
+    height: 20px;
+    background-color: rgba(var(--brand-primary-rgb), 0.18);
+    flex-shrink: 0;
+}
+
+/* 主页按钮：与 OL .home-btn 同款品牌渐变圆形按钮 */
+.home-btn {
+    width: 36px;
+    height: 36px;
+    position: relative;
+    overflow: hidden;
+    border-radius: 50%;
+    background: var(--brand-gradient);
+    border: none;
+    color: #ffffff;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    flex-shrink: 0;
+    box-shadow:
+        0 3px 9px rgba(var(--brand-primary-dark-rgb), 0.32),
+        inset 0 1px 0 rgba(255, 255, 255, 0.28);
+    transition:
+        transform 0.2s cubic-bezier(0.4, 0, 0.2, 1),
+        filter 0.2s ease,
+        box-shadow 0.2s ease;
+}
+
+.home-btn:hover {
+    filter: brightness(1.07);
+    transform: scale(1.06);
+    box-shadow:
+        0 5px 14px rgba(var(--brand-primary-dark-rgb), 0.4),
+        inset 0 1px 0 rgba(255, 255, 255, 0.28);
+}
+
+.home-btn:active {
+    transform: scale(0.94);
+}
+
+@media (pointer: coarse) {
+    /* 触屏默认右侧竖列：只保留缩放级别 / 主页 / 坐标开关（对齐 OL 收起态） */
+    .coordinate-display {
+        bottom: 30px;
+        right: 10px;
+        max-width: calc(100vw - 24px);
+        font-size: 12px;
+        flex-direction: column;
+        gap: 8px;
+        padding: 8px 6px;
+        border-radius: 999px;
+        transform: scale(0.8);
+    }
+
+    /* 展开坐标时恢复桌面式横向一行；收起时保持竖列 */
+    .coordinate-display.coord-open {
+        flex-direction: row;
+        gap: 8px;
+        padding: 4px;
+        border-radius: 9999px;
+    }
+
+    .coordinate-display.coord-open .coordinate-section,
+    .coordinate-display.coord-open .coordinate-copy-area {
+        min-width: 0;
+        flex: 1 1 auto;
+    }
+
+    /* 触屏开关 ≥40px，图标同步放大 */
+    .coord-toggle-btn {
+        width: 40px;
+        height: 40px;
+    }
+
+    .coord-toggle-btn svg {
+        width: 20px;
+        height: 20px;
+    }
+
+    /* 触屏保持与 OL 一致的横向胶囊；紧凑文本单行，窄屏省略。
+       字号收到 12px：横向展开时固定控件已占 ~123px，需为「经度, 纬度, 海拔」留足宽度 */
+    .coordinate-mobile-text {
+        font-size: 12px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    /* 触屏无 hover 态：复制图标常显（对齐 OL 触屏展开时复制按钮常显） */
+    .coordinate-copy-icon {
+        opacity: 0.55;
+    }
+
+    /* 触屏数据区高度 ≥40px（规范 §3 移动端基线），内边距/间距收紧避免挤占文本宽度 */
+    .coordinate-copy-area {
+        height: 40px;
+        gap: 6px;
+        padding: 0 10px;
+    }
+
+    /* 竖列态分隔线转横线，宽度跟随容器（对齐 OL 触屏竖列） */
+    .divider {
+        width: 60%;
+        height: 1px;
+    }
+
+    /* 横向展开态分隔线改回竖发丝线 */
+    .coordinate-display.coord-open .divider {
+        width: 1px;
+        height: 20px;
+    }
+
+    /* 触屏可点击目标 ≥40px，图标 glyph 同步放大（规范 §3 移动端基线） */
+    .zoom-level-display {
+        width: 40px;
+        height: 40px;
+        font-size: 16px;
+    }
+
+    .home-btn {
+        width: 42px;
+        height: 42px;
+    }
+
+    .home-btn svg {
+        width: 22px;
+        height: 22px;
+    }
+}
+
+:global(.cesium-viewer-toolbar),
+:global(.cesium-baseLayerPicker-dropDown),
+:global(.cesium-geocoder-searchButton),
+:global(.cesium-geocoder-searchButton:hover) {
+    z-index: calc(var(--z-popover) + 200);
+}
+
+:global(.cesium-viewer-toolbar) {
+    top: 12px !important;
+    right: 12px !important;
+}
+
+:global(.cesium-baseLayerPicker-dropDown) {
+    top: calc(100% + 4px);
+    max-height: calc(100vh - 82px);
+    overflow-y: auto;
+}
+
+/* FPS 面板（debugShowFramesPerSecond）：Cesium 默认 top:50 双行盒子会压住
+   罗盘（top:100, right:0）。压成单行紧凑胶囊后放回罗盘正上方、贴右缘——
+   上不碰工具栏行（约 y≤52），下不碰罗盘（y≥100）；z 用 --z-panel 且
+   pointer-events:none，任何侧栏/下拉都盖在它上面，永不遮挡交互 */
+:global(.cesium-performanceDisplay-defaultContainer) {
+    top: 50px !important;
+    right: 10px !important;
+    text-align: right;
+    pointer-events: none;
+    z-index: var(--z-panel);
+}
+
+/* 主题化：白底 + 品牌绿实色（原为深海军蓝 + 青/绿字） */
+:global(.cesium-performanceDisplay) {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 10px;
+    padding: 3px 11px !important;
+    background: #fff !important;
+    border: 1px solid var(--brand-primary) !important;
+    border-radius: 999px !important;
+    color: var(--brand-primary-dark) !important;
+    font: 600 11px 'Consolas', 'Courier New', monospace !important;
+    line-height: 1.5;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.15);
+}
+
+/* FPS 用固定蓝（#2563eb，对白约 5.2:1 过 AA），MS 用品牌暖金深色 ——
+   两者色相明显不同、一眼可辨；
+   --brand-gold-dark 是主题专门为「浅底上的金色文字」准备的档位（对白约 4.9:1，过 AA），
+   且金与绿、金与蓝都是经典配对，两套主题通用，无需按主题分化。
+   FPS 用常量蓝而非 --brand-primary，是为了保证绿/蓝两套主题下 FPS 始终是同一个蓝、
+   不随主题主色变来变去。 */
+:global(.cesium-performanceDisplay-fps) {
+    color: #2563eb !important;
+    font-weight: 800 !important;
+    font-size: 12px !important;
+}
+
+:global(.cesium-performanceDisplay-ms) {
+    color: var(--brand-gold-dark) !important;
+    font-weight: 800 !important;
+    font-size: 12px !important;
+}
+
+/* 渲染被节流（throttled）：告警态用红，与上面两色都不同 */
+:global(.cesium-performanceDisplay-throttled) {
+    color: #dc2626 !important;
+    font-weight: 800 !important;
+}
+
+/* —— InfoBox 属性卡片：白底 + 品牌绿（Cesium 原生为暗色卡片）——
+   InfoBox 位于右侧抽屉，与右上角 FPS 胶囊同处一片区域。
+   注意 .cesium-viewer-infoBoxContainer 本身是 static 元素（z-index 不生效），
+   故层级必须加在 position:absolute 的 .cesium-infoBox 上，
+   让卡片完整盖住 FPS 胶囊而非两者交叠。 */
+:global(.cesium-infoBox) {
+    z-index: calc(var(--z-panel) + 5);
+    background: #fff !important;
+    color: var(--text-primary) !important;
+    border: 1px solid var(--brand-primary) !important;
+    border-right: none !important;
+    box-shadow: 0 8px 28px rgba(0, 0, 0, 0.18) !important;
+}
+
+:global(.cesium-infoBox-title) {
+    background: var(--brand-gradient) !important;
+    color: #fff !important;
+    font-weight: 700;
+}
+
+/* 相机定位按钮：白底品牌描边 + 品牌色图标（挂在绿色标题栏上） */
+:global(button.cesium-infoBox-camera) {
+    background: #fff !important;
+    border: 1px solid var(--brand-primary) !important;
+    color: var(--brand-primary) !important;
+    fill: var(--brand-primary) !important;
+}
+
+/* 关闭按钮：标题栏为品牌渐变，故用白字；hover 转品牌深色实底 */
+:global(button.cesium-infoBox-close) {
+    color: #fff !important;
+    background: transparent !important;
+}
+
+:global(button.cesium-infoBox-close:hover) {
+    background: var(--brand-primary-dark) !important;
+    color: #fff !important;
+}
+
+:global(button.cesium-infoBox-close:focus) {
+    background: var(--brand-primary-dark) !important;
+    outline: none !important;
+}
+
+/* 描述 iframe 本体为白底（iframe 内文字颜色由 useCesiumInfoBoxTheme 注入） */
+:global(.cesium-infoBox-iframe) {
+    background: #fff !important;
+}
+
+/* 移动端导航样式已迁移至 vendors/cesium-navigation/styles/cesium-navigation.css（"移动端适配"段），勿在此重复定义 */
+
+
+:global(.cesium-geocoder .search-results) {
+    z-index: 1401;
+}
+
+/* ============================================================
+   Cesium 原生控件主题化：统一使用应用品牌主题色
+   覆盖 顶部工具栏按钮 / 搜索框 / 左下动画控件 / 底部时间轴 / 底图选择器。
+   全部使用「白色底 + 品牌实色」覆写，不使用半透明玻璃效果
+   （Cesium 控件层级复杂，半透明叠加后发灰失真，故一律实色）。
+   颜色取自 --brand-* 令牌，随 [data-theme] 联动（绿/蓝主题自动跟随）。
+   widgets.css 在运行时注入、晚于本组件 CSS，故统一加 !important 确保生效。
+   ============================================================ */
+
+/* —— 顶部工具栏按钮（home / 2D-3D / 底图 / 全屏，共用 .cesium-button）—— */
+:global(.cesium-button) {
+    background: #fff !important;
+    border: 1px solid var(--brand-primary) !important;
+    color: var(--brand-primary-dark) !important;
+    fill: var(--brand-primary) !important;
+    border-radius: 8px !important;
+}
+:global(.cesium-button:hover) {
+    color: #fff !important;
+    fill: #fff !important;
+    background: var(--brand-primary) !important;
+    border-color: var(--brand-primary-dark) !important;
+    box-shadow: 0 0 8px rgba(var(--brand-primary-rgb), 0.45) !important;
+}
+:global(.cesium-button:focus) {
+    color: var(--brand-primary-dark) !important;
+    fill: var(--brand-primary) !important;
+    border-color: var(--brand-primary-dark) !important;
+    outline: none !important;
+}
+:global(.cesium-toolbar-button) {
+    border-radius: 9px !important;
+}
+
+/* —— 搜索（Geocoder）输入框与按钮 —— */
+:global(.cesium-viewer-geocoderContainer .cesium-geocoder-input) {
+    background-color: #fff !important;
+    border: 1px solid var(--brand-primary) !important;
+    color: var(--text-primary) !important;
+}
+:global(.cesium-viewer-geocoderContainer:hover .cesium-geocoder-input) {
+    border-color: var(--brand-primary-dark) !important;
+    box-shadow: 0 0 8px rgba(var(--brand-primary-rgb), 0.35) !important;
+}
+:global(.cesium-viewer-geocoderContainer .cesium-geocoder-input:focus) {
+    border-color: var(--brand-primary-dark) !important;
+    background-color: #fff !important;
+    box-shadow: none !important;
+    outline: none !important;
+}
+:global(.cesium-geocoder-searchButton) {
+    background-color: var(--brand-primary) !important;
+    fill: #fff !important;
+}
+:global(.cesium-geocoder-searchButton:hover) {
+    background-color: var(--brand-primary-dark) !important;
+}
+:global(.cesium-viewer-geocoderContainer .search-results) {
+    background-color: #fff !important;
+    color: var(--text-primary) !important;
+    border: 1px solid var(--brand-primary) !important;
+    border-radius: 8px !important;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18) !important;
+    opacity: 1 !important;
+}
+:global(.cesium-viewer-geocoderContainer .search-results ul li:hover) {
+    background: var(--brand-primary-bg) !important;
+    color: var(--brand-primary-dark) !important;
+}
+:global(.cesium-viewer-geocoderContainer .search-results ul li.active) {
+    background: var(--brand-primary) !important;
+    color: #fff !important;
+}
+
+/* —— 左下角动画控件（Animation）重新设计 ——
+   原生控件是「深色圆盘 + 深色文字」，套主题色后绿底绿字几乎不可读。
+   现改为：白色外圈(品牌绿描边) → 品牌浅绿内环 → 纯白表盘(深色时间文字)，
+   按钮为品牌绿实底 + 白色图标，昼夜弧线与指针用品牌绿，整体为实色。
+   注意 Cesium 会给该控件注入 SVG 渐变 fill，故需直接覆写 fill 才能压过渐变。 */
+:global(.cesium-animation-themeNormal) { color: var(--brand-primary) !important; }
+:global(.cesium-animation-themeHover) { color: var(--brand-primary-dark) !important; }
+:global(.cesium-animation-themeSelect) { color: var(--brand-primary-dark) !important; }
+:global(.cesium-animation-themeDisabled) { color: var(--text-muted) !important; }
+:global(.cesium-animation-themeKnob) { color: var(--brand-primary-bg) !important; }
+:global(.cesium-animation-themePointer) { color: var(--brand-primary-dark) !important; }
+:global(.cesium-animation-themeSwoosh) { color: var(--brand-primary) !important; }
+:global(.cesium-animation-themeSwooshHover) { color: var(--brand-primary-dark) !important; }
+
+/* 表盘三层：外圈白底 / 内环浅绿 / 中心纯白 —— 保证深色时间文字清晰 */
+:global(.cesium-animation-shuttleRingBack) {
+    fill: #fff !important;
+    fill-opacity: 1 !important;
+    stroke: var(--brand-primary) !important;
+    stroke-width: 2 !important;
+}
+:global(.cesium-animation-knobOuter) {
+    fill: var(--brand-primary-bg) !important;
+    stroke: var(--brand-primary) !important;
+    stroke-width: 1.5 !important;
+}
+:global(.cesium-animation-knobInner) { fill: #fff !important; }
+:global(.cesium-animation-svgText) { fill: var(--text-primary) !important; }
+
+/* 昼夜弧线与时间指针 */
+:global(.cesium-animation-shuttleRingG .cesium-animation-shuttleRingSwoosh) { fill: var(--brand-primary) !important; }
+:global(.cesium-animation-shuttleRingG:hover .cesium-animation-shuttleRingSwoosh) { fill: var(--brand-primary-dark) !important; }
+:global(.cesium-animation-shuttleRingSwoosh line) {
+    stroke: var(--brand-primary-dark) !important;
+    stroke-opacity: 1 !important;
+}
+:global(.cesium-animation-shuttleRingPointer) { fill: var(--brand-primary-dark) !important; }
+
+/* 播放/暂停/倍速按钮：品牌绿实底 + 白色图标 */
+:global(.cesium-animation-rectButton .cesium-animation-buttonMain) {
+    fill: var(--brand-primary) !important;
+    stroke: var(--brand-primary-dark) !important;
+    stroke-width: 1 !important;
+}
+:global(.cesium-animation-rectButton:hover .cesium-animation-buttonMain) {
+    fill: var(--brand-primary-dark) !important;
+    stroke: var(--brand-primary-dark) !important;
+}
+:global(.cesium-animation-rectButton .cesium-animation-buttonPath) { fill: #fff !important; }
+:global(.cesium-animation-rectButton .cesium-animation-buttonGlow) { fill: var(--brand-primary-light) !important; }
+:global(.cesium-animation-buttonToggled .cesium-animation-buttonMain) { fill: var(--brand-primary-dark) !important; }
+:global(.cesium-animation-buttonDisabled .cesium-animation-buttonMain) { fill: var(--text-muted) !important; }
+:global(.cesium-animation-buttonDisabled .cesium-animation-buttonPath) { fill: #fff !important; }
+
+/* —— 底部时间轴（Timeline）：白色实底 + 品牌刻度 —— */
+:global(.cesium-timeline-main) { border: solid 1px var(--brand-primary) !important; }
+:global(.cesium-timeline-trackContainer) { border-top: solid 1px var(--brand-primary) !important; }
+:global(.cesium-timeline-bar) { background: #fff !important; }
+:global(.cesium-timeline-ticLabel) { color: var(--text-primary) !important; }
+:global(.cesium-timeline-ticMain) { background: var(--brand-primary) !important; }
+:global(.cesium-timeline-ticSub) { background: var(--brand-primary-light) !important; }
+:global(.cesium-timeline-ticTiny) { background: var(--brand-primary-lighter) !important; }
+:global(.cesium-timeline-highlight) { background: var(--brand-primary-bg) !important; }
+:global(.cesium-timeline-needle) { background: var(--brand-primary-dark) !important; }
+
+/* —— 底图选择器下拉面板（工具栏「图层」按钮展开）—— */
+:global(.cesium-baseLayerPicker-dropDown) {
+    background-color: #fff !important;
+    border: 1px solid var(--brand-primary) !important;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2) !important;
+}
+:global(.cesium-baseLayerPicker-sectionTitle),
+:global(.cesium-baseLayerPicker-categoryTitle) {
+    color: var(--text-primary) !important;
+}
+:global(.cesium-baseLayerPicker-choices) {
+    border: 1px solid var(--brand-primary-light) !important;
+}
+:global(.cesium-baseLayerPicker-itemLabel) {
+    color: var(--text-secondary) !important;
+}
+:global(.cesium-baseLayerPicker-item:hover .cesium-baseLayerPicker-itemLabel),
+:global(.cesium-baseLayerPicker-item:focus .cesium-baseLayerPicker-itemLabel) {
+    color: var(--brand-primary-dark) !important;
+}
+:global(.cesium-baseLayerPicker-itemIcon) {
+    border: 1px solid var(--brand-primary) !important;
+}
+:global(.cesium-baseLayerPicker-item:hover .cesium-baseLayerPicker-itemIcon) {
+    border-color: var(--brand-primary-dark) !important;
+    box-shadow: 0 0 8px rgba(var(--brand-primary-rgb), 0.45) !important;
+}
+:global(.cesium-baseLayerPicker-selectedItem .cesium-baseLayerPicker-itemLabel) {
+    color: var(--brand-primary-dark) !important;
+}
+:global(.cesium-baseLayerPicker-selectedItem .cesium-baseLayerPicker-itemIcon) {
+    border: double 3px var(--brand-primary) !important;
+}
+
+/* 拖拽上传覆盖层 */
+.drag-overlay {
+    position: absolute;
+    inset: 0;
+    z-index: var(--z-modal);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 14px;
+    background: rgba(8, 25, 36, 0.88);
+    border: 3px dashed rgba(74, 222, 128, 0.56);
+    border-radius: 12px;
+    pointer-events: none;
+    color: #a7f3d0;
+}
+
+.drag-overlay-text {
+    font-size: 18px;
+    font-weight: 800;
+    color: #f6fffb;
+}
+
+.drag-overlay-hint {
+    font-size: 13px;
+    color: rgba(220, 243, 255, 0.56);
+}
+
+/* 路线漫游状态 HUD：底部居中悬浮，避开左右面板 */
+.route-fly-hud {
+    position: fixed;
+    left: 50%;
+    top:70px;
+    transform: translateX(-50%);
+    z-index: 1000;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    max-width: calc(100vw - 48px);
+    padding: 8px 18px;
+    border-radius: 999px;
+    background: rgba(12, 18, 28, 0.78);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    color: #e8f1ff;
+    font-size: 12px;
+    line-height: 1.6;
+    white-space: nowrap;
+    pointer-events: none;
+}
+
+.route-fly-hud .hud-tip {
+    color: #7fd4ff;
+    font-weight: 600;
+}

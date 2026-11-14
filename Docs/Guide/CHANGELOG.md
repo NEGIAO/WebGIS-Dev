@@ -11,6 +11,77 @@
 > 零散升号、整合后即废弃，号段均高于当前版本）统一归并为 **V3.6.42**。
 > 条目所述功能与修复内容、发布日期、整合结论均不变，仅版本号表述归一，便于全文检索不再出现倒挂号。
 
+### V3.7.0 (2026-11-14) — 前端全面从 JavaScript 过渡到 TypeScript 严格模式 + Vue 组件范式化架构升级 + 全仓 Code Review 收口
+
+> **一句话**：前端彻底告别旧 JavaScript（业务 `.js` 文件归零，全量 636 个 `.ts` + 1 个 `.mts` + 73 个 `.vue`），开启 `tsconfig.json` 完整严格编译模式（`strict: true` / `noImplicitAny: true`），完成 36 个复杂 Vue 组件「`X.vue` 视图层 + `X.ts` `class Instance` 实例层」物理分离、7 个巨型组件样式外置、8 类通用能力 composable 沉淀、23 处跨域依赖清零，并修复全仓 Code Review 检出的潜在运行时 Bug 与后端降级 503 掩盖 CORS 预检缺陷。
+
+#### ① 前端 JS → TS 全面迁移与严格模式（`strict: true`）全量 0 错误收口
+
+1. **业务 `.js` 全面清零与全量 `.vue` TypeScript 化**：
+   - 删除冗余的 `frontend/jsconfig.json`；`frontend/src/` 下全部业务源码完成 `.js → .ts` 迁移（636 个 `.ts` + 1 个 `.mts` + 73 个 `.vue`），并将剩余 34 个内联 `<script setup>` 的 `.vue` 组件全部升级为 `<script setup lang="ts">`（全仓 73 个 `.vue` 组件中 36 个为 `<script lang="ts" src="./X.ts">`、36 个为 `<script setup lang="ts">`、1 个 `AuthGlobeStage.vue` 为无脚本纯视图组件），仅 `public/` 静态资源目录保留第三方 WebWorker 脚本（`lerc-wasm.js` / `tiff-worker.js`）。
+   - `frontend/tsconfig.json` 开启完整严格模式开关：`"strict": true`、`"noImplicitAny": true`、`"noUnusedLocals": true`、`"noUnusedParameters": true`、`"noImplicitReturns": true`、`"noFallthroughCasesInSwitch": true`，清零全仓 **2,122 条 `.ts` 严格模式诊断 + 253 条 `.vue` 内联脚本严格模式诊断**。
+2. **模块类型声明与路由类型增强**：
+   - 新增 `frontend/src/shims-modules.d.ts`，为 `three`、`three/addons/*`、`lerc`、`pako/lib/inflate.js` 及构建脚本 `.mjs` 提供完整模块声明。
+   - `frontend/src/router/index.ts` 新增 `declare module 'vue-router' { interface RouteMeta { requiresAuth?: boolean; skipAuthCheck?: boolean } }` 模块增强，为路由守卫与辅助函数补齐 `RouteLocationNormalized` 强类型注解。
+   - `frontend/src/cesium-shim.ts` 补齐 `window.CESIUM_BASE_URL` 与 `knockout.track` 交叉类型声明。
+3. **迁移期批处理缺陷与类型冲突深度修复**：
+   - **修复 6 处正则批处理撕裂参数标识符的阻断级 Bug**：`tilesetTerrainFit.ts`（`p: anyairs` → `pairs: any[]`）、`firstPersonFlyController.ts`（`degree: anys` → `degrees: any`）、`arcgisAttributeQuery.ts`（`p: anyath` → `path: any`）、`tdt/topology/geometry.ts`（`r: anyings` → `rings: any`）、`useBasemapResilience.ts`（`layer: anyId` → `layerId: any`）、`useFeatureStyleStore.ts`（`feature: anyKey` → `featureKey: any`）。
+   - **修正 9 个文件中 `: any[]` 机械错标导致的真实类型冲突**：恢复 `useCesiumCameraEnhanced.ts`、`useCesiumBeautify.ts`、`cesium-navigation/core/Utils.ts`、`DistanceLegendViewModel.ts`、`Magic/useDelaunay.ts`、`Magic/useFluid.ts`、`Magic/useSingularity.ts`、`Magic/useWave.ts`、`nonGeorefTiffLayer.ts` 中 DOM / Canvas / Cesium / 计时器 / 数值变量的真实类型。
+   - **补齐核心业务接口契约**：涵盖 `api/backend/auth.ts`（`AuthRegisterPayload`）、`useChatAgentConfig.ts` / `agentConfig/routing.ts`（`ChatAgentConfigDeps` / `RoutingMethodDeps`）、`useCesiumHeightSampler.ts`（`PlainCartographic` 及 4 个采样选项接口）、`useLayerControlHandlers.ts`（3 个图层控制载荷接口）、`tdtBuildingTopology.ts` 拓扑切割类型等。
+
+#### ② Vue 组件工程化范式重构与巨型文件解耦
+
+1. **视图层与实例层物理分离（36 个组件）**：
+   - 建立「`X.vue`（纯 `<template>` + `<style>` + 单行 `<script lang="ts" src="./X.ts">`）+ `X.ts`（`defineComponent` 桥接 `class Instance`）」标准范式，配套规范文档 `Docs/Guide/vue-component-template.md` 与重构计划 `Docs/TODO/2026-11-13-vue-component-refactor-plan.md`。
+   - 统一类组件 `public emit!: SetupContext<EmitsType>['emit']` 强类型声明与 `Object.assign(this, ...)` 组合式能力返回类型交集（如 `AdminControlPanel`、`LayerControlPanel`、`TOCPanel`）。
+2. **8 类跨组件通用能力层落地 `domains/common/composables/`**：
+   - `useRequestToken.ts`（请求竞态令牌）、`useTimerRegistry.ts`（定时器/帧回调统一托管）、`usePanelDragResize.ts`（面板拖拽与八向缩放）、`useVirtualRows.ts`（定高行虚拟滚动窗口）、`useCellEditing.ts`（单元格就地编辑状态机）、`useDragSort.ts`（拖拽排序状态机）、`useAnchoredMenu.ts`（锚点弹层视口定位）、`useLongPress.ts`（触摸长按识别）。
+3. **7 个巨型组件样式外置（`styles/*.scss`）与主容器管线拆分**：
+   - `LandingView.vue`（4749→868 行）、`CesiumToolPanel.vue`（2277→854 行）、`TOCPanel.vue`（2046→621 行）、`AttributeTable.vue`（1695→594 行）、`MapContainer.vue`（2942→2181 行）、`CesiumContainer.vue`（3226→2539 行）、`HomeView.vue`（2866→2377 行）。
+   - 进一步按职责拆分 `useLandingGithubAndVersion.ts`、`useMapBasemapPipeline.ts`、`useMapLayerAndRoutePipeline.ts` 等管线 composable。
+
+#### ③ 领域边界治理：23 处跨域依赖全部清零
+
+- **模块上移 `common`**：`useStyleEditor`、`AmapAoiInjectDialog.vue`、`useAttrStore` + `attrStoreHelpers`、`useLayerMetadataNormalization` + `metadata/*`、`coordinateInputHandler` + `usePositionCodeTool`、`useBasemapUrlMapping` 全部迁入 `domains/common/`。
+- **协议常量与注册式端口解耦**：`CESIUM_NODE_PREFIX` 收敛至 `common/layer-tree/protocol.ts`；新增 `common/layer-tree/engineTreePort.ts`（Cesium 侧通过 `registerCesiumTreePort.ts` 注入实现）与 `common/basemap/catalogProjection.ts`（底图目录纯查询投影），使 `common`、`ol`、`cesium` 彻底解除双向硬编码耦合。
+- **长效门禁**：`eslint.config.js` 配置按域 `no-restricted-imports`，并新增 `Scripts/CheckDomainDeps.py`、`Scripts/CheckVueParadigm.py`、`Scripts/SyncStructureTree.py`、`Scripts/ExtractVueStyles.py` 四个自动化门禁与工具脚本。
+
+#### ④ 全仓 Code Review 潜在 Bug 修复（运行时与交互隐患）
+
+1. **`class Instance` 原型方法与 `this` 绑定缺陷修复**：
+   - `LocationSearch.ts`：`public resolvePoiId(item: any)` 原为原型方法，而 Vue 3 `PublicInstanceProxyHandlers` 对 `setup()` 返回对象仅代理自有属性（`hasOwn`），导致模板渲染搜索结果时抛 `TypeError: _ctx.resolvePoiId is not a function`；已改为自有箭头属性 `public resolvePoiId = (item: any) => ...`。
+   - `CesiumToolPanel.ts`：`private persistUiState()` 原为原型方法，直接作为回调传给 `watch(..., this.persistUiState)` 时丢失 `this` 上下文导致 UI 状态持久化静默失效；已改为箭头属性 `private persistUiState = () => ...`。
+   - `feng-shui-compass-svg.ts`：28 个模板调用方法改为箭头函数类字段，修复模板 render proxy 下 `.value` 解包不一致问题。
+2. **Vue 3 保留前缀与组件/模板契约修复**：
+   - `useGeocoding.ts` / `TOCPanel.ts`（`_clearGeocodeInput` → `clearGeocodeInput`）与 `RegisterView.ts`（`_fillGuestAccount` → `fillGuestAccount`）：消除 Vue 3 对 `setup()` 返回 `_` 前缀公开属性的保留字警告。
+   - `LayerPropertiesDialog.vue`：补齐 `@lucide/vue` 的 `Ruler` 图标导入，消除切换要素测量标签时的 `Failed to resolve component: Ruler` 告警。
+   - `LayerControlPanel.vue` / `SpatialAnalysisPanel.vue` / `CesiumToolPanel.vue`：移除 SFC 模板内非法 TS `as` 断言（修复浏览器 `SyntaxError: Unexpected identifier 'as'`），修正 `<component :is>` 局部图标解析及 `<Link>` 原生标签名冲突（改为 `LinkIcon`）。
+   - `CheckVueParadigm.py`：新增 `2.5` 门禁规则，长期禁止 `class Instance` 声明 `_`/`$` 前缀的 `public` 属性或原型 `public` 方法。
+3. **路由与 URL 状态同步日志降噪**：
+   - 移除 `useUrlParamStore.ts` 与 `router/index.ts` 中在每次地图 `moveend` 同步 URL 查询参数时触发的 `console.warn` 调试输出，消除浏览器控制台高频堆栈刷屏。
+
+#### ⑤ 后端跨源预检（CORS）与降级 503 掩盖修复
+
+- `backend/app.py`：① 将 `CORSMiddleware` 注册移至 `check_startup_state` 之后（匹配 Starlette `insert(0)` 最外层语义）；② `check_startup_state` 对 `OPTIONS` 预检请求直接放行，不依赖数据库存储初始化；③ `global_exception_handler` 通过 `_cors_headers_for(request)` 为兜底 500 响应补齐 CORS 头；④ 新增 `LoggingCORSMiddleware` 记录非白名单来源预检拒绝日志。
+- 新增 `backend/tests/test_cors_middleware.py`（6 个单元测试用例），后端 `python -m unittest discover -s tests` 全量 31 项测试通过。
+
+#### ⑥ 验证结果
+
+| 检查项 | 结果 |
+|---|---|
+| `npx tsc --noEmit` | **0 错误** |
+| `npx vue-tsc --noEmit` | **0 错误**（自 2,122 条严格模式错误清零） |
+| `npx eslint src/ --quiet` | **0 错误** |
+| `python Scripts/CheckStructureTree.py` | **通过**（文档条目 687 · 磁盘文件 687 · 漏登记 0 · 幽灵条目 0） |
+| `python Scripts/CheckConfigRegistry.py` | **通过**（7 项全绿） |
+| `python Scripts/CheckVueParadigm.py frontend/src` | **通过**（36 个范式化组件全部自洽） |
+| `python Scripts/CheckDomainDeps.py frontend/src` | **通过**（4 类跨域违规均为 0） |
+| `python -m unittest discover -s backend/tests` | **通过**（31 项单测全绿） |
+
+详见维护日志 [`Docs/LLM_record/26-11/2026-11-14/2026-11-14-fix-js-ts-migration-errors.md`](../LLM_record/26-11/2026-11-14/2026-11-14-fix-js-ts-migration-errors.md)。
+
+---
+
 ### V3.6.45 (2026-11-13) — 三维白模 + TOC 菜单可达性与导出项收敛 + 暂存区 JS→TS 与文件瘦身
 
 > **一句话**：三维矢量导入改纯色白模；TOC 菜单加视口约束并修复「导入到 3D」；InfoBox 高度自适应；导出补齐属性且可原样回读；菜单四个导出项收敛为「导出数据」子菜单；暂存区 14 个 JS 逻辑文件全部转 TS，并把超 500 行的文件按职责拆分。
@@ -161,6 +232,52 @@
 | 拆分（原 2396/2179 行） | `locales/zh-CN.ts` + `locales/zh-CN/*.ts`（8 片）、`locales/en-US.ts` + `locales/en-US/*.ts`（8 片） | 按命名空间分片，入口仅做合并；AST 切分，键路径零改动 |
 
 **等价性**：新旧语言包经 esbuild 打包后逐键比对——键集合、值、层级一致（仅键顺序变化）；拆分类模块用 `tsc --noEmit` 捕获漏注入的闭包变量，生产构建通过。详见[日志](LLM_record/26-11/2026-11-13/2026-11-13-js-ts-refactor-and-500line-split.md)。
+
+#### ⑩ 全项目超长逻辑库按职责拆分（>600 行）
+
+**口径**：单文件 ≤600 行且职责单一不动；>600 行且混有多种职责才拆，拆分产物应各自可独立描述与复用（一般 150~600 行）。**不为凑行数制造几十行的碎片**——早期两处「500+24/32」的拆法已回退。
+
+| 原文件 | 行数 | 拆分结果 |
+|---|---|---|
+| `common/basemap/wmsService.js` | 993 | `wmsService.ts`(147，编排+缓存) + `wms/arcgisRest.ts`(415) + `wms/capabilities.ts`(237) + `wms/urlDetect.ts`(125) + `wms/transport.ts`(114) + `wms/types.ts`(58) + `wms/geoBbox.ts`(47) |
+| `ol/basemap/constants/basemapConfig.ts` | 1960 | `basemapCore.ts`(172) + `definitions/group-1..4.ts`(453/447/444/395) + 入口聚合(129) |
+| `common/url-state/crypto.js` | 531 | `crypto.ts`(9，显式 re-export 8 个公开函数) + `codec/positions.ts`(296) + `codec/cesiumPose.ts`(280) |
+| `cesium/…/dataImport/dataSourceDisplay.js` | 519 | `dataSourceDisplay.ts`(293) + `display/vectorColorScaling.ts`(233) |
+| `locales/core.js` | 572 | `core/zh-CN.ts`(290) + `core/en-US.ts`(285) + `core/index.ts`(12) |
+| `common/command-bus/GISCommander.js` | 513 | 单文件 519 行（私有逻辑不外移） |
+| `cesium/…/draw/useCesiumRouteRendering.js` | 511 | 单文件 514 行（同上） |
+| `common/weather/composables/useWeatherCharts.js` | 886 | `useWeatherCharts.ts`(122，装配) + `charts/runtime.ts`(267) + `charts/windChart.ts`(252) + `charts/layoutMetrics.ts`(214) + `charts/trendChart.ts`(171) |
+| `ol/layer/composables/useLayerMetadataNormalization.js` | 870 | `useLayerMetadataNormalization.ts`(48，入口) + `metadata/{htmlAttributes 254, featureRecords 232, layerSnapshot 147, valueUtils 135, geometry 119}` |
+| `cesium/composables/toolModules/useCesiumToolModules.js` | 812 | `useCesiumToolModules.ts`(238，装配+路由) + `advancedControllers.ts`(398) + `fxState.ts`(352) |
+| `common/chat/composables/useChatAgentConfig.js` | 776 | `useChatAgentConfig.ts`(46，装配) + `agentConfig/{personalConfig 355, routing 198, configState 151, llmCall 134}` |
+| `common/data-import/parsers/tdtVectorFetcher.js` | 800 | `tdtVectorFetcher.ts`(29，入口) + `tdt/{tileMath 58, pbf 391, decode 250, fetch 86}` |
+| `common/data-import/parsers/tdtVectorTopology.js` | 789 | `tdtVectorTopology.ts`(26，入口) + `tdt/topology/{builders 346, rings 222, geometry 142, props 56}` |
+| `cesium/modules/planar-route/utils/wayLineCalc.ts` | 840 | `wayLineCalc.ts`(84，入口) + `wayLine/{scan 343, path 256, geometry 221}` |
+| `cesium/modules/planar-route/utils/planarKmzExport.ts` | 746 | `planarKmzExport.ts`(44，入口) + `kmz/{document 493, routeData 222, types 52}` |
+| `cesium/modules/planar-route/planarRouteController.ts` | 1163 | `planarRouteController.ts`(736，壳) + `composables/usePolygonAreaEditor.ts`(280) + `utils/planarRoutePlanner.ts`(209) + `utils/planarRouteKmzIO.ts`(188) |
+| `cesium/modules/planar-route/utils/planarKmzImport.ts` | 693 | `planarKmzImport.ts`(579) + `utils/kmz/xml.ts`(125，XML 导航原语) |
+| `cesium/modules/player-controller/playerController.ts` | 867 | `playerController.ts`(773) + `systems/DebugColliderSystem.ts`(144，碰撞线框三件套) |
+| `cesium/modules/player-controller/systems/PhysicsSystem.ts` | 775 | `PhysicsSystem.ts`(644) + `systems/physicsDebugGeometry.ts`(157，调试几何纯函数) |
+| `common/data-import/parsers/shpParser.ts` | 694 | `shpParser.ts`(292) + `shp/{datasets 91, encoding 97, geoValidation 120, dbfAttributes 98}` |
+| `common/chat/agent/mapCommandAdapters.js` | 674 | **JS→TS**：`mapCommandAdapters.ts`(9，re-export 入口) + `mapCommand/{shared 249, olAdapter 276, cesiumAdapter 347}`（校验函数运行时对拍 ALL EQUAL） |
+| `common/map-view/useUserLocation.js` | 671 | **JS→TS**：`useUserLocation.ts`(570) + `userLocationMath.ts`(171，定位纯函数) |
+| `ol/search/composables/useMapSearchAndCoordinateInput.js` | 654 | **JS→TS**：`useMapSearchAndCoordinateInput.ts`(628) + `aoiFeatureHelpers.ts`(59) |
+| `ol/stores/useAttrStore.ts` | 718 | `useAttrStore.ts`(409，Pinia 状态) + `attrStoreHelpers.ts`(303，类型+几何范围/签名/字段配置/行构建纯函数) |
+| `cesium/modules/shallow-water/composables/useShallowWater.js` | 695 | **JS→TS**：`useShallowWater.ts`(609) + `lightning.ts`(173，闪电子系统类：闪络几何/节奏/曝光脉冲) |
+| `ol/composables/useMapState.js` | 1186 | **JS→TS**：`useMapState.ts`(910，URL 同步/图层切换/视图动画编排) + `useMapStateHelpers.ts`(100) + `useMapDecorations.ts`(242，经纬网+中心点) |
+| `common/compass/services/CompassManager.ts` | 1245 | `CompassManager.ts`(663，生命周期/事件/URL 同步薄壳) + `compassDrawUtils.ts`(182) + `compassCanvasStyle.ts`(440，原生 Canvas 渲染样式) |
+| `cesium/modules/route-fly/firstPersonFlyController.js` | 1067 | **JS→TS**：`firstPersonFlyController.ts`(1045，类字段收拢声明) + `routeSerialize.ts`(98，KML 构建/JSON・KML 解析纯函数) |
+| `cesium/modules/cloud/lib/CloudShadowPass.js` | 1095 | **JS→TS**：`CloudShadowPass.ts`(997) + `shadowMath.ts`(211，正交相机/矩阵求逆/测地偏移等 9 个纯数学函数) |
+| `cesium/…/AtmosphereFromThreeGeospatial/AtmospherePostProcess.js` | 1071 | **JS→TS**：`AtmospherePostProcess.ts`(576) + `atmosphereShaders.ts`(551，GLSL 组装层：BSM 采样/丁达尔/Bruneton 拼接) |
+| `cesium/composables/draw/useCesiumDrawMeasure.js` | 1423 | **JS→TS**：`useCesiumDrawMeasure.ts`(1137，三态状态机/句柄表/顶点编辑) + `drawMeasureCalc.ts`(354，测地线/面积/载荷组装工厂，测量开关 getter 注入) |
+| `cesium/composables/dataImport/loaders/tilesetLoader.js` | 1665 | **JS→TS**：`tilesetLoader.ts`(627，加载入口+样例+目录 fallback) + `tileset/{tilesetPath 111, tilesetTerrainFit 747, tilesetMaterial 212}`（fit/refit 经入口再导出，对外契约不变） |
+| `cesium/modules/fluid-simulation/fluidRuntime.js` | 1721 | **JS→TS**：`fluidRuntime.ts`(1089，闭包工厂内 FluidRenderer/CustomPrimitive/RenderUtil/高度偏移矩阵) + `fluid/fluidShaders.ts`(491，Command+BufferA-D+renderShaderSource 纯 GLSL) + `fluid/atmosphereShader.ts`(191，大气雾片元源)；着色器串零插值、字节级搬迁 |
+| `cesium/modules/cloud/lib/ThreeGeospatialPipeline.js` | 2156 | **JS→TS**：`ThreeGeospatialPipeline.ts`(1397，管线类 48 字段收拢；BSM/TAA 因 uniform 写入顺序红线有意保留类内) + `cloudFragmentShader.ts`(820，Bruneton 集成片元源 + WebGL 编译工具) |
+| `cesium/composables/layers/useCesiumLayers.js` | 2328 | **JS→TS**：`useCesiumLayers.ts`(938，底图/在线服务/装配编排，返回面 22 键零变化) + `i3sWebMercator.ts`(252) + `terrainManager.ts`(272) + `customIonLayer.ts`(637) + `overlayTilesets.ts`(243) + `tdtOverlays.ts`(150) + `arcgisIdentify.ts`(191)；新旧 esbuild 打包 API 对拍 **ALL EQUAL** |
+| 560~640 判断区间 7 件（逐个判定） | 624/622/614/595/576/574/560 | **全部职责单一，只 JS→TS 不拆**：`usePlayerController.ts`、`cloudModule.ts`、`kmlStyleParser.ts`、`useCesiumCameraEnhanced.ts`、`useWeatherData.ts`、`useLayerControlHandlers.ts`、`useMarkdownRenderer.ts`（签名注解/类字段收拢/元组断言，零逻辑改动） |
+
+**等价性做法**：可运行的新旧实现各自打包后跑同一组用例逐字符比对（`wmsService` 的 11 个导出符号与全部分支输出一致；`crypto` 的位置/罗盘/相机/位姿编解码一致；语言包逐键一致；`mapCommandAdapters` 校验函数逐参数一致；`useCesiumLayers` 的 22 键返回面 + 10 项初始值 + 6 项行为探针一致）；XML/DOM 类无法在 Node 运行的部分，用「原函数逐行覆盖检查」确认逻辑行零丢失（`wmsService` 45 个函数仅签名行与类型标注差异；`planarRouteController`/`shpParser` 的未命中行全部是补 `export` 前缀的声明行）。
+
 
 ### V3.6.44 (2026-11-11) — 修复天地图 MVT 矢量底图切换无法渲染缺陷（OpenLayers 2D 引擎）
 

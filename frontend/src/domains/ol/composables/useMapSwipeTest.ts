@@ -17,10 +17,10 @@ export function useMapSwipeTest() {
     if (!import.meta.env.DEV) {
         return {
             setupDualBasemapSwipe: () => false,
-            testSwipePerformance: () => null,
-            testModeToggling: () => null,
-            monitorNetworkRequests: () => undefined,
-            printDebugInfo: () => undefined,
+            testSwipePerformance: () : any => null,
+            testModeToggling: () : any => null,
+            monitorNetworkRequests: () : any => undefined,
+            printDebugInfo: () : any => undefined,
         };
     }
 
@@ -30,7 +30,7 @@ export function useMapSwipeTest() {
      * @param layerStore Pinia 图层状态管理
      * @param baseMapIds 底图图层 ID 数组 [leftBaseMapId, rightBaseMapId]
      */
-    function setupDualBasemapSwipe(mapInstance, layerStore, baseMapIds = []) {
+    function setupDualBasemapSwipe(mapInstance: any, layerStore: any, baseMapIds: any[] = []) {
         if (!mapInstance || !layerStore) {
             if (import.meta.env.DEV) console.warn('[useMapSwipeTest] Missing required parameters');
             return false;
@@ -65,7 +65,7 @@ export function useMapSwipeTest() {
      * 测试滑块性能
      * 对滑块进行多次移动，记录性能指标
      */
-    function testSwipePerformance(layerStore, iterations = 10) {
+    function testSwipePerformance(layerStore: any, iterations = 10) {
         if (!layerStore) {
             console.warn('[useMapSwipeTest] Missing layerStore');
             return null;
@@ -106,7 +106,7 @@ export function useMapSwipeTest() {
     /**
      * 切换滑块模式并测试
      */
-    function testModeToggling(layerStore, toggleCount = 5) {
+    function testModeToggling(layerStore: any, toggleCount = 5) {
         if (!layerStore) {
             if (import.meta.env.DEV) console.warn('[useMapSwipeTest] Missing layerStore');
             return null;
@@ -139,10 +139,10 @@ export function useMapSwipeTest() {
      * 监控网络请求
      * 帮助验证双底图的网络请求
      */
-    function monitorNetworkRequests(callback) {
+    function monitorNetworkRequests(callback: any) {
         if (typeof window === 'undefined') {
             console.warn('[useMapSwipeTest] Not in browser environment');
-            return;
+            return null;
         }
 
         // 使用 PerformanceObserver 监控网络请求
@@ -174,21 +174,22 @@ export function useMapSwipeTest() {
                 return null;
             }
         }
+        return null;
     }
 
     /**
      * 打印调试信息
      */
-    function printDebugInfo(mapInstance, layerStore) {
+    function printDebugInfo(mapInstance: any, layerStore: any) {
         if (!mapInstance || !layerStore) {
             console.warn('[useMapSwipeTest] Missing parameters');
             return;
         }
 
         const swipeConfig = layerStore.swipeConfig;
-        const baseLayers = [];
+        const baseLayers: any[] = [];
 
-        mapInstance.getLayers().forEach((layer) => {
+        mapInstance.getLayers().forEach((layer: any) => {
             const source = layer.getSource?.();
             if (source && typeof source.getTile === 'function') {
                 baseLayers.push({

@@ -1,0 +1,244 @@
+/**
+ * Agent 配置共享 Composable
+ * 消除 AdminControlPanel.vue 和 ApiKeysManagementPanel.vue 之间的重复代码
+ *
+ * 设计说明：
+ * - useMessage() 在各函数内部按需调用，避免模块顶层执行导致 Vue 注入上下文缺失
+ * - DEFAULT_AGENT_CONFIG.extra_body 使用工厂函数，确保每次获取都是独立副本（避免引用共享）
+ */
+
+import { ref } from 'vue';
+import { useMessage } from '@common/shell/useMessage';
+import { translate as t } from '@common/app/useLocale';
+import {
+    apiAdminGetAgentConfig,
+    apiAdminUpdateAgentConfig,
+} from '@/api/backend';
+
+/**
+ * Agent 配置对象：后端返回结构的类型契约
+ * 含索引签名以容纳未穷举的后端字段；字段按需可选（初始为空对象，异步加载后填充）
+ */
+export interface AgentConfig {
+    base_url?: string;
+    model?: string;
+    available_models?: any[];
+    timeout_seconds?: number;
+    max_tokens?: number;
+    temperature?: number;
+    top_p?: number;
+    extra_body?: any;
+    stream?: boolean;
+    system_prompt?: string;
+    provider?: Record<string, any>;
+    is_configured?: boolean;
+    [key: string]: any;
+}
+
+/**
+ * 获取默认 extra_body 的深拷贝（避免多组件共享同一引用）
+ * @returns {Record<string, never>}
+ */
+const getDefaultExtraBody = () => ({});
+
+// 默认配置常量（与后端 constants.py 保持一致）
+// extra_body 存为 JSON 字符串（V3.4.62 B1）：草稿链路（hydrate/textarea/buildSavePayload）
+// 全程按字符串处理，原对象形态既造成跨实例引用共享，又令「未加载先保存」时
+// JSON.parse("[object Object]") 必然失败、textarea 显示 [object Object]
+export const DEFAULT_AGENT_CONFIG = {
+    base_url: '',
+    model: '',
+    available_models_text: '',
+    timeout_seconds: 45,
+    max_tokens: 32768,
+    temperature: 1,
+    top_p: 0.95,
+    extra_body: JSON.stringify(getDefaultExtraBody(), null, 2),
+    stream: true,
+    system_prompt: '',
+};
+
+/**
+ * 解析 Available Models 文本为数组
+ */
+export function parseAvailableModelsText(rawText: any) {
+    return String(rawText || '')
+        .split(/[,\n]/g)
+        .map((item) => String(item || '').trim())
+        .filter(Boolean)
+        .filter((item, index, array) => array.indexOf(item) === index)
+        .slice(0, 200);
+}
+
+/**
+ * 将后端返回的配置对象转换为表单草稿格式
+ */
+export function hydrateAgentConfigDraft(agentConfig: any, agentConfigDraft: { value: any }) {
+    const cfg = agentConfig || {};
+    const provider = cfg.provider || {};
+
+    agentConfigDraft.value = {
+        base_url: String(provider.base_url || ''),
+        model: String(provider.model || ''),
+        available_models_text: Array.isArray(provider.available_models)
+            ? provider.available_models.join('\n')
+            : '',
+        // ?? 而非 ||（V3.4.62 B4）：管理员显式配置的 0 值不被吞成默认值
+        timeout_seconds: Number(provider.timeout_seconds ?? 45),
+        max_tokens: Number(provider.max_tokens ?? 32768),
+        temperature: Number(provider.temperature ?? 1),
+        top_p: Number(provider.top_p ?? 0.95),
+        extra_body: provider.extra_body
+            ? JSON.stringify(provider.extra_body, null, 2)
+            : JSON.stringify(getDefaultExtraBody(), null, 2),
+        stream: Boolean(provider.stream ?? true),
+        system_prompt: String(provider.system_prompt || ''),
+    };
+}
+
+/**
+ * 验证并构建保存载荷
+ */
+export function buildSavePayload(agentConfigDraft: any) {
+    const availableModels = parseAvailableModelsText(agentConfigDraft.value.available_models_text);
+
+    let extraBodyParsed;
+    try {
+        extraBodyParsed = JSON.parse(agentConfigDraft.value.extra_body || '{}');
+    } catch (_e) {
+        return { error: t('admin.extraBodyInvalidJson') };
+    }
+
+    const timeoutSeconds = Number(agentConfigDraft.value.timeout_seconds);
+    const maxTokens = Number(agentConfigDraft.value.max_tokens);
+
+    const payload = {
+        base_url: String(agentConfigDraft.value.base_url || '').trim(),
+        model: String(agentConfigDraft.value.model || '').trim(),
+        available_models: availableModels,
+        timeout_seconds: timeoutSeconds,
+        max_tokens: maxTokens,
+        temperature: Number(agentConfigDraft.value.temperature ?? 1),
+        top_p: Number(agentConfigDraft.value.top_p ?? 0.95),
+        extra_body: extraBodyParsed,
+        stream: Boolean(agentConfigDraft.value.stream ?? true),
+        system_prompt: String(agentConfigDraft.value.system_prompt || '').trim(),
+    };
+
+    // 验证必填字段（显式校验替代 || 静默兜底：清空输入直接报错而非悄悄回默认，V3.4.62 B4）
+    if (!payload.base_url || !payload.system_prompt) {
+        return { error: t('admin.baseUrlSystemPromptRequired') };
+    }
+
+    if (!Number.isFinite(timeoutSeconds) || timeoutSeconds < 1) {
+        return { error: t('admin.timeoutMustBePositive') };
+    }
+
+    if (!Number.isFinite(maxTokens) || maxTokens < 1) {
+        return { error: t('admin.maxTokensMustBePositive') };
+    }
+
+    if (!payload.model && payload.available_models.length === 0) {
+        return { error: t('admin.modelOrListRequired') };
+    }
+
+    return { payload };
+}
+
+/**
+ * 加载 Agent 配置
+ * @param {import('vue').Ref<Object>} agentConfig - 配置状态 ref
+ * @param {import('vue').Ref<Object>} agentConfigDraft - 表单草稿 ref
+ * @param {import('vue').Ref<boolean>} loadingRef - 加载状态 ref
+ */
+export async function loadAgentConfig(agentConfig: { value: any }, agentConfigDraft: { value: any }, loadingRef: { value: boolean }) {
+    const message = useMessage();
+    loadingRef.value = true;
+    try {
+        const result = await apiAdminGetAgentConfig();
+        const data = result?.data || result || {};
+        agentConfig.value = data;
+        hydrateAgentConfigDraft(data, agentConfigDraft);
+    } catch (error: unknown) {
+        message.error(t('admin.loadAgentFailed', { error: (error as { message?: string })?.message || String(error) }));
+    } finally {
+        loadingRef.value = false;
+    }
+}
+
+/**
+ * 保存 Agent 配置
+ * @param {import('vue').Ref<Object>} agentConfig - 配置状态 ref
+ * @param {import('vue').Ref<Object>} agentConfigDraft - 表单草稿 ref
+ * @param {import('vue').Ref<boolean>} loadingRef - 加载状态 ref
+ * @param {import('vue').Ref<boolean>} submittingRef - 提交状态 ref
+ * @returns {Promise<boolean>} 是否保存成功
+ */
+export async function saveAgentConfig(
+    agentConfig: { value: any },
+    agentConfigDraft: { value: any },
+    _loadingRef: { value: boolean },
+    submittingRef: { value: boolean },
+) {
+    const message = useMessage();
+    // 再入守卫（V3.4.62 B3）：未加 :disabled 的调用方连点不会双发
+    if (submittingRef.value) return false;
+
+    const validation = buildSavePayload(agentConfigDraft);
+    if (validation.error) {
+        message.error(validation.error);
+        return false;
+    }
+
+    submittingRef.value = true;
+    try {
+        const result = await apiAdminUpdateAgentConfig(validation.payload);
+        const data = result?.data || result || {};
+        // 使用服务端返回的完整配置，而不是本地 payload
+        agentConfig.value = data;
+        hydrateAgentConfigDraft(data, agentConfigDraft);
+        message.success(t('admin.saveAgentSuccess'));
+        return true;
+    } catch (error: unknown) {
+        message.error(t('admin.saveAgentFailed', { error: (error as { message?: string })?.message || String(error) }));
+        return false;
+    } finally {
+        submittingRef.value = false;
+    }
+}
+
+/**
+ * 创建 Agent 配置状态和方法的工厂函数
+ * 每个组件调用一次获得独立的响应式状态
+ */
+export function useAgentConfig() {
+    const agentConfig = ref<AgentConfig>({});
+    const agentConfigDraft = ref({ ...DEFAULT_AGENT_CONFIG });
+    const loading = ref(false);
+    const submitting = ref(false);
+    /** 编辑模式开关 */
+    const editingConfig = ref(false);
+
+    return {
+        // 状态
+        agentConfig,
+        agentConfigDraft,
+        loading,
+        submitting,
+        editingConfig,
+
+        // 方法
+        load: () => loadAgentConfig(agentConfig, agentConfigDraft, loading),
+        save: () => saveAgentConfig(agentConfig, agentConfigDraft, loading, submitting),
+        hydrate: () => hydrateAgentConfigDraft(agentConfig.value, agentConfigDraft),
+        /** 进入编辑模式，将当前配置填充到草稿 */
+        startEdit: () => {
+            hydrateAgentConfigDraft(agentConfig.value, agentConfigDraft);
+            editingConfig.value = true;
+        },
+        /** 退出编辑模式，丢弃未保存的草稿 */
+        cancelEdit: () => {
+            editingConfig.value = false;
+        },
+    };
+}

@@ -11,9 +11,9 @@ import { detectProjectionFromKmlText } from '@common/map-view/geo/index';
 
 export interface KmlTextHelperDeps {
     /** 消息实例（解析告警用） */
-    message: any;
     /** 投影识别（含人工声明），用于 KML 无 srsName 时推断 */
     resolveSupportedProjection: (...args: any[]) => Promise<any>;
+    message: any;
 }
 
 /**
@@ -22,7 +22,7 @@ export interface KmlTextHelperDeps {
  * @returns 命名空间归一 / 绘制顺序 / 样式套用 / 文本转要素
  */
 export function createKmlTextHelpers({ message, resolveSupportedProjection }: KmlTextHelperDeps) {
-    function normalizeKmlNamespace(kmlText) {
+    function normalizeKmlNamespace(kmlText: any) {
         if (/<\s*\/?\s*kml:/i.test(kmlText)) {
             return String(kmlText)
                 .replace(/<(\/?)(\s*)kml:/gi, '<$1$2')
@@ -41,7 +41,7 @@ export function createKmlTextHelpers({ message, resolveSupportedProjection }: Km
      * 序号存为要素对象自有属性（不在 getProperties 内），不污染属性表与导出数据。
      * 无 Folder 的普通 KML 或结构异常时返回 -1（不设定）。
      */
-    function applyKmlDrawOrder(kmlText, features) {
+    function applyKmlDrawOrder(kmlText: any, features: any[]) {
         if (!Array.isArray(features) || features.length < 2) return -1;
         try {
             const tokenRe = /<(\/?)(Folder|Placemark)[\s>/]/g;
@@ -66,7 +66,7 @@ export function createKmlTextHelpers({ message, resolveSupportedProjection }: Km
                 if (!byGroup.has(group)) byGroup.set(group, []);
                 byGroup.get(group).push(features[index]);
             });
-            const next = [];
+            const next: any[] = [];
             groupOrder.forEach((group, rank) => {
                 for (const feature of byGroup.get(group)) {
                     try {
@@ -96,7 +96,7 @@ export function createKmlTextHelpers({ message, resolveSupportedProjection }: Km
      * @param {string} kmlTextForStyle - 用于样式解析的 KML 文本
      * @param {string} label - 日志标签
      */
-    function applyKmlStylesAndCleanup(features, kmlTextForStyle, label = 'KML') {
+    function applyKmlStylesAndCleanup(features: any, kmlTextForStyle: string, label = 'KML') {
         if (!features || features.length === 0) return;
 
         try {
@@ -132,7 +132,7 @@ export function createKmlTextHelpers({ message, resolveSupportedProjection }: Km
      * @param {string|null} explicitProjection - 显式指定的数据投影，null 则自动检测
      * @returns {Promise<Array>} OL Feature 数组
      */
-    async function parseKmlTextToFeatures(kmlText, label = 'KML', explicitProjection = null) {
+    async function parseKmlTextToFeatures(kmlText: any, label = 'KML', explicitProjection = null) {
         const rawProjection = explicitProjection || detectProjectionFromKmlText(kmlText);
         const dataProjection = await resolveSupportedProjection(
             rawProjection,

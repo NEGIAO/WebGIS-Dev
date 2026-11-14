@@ -81,7 +81,7 @@ let entity: any = null;
 let drawDataSource: any = null;
 
 //此函数用来绘制多边形
-export function drawPolygon(viewer, callback, cancelCallback: () => void): () => void {
+export function drawPolygon(viewer: any, callback: any, cancelCallback: () => void): () => void {
 	drawDataSource = window.mainViewer.dataSources.getByName('drawDataSource').at(-1);
 	const mapContainer = document.querySelector<HTMLElement>('.wayMap');
 	if (mapContainer) {
@@ -98,8 +98,8 @@ export function drawPolygon(viewer, callback, cancelCallback: () => void): () =>
 	const handler2 = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
 	polygonPositions = [];
 	resetKinksState();
-	let polygonEntity = null;
-	let lineEntity = null;
+	let polygonEntity: any = null;
+	let lineEntity: any = null;
 	let index = -1;
 	const pointEntityList: any = [];
 	const entityLabelist: any = [];
@@ -130,7 +130,7 @@ export function drawPolygon(viewer, callback, cancelCallback: () => void): () =>
 	};
 
 	document.addEventListener('keydown', handleKeyDown);
-	handler.setInputAction((click) => {
+	handler.setInputAction((click: any) => {
 		/**点击位置笛卡尔坐标 */
 		const cartesian = pickTerrainPosition(viewer, click.position);
 		if (!cartesian) {
@@ -181,7 +181,7 @@ export function drawPolygon(viewer, callback, cancelCallback: () => void): () =>
 		);
 		// console.log(entityLabel,'查看当前label的信息1')
 
-		handler2.setInputAction((event) => {
+		handler2.setInputAction((event: any) => {
 			const currentPosition = pickTerrainPosition(viewer, event.endPosition);
 			if (!currentPosition) {
 				return;
@@ -237,7 +237,7 @@ export function drawPolygon(viewer, callback, cancelCallback: () => void): () =>
 	}, Cesium.ScreenSpaceEventType.LEFT_CLICK);
 
 	//鼠标右击事件结束
-	handler.setInputAction((click) => {
+	handler.setInputAction((click: any) => {
 		if (polygonPositions.length < 3) {
 			return;
 		}
@@ -433,10 +433,10 @@ export function drawImportedPolygon(viewer: Cesium.Viewer, importedPositions: Ce
 }
 
 //移动多边形的各个边
-export function movePolygon(entityObjPolygonObj, viewer, callback) {
+export function movePolygon(entityObjPolygonObj: any, viewer: any, callback: any) {
 	entity = entityObjPolygonObj;
 	const handler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
-	handler.setInputAction((event) => {
+	handler.setInputAction((event: any) => {
 		const currentPosition = pickTerrainPosition(viewer, event.endPosition);
 		if (!currentPosition) {
 			return;
@@ -493,7 +493,7 @@ export function movePolygon(entityObjPolygonObj, viewer, callback) {
 /**
  * 更新移动顶点影响到的指定边标签。
  */
-function updatePolygonEdgeLabel(entityObjPolygonObj, edgeIndex: number) {
+function updatePolygonEdgeLabel(entityObjPolygonObj: any, edgeIndex: number) {
 	const positions = entityObjPolygonObj.polygonPositions;
 	const nextIndex = (edgeIndex + 1) % positions.length;
 	updateDistanceLabel(entityObjPolygonObj.entityLabelList[edgeIndex], positions[edgeIndex], positions[nextIndex]);
@@ -502,7 +502,7 @@ function updatePolygonEdgeLabel(entityObjPolygonObj, edgeIndex: number) {
 /**
  * 使用椭球表面距离更新边长标签和标签位置。
  */
-function updateDistanceLabel(labelEntity, start: Cesium.Cartesian3, end: Cesium.Cartesian3) {
+function updateDistanceLabel(labelEntity: any, start: Cesium.Cartesian3, end: Cesium.Cartesian3) {
 	if (!labelEntity) {
 		return;
 	}
@@ -540,7 +540,7 @@ function pickTerrainPosition(viewer: Cesium.Viewer, windowPosition: Cesium.Carte
 function iskinksBoolean() {
 	// if(polygonPositions.length == 0) return
 
-	const outPoint = polygonPositions.map((e) => {
+	const outPoint = polygonPositions.map((e: any) => {
 		const ellipsoid = window.mainViewer.scene.globe.ellipsoid;
 		const cartographic = ellipsoid.cartesianToCartographic(e);
 		return [Cesium.Math.toDegrees(cartographic.longitude), Cesium.Math.toDegrees(cartographic.latitude)];
@@ -566,7 +566,7 @@ function resetKinksState(): void {
 	document.getElementById(KINKS_TIP_ID)?.remove();
 }
 
-function upEntityColor(polygonEntity, lineEntity, lastLineEntity?) {
+function upEntityColor(polygonEntity: any, lineEntity: any, lastLineEntity?: any) {
 	if (isKinks) {
 		polygonEntity.polygon.material = Cesium.Color.RED.withAlpha(POLYGON_KINKS_FILL_ALPHA);
 		lineEntity.polyline.material = Cesium.Color.RED;

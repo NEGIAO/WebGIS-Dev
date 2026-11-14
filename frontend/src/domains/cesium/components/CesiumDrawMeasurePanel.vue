@@ -105,7 +105,7 @@
                         type="color"
                         class="color-input"
                         :value="style.outlineColor"
-                        @input="patchStyle({ outlineColor: $event.target.value })"
+                        @input="onStyleColorInput('outlineColor', $event)"
                     />
                 </div>
                 <div class="style-row">
@@ -117,7 +117,7 @@
                         max="10"
                         step="0.5"
                         :value="style.outlineWidth"
-                        @input="patchStyle({ outlineWidth: Number($event.target.value) })"
+                        @input="onStyleNumberInput('outlineWidth', $event)"
                     />
                     <span class="range-value">{{ style.outlineWidth }}px</span>
                 </div>
@@ -127,7 +127,7 @@
                         type="color"
                         class="color-input"
                         :value="style.fillColor"
-                        @input="patchStyle({ fillColor: $event.target.value })"
+                        @input="onStyleColorInput('fillColor', $event)"
                     />
                 </div>
                 <div class="style-row">
@@ -139,7 +139,7 @@
                         max="1"
                         step="0.05"
                         :value="style.fillOpacity"
-                        @input="patchStyle({ fillOpacity: Number($event.target.value) })"
+                        @input="onStyleNumberInput('fillOpacity', $event)"
                     />
                     <span class="range-value">{{ Math.round(style.fillOpacity * 100) }}%</span>
                 </div>
@@ -147,7 +147,7 @@
                     <input
                         type="checkbox"
                         :checked="style.showVertices"
-                        @change="patchStyle({ showVertices: $event.target.checked })"
+                        @change="onStyleCheckChange('showVertices', $event)"
                     />
                     <span>{{ t('cesium.drawMeasure.style.showVertices') }}</span>
                 </label>
@@ -160,7 +160,7 @@
                         max="20"
                         step="1"
                         :value="style.vertexSize"
-                        @input="patchStyle({ vertexSize: Number($event.target.value) })"
+                        @input="onStyleNumberInput('vertexSize', $event)"
                     />
                     <span class="range-value">{{ style.vertexSize }}</span>
                 </div>
@@ -200,288 +200,7 @@
     </div>
 </template>
 
-<script setup>
-/**
- * CesiumDrawMeasurePanel.vue — 3D 绘制 / 测量面板（引擎感知：2D 用 OL 的 DrawPanel/MeasurePanel）
- *
- * 单一职责：渲染 + 收集用户意图。所有场景动作通过 emit 上抛，
- * 由 HomeView 统一按引擎路由到 CesiumContainer（迁移方案 §2.1 引擎裁决单点）。
- * 测量开关与样式直接写 store（纯数据，无引擎依赖），由容器 watch 后下推管理器。
- *
- * variant：
- *   draw    绘制工具（点/线/面/矩形/圆）+ 样式
- *   measure 测量工具（测距/测面/测高距/方位角）
- */
-import { computed } from 'vue';
-import { storeToRefs } from 'pinia';
-import {
-    Ban,
-    Circle,
-    CircleDot,
-    Compass,
-    Copy,
-    Download,
-    Eraser,
-    Info,
-    Maximize,
-    PenLine,
-    Pentagon,
-    Play,
-    Ruler,
-    Square,
-    SquareDashedBottom,
-    TriangleRight,
-    Undo2,
-    X,
-} from '@lucide/vue';
-import { useLocale } from '@common/app/useLocale';
-import { useMessage } from '@common/shell/useMessage';
-import { formatAreaMeasure, formatDistanceMeasure } from '@common/map-view/units';
-import { useDrawMeasureStore } from '@cesium-domain/stores/useDrawMeasureStore';
-import { copyTextToClipboard, downloadTextFile } from '@cesium-domain/utils/browserIo';
-
-const props = defineProps({
-    /** 面板形态：draw = 绘制工具，measure = 测量工具 */
-    variant: {
-        type: String,
-        default: 'measure',
-    },
-});
-
-const emit = defineEmits(['close', 'action', 'activate']);
-
-const { t } = useLocale();
-const message = useMessage();
-const store = useDrawMeasureStore();
-const { measureOptions, style, activeType, drawing, lastResult, records, subOptionsDisabled } =
-    storeToRefs(store);
-
-const DRAW_TOOLS = [
-    { type: 'Point', icon: CircleDot },
-    { type: 'LineString', icon: PenLine },
-    { type: 'Polygon', icon: Pentagon },
-    { type: 'Rectangle', icon: Square },
-    { type: 'Circle', icon: Circle },
-];
-
-const MEASURE_TOOLS = [
-    { type: 'MeasureDistance', icon: Ruler },
-    { type: 'MeasureArea', icon: SquareDashedBottom },
-    { type: 'MeasureHeight', icon: TriangleRight },
-    { type: 'MeasureAzimuth', icon: Compass },
-];
-
-const tools = computed(() => (props.variant === 'draw' ? DRAW_TOOLS : MEASURE_TOOLS));
-
-const title = computed(() =>
-    props.variant === 'draw'
-        ? t('cesium.drawMeasure.title.draw')
-        : t('cesium.drawMeasure.title.measure'),
-);
-
-const groupLabel = computed(() =>
-    props.variant === 'draw'
-        ? t('cesium.drawMeasure.groups.draw')
-        : t('cesium.drawMeasure.groups.measure'),
-);
-
-/** 底部提示：随当前交互类型切换 */
-const hint = computed(() => {
-    const type = activeType.value;
-    if (!type) return t('cesium.drawMeasure.hints.default');
-    return t(`cesium.drawMeasure.hints.${type}`);
-});
-
-// ────────────────────────── 交互 ──────────────────────────
-
-function selectTool(type) {
-    // 再次点击同一工具 = 取消当前交互（与侧栏二次点击收起的既有手感一致）
-    if (activeType.value === type) {
-        emit('action', 'cancel');
-        return;
-    }
-    emit('activate', type);
-}
-
-function toggleOption(key, event) {
-    store.setMeasureOption(key, !!event.target.checked);
-}
-
-function patchStyle(patch) {
-    store.setStyle(patch);
-}
-
-function clearRecords() {
-    store.clearRecords();
-}
-
-// ────────────────────────── 结果读数 ──────────────────────────
-
-/**
- * 载荷 → 面板键值行。
- * 口径与场景标注一致：measure 为总开关，showArea 管面积，showPerimeter 管周长/长度/距离/角度。
- */
-const rows = computed(() => {
-    const r = lastResult.value;
-    if (!r) return [];
-
-    const onArea = measureOptions.value.measure && measureOptions.value.showArea;
-    const onLength = measureOptions.value.measure && measureOptions.value.showPerimeter;
-    const out = [];
-
-    const coord = (p) => (p ? `${p[0].toFixed(6)}, ${p[1].toFixed(6)}` : '—');
-    const pushArea = (value, label) => {
-        if (!onArea || !Number.isFinite(value)) return;
-        out.push({ label, value: formatAreaMeasure(value), accent: true });
-    };
-    const pushLength = (value, label, accent = false) => {
-        if (!onLength || !Number.isFinite(value)) return;
-        out.push({ label, value: formatDistanceMeasure(value), accent });
-    };
-
-    const K = (key) => t(`cesium.drawMeasure.result.${key}`);
-
-    switch (r.type) {
-        case 'Point':
-            out.push({ label: K('position'), value: coord(r.lonLats[0]) });
-            break;
-
-        case 'LineString':
-        case 'MeasureDistance':
-            out.push({ label: K('pointCount'), value: `${r.lonLats.length}` });
-            pushLength(r.length, K('length'), true);
-            out.push({ label: K('start'), value: coord(r.lonLats[0]) });
-            out.push({ label: K('end'), value: coord(r.lonLats[r.lonLats.length - 1]) });
-            break;
-
-        case 'Polygon':
-        case 'MeasureArea':
-            out.push({ label: K('vertexCount'), value: `${r.lonLats.length}` });
-            pushArea(r.area, K('area'));
-            pushLength(r.perimeter, K('perimeter'));
-            out.push({ label: K('first'), value: coord(r.lonLats[0]) });
-            break;
-
-        case 'Rectangle':
-            pushLength(r.width, K('spanEW'));
-            pushLength(r.height, K('spanNS'));
-            pushArea(r.area, K('area'));
-            pushLength(r.perimeter, K('perimeter'));
-            out.push({ label: K('southWest'), value: coord([r.rectangle.west, r.rectangle.south]) });
-            out.push({ label: K('northEast'), value: coord([r.rectangle.east, r.rectangle.north]) });
-            break;
-
-        case 'Circle':
-            out.push({ label: K('center'), value: coord(r.center) });
-            pushLength(r.radius, K('radius'), true);
-            pushArea(r.area, K('area'));
-            pushLength(r.perimeter, K('perimeter'));
-            break;
-
-        case 'MeasureHeight':
-            pushLength(r.verticalDistance, K('vertical'), true);
-            pushLength(r.horizontalDistance, K('horizontal'), true);
-            pushLength(r.slopeDistance, K('slope'));
-            if (r.heights) {
-                out.push({ label: K('heightStart'), value: formatDistanceMeasure(r.heights[0]) });
-                out.push({ label: K('heightEnd'), value: formatDistanceMeasure(r.heights[1]) });
-            }
-            out.push({ label: K('start'), value: coord(r.lonLats[0]) });
-            out.push({ label: K('end'), value: coord(r.lonLats[1]) });
-            break;
-
-        case 'MeasureAzimuth':
-            if (onLength && Number.isFinite(r.azimuth)) {
-                out.push({
-                    label: K('azimuth'),
-                    value: `${r.azimuth.toFixed(2)}°`,
-                    accent: true,
-                });
-            }
-            pushLength(r.distance, K('horizontal'));
-            out.push({ label: K('start'), value: coord(r.lonLats[0]) });
-            out.push({ label: K('end'), value: coord(r.lonLats[1]) });
-            break;
-
-        default:
-            break;
-    }
-
-    return out;
-});
-
-// ────────────────────────── 导出 / 复制 ──────────────────────────
-
-/** 组装 GeoJSON Feature（圆按绘制时的 64 边形环导出） */
-function buildFeature() {
-    const r = lastResult.value;
-    if (!r) return null;
-
-    const properties = {
-        id: r.id,
-        name: r.name,
-        drawType: r.type,
-    };
-    if (Number.isFinite(r.area)) properties.area_m2 = Number(r.area.toFixed(2));
-    if (Number.isFinite(r.perimeter)) properties.perimeter_m = Number(r.perimeter.toFixed(2));
-    if (Number.isFinite(r.length)) properties.length_m = Number(r.length.toFixed(2));
-    if (Number.isFinite(r.radius)) properties.radius_m = Number(r.radius.toFixed(2));
-    if (Number.isFinite(r.azimuth)) properties.azimuth_deg = Number(r.azimuth.toFixed(2));
-    if (Number.isFinite(r.verticalDistance)) {
-        properties.vertical_m = Number(r.verticalDistance.toFixed(2));
-    }
-    if (Number.isFinite(r.horizontalDistance)) {
-        properties.horizontal_m = Number(r.horizontalDistance.toFixed(2));
-    }
-
-    const ring = r.lonLats.map((p) => [p[0], p[1]]);
-    let geometry;
-
-    if (r.type === 'Point') {
-        geometry = { type: 'Point', coordinates: ring[0] };
-    } else if (
-        r.type === 'LineString' ||
-        r.type === 'MeasureDistance' ||
-        r.type === 'MeasureHeight' ||
-        r.type === 'MeasureAzimuth'
-    ) {
-        geometry = { type: 'LineString', coordinates: ring };
-    } else {
-        // 面类：补闭合点
-        const first = ring[0];
-        const last = ring[ring.length - 1];
-        if (first[0] !== last[0] || first[1] !== last[1]) ring.push([first[0], first[1]]);
-        geometry = { type: 'Polygon', coordinates: [ring] };
-    }
-
-    return { type: 'Feature', properties, geometry };
-}
-
-/**
- * 导出 GeoJSON。剪贴与落盘兜底逻辑统一走 utils/browserIo
- * （与 TOC 右键「导出坐标」同一实现，避免两套各写一份）。
- */
-function exportGeoJson() {
-    const feature = buildFeature();
-    if (!feature) return;
-    const filename = `${feature.properties.id}-${feature.properties.drawType}.geojson`;
-    downloadTextFile(JSON.stringify(feature, null, 2), filename, 'application/geo+json');
-    message.success(t('cesium.exported', { name: filename }));
-}
-
-/**
- * 复制坐标。非安全上下文（http / 内网 IP）的兜底在 browserIo 内处理，
- * 此处只关心结果反馈（Force_command §2-8：不允许静默成功 / 失败）。
- */
-async function copyCoords() {
-    const r = lastResult.value;
-    if (!r) return;
-    const text = r.lonLats.map((p) => `${p[0].toFixed(6)},${p[1].toFixed(6)}`).join('\n');
-    const ok = await copyTextToClipboard(text);
-    if (ok) message.success(t('cesium.drawMeasure.toast.coordsCopied', { count: r.lonLats.length }));
-    else message.warning(t('cesium.copyCoordinatesFailed'));
-}
-</script>
+<script lang="ts" src="./CesiumDrawMeasurePanel.ts"></script>
 
 <style scoped>
 .cesium-dm-panel {

@@ -178,11 +178,12 @@
     </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 /**
  * 预报表格 + API 元信息 + 原始 JSON 面板
  * 所有数据由父组件通过 props 传入
  */
+import { type PropType } from 'vue';
 import { resolveWeatherIcon, formatWeekLabel } from '@common/weather/utils/weatherUtils';
 import { useLocale } from '@common/app/useLocale';
 
@@ -190,11 +191,11 @@ const { t } = useLocale();
 
 defineProps({
     /** 实况天气数据对象 */
-    liveWeather: { type: Object, default: null },
+    liveWeather: { type: Object as PropType<Record<string, any> | null>, default: null },
     /** 预报天气数据对象 */
-    forecastWeather: { type: Object, default: null },
+    forecastWeather: { type: Object as PropType<Record<string, any> | null>, default: null },
     /** 预报 casts 数组（已截取 4 天） */
-    casts: { type: Array, default: () => [] },
+    casts: { type: Array as PropType<any[]>, default: () => [] },
     /** base 接口元信息 */
     baseApiMeta: {
         type: Object,

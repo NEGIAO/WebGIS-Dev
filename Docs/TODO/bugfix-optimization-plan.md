@@ -130,17 +130,25 @@
 ## P3 — 可维护性债（穿插进行，每次只拆一个）
 
 ### P3-1 巨型文件渐进拆分（规范 6 单一职责）
-| 文件 | 行数 | 拆分方向 |
-|------|------|----------|
-| `CesiumToolPanel.vue` | 2686 | 各页签拆子组件（DataTab/ModulesTab…），模块渲染已是 LilGuiControls 可直接搬 |
-| `TOCPanel.vue` | 2499 | 动作处理层已外移一部分（contextActionManager/cesiumTocActions），继续拆上传/搜索区块 |
-| `RegisterView.vue` | 2198 | 表单步骤组件化（登录/注册/重置/绑定四段） |
-| `MapContainer.vue` | 2041 | 持续外移到 composables（既有方向，禁新增功能代码） |
-| `HomeView.vue` | 2011 | 面板编排层拆 useHomePanels 类 composable |
+> **行数基线已按 2026-11-13 实测重算**（原表 2026-07 数据已全面过期，最大偏差 +2311 行）。
+> 度量口径与完整分析见 [`2026-11-13-vue-component-refactor-plan.md`](2026-11-13-vue-component-refactor-plan.md)。
+
+| 文件 | 行数（实测） | 有效逻辑行 | 拆分方向 |
+|------|------|------|----------|
+| `CesiumContainer.vue` | 3226 | 1707 | 启动簇 / 大气簇 / 导航簇外移，目标 ~800 行 |
+| `MapContainer.vue` | 2942 | 1552 | 持续外移到 composables（既有方向，禁新增功能代码） |
+| `HomeView.vue` | 2866 | 1448 | 面板编排层拆 useHomePanels 类 composable |
+| `RegisterView.vue` | 2714 | 793 | 表单步骤组件化（登录/注册/重置/绑定四段） |
+| `CesiumToolPanel.vue` | 2703 | 371 | 各页签拆子组件（DataTab/ModulesTab…），模块渲染已是 LilGuiControls 可直接搬 |
+| `TOCPanel.vue` | 2518 | 397 | 动作处理层已外移一部分（contextActionManager/cesiumTocActions），继续拆上传/搜索区块 |
+| `AttributeTable.vue` | 2516 | 644 | 虚拟滚动 / 单元格编辑 / 面板拖拽已抽 composable，剩余为编排 |
+| `AdminControlPanel.vue` | 2515 | 728 | 已范式化；表格 CRUD 与页签拖拽已外移 |
+| `LayerControlPanel.vue` | 2090 | 665 | 已范式化；拖拽排序 / 右键定位 / 长按 / 请求令牌已外移 |
+| `LandingView.vue` | 5639 | 667 | **样式主导**（3881 行样式），需样式外置而非脚本拆分 |
 - **原则**：只搬不改逻辑、每次一个文件一份日志、拆后 ESLint+回归；与功能迭代穿插，不集中大爆改。
 - **容器二轮既有路线图**（V3.4.29 日志 `2026-07-26-container-components-slimming-round1.md`，factory 注入模式照抄一轮）：
   MapContainer：`runDeferredStartupTasks`(~170) → `activateInteraction`(~121) → `syncAttributeTableMapExtent` 段 → 尾部 `getMapExtent` 簇，目标 ~1200 行；
-  CesiumContainer（现 ~915）：`bootCesium/initViewer/reset` 启动簇(~244) → `applyAtmosphereParams` 簇(~165) → `handleNavTargetSelect`(~84)，目标 ~500 行。
+  CesiumContainer（实测 3226，原记录 ~915 已失效）：`bootCesium/initViewer/reset` 启动簇 → `applyAtmosphereParams` 簇 → `handleNavTargetSelect` 簇，目标 ~800 行。
 
 ### P3-2 cesium-navigation 内嵌包上游 TODO（tracking 场景 2 处 bug 注释）
 - **定性**：上游遗留、仅实体追踪模式触发（项目暂未用 tracking）→ 挂起观察，触发时再修。
@@ -390,3 +398,31 @@ Sprint 3（穿插）：P3-1 容器二轮（O1/O2 交替）→ P2-1 bundle 分析
   - [ ] (现象) 同日 CLI `tdt_vector_fetch.mjs` 已改为「原始键全保留 + 派生键追加」（CE 输出 `elemid/A6/h/floor/Z5/I8` + `height_m/floors/name`），而前端 `tdtVectorTopology.js` 的 CE 分支仍只输出 `{_layer, height_m, floors, A6, name}`，AP 分支只输出 `{_layer, objectid}`；CK/BM 的 `fuseByS8` 同样只留 `S8`。
   - [ ] (影响) 同一范围「前端抓取」与「CLI 抓取」得到的属性表不一致；用户在面板里看不到 `Z5` 楼名原键、`I8`（如「无底座」）等字段，也无法与 CLI 产物做字段级对拍。
   - [ ] (建议) 按 CLI 同一策略改造：`extra.raw = {...record.props}`，`props(ex)` 以 raw 为基底再追加派生键；CK/BM 环片携带 props 后取并集。属 L2，估算 1 人日含回归。
+
+- [ ] **IDE 诊断快照漂移与会话内并发写盘**（2026-11-13 · V3.6.47 顺带发现，按 Force_command §2.5 只记不改，日志 [2026-11-13-fix-cesium-tool-panel-lint.md](../LLM_record/26-11/2026-11-13/2026-11-13-fix-cesium-tool-panel-lint.md)）：
+  - [x] (已闭环·无需处理) 首轮 `npx eslint`（5 文件）实检出 `useCesiumLayers.ts` **8 条** `@typescript-eslint/no-unused-vars`（5 个 V3.6.46 重构残留 import + 3 个未消费解构变量：`queueTerrainFallback` / `ensureTdtBoundaryLayer` / `ensureTdtTextLabelLayer`）。它们**不在**用户提交的诊断列表内，按 §2.5 未擅自删改；复跑时已全部消失，核查为该文件 import 块被**外部写入**（IDE 保存 / 并行会话）清理，非本会话修改。终态 `eslint --no-cache` 与 `tsc --noEmit` 均 0 问题。若再次出现，按 lint 清理即可；但需先确认这 3 个解构变量是否本应被调用（可能是重构漏调用，而非单纯可删）。
+  - [ ] (风险·待用户留意) 同轮 `CheckStructureTree.py` 首跑报 `RegisterView.ts` 漏登记（文档 645 / 磁盘 646，exit 1），数分钟后复跑 646/646 全绿；期间 `frontend-structure.md` 被外部补录一行。加上 `CHANGELOG.md` 中 V3.6.46 标题在同几分钟内被改写三次（16 → 18 → 19 个组件），**同一会话内多次出现磁盘内容被外部写入**。这正是用户 Problems 面板 `modelVersionId` 与磁盘代码不同步、19 条诊断中 17 条已不存在的直接成因。
+  - [ ] (建议) 修前端代码前：① 强制 IDE 保存全部缓冲区；② 重启 ESLint Server / TypeScript Server 或重开文件；③ 以 `npx tsc --noEmit` 与 `npx eslint`（不带 `--fix`）的实跑结果为唯一依据，**禁止照 Problems 面板旧行号改代码**。并行会话较多时，写 README / CHANGELOG 前先复核当前版本号（handover §7 已提示撞车风险）。
+
+- [ ] **`Object.assign(this, ...)` 注入成员的模板类型检查缺口**（2026-11-13 · V3.6.50 顺带发现，按 Force_command §2.5 只记不改，日志 [2026-11-13-fix-admin-panel-template-types.md](../LLM_record/26-11/2026-11-13/2026-11-13-fix-admin-panel-template-types.md)）：
+  - [ ] (同类风险·未复验) `frontend/src/domains/common/layer-tree/components/TOCPanel.ts` 有 **4 处** `Object.assign(this, ...)`（L231 `geocoding` / L253 `dispatcher` / L265 `fileUpload` / L273 `sharedResources`）。与 V3.6.48 `LayerControlPanel`、V3.6.50 `AdminControlPanel` 已修的问题同源：运行时平铺但静态类型不可见，`tsc --noEmit` 不解析 SFC 模板因而全绿，Volar 才会在模板里报 TS2339。建议用户打开 `TOCPanel.vue` 看 Problems 面板确认；若确有报错，按已验证的两种写法之一补类型（V3.6.48 的 `public …!` 逐条声明 / V3.6.50 的 `setup` 返回类型交集）。
+  - [ ] (门禁缺口) 项目**未安装 `vue-tsc`**，`npx tsc --noEmit` 不覆盖 `.vue` 模板，导致此类缺陷只有在 IDE 里才可见。建议：评估把 `vue-tsc --noEmit` 纳入门禁（属 L3 依赖增删 + CI 配置变更，须先提交方案并获批准，且涉及 `.github/workflows/` 部署面），或至少在 `dev-conventions.md` 写明「范式化组件新增 `Object.assign` 注入必须同步补静态类型」。
+  - [ ] (范式统一) V3.6.48 用 `public …!` 逐条声明、V3.6.50 用 `setup` 返回类型 `ReturnType` 派生，两者都有效但写法不一。若后续要求统一，应作为独立重构任务评估，不要在功能修复里顺手归并。
+
+- [ ] **js→ts 迁移多会话并行期的范围外 tsc 错误快照**（2026-11-13 · V3.6.55 顺带发现，按 Force_command §2.5 只记不改，日志 [2026-11-13-fix-useCesiumHeightSampler-ts-errors.md](../LLM_record/26-11/2026-11-13/2026-11-13-fix-useCesiumHeightSampler-ts-errors.md)）：
+  - [ ] (现象) 本任务收尾时点 `npx tsc --noEmit --pretty false` 实测 5 处错误，均在任务范围外且属并行会话活跃写入区：`common/data-import/parsers/tdtBuildingTopology.ts` L301/302/305/306 ×4 TS2363（算术运算右侧类型不符）、`ol/basemap/composables/useBasemapSelectionWatcher.ts` L203 ×1 TS2339（`targetLayerId` does not exist on type `'{}'`，与 V3.6.48 已修的 `{}` 默认参数同模式）。
+  - [ ] (说明) 同日开工基线为 `AerialPerspectiveEffect.ts` ×24（类字段未声明的 TS2339 模式），收尾复跑已被并行会话清零——多会话并行下错误面持续流动，本条仅为 16:34 时点快照；复跑若已清零则视为闭环。
+  - [ ] (建议) 修复一律以 `npx tsc --noEmit --pretty false` 实跑为准；`useBasemapSelectionWatcher` 的 `{}` 参数按 V3.6.48 先例补 payload 接口类型；`tdtBuildingTopology` 的 TS2363 需核对算术操作数是否应先 `Number()` 归一。
+
+- [ ] **amapBuildingFetcher.ts 存量 tsc 报错（PbfReader 属性访问 / 对象字面量动态赋值）**（2026-11-13 · V3.6.52 排查 `AerialPerspectiveEffect.ts` 诊断漂移时顺带发现，按 Force_command §2.5 只记不改）：
+  - [ ] (现象) 16:24–16:28 三次 `npx tsc --noEmit` 快照为全项目 53 → 41 → 8 条递减，期间磁盘持续被 IDE 缓冲区外部回写（报错文件数 4 → 3 → 1）。终态快照仅剩 `amapBuildingFetcher.ts` 8 条：`PbfReader` 上 `pos`/`b`/`len` 的 TS2339、对象字面量推断 `{}` 上动态属性赋值的 TS2339、TS2363 算术运算类型、TS2554 参数个数。
+  - [ ] (影响) 门禁基线退化：2026-11-03 复核时全项目 tsc 为 0 错误（本文件上方条目），当前存量报错违反 dev-conventions「`.ts` 文件 `tsc --noEmit` 零报错」。
+  - [ ] (建议) 因并行会话活跃，先以实跑 `npx tsc --noEmit` 复核最新状态（勿照 IDE Problems 面板旧行号改，见上方 2026-11-13 条目建议）。若仍存留，属 L2：PbfReader 解包结果补类型或收拢 `Record<string, any>` 注解，与 `AerialPerspectiveEffect.ts` 本日已落地的修法同源。
+
+- [ ] **结构树门禁成为并行 JS→TS 改名的「移动靶」**（2026-11-13 · V3.6.52 顺带发现，按 Force_command §2.5 只记录结论，日志 [2026-11-13-fix-map-controls-bar-format-options-type.md](../LLM_record/26-11/2026-11-13/2026-11-13-fix-map-controls-bar-format-options-type.md)）：
+  - [x] (已闭环·按 §7 补录) V3.6.50 任务补录 4 处（`AerialPerspectiveEffect` / `gltfLoader` / `useCesiumHeightSampler` / `useCesiumModelManager`），V3.6.52 任务再补录 7 处（6 处 `.js→.ts` + 新增 `LogMonitor.ts`），每次都让门禁转绿（652/652 → 656/656 → 657/657）。漂移全部由**并行会话批量 JS→TS 改名**引起，非本会话代码改动引入。
+  - [ ] (建议) 批量改名时应把 `Docs/Guide/frontend-structure.md` 同步纳入同一次改动，否则后续每个任务的收尾都要替它补录；可在改名脚本里按门禁输出的清单自动替换扩展名。
+  - [ ] (风险) 并行会话编辑期间 `npx tsc --noEmit` 全量会短暂报大量无关错误（V3.6.50 见 `useLayerControlHandlers.ts`、V3.6.52 见 `useCesiumDataImport.ts`），复跑即消失。判断「是否本次引入」时，宜用 TypeScript 编译器 API 只取目标文件的 semantic diagnostics，避免把并发瞬时状态误判为回归。
+  - [ ] (延续观察 · V3.6.53) 移动靶未停止：V3.6.53 任务补录 `main.js→main.ts` 后门禁立刻又报 `useStyleEditor.js→.ts`，再补录才转绿（657/657）。同一任务内若持续出现新漂移，按 Force_command §0 应停止追逐并如实报告，而非无限补录。另：并行会话可在同一分钟内改写**目标源码本身**（`useBasemapSelectionWatcher.ts` L203 从无参数注解变为有注解），核对必须以最后一次读取为准（日志 [2026-11-13-fix-basemap-watcher-reset-param-type.md](../LLM_record/26-11/2026-11-13/2026-11-13-fix-basemap-watcher-reset-param-type.md)）。
+
+

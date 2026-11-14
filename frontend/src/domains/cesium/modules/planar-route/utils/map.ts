@@ -58,7 +58,7 @@ export function setViewer(viewer: Cesium.Viewer, option?: any) {
  * @param viewer Cesium Viewer 实例
  * @param callback 事件回调函数
  */
-export function addMapEvent(viewer: Cesium.Viewer, type: Cesium.ScreenSpaceEventType, callback: (pick) => void) {
+export function addMapEvent(viewer: Cesium.Viewer, type: Cesium.ScreenSpaceEventType, callback: (pick: any) => void) {
 	// 注册事件处理器
 	handler = viewer.screenSpaceEventHandler;
 
@@ -83,7 +83,7 @@ export function removeMapEvent(type: Cesium.ScreenSpaceEventType) {
  * @param {Object} viewer Cesium的视图对象，用于获取相机位置。
  * @param {Object} cameraState 用于存储相机位置状态的对象，包括经度、纬度和高度。
  */
-export const preUpdate = (viewer, cameraState) => {
+export const preUpdate = (viewer: any, cameraState: any) => {
 	const direct = viewer.scene.camera;
 	const cameraPos = viewer.scene.camera.positionCartographic;
 	const height = cameraPos.height;
@@ -101,7 +101,7 @@ export const preUpdate = (viewer, cameraState) => {
  * @param {Object} viewer Cesium的观众对象，用于获取相机和场景信息。
  * @param {Object} dom 包含相机状态的DOM元素，其cameraState属性将被更新。
  */
-export function moveEvent(e, viewer, cameraState) {
+export function moveEvent(e: any, viewer: any, cameraState: any) {
 	// 从相机位置和鼠标事件位置生成射线
 	const ray = viewer.camera.getPickRay(e.endPosition);
 	// 尝试在地球表面拾取点
@@ -121,7 +121,7 @@ export function moveEvent(e, viewer, cameraState) {
 /**
  * 获取一个点的地形高度
  */
-export async function getTerrainHeight(viewer: Cesium.Viewer, longitude, latitude) {
+export async function getTerrainHeight(viewer: Cesium.Viewer, longitude: number, latitude: number) {
 	// 1. 将经纬度转换为Cartographic（弧度制）
 	const position = Cesium.Cartographic.fromDegrees(longitude, latitude);
 
@@ -195,7 +195,7 @@ export function lngLat2Cartesian(lngLat: number[]) {
  * @param { Cesium.Cartesian3 } endPoint
  * @returns
  */
-export function getHeading(startPoint, endPoint) {
+export function getHeading(startPoint: any, endPoint: any) {
 	const startCartographic = Cesium.Cartographic.fromCartesian(startPoint);
 	const endCartographic = Cesium.Cartographic.fromCartesian(endPoint);
 	const startLongitude = Cesium.Math.toDegrees(startCartographic.longitude);
@@ -253,7 +253,7 @@ export function takeScreenshot(viewer: Cesium.Viewer, cb: (data: string | null) 
  * 根据 kmzToJson 解析结果绘制线
  * 支持传入 Document / { Placemark } / Placemark 数组
  */
-export const drawKmzPolyline = (viewer: Cesium.Viewer, kmzData: any, cb) => {
+export const drawKmzPolyline = (viewer: Cesium.Viewer, kmzData: any, cb?: any) => {
 	if (!viewer || !kmzData) {
 		cb?.([]);
 		return;

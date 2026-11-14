@@ -29,7 +29,7 @@ export const useThemeStore = defineStore('themeStore', () => {
     }
 
     /** 切换主题 */
-    function setTheme(newTheme) {
+    function setTheme(newTheme: any) {
         if (!THEMES[newTheme]) return;
         theme.value = newTheme;
         applyTheme();

@@ -21,6 +21,16 @@ import { createKmlTextHelpers } from '../vector/kmlTextHelpers';
 import { createVectorImportPipeline } from '../vector/vectorImportPipeline';
 
 
+export interface LayerDataImportDeps {
+    mapInstance: { value: any };
+    initialView: any;
+    userDataLayers: any[];
+    addManagedLayerRecord: (record: any) => any;
+    createManagedVectorLayer: (options: any) => any;
+    styleTemplates: Record<string, any>;
+    onImportProgress?: ((progress: any) => void) | null;
+}
+
 export function useLayerDataImport({
     mapInstance,
     initialView,
@@ -29,7 +39,7 @@ export function useLayerDataImport({
     createManagedVectorLayer,
     styleTemplates,
     onImportProgress = null,
-}) {
+}: LayerDataImportDeps) {
     const gisInlet = useGisLoader();
     const message = useMessage();
 
@@ -66,7 +76,16 @@ export function useLayerDataImport({
         packet = null,
         metadata = null,
         capabilities = null,
-    }) {
+    }: {
+        id?: string;
+        name?: string;
+        layerType?: string;
+        sourceType?: string;
+        featureCount?: number;
+        packet?: any;
+        metadata?: any;
+        capabilities?: any;
+    } = {}) {
         return createStandardItem({
             id,
             name,
@@ -96,7 +115,7 @@ export function useLayerDataImport({
     let importInFlight = false;
 
     async function resolveSupportedProjection(
-        rawProjection,
+        rawProjection: any,
         fallbackProjection = 'EPSG:4326',
         label = '数据',
     ) {
@@ -121,8 +140,8 @@ export function useLayerDataImport({
         );
     }
 
-    function reportImportProgress(state = {}) {
-        if (typeof onImportProgress !== 'function') return;
+    function reportImportProgress(state: any = {}) {
+        if (!onImportProgress || typeof onImportProgress !== 'function') return;
         onImportProgress({
             phase: 'idle',
             total: 0,
@@ -209,7 +228,14 @@ export function useLayerDataImport({
      * @param {string} params.name - 文件名
      * @param {Array|null} [params.resources=null] - 文件夹导入时的资源列表
      */
-    async function addUserDataLayer({ content, type, name, resources, file = null, overrideCrs = '' }) {
+    async function addUserDataLayer({
+        content,
+        type,
+        name,
+        resources,
+        file = null,
+        overrideCrs = '',
+    }: Record<string, any>) {
         if (!mapInstance.value) return;
         // 串行闸门：activeOverrideCrs 是本次导入的作用域值，并发导入会互相覆盖，
         // 因此显式拒绝第二次进入（而不是依赖调用方自觉），保证「赋值 → 使用 → 清空」独占。
@@ -225,7 +251,7 @@ export function useLayerDataImport({
             // 再进入重活；同步解析/解码阶段面板也能给出可见反馈，不再"卡死无任何提示"
             await withImportMask('正在导入数据，请稍候…', () =>
                 importUploadInternal({ content, type, name, resources, file }));
-        } catch (e) {
+        } catch (e: any) {
             if (isUnsupportedProjectedCrsError(e)) {
                 if (!e?.notified) {
                     message.error(UNSUPPORTED_PROJECTED_CRS_MESSAGE, {
@@ -242,7 +268,13 @@ export function useLayerDataImport({
         }
     }
 
-    async function importUploadInternal({ content, type, name, resources, file = null }) {
+    async function importUploadInternal({
+        content,
+        type,
+        name,
+        resources,
+        file = null,
+    }: Record<string, any>) {
         const isFolderImport = Array.isArray(resources) && resources.length > 0;
         const normalizedType = isFolderImport
             ? 'directory'
@@ -369,7 +401,7 @@ export function useLayerDataImport({
                 message: `导入完成：${name || '上传图层'}`,
             });
             message.success(`导入完成：${name || '上传图层'}`);
-        } catch (e) {
+        } catch (e: any) {
             // 用户提示统一由 withImportMask 外层的 addUserDataLayer 收口，
             // 这里只负责面板进度条的错误反馈，并向上抛出便于识别不支持投影
             reportImportProgress({

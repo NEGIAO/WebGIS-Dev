@@ -11,7 +11,7 @@
     </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, onMounted, onUnmounted, watch } from 'vue';
 import { useMessage } from '@common/shell/useMessage';
 
@@ -28,51 +28,51 @@ const props = defineProps({
 
 defineEmits(['toggle-active']);
 
-const canvasRef = ref(null);
+const canvasRef = ref<HTMLCanvasElement | null>(null);
 const isLoading = ref(false);
 
 const message = useMessage();
 
-let activeEngine = null;
+let activeEngine: any = null;
 
 // 导入模块缓存
-const importedModules = {};
+const importedModules: Record<string, any> = {};
 
 /**
  * 动态导入特效模块 - 仅在需要时加载
  */
-async function dynamicImportEffect(effectName) {
+async function dynamicImportEffect(effectName: string) {
     if (importedModules[effectName]) {
         return importedModules[effectName];
     }
 
     try {
         isLoading.value = true;
-        let moduleLoader;
+        let moduleLoader: () => Promise<Record<string, any>>;
         switch (effectName) {
             case 'fluid':
-                moduleLoader = () => import('@common/components/Magic/useFluid.js');
+                moduleLoader = () => import('@common/components/Magic/useFluid');
                 break;
             case 'gravity':
-                moduleLoader = () => import('@common/components/Magic/useGravity.js');
+                moduleLoader = () => import('@common/components/Magic/useGravity');
                 break;
             case 'void':
-                moduleLoader = () => import('@common/components/Magic/useDelaunay.js');
+                moduleLoader = () => import('@common/components/Magic/useDelaunay');
                 break;
             case 'wave':
-                moduleLoader = () => import('@common/components/Magic/useWave.js');
+                moduleLoader = () => import('@common/components/Magic/useWave');
                 break;
             case 'singularity':
-                moduleLoader = () => import('@common/components/Magic/useSingularity.js');
+                moduleLoader = () => import('@common/components/Magic/useSingularity');
                 break;
             case 'ring-explosion':
-                moduleLoader = () => import('@common/components/Magic/useRingExplosion.js');
+                moduleLoader = () => import('@common/components/Magic/useRingExplosion');
                 break;
             default:
-                moduleLoader = () => import('@common/components/Magic/useGravity.js');
+                moduleLoader = () => import('@common/components/Magic/useGravity');
         }
 
-        const module = await moduleLoader();
+        const module: Record<string, any> = await moduleLoader();
         const composableName =
             effectName === 'fluid'
                 ? 'useFluid'
@@ -98,7 +98,7 @@ async function dynamicImportEffect(effectName) {
 /**
  * 切换特效引擎
  */
-async function switchEffect(effectName) {
+async function switchEffect(effectName: any) {
     if (isLoading.value) return;
 
     try {
@@ -109,7 +109,7 @@ async function switchEffect(effectName) {
 
         if (canvasRef.value) {
             const ctx = canvasRef.value.getContext('2d');
-            ctx.clearRect(0, 0, canvasRef.value.width, canvasRef.value.height);
+            ctx?.clearRect(0, 0, canvasRef.value.width, canvasRef.value.height);
         }
 
         const useEffectComposable = await dynamicImportEffect(effectName);

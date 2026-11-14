@@ -11,11 +11,11 @@ import { revokeBlobUrl, detachEntityFromScene } from './loaders/utils';
 export interface DataSourceLifecycleDeps {
     getCesium: () => any;
     getViewer: () => any;
-    message: any;
     loadedDataSources: { value: any[] };
     rasterCache: Map<string, any>;
     /** 清空时回收待确认的 GLTF 临时文件 */
     cancelPendingGltf: () => void;
+    message: any;
 }
 
 /**
@@ -31,7 +31,7 @@ export function createDataSourceLifecycle({
     rasterCache,
     cancelPendingGltf,
 }: DataSourceLifecycleDeps) {
-    function removeDataSource(id) {
+    function removeDataSource(id: any) {
         const record = loadedDataSources.value.find((ds) => ds.id === id);
         if (!record) return;
 

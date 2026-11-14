@@ -156,12 +156,12 @@ export const useTOCStore = defineStore('tocStore', () => {
         const id = normalizeText(layerId);
         if (!id || !layerMetadataMap.value[id]) return;
 
-        const nextMap = { ...layerMetadataMap.value };
+        const nextMap: Record<string, any> = { ...layerMetadataMap.value };
         delete nextMap[id];
         layerMetadataMap.value = nextMap;
 
         if (selectedDistrictNodes.value[id]) {
-            const nextNodes = { ...selectedDistrictNodes.value };
+            const nextNodes: Record<string, any> = { ...selectedDistrictNodes.value };
             delete nextNodes[id];
             selectedDistrictNodes.value = nextNodes;
         }
@@ -306,7 +306,7 @@ export const useTOCStore = defineStore('tocStore', () => {
         clearSelectedDistricts,
 
         // 辅助转换函数（供外部使用）
-        districtNodeToLayerMeta: (node: DistrictTreeNode, featureCount: number = 0) => ({
+        districtNodeToLayerMeta: (node: DistrictTreeNode, featureCount: number = 0) : any => ({
             id: `district_${node.value}`,
             name: node.label,
             adcode: node.value,

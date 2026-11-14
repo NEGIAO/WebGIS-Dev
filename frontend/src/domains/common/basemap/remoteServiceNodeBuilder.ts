@@ -46,7 +46,7 @@ function orderedSublayers(record: RemoteServiceRecord): RemoteServiceRecord['sub
     const order = record.layerOrder || [];
     const ordered = order
         .map((name) => subs.find((sub) => sub.name === name))
-        .filter(Boolean);
+        .filter((sub): sub is NonNullable<typeof sub> => Boolean(sub));
     const rest = subs.filter((sub) => !order.includes(sub.name));
     return [...ordered, ...rest];
 }

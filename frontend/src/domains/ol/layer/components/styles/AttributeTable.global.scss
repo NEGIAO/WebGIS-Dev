@@ -1,0 +1,21 @@
+/** GIS 主题控制配色映射：以截图中The Science of Where标准绿色和GIS专业应用为原形搭配色块 **/
+:root {
+    --arc-pro-bg: var(--bg-primary);
+    --arc-pro-panel-base: #f0f3f2;
+    --arc-pro-topbar-green: var(--brand-accent); /* 主题Logo顶板色系 */
+    --arc-pro-win-hover-red: var(--danger);
+    --arc-pro-toolbar-line: #cdcece;
+    --arc-pro-ribbon-btn-bg: transparent;
+    --arc-pro-ribbon-hover: #dbefdc; /* 操作栏按住焦点和光标指引浅亮主绿区搭配 */
+
+    /* Grid 标准表格级表现配置 */
+    --arc-pro-border-color: #d1d4d3;
+    --arc-pro-header-bg: #ecefec;
+    --arc-pro-grid-lines: #dfdfdf;
+
+    --arc-pro-select-cyan: #d2ecdc; /* 数据被选目标绿色亮圈，原系其实略偏浅绿蓝色交织系。因截图为纯正绿色定制做调整对应兼容  */
+    --arc-pro-row-hover: #eaf1e8;
+
+    --arc-pro-font-def: 'Segoe UI', 'Microsoft Yahei', sans-serif;
+    --arc-pro-text: #2a342f;
+}

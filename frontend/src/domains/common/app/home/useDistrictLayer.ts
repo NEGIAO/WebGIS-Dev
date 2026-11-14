@@ -8,13 +8,13 @@
  * @param {Object} deps - 依赖注入
  * @param {import('vue').Ref} deps.mapContainerRef - MapContainer 组件引用
  */
-export function useDistrictLayer({ mapContainerRef }) {
+export function useDistrictLayer({ mapContainerRef }: { mapContainerRef: any }) {
     /**
      * 获取图层元数据
      * @param {string} layerId - 图层 ID
      * @returns {Object|null} 图层元数据
      */
-    function getLayerMetaById(layerId) {
+    function getLayerMetaById(layerId: any) {
         return mapContainerRef.value?.getLayerMetaById?.(layerId) || null;
     }
 
@@ -23,7 +23,7 @@ export function useDistrictLayer({ mapContainerRef }) {
      * @param {string} layerId - 图层 ID
      * @returns {boolean}
      */
-    function isDistrictLayer(layerId) {
+    function isDistrictLayer(layerId: any) {
         const meta = getLayerMetaById(layerId);
         return meta?.sourceType === 'district-boundary';
     }
@@ -33,7 +33,7 @@ export function useDistrictLayer({ mapContainerRef }) {
      * @param {string} layerId - 图层 ID
      * @returns {Object|null}
      */
-    function getDistrictMeta(layerId) {
+    function getDistrictMeta(layerId: any) {
         return getLayerMetaById(layerId);
     }
 
@@ -41,7 +41,7 @@ export function useDistrictLayer({ mapContainerRef }) {
      * 聚焦行政区图层
      * @param {string} layerId - 图层 ID
      */
-    function focusDistrictLayer(layerId) {
+    function focusDistrictLayer(layerId: any) {
         mapContainerRef.value?.focusDistrictByAdcode?.({
             adcode: layerId.replace('district-', ''),
         });
@@ -52,7 +52,7 @@ export function useDistrictLayer({ mapContainerRef }) {
      * @param {string} layerId - 图层 ID
      * @param {boolean} visible - 是否可见
      */
-    function handleDistrictLayerVisibility(layerId, visible) {
+    function handleDistrictLayerVisibility(layerId: string, visible: boolean) {
         const adcode = layerId.replace('district-', '');
         mapContainerRef.value?.setDistrictLayerVisibility?.(adcode, visible);
     }
@@ -61,7 +61,7 @@ export function useDistrictLayer({ mapContainerRef }) {
      * 移除行政区图层
      * @param {string} layerId - 图层 ID
      */
-    function handleDistrictLayerRemove(layerId) {
+    function handleDistrictLayerRemove(layerId: any) {
         const adcode = layerId.replace('district-', '');
         mapContainerRef.value?.removeDistrictLayer?.(adcode);
     }
@@ -70,7 +70,7 @@ export function useDistrictLayer({ mapContainerRef }) {
      * 同步行政区图层可见性
      * @param {string} layerId - 图层 ID
      */
-    function syncDistrictLayerVisibility(_layerId) {
+    function syncDistrictLayerVisibility(_layerId: any) {
         // 可以在这里添加同步逻辑
     }
 

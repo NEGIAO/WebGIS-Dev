@@ -34,6 +34,17 @@ export interface RasterLayerFactoryDeps {
     projectExtentToMapView: (...args: any[]) => any;
 }
 
+export interface CreateManagedRasterLayerParams {
+    name: string;
+    type: string;
+    sourceType?: any;
+    data?: any;
+    url?: string | null;
+    fitView?: boolean;
+    packet?: any;
+    file?: File | null;
+}
+
 /**
  * 创建受管栅格图层构造函数
  * @param deps 依赖注入（见 RasterLayerFactoryDeps）
@@ -83,9 +94,9 @@ export function createRasterLayerFactory(deps: RasterLayerFactoryDeps) {
         packet = null,
         /** 传入原始 File 对象，用于大文件 Worker 解码路径 */
         file = null,
-    }) {
+    }: CreateManagedRasterLayerParams) {
         if (!mapInstance.value) return null;
-        if (!url && !(data instanceof ArrayBuffer)) return null;
+        if (!url && !(data && data instanceof ArrayBuffer)) return null;
 
         const GeoTIFFSource = await getGeoTIFFSourceCtor();
         const pool = await getPool();
@@ -96,16 +107,16 @@ export function createRasterLayerFactory(deps: RasterLayerFactoryDeps) {
         // 使用 Worker Pool 在后台线程解码，不阻塞 UI
         let sampleBandCount;
         let nodataValue;
-        let singleBandStretch = null;
-        let firstImageRef = null;
-        let blob = null;
+        let singleBandStretch: any = null;
+        let firstImageRef: any = null;
+        let blob: any = null;
         try {
             let tiff;
             if (url) {
                 const fromUrl = await getGeotiffFromUrl();
                 tiff = await fromUrl(url);
             } else {
-                blob = new Blob([data], { type: 'image/tiff' });
+                blob = new Blob([data as ArrayBuffer], { type: 'image/tiff' });
                 const fromBlob = await getGeotiffFromBlob();
                 tiff = await fromBlob(blob);
             }
@@ -137,14 +148,14 @@ export function createRasterLayerFactory(deps: RasterLayerFactoryDeps) {
         // 阶段 2：创建 GeoTIFFSource
         // URL 模式：直接传 URL，OL 通过 Range Requests 按需加载瓦片
         // Blob 模式：传 Blob，OL 在内存中按需读取
-        const sourceOpts: any = {};
+        const sourceOpts: Record<string, any> = {};
         if (sampleBandCount === 1 && nodataValue !== null) {
             sourceOpts.nodata = nodataValue;
         }
         if (url) {
             sourceOpts.url = url;
         } else {
-            sourceOpts.blob = blob || new Blob([data], { type: 'image/tiff' });
+            sourceOpts.blob = blob || new Blob([data as ArrayBuffer], { type: 'image/tiff' });
         }
         const source = new GeoTIFFSource({
             convertToRGB: 'auto',
@@ -153,12 +164,12 @@ export function createRasterLayerFactory(deps: RasterLayerFactoryDeps) {
             maximumConnections: 6,
         });
 
-        let viewCfg = null;
+        let viewCfg: any = null;
         let hasGeorefExtent;
         try {
             viewCfg = await source.getView();
             hasGeorefExtent = !!(
-                viewCfg?.extent && viewCfg.extent.every((v) => Number.isFinite(v))
+                viewCfg?.extent && viewCfg.extent.every((v: any) => Number.isFinite(v))
             );
         } catch (_e) {
             hasGeorefExtent = false;

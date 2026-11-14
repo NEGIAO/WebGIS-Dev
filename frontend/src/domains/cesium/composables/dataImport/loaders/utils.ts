@@ -11,7 +11,7 @@
  * @param {string} filename - 文件名
  * @returns {string} 小写扩展名（不含点）
  */
-export function getExtension(filename) {
+export function getExtension(filename: any) {
     const lastDot = filename.lastIndexOf('.');
     return lastDot === -1 ? '' : filename.slice(lastDot + 1).toLowerCase();
 }
@@ -27,7 +27,7 @@ const VECTOR_IMPORT_PALETTE = ['#4caf50', '#26a69a', '#42a5f5', '#7e57c2', '#ffa
  *   叠在一起读不出体块边界，因此不再使用 withAlpha(0.2~0.3)；
  *   色相按导入批次随机，同一次导入的所有要素共用一色，便于在图层树中区分来源。
  */
-export function pickVectorImportColors(Cesium) {
+export function pickVectorImportColors(Cesium: any) {
     const hex = VECTOR_IMPORT_PALETTE[Math.floor(Math.random() * VECTOR_IMPORT_PALETTE.length)];
     // fromCssColorString 对 6 位 hex 返回 alpha=1，此处不再叠加 withAlpha
     const fill = Cesium.Color.fromCssColorString(hex);
@@ -41,7 +41,7 @@ export function pickVectorImportColors(Cesium) {
  * @param {Cesium.DataSource|Cesium.Cesium3DTileset} entity - 加载后的数据源
  * @param {string} format - 数据格式
  */
-export function flyToEntity(viewer, Cesium, entity, format) {
+export function flyToEntity(viewer: any, Cesium: any, entity: any, format?: string): void {
     if (!viewer || !Cesium || !entity) return;
 
     try {
@@ -92,7 +92,14 @@ export function flyToEntity(viewer, Cesium, entity, format) {
  * @param {string} [params.type] - 记录 type（'terrain' 显式声明时强制走地形复位分支）
  * @returns {boolean} 是否成功从某个宿主容器卸载（或完成地形复位）
  */
-export function detachEntityFromScene({ viewer, Cesium, entity, type }) {
+export interface DetachEntityParams {
+    viewer: any;
+    Cesium?: any;
+    entity: any;
+    type?: string;
+}
+
+export function detachEntityFromScene({ viewer, Cesium, entity, type }: DetachEntityParams): boolean {
     if (!viewer || !entity || typeof entity !== 'object') return false;
 
     // 1) Entity 形态句柄（GLTF Entity 等）：viewer.entities
@@ -142,7 +149,7 @@ export function detachEntityFromScene({ viewer, Cesium, entity, type }) {
  * @param {File|Blob} file - 文件对象
  * @returns {string} Blob URL
  */
-export function createBlobUrl(file) {
+export function createBlobUrl(file: any) {
     return URL.createObjectURL(file);
 }
 
@@ -150,14 +157,14 @@ export function createBlobUrl(file) {
  * 回收 Blob URL，释放内存
  * @param {string} url - 要回收的 URL
  */
-export function revokeBlobUrl(url) {
+export function revokeBlobUrl(url: any) {
     if (url && url.startsWith('blob:')) {
         URL.revokeObjectURL(url);
     }
 }
 
 /** @type {Promise<{decompressBuffer: Function, parseShpPartsToGeoJSON: Function}>|null} */
-let gisParserCache = null;
+let gisParserCache: any = null;
 
 /**
  * 懒加载 GIS 解析器（shpjs + 自定义 dbfParser）
@@ -168,7 +175,7 @@ export async function ensureGisParsers() {
     if (gisParserCache) return gisParserCache;
 
     const [{ decompressBuffer }, { parseShpPartsToGeoJSON }] = await Promise.all([
-        import('@common/data-import/decompressFile.js'),
+        import('@common/data-import/decompressFile'),
         import('@common/data-import/parsers/shpParser'),
     ]);
 
@@ -189,7 +196,7 @@ export async function ensureGisParsers() {
  * @param {Cesium.CustomDataSource|Cesium.GeoJsonDataSource|Cesium.KmlDataSource} dataSource
  * @param {Cesium} Cesium - Cesium 命名空间
  */
-export function forceDataSourceClampToGround(dataSource, Cesium) {
+export function forceDataSourceClampToGround(dataSource: any, Cesium: any): void {
     if (!dataSource?.entities || !Cesium?.HeightReference) return;
     const clampRef = Cesium.HeightReference.CLAMP_TO_GROUND;
     for (const entity of dataSource.entities.values) {
@@ -227,7 +234,7 @@ export function forceDataSourceClampToGround(dataSource, Cesium) {
  * @param {Cesium} Cesium - Cesium 命名空间
  * @returns {number} 被处理的广告牌数量
  */
-export function raiseClampedBillboards(dataSource, Cesium) {
+export function raiseClampedBillboards(dataSource: any, Cesium: any): number {
     const entities = dataSource?.entities?.values;
     if (!Cesium?.HeightReference || !Array.isArray(entities)) return 0;
     const clampRef = Cesium.HeightReference.CLAMP_TO_GROUND;
@@ -274,14 +281,14 @@ export function raiseClampedBillboards(dataSource, Cesium) {
  * @param {string} kmlText - 归一化（去 kml: 前缀）后的 KML 文本
  * @returns {number[]} 每个地面几何 Placemark 的 run 序号，与文档中地面要素顺序一一对应
  */
-export function parseKmlPolygonStackingRanks(kmlText: string) {
+export function parseKmlPolygonStackingRanks(kmlText: string): number[] {
     if (!kmlText) return [];
 
     const xml = new DOMParser().parseFromString(kmlText, 'text/xml');
     if (xml.documentElement.tagName === 'parsererror') return [];
 
-    const ranks = [];
-    let currentFolder = null;
+    const ranks: number[] = [];
+    let currentFolder: string | null = null;
     let currentRank = -1;
 
     const visit = (node: Element, folderStack: string[]) => {
@@ -335,20 +342,23 @@ export function parseKmlPolygonStackingRanks(kmlText: string) {
  * @param {number} [buckets=64] - zIndex 量化档位数（0~63，留余量给其它业务层）
  * @param {number[]|null} [ranks=null] - parseKmlPolygonStackingRanks 的 run 序号数组
  */
-export function applyGroundStackingZIndex(dataSource, buckets = 64, ranks = null) {
-    const groundEntities = (dataSource?.entities?.values || []).filter(
-        (entity) => entity.polygon || entity.polyline,
+export function applyGroundStackingZIndex(
+    dataSource: any,
+    buckets = 64,
+    ranks: number[] | null = null,
+): void {
+    const groundEntities: any[] = (dataSource?.entities?.values || []).filter(
+        (entity: any) => entity.polygon || entity.polyline,
     );
     if (!groundEntities.length) return;
 
-    const clampZ = (value) => Math.min(buckets - 1, Math.max(0, Math.floor(value)));
+    const clampZ = (value: number): number => Math.min(buckets - 1, Math.max(0, Math.floor(value)));
 
-    const hasRanks = Array.isArray(ranks) && ranks.length === groundEntities.length;
-    if (hasRanks) {
+    if (Array.isArray(ranks) && ranks.length === groundEntities.length) {
         const maxRank = Math.max(...ranks);
         if (maxRank >= 1) {
             const span = maxRank + 2;
-            groundEntities.forEach((entity, index) => {
+            groundEntities.forEach((entity: any, index: number) => {
                 // 文档在前 → zIndex 更高 → 渲染在上（与 2D renderOrder rank 语义对齐）
                 const z = buckets - 1 - clampZ(((ranks[index] + 1) / span) * buckets);
                 if (entity.polygon) entity.polygon.zIndex = z;
@@ -361,10 +371,10 @@ export function applyGroundStackingZIndex(dataSource, buckets = 64, ranks = null
     }
 
     // 策略 B：按面实体序号等分位（保持文档顺序，先画垫底；扁平层不反转）
-    const polygons = groundEntities.filter((entity) => entity.polygon);
+    const polygons: any[] = groundEntities.filter((entity: any) => entity.polygon);
     const total = polygons.length;
     if (total > 1) {
-        polygons.forEach((entity, index) => {
+        polygons.forEach((entity: any, index: number) => {
             entity.polygon.zIndex = clampZ((index / total) * buckets);
         });
     }

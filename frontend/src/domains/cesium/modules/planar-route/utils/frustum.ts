@@ -121,7 +121,7 @@ export class CreateFrustum {
 	isUpdateModel?: boolean = true;
 	polygonColor: string;
 	polylineColor: string;
-	constructor(options) {
+	constructor(options: any) {
 		this.viewer = options.viewer;
 		this.position = options.position;
 		this.heading = options.heading;
@@ -146,7 +146,7 @@ export class CreateFrustum {
 	}
 
 	// 更新视锥体的姿态
-	update(option) {
+	update(option: any) {
 		this.position = option.position;
 		this.heading = option.heading;
 		this.miniHeading = option.miniHeading;
@@ -251,7 +251,7 @@ export class CreateFrustum {
 	// 	let result = Cesium.Matrix4.multiplyByPoint(matrix, new Cesium.Cartesian3(0, len, 0), new Cesium.Cartesian3());
 	// 	return result;
 	// }
-	GetByDircAndLen(position, angle, len) {
+	GetByDircAndLen(position: any, _angle: any, len: number) {
 		const matrix = Cesium.Transforms.eastNorthUpToFixedFrame(position);
 		const mz = Cesium.Matrix3.fromRotationZ(Cesium.Math.toRadians(0));
 		const rotationZ = Cesium.Matrix4.fromRotationTranslation(mz);
@@ -259,7 +259,7 @@ export class CreateFrustum {
 		const result = Cesium.Matrix4.multiplyByPoint(matrix, new Cesium.Cartesian3(0, len, 0), new Cesium.Cartesian3());
 		return result;
 	}
-	computePointAtDistance(start, heading, pitch, distance) {
+	computePointAtDistance(start: any, heading: number, pitch: number, distance: number) {
 		// 1. 将起点转换为Cartographic格式(经纬度高程)
 		const cartographic = Cesium.Cartographic.fromCartesian(start);
 

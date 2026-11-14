@@ -71,10 +71,10 @@ export interface DrawPayload {
 
 /** 样式回放描述项：记录「这条实体用什么基色、基础透明度多少」 */
 export interface StyledDescriptor {
-    entity: any;
     kind: 'polyline' | 'polygon' | 'rectangle' | 'point';
     hexColor: string;
     baseAlpha: number;
+    entity: any;
 }
 
 /** 成品句柄：管理器持有的运行时句柄（禁止写入 pinia store） */
@@ -111,17 +111,21 @@ export interface DrawEntityFactoryDeps {
 interface LabelStyleOptions {
     text: string;
     font: string;
-    fillColor: any;
     showBackground: boolean;
-    backgroundColor: any;
-    pixelOffset: any;
-    backgroundPadding: any;
-    style: any;
-    horizontalOrigin: any;
-    verticalOrigin: any;
     disableDepthTestDistance: number;
-    scaleByDistance: any;
     heightReference?: any;
+    fillColor?: any;
+    backgroundColor?: any;
+    /** 标签相对锚点的像素偏移 */
+    pixelOffset?: any;
+    /** 背景框内边距（像素） */
+    backgroundPadding?: any;
+    /** 填充方式（Cesium.LabelStyle） */
+    style?: any;
+    horizontalOrigin?: any;
+    verticalOrigin?: any;
+    /** 按距离缩放（Cesium.NearFarScalar） */
+    scaleByDistance?: any;
 }
 
 /** 测高距三条线的语义配色（不随用户样式改变，否则直角三角形的语义会丢） */
@@ -469,7 +473,7 @@ export function createDrawEntityFactory({ getCesium, getViewer, getLabel }: Draw
         const clampToGround = o.clampToGround !== false;
         const offsetY = o.offsetY === undefined ? (isArea ? 0 : -15) : o.offsetY;
 
-        const style: LabelStyleOptions = {
+        const style: any = {
             text,
             font: LABEL_FONT,
             fillColor: Cesium.Color.WHITE,

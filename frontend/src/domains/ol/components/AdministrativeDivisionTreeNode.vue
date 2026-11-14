@@ -75,7 +75,7 @@
     </li>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { computed, ref, watch } from 'vue';
 import { ChevronRight, Folder, FolderOpen, MapPin } from '@lucide/vue';
 
@@ -145,7 +145,7 @@ function selectNode() {
     });
 }
 
-function emitSelect(payload) {
+function emitSelect(payload: any) {
     emit('select', payload);
 }
 </script>

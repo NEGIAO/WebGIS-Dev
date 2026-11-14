@@ -56,9 +56,6 @@ export interface GroundCapability {
 /** 策略执行上下文 */
 export interface GroundCtx {
     /** loadedDataSources 记录（含 id / type / entity / tilesetGeo 等） */
-    record: any;
-    viewer: any;
-    Cesium: any;
     /** 3D Tiles 高程滑杆需要数据导入层的 setTilesetHeight 记账 */
     dataImport?: any;
     /**
@@ -68,6 +65,12 @@ export interface GroundCtx {
     region?: { west: number; south: number; east: number; north: number } | null;
     /** 估算分位数覆盖（0~1），缺省用 loader 内的 DEFAULT_FIT_QUANTILE */
     fitQuantile?: number;
+
+    record: any;
+    viewer: any;
+    Cesium: any;
+    tileset?: any;
+    i3sProvider?: any;
 }
 
 /** 统一结果 */

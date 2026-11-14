@@ -6,7 +6,7 @@
     ></div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 /**
  * 热带浅水场景叠加层组件
  * 在 Cesium canvas 上方叠加 Three.js 渲染的热带浅水效果

@@ -116,7 +116,7 @@
                         autocomplete="off"
                         @focus="openModelDropdown"
                         @blur="onModelInputBlur"
-                        @input="modelQuery = $event.target.value"
+                        @input="onModelQueryInput"
                     />
                     <button
                         class="cfg-input-btn"
@@ -286,7 +286,7 @@
     </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 /**
  * ChatConfigPanel - 个人 Agent 配置面板（对标网页版设置面板重设计）
  *
@@ -313,22 +313,22 @@ import {
 import { useLocale } from '@common/app/useLocale';
 
 /** 容器 ChatPanelContent provide 的 Agent 配置对象 */
-const config = inject('chatAgentConfig', reactive({}));
+const config = inject<Record<string, any>>('chatAgentConfig', reactive({}));
 const { t } = useLocale();
 
-const modelInputRef = ref(null);
+const modelInputRef = ref<HTMLInputElement | null>(null);
 const showModelDropdown = ref(false);
 const showKey = ref(false);
 
 /** 卡片折叠态：默认只展开「模型」（最常用），其余收起以控制面板高度占比 */
-const openSections = reactive({
+const openSections = reactive<Record<string, boolean>>({
     credentials: false,
     model: true,
     params: false,
     prompt: false,
 });
 
-function toggleSection(key) {
+function toggleSection(key: string) {
     openSections[key] = !openSections[key];
 }
 
@@ -336,18 +336,22 @@ function toggleSection(key) {
  * 不直接用 draft.model 当过滤词——它常驻显示当前模型名，会把列表过滤到只剩自己 */
 const modelQuery = ref('');
 
+function onModelQueryInput(event: Event) {
+    modelQuery.value = (event.target as HTMLInputElement | null)?.value || '';
+}
+
 /** 过滤下拉列表：无键入时展示全量，键入时按 id/name 忽略大小写过滤 */
-const filteredModels = computed(() => {
+const filteredModels = computed<any[]>(() => {
     const q = modelQuery.value.trim().toLowerCase();
-    const list = config.selectModels || [];
+    const list: any[] = config.selectModels || [];
     if (!q) return list;
     return list.filter(
-        (m) => m.id.toLowerCase().includes(q) || String(m.name || '').toLowerCase().includes(q),
+        (m: any) => m.id.toLowerCase().includes(q) || String(m.name || '').toLowerCase().includes(q),
     );
 });
 
 /** 从下拉列表选中某个模型：仅写入草稿，实际请求模型保持不变 */
-function pickModel(id) {
+function pickModel(id: string) {
     // 只改草稿：默认 AI / 个人 Key 的请求模型源（defaultAIModel / directConfig.model）
     // 必须等用户点击「保存设置」由 saveUserConfig 提交后才变更，未保存前不影响在途请求
     config.userConfigDraft.model = id;

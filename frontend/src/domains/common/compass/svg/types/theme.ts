@@ -18,5 +18,4 @@ export interface ThemeInfopPreview {
 // 配置变更事件
 export interface ConfigChangeEvent {
     type: 'theme' | 'data' | 'style';
-    data: any;
 }

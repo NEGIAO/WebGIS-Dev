@@ -68,7 +68,7 @@
     </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { computed, ref, watch } from 'vue';
 import { ChevronRight, Folder, FolderOpen } from '@lucide/vue';
 
@@ -122,7 +122,7 @@ function handleFileClick() {
     emit('load-resource', props.node.resource);
 }
 
-function forwardLoad(resource) {
+function forwardLoad(resource: any) {
     emit('load-resource', resource);
 }
 </script>

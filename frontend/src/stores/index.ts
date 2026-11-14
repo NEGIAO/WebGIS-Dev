@@ -1,4 +1,4 @@
-export * from '@ol/stores/useAttrStore';
+export * from '@common/attribute/stores/useAttrStore';
 export * from '@ol/stores/useLayerStore';
 export * from '@common/weather/stores/useWeatherStore';
 export * from '@common/app/stores/useAppStore';

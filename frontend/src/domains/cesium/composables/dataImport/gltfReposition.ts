@@ -13,13 +13,13 @@ import { revokeBlobUrl } from './loaders/utils';
 export interface GltfRepositionDeps {
     getCesium: () => any;
     getViewer: () => any;
-    message: any;
     loadedDataSources: { value: any[] };
     nextId: { current: number };
     pendingGltfFile: { value: any };
     repositionTarget: { value: any };
     gltfLoading: { value: boolean };
     gltfLoadError: { value: string };
+    message: any;
 }
 
 /**
@@ -43,7 +43,7 @@ export function createGltfRepositionTools({
      * 失败时保留 pendingGltfFile 与用户输入：弹窗不关闭，可重试或显式取消
      * @param {{ lng: number, lat: number, height: number }} coords
      */
-    async function loadGltfWithUserCoords(coords) {
+    async function loadGltfWithUserCoords(coords: any) {
         const Cesium = getCesium();
         const viewer = getViewer();
         if (!pendingGltfFile.value) throw new Error('没有等待确认的模型文件');
@@ -83,7 +83,7 @@ export function createGltfRepositionTools({
             return record;
         } catch (error) {
             // 仅记录失败原因，不动 pendingGltfFile：弹窗保持打开、坐标保留可重试
-            gltfLoadError.value = error?.message || String(error);
+            gltfLoadError.value = error instanceof Error ? error.message : String(error);
             throw error;
         } finally {
             gltfLoading.value = false;
@@ -98,7 +98,7 @@ export function createGltfRepositionTools({
         }
     }
 
-    function startGltfReposition(id) {
+    function startGltfReposition(id: any) {
         const record = loadedDataSources.value.find((ds) => ds.id === id);
         if (!record || record.type !== 'gltf') {
             message.warning('该数据源不支持位置调整');
@@ -107,7 +107,7 @@ export function createGltfRepositionTools({
         repositionTarget.value = record;
     }
 
-    async function confirmGltfReposition(coords) {
+    async function confirmGltfReposition(coords: any) {
         const record = repositionTarget.value;
         if (!record) return;
 
@@ -169,8 +169,9 @@ export function createGltfRepositionTools({
                     }
                 } catch { /* ignore */ }
             }
-            gltfLoadError.value = error?.message || String(error);
-            message.error(`位置调整失败: ${error.message || error}（弹窗保留，可重试或取消）`);
+            const errMsg = error instanceof Error ? error.message : String(error);
+            gltfLoadError.value = errMsg;
+            message.error(`位置调整失败: ${errMsg}（弹窗保留，可重试或取消）`);
         } finally {
             gltfLoading.value = false;
         }

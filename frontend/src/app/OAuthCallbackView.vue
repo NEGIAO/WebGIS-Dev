@@ -61,7 +61,7 @@
     </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useMessage } from '@common/shell/useMessage';
@@ -131,7 +131,7 @@ onMounted(async () => {
             setTimeout(async () => {
                 await router.replace({ name: 'home' });
             }, 1000);
-        } catch (error) {
+        } catch (error: any) {
             currentState.value = 'error';
             statusText.value = String(error?.message || '第三方账号绑定失败');
             message.error(statusText.value);
@@ -157,7 +157,7 @@ onMounted(async () => {
                 await router.replace(resolveRedirectTarget());
                 consumePersistedPositionCode();
             }, 1000);
-        } catch (error) {
+        } catch (error: any) {
             currentState.value = 'error';
             statusText.value = String(error?.message || t('oauth.exchangeFailed'));
             message.error(statusText.value);

@@ -53,7 +53,7 @@
     </Teleport>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import { storeToRefs } from 'pinia';
 // 深导入：GlobalLoading 随 App.vue 常驻首屏，禁止经 '@/stores' 聚合桶取 store
@@ -65,7 +65,7 @@ const { loading, loadingText } = storeToRefs(appStore);
 const { t } = useLocale();
 
 const dotFrame = ref(0);
-let dotTimer = null;
+let dotTimer: number | null = null;
 
 const resolvedLoadingText = computed(() => {
     const text = String(loadingText.value || '').trim();

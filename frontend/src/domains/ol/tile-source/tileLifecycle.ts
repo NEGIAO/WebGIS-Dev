@@ -73,7 +73,7 @@ function markAllSourceTilesAsError(source: any): void {
 
     const keys: string[] = [];
     try {
-        cache.forEach((value: any, key: string) => {
+        cache.forEach((_value: any, key: string) => {
             keys.push(key);
         });
     } catch {
@@ -315,7 +315,7 @@ export function prioritizeTileSourceRequest<T>(source: T): T {
 
     const originalTileLoadFn = src.getTileLoadFunction?.();
     if (typeof originalTileLoadFn === 'function') {
-        src.setTileLoadFunction((tile: any, srcUrl: string) => {
+        src.setTileLoadFunction?.((tile: any, srcUrl: string) => {
             const controller = resolveSourceAbortController(src);
             const sourceSignal = controller.signal;
 

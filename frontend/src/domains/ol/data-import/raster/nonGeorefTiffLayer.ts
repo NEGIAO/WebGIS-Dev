@@ -24,8 +24,6 @@ const FIT_DURATION_SHORT = 700;
 
 export interface NonGeorefTiffDeps {
     mapInstance: { value: any };
-    message: any;
-    initialView: any;
     reportImportProgress: (state?: any) => void;
     /** 图层树登记与标准化项 */
     addManagedLayerRecord: (record: any) => void;
@@ -36,6 +34,8 @@ export interface NonGeorefTiffDeps {
     createExtentRasterSampler: (...args: any[]) => any;
     buildRgbaFromBands: (...args: any[]) => any;
     projectExtentToMapView: (...args: any[]) => any;
+    initialView: any;
+    message: any;
 }
 
 /**
@@ -71,7 +71,7 @@ export function createNonGeorefTiffLayerFactory({
         packet = null,
         /** 传入 File 对象时，大文件走 Worker 解码路径 */
         file = null,
-    }) {
+    }: Record<string, any>) {
         if (!mapInstance.value) return null;
 
         let width, height, bands, workerNodata;
@@ -82,22 +82,22 @@ export function createNonGeorefTiffLayerFactory({
                 phase: 'decoding',
                 message: `正在后台解码大 TIF 文件：${name}（0%）`,
             });
-            const decoded = await loadTifInWorker(file, (progress, phase) => {
+            const decoded = await loadTifInWorker(file, (progress: number, phase?: string) => {
                 reportImportProgress({
                     phase: phase || 'decoding',
                     message: `正在后台解码大 TIF 文件：${name}（${progress}%）`,
                 });
             });
-            width = decoded.width;
-            height = decoded.height;
-            bands = decoded.data; // Float32Array[]
-            workerNodata = decoded.nodata;
+            width = (decoded as any).width;
+            height = (decoded as any).height;
+            bands = (decoded as any).data; // Float32Array[]
+            workerNodata = (decoded as any).nodata;
             if (nodataValue === null && workerNodata !== null && workerNodata !== undefined) {
                 nodataValue = workerNodata;
             }
             reportImportProgress({
                 phase: 'decoding',
-                message: `解码完成：${name}（${decoded.elapsed}ms）`,
+                message: `解码完成：${name}（${(decoded as any).elapsed}ms）`,
             });
         } else {
             // 小文件：主线程直接解码，使用 Worker Pool 并行解压
@@ -115,7 +115,7 @@ export function createNonGeorefTiffLayerFactory({
         const bandStats = bands.slice(0, 3).map(getBandMinMax);
         const alphaStats = bands.length >= 4 ? getBandMinMax(bands[3]) : null;
         const isSingleBand = bands.length === 1;
-        let singleBandStretch = null;
+        let singleBandStretch: any = null;
         if (stretchRange && Number.isFinite(stretchRange.min) && Number.isFinite(stretchRange.max)) {
             singleBandStretch = stretchRange;
         } else if (isSingleBand) {
@@ -131,8 +131,8 @@ export function createNonGeorefTiffLayerFactory({
         // 渲染策略：
         // - 多波段（3/4 波段）：WebGL 着色器，原始数据直接上传 GPU，着色器做全部拉伸
         // - 单波段：CPU 循环已足够快（<100ms），WebGL 纹理上传开销反而更大
-        let canvas;
-        let pngBlob;
+        let canvas: HTMLCanvasElement | null = null;
+        let pngBlob: Blob;
 
         if (!isSingleBand && bands.length >= 3) {
             canvas = renderBandsToCanvas({
@@ -145,8 +145,8 @@ export function createNonGeorefTiffLayerFactory({
         }
 
         if (canvas) {
-            pngBlob = await new Promise((resolve, reject) => {
-                canvas.toBlob((out) => {
+            pngBlob = await new Promise<Blob>((resolve, reject) => {
+                canvas!.toBlob((out: Blob | null) => {
                     if (out) resolve(out);
                     else reject(new Error('无法生成影像预览'));
                 }, 'image/png');
@@ -174,8 +174,8 @@ export function createNonGeorefTiffLayerFactory({
             if (!ctx) throw new Error('无法创建画布渲染上下文');
             ctx.putImageData(new ImageData(rgba, width, height), 0, 0);
 
-            pngBlob = await new Promise((resolve, reject) => {
-                canvas.toBlob((out) => {
+            pngBlob = await new Promise<Blob>((resolve, reject) => {
+                canvas!.toBlob((out: Blob | null) => {
                     if (out) resolve(out);
                     else reject(new Error('无法生成影像预览'));
                 }, 'image/png');
@@ -186,6 +186,9 @@ export function createNonGeorefTiffLayerFactory({
             canvas.height = 0;
         }
 
+        if (!pngBlob) {
+            throw new Error('无法生成影像预览 Blob');
+        }
         const pngUrl = URL.createObjectURL(pngBlob);
 
         const view = mapInstance.value.getView();
@@ -193,7 +196,7 @@ export function createNonGeorefTiffLayerFactory({
         const center = view.getCenter() || fromLonLat(initialView.center);
         const resolution = view.getResolution() || 1;
         const extent =
-            imageExtent && imageExtent.every((v) => Number.isFinite(v))
+            imageExtent && imageExtent.every((v: number) => Number.isFinite(v))
                 ? imageExtent
                 : [
                       center[0] - (width * resolution) / 2,

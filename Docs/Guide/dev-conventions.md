@@ -32,10 +32,29 @@
 | 层 | 职责 | 禁止 |
 |----|------|------|
 | `components/` | UI 渲染 + 事件 | 业务逻辑 |
+| `X.ts`（组件实例层，与 `X.vue` 同名同级） | 单组件私有编排：生命周期、事件、UI 局部态、调度 composable | 承载跨组件复用逻辑（应下沉 `composables/`）、实现业务规则（应进 `stores/` / `services/`） |
 | `composables/` | 编排流程 + 地图动作 | 直接操作 store state |
 | `stores/` | 状态维护 + 派生 | 依赖 OL / Cesium 类 |
 | `utils/` | 纯函数 + 解析 | 副作用 |
 | `services/` | 外部 SDK 集成 | UI 逻辑 |
+
+**组件范式化（V3.6.60 起）**：有效逻辑行 > 150 的复杂组件采用「视图 / 实例」物理分离——`X.vue` 只保留 `<template>` + `<style>` + 单行 `<script lang="ts" src="./X.ts">`；`X.ts` 用 `defineComponent` 桥接 `class Instance`。单文件目标 **500–600 行（软上限，非硬性）**，超限按**功能逻辑**（请求 / 派生 / 手势 / 渲染副作用 / 持久化）拆为多个 composable，禁止按行数机械对半切。判据、模板与批次见 [`2026-11-13-vue-component-refactor-plan.md`](../TODO/2026-11-13-vue-component-refactor-plan.md)。
+
+**样式外置（V3.6.57 起）**：样式主导型组件（`<style>` 超 500 行）改为
+`<style scoped lang="scss" src="./styles/X.scss"></style>`，文件放组件同级 `styles/` 目录；
+非 scoped 块命名 `X.global.scss` 以保留全局作用域。工具：`python Scripts/ExtractVueStyles.py <vue 路径>`。
+
+**领域单向依赖门禁（V3.6.57 起）**：`common` 不得 import `ol` / `cesium`，`ol` 与 `cesium` 互不 import。
+跨引擎互通必须经 `common` 的协议层——已落地的四个接缝：
+`common/layer-tree/engineTreePort.ts`（引擎树注册式端口）、
+`common/basemap/catalogProjection.ts`（底图目录只读投影）、
+`common/layer-tree/protocol.ts`（节点前缀等协议常量单一真相源）、
+`common/data-protocol/`。门禁由 ESLint `no-restricted-imports`（按域 glob）与
+`python Scripts/CheckDomainDeps.py frontend/src` 双重执行。
+
+**视图层范式完整性**：`python Scripts/CheckVueParadigm.py frontend/src` 校验已范式化组件
+（`.vue` 内不得有第二段 `<script>`、编译宏、`import`；模板调用的符号必须在 `.ts` 中存在）。
+`tsc` 不解析 `.vue` 模板，这一类遗漏只能靠该脚本捕获。
 
 ### 坐标系统约定
 

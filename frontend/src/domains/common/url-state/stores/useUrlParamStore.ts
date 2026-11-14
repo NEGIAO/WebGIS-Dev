@@ -129,8 +129,6 @@ export const useUrlParamStore = defineStore('urlParamStore', () => {
 
         // 每次更新参数后，重置应用标记，等待地图重新应用
         isParamApplied.value = false;
-
-        console.warn('[UrlParamStore] Extracted pending params:', pendingParams.value);
     }
 
     /**
@@ -175,7 +173,6 @@ export const useUrlParamStore = defineStore('urlParamStore', () => {
      */
     function markParamsAsApplied() {
         isParamApplied.value = true;
-        console.warn('[UrlParamStore] Params marked as applied');
     }
 
     /**

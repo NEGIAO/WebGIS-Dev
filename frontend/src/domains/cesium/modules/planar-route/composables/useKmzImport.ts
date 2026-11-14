@@ -94,6 +94,8 @@ export interface KmzImportContext {
 }
 
 export class KmzImportHandler {
+
+
 	private ctx: KmzImportContext;
 	private importedPolygonNeedsSafeView = false;
 	private importedTerrainLoadCleanup: (() => void) | null = null;

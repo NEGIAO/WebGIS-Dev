@@ -31,7 +31,7 @@ const FRAME_MAX_HEIGHT_RATIO = 0.6;
  * 说明：Cesium 的 InfoBoxDescription.css 已把 body 的 margin/padding 归零，
  *   故 scrollHeight 与实际可见高度一致；同时取 documentElement 与 body 的较大值兜底。
  */
-function measureFrameContentHeight(doc) {
+function measureFrameContentHeight(doc: any) {
     const root = doc?.documentElement;
     const body = doc?.body;
     if (!root || !body) return 0;
@@ -42,7 +42,7 @@ function measureFrameContentHeight(doc) {
 function readThemeTokens() {
     const root = document.documentElement;
     const cs = getComputedStyle(root);
-    const pick = (name, fallback) => cs.getPropertyValue(name).trim() || fallback;
+    const pick = (name: any, fallback: string) => cs.getPropertyValue(name).trim() || fallback;
     return {
         text: pick('--text-primary', '#333'),
         textMuted: pick('--text-muted', '#999'),
@@ -54,7 +54,7 @@ function readThemeTokens() {
 }
 
 /** iframe 内部样式：白底深字 + 品牌色表头，覆写 Cesium 自带的浅色规则 */
-function buildFrameCss(t) {
+function buildFrameCss(t: any) {
     return `
 .cesium-infoBox-description { color: ${t.text} !important; }
 .cesium-infoBox-description a:link,
@@ -89,10 +89,10 @@ export interface InfoBoxThemeOptions {
 }
 
 export function useCesiumInfoBoxTheme({ getViewer }: InfoBoxThemeOptions = {}) {
-    let boundFrame = null;
-    let themeObserver = null;
-    let contentObserver = null;
-    let resizeObserver = null;
+    let boundFrame: any = null;
+    let themeObserver: any = null;
+    let contentObserver: any = null;
+    let resizeObserver: any = null;
     let rafId = 0;
     let lastWidth = 0;
 

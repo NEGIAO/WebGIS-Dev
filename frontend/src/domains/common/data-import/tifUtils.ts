@@ -1,0 +1,261 @@
+/**
+ * tifUtils.js
+ * TIF/GeoTIFF 工具函数
+ * 封装 TIF 文件的 Worker 解码、图层创建、样式生成等逻辑
+ *
+ * ⚠️ 重量级依赖一律**函数内按需 import**，禁止提到模块顶层。
+ *
+ * 原因（2026-10-31）：本文件此前在顶层静态导入 geotiff(~309 kB) / ol/source/DataTile /
+ * ol/layer/WebGLTile / ol/source/GeoTIFF，而本文件的唯一实际使用方
+ * `useLayerDataImport` 只用到 `loadTifInWorker` 与 `isLargeFile` 两个**不需要上述依赖**
+ * 的函数。静态导入因此把 geotiff 绑进了 `useLayerDataImport` 分片的静态图 ——
+ * 进入 OL 后任何一次用户图层操作（显隐/缩放等 facade 调用）都会连带下载 geotiff，
+ * 而这条路径根本不碰 TIF。改为按需 import 后，只有真正调用下述三个函数时才会加载。
+ *
+ * 注：下面的 `import type` 只参与类型检查，编译后完全擦除，不会把依赖拉回顶层静态图。
+ */
+
+import type DataTileSourceType from 'ol/source/DataTile';
+import type DataTile from 'ol/DataTile';
+
+/** 文件大小阈值：50MB，超过此大小走 Worker 路径 */
+const LARGE_FILE_THRESHOLD = 50 * 1024 * 1024;
+
+/**
+ * 判断是否为大文件
+ * @param {File} file - 文件对象
+ * @param {number} [threshold] - 自定义阈值（字节）
+ * @returns {boolean}
+ */
+export function isLargeFile(file: any, threshold = LARGE_FILE_THRESHOLD) {
+  return file.size > threshold;
+}
+
+/**
+ * 用 Worker 解码 TIF 文件（大文件路径）
+ * @param {File} file - TIF 文件对象
+ * @param {function} onProgress - 进度回调 (progress: number, phase: string) => void
+ * @returns {Promise<{ width, height, bandCount, data, nodata, stats }>}
+ */
+export function loadTifInWorker(file: any, onProgress?: (progress: number, phase: string) => void) {
+  return new Promise((resolve, reject) => {
+    const worker = new Worker(new URL('../../../workers/tiffWorker.ts', import.meta.url), {
+      type: 'module',
+    });
+
+    worker.onmessage = (e) => {
+      const msg = e.data;
+      if (msg.type === 'progress') {
+        onProgress?.(msg.progress, msg.phase);
+      } else if (msg.type === 'complete') {
+        worker.terminate();
+        resolve({
+          width: msg.width,
+          height: msg.height,
+          bandCount: msg.bandCount,
+          data: msg.data,
+          nodata: msg.nodata,
+          stats: msg.stats,
+          elapsed: msg.elapsed,
+        });
+      } else if (msg.type === 'error') {
+        worker.terminate();
+        reject(new Error(msg.error));
+      }
+    };
+
+    worker.onerror = (err) => {
+      worker.terminate();
+      reject(new Error(err.message || 'TIF Worker error'));
+    };
+
+    // 读取文件为 ArrayBuffer 后发送给 Worker（Transferable 零拷贝）
+    file
+      .arrayBuffer()
+      .then((buffer: any) => {
+        worker.postMessage({ buffer, fileName: file.name }, [buffer]);
+      })
+      .catch(reject);
+  });
+}
+
+/**
+ * 直接在主线程用 geotiff.js 解码（小文件路径）
+ * @param {File} file - TIF 文件对象
+ * @returns {Promise<{ width, height, bandCount, data, nodata, stats }>}
+ */
+export async function loadTifDirect(file: any) {
+  // 按需加载：geotiff 仅在真正解码 TIF 时才下载（见文件头说明）
+  const { fromBlob, Pool } = await import('geotiff');
+  const tiff = await fromBlob(file);
+  const image = await tiff.getImage();
+  const width = image.getWidth();
+  const height = image.getHeight();
+  const bandCount = image.getSamplesPerPixel();
+  const nodata = image.getGDALNoData();
+
+  // 使用 Pool 并行解码
+  const pool = new Pool(navigator.hardwareConcurrency || 4);
+  const rasterData = await image.readRasters({ pool });
+  pool.destroy?.();
+
+  const data = [];
+  for (let b = 0; b < bandCount; b++) {
+    data.push(new Float32Array(rasterData[b]));
+  }
+
+  // 统计信息
+  const stats = data.map((band) => {
+    let min = Infinity, max = -Infinity, sum = 0, count = 0;
+    for (let i = 0; i < band.length; i++) {
+      const v = band[i];
+      if (nodata !== null && nodata !== undefined && v === nodata) continue;
+      if (Number.isNaN(v)) continue;
+      if (v < min) min = v;
+      if (v > max) max = v;
+      sum += v;
+      count++;
+    }
+    return {
+      min: count > 0 ? min : 0,
+      max: count > 0 ? max : 0,
+      mean: count > 0 ? sum / count : 0,
+    };
+  });
+
+  return { width, height, bandCount, data, nodata, stats };
+}
+
+/**
+ * 根据波段数生成默认 TIF 渲染样式
+ * @param {number} bandCount - 波段数
+ * @param {Array} stats - 各波段统计 [{ min, max, mean }]
+ * @returns {object|null} OL WebGLTile 样式对象，null 表示使用默认样式
+ */
+export function getDefaultTifStyle(bandCount: number, stats: any[]) {
+  if (!stats || stats.length === 0) return null;
+
+  if (bandCount >= 3) {
+    // RGB 三波段
+    return {
+      color: [
+        'array',
+        ['band', 1],
+        ['band', 2],
+        ['band', 3],
+        ['band', 1],
+      ],
+      exposure: ['array', 1, 1, 1, 1],
+    };
+  } else if (bandCount === 1) {
+    // 单波段灰度
+    const min = stats[0]?.min ?? 0;
+    const max = stats[0]?.max ?? 255;
+    if (max > min) {
+      return {
+        color: [
+          'interpolate',
+          ['linear'],
+          ['band', 1],
+          min, [0, 0, 0, 1],
+          max, [255, 255, 255, 1],
+        ],
+      };
+    }
+  }
+
+  return null;
+}
+
+/**
+ * 根据解码数据创建 DataTileSource + WebGLTileLayer
+ *
+ * 注：自 2026-10-31 起为 async —— DataTileSource / WebGLTileLayer 改为函数内按需 import，
+ * 避免把这两个重量级模块绑进 `useLayerDataImport` 分片的静态图（见文件头说明）。
+ * 当前仓库内无调用点；若后续启用，调用方需 await。
+ *
+ * @param {object} decoded - { width, height, bandCount, data, nodata, stats }
+ * @param {string} layerId - 图层 ID
+ * @param {string} fileName - 文件名
+ * @param {object} [customStyle] - 自定义样式
+ * @returns {Promise<{ source: import('ol/source/DataTile.js').default, layer: import('ol/layer/WebGLTile.js').default }>}
+ */
+export async function createTIFWebGLLayer(decoded: any, layerId: string, fileName: string, customStyle?: any) {
+  const [{ default: DataTileSource }, { default: WebGLTileLayer }] = await Promise.all([
+    import('ol/source/DataTile.js'),
+    import('ol/layer/WebGLTile.js'),
+  ]);
+
+  const { width, height, bandCount, data } = decoded;
+
+  // 将多波段数据交织为单个 TypedArray（行优先，像素交织）
+  const pixelCount = width * height;
+  const interleaved = new Float32Array(pixelCount * bandCount);
+  for (let b = 0; b < bandCount; b++) {
+    for (let i = 0; i < pixelCount; i++) {
+      interleaved[i * bandCount + b] = data[b][i];
+    }
+  }
+
+  // DataTileSource loader：按瓦片坐标返回数据
+  const source = new DataTileSource({
+    loader: (_z, _x, _y) => {
+      // 简化：将整幅影像作为一个大瓦片返回
+      // 对于 DataTileSource，我们直接返回交织数据
+      return interleaved;
+    },
+    interpolate: bandCount >= 3,
+    transition: 0,
+  });
+
+  const style = customStyle || getDefaultTifStyle(bandCount, decoded.stats);
+
+  // 注：id/title 并非 OL 图层构造选项（运行时会被忽略），沿用既有行为，
+  // 这里显式声明形状以避免对象字面量多余属性报错。
+  const layerConfig: { source: DataTileSourceType<DataTile>; id: any; title: any; style?: any } = {
+    source,
+    id: layerId,
+    title: fileName,
+  };
+  if (style) {
+    layerConfig.style = style;
+  }
+
+  const layer = new WebGLTileLayer(layerConfig);
+  return { source, layer };
+}
+
+/**
+ * 用 OL 原生 GeoTIFF source 创建图层（适用于 COG/远程 URL）
+ *
+ * 注：自 2026-10-31 起为 async —— `ol/source/GeoTIFF` 内部会引入 geotiff 解码器，
+ * 改为函数内按需 import，避免远程 GeoTIFF 能力拖累普通图层操作的加载体积。
+ * 当前仓库内无调用点；若后续启用，调用方需 await。
+ *
+ * @param {string} url - GeoTIFF URL
+ * @param {string} layerId - 图层 ID
+ * @param {string} layerName - 图层名称
+ * @returns {Promise<{ source: import('ol/source/GeoTIFF.js').default, layer: import('ol/layer/WebGLTile.js').default }>}
+ */
+export async function createRemoteGeoTIFFLayer(url: string, layerId: string, layerName: string) {
+  const [{ default: GeoTIFF }, { default: WebGLTileLayer }] = await Promise.all([
+    import('ol/source/GeoTIFF.js'),
+    import('ol/layer/WebGLTile.js'),
+  ]);
+
+  const source = new GeoTIFF({
+    sources: [{ url }],
+    transition: 0,
+    convertToRGB: true,
+  });
+
+  // 同 createTifLayer：id/title 非 OL 构造选项，保持既有行为
+  const layerConfig: { source: any; id: any; title: any } = {
+    source,
+    id: layerId,
+    title: layerName || 'Remote GeoTIFF',
+  };
+  const layer = new WebGLTileLayer(layerConfig);
+
+  return { source, layer };
+}

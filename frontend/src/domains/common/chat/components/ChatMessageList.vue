@@ -236,7 +236,7 @@
     </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 /**
  * ChatMessageList - 对话消息列表（对标网页版对话气泡设计）
  *
@@ -248,7 +248,7 @@
  *   - 跨天日期分隔线（历史持久化后跨天可读）、消息入场动画、智能粘底 + 回底悬浮钮
  * 代码块复制按钮与语言徽章由 useMarkdownRenderer 注入。
  */
-import { computed, nextTick, onUnmounted, ref, watch } from 'vue';
+import { computed, nextTick, onUnmounted, ref, watch, type PropType } from 'vue';
 import {
     Bot,
     Brain,
@@ -270,7 +270,7 @@ import { useLocale } from '@common/app/useLocale';
 
 const props = defineProps({
     /** 会话消息列表（含时间戳/工具状态卡） */
-    messages: { type: Array, required: true },
+    messages: { type: Array as PropType<any[]>, required: true },
     /** 是否正在等待 LLM 回复 */
     isLoading: { type: Boolean, default: false },
 });
@@ -280,13 +280,13 @@ const emit = defineEmits(['suggest', 'regenerate']);
 const { t } = useLocale();
 const { renderAnswerHtml, renderThinkHtml, hasThinkContent, ready } = useMarkdownRenderer();
 
-const chatBody = ref(null);
+const chatBody = ref<HTMLElement | null>(null);
 const showScrollFab = ref(false);
 /** 内容是否已滚出顶部（用于顶部渐隐阴影） */
 const scrolledFromTop = ref(false);
 const copiedIndex = ref(-1);
 const unseenCount = ref(0);
-let copiedTimer = null;
+let copiedTimer: ReturnType<typeof setTimeout> | null = null;
 
 /** 空状态 GIS 快捷建议词（随语言切换）
  *  注意：这些文案本身就是发给 Agent 的 prompt，改动前先确认对应工具链可用 */
@@ -310,8 +310,8 @@ const heroSubtitle = computed(() => {
  * Markdown 渲染缓存：打字机高频更新单条消息时，
  * 其余消息命中缓存避免整列表重复 marked.parse（libs 就绪状态纳入 key，防冻结降级 HTML）
  */
-const htmlCache = new Map();
-function cachedRender(prefix, content, renderFn) {
+const htmlCache = new Map<string, string>();
+function cachedRender(prefix: string, content: string, renderFn: (c: string) => string) {
     const key = `${ready.value ? 1 : 0}|${prefix}|${content}`;
     const hit = htmlCache.get(key);
     if (hit !== undefined) return hit;
@@ -320,8 +320,8 @@ function cachedRender(prefix, content, renderFn) {
     htmlCache.set(key, html);
     return html;
 }
-const renderAnswer = (content) => cachedRender('a', String(content || ''), renderAnswerHtml);
-const renderThink = (content) => cachedRender('t', String(content || ''), renderThinkHtml);
+const renderAnswer = (content: any) => cachedRender('a', String(content || ''), renderAnswerHtml);
+const renderThink = (content: any) => cachedRender('t', String(content || ''), renderThinkHtml);
 
 /** 距底部小于该阈值视为"贴底"，自动跟随滚动 */
 const NEAR_BOTTOM_PX = 80;
@@ -376,7 +376,7 @@ watch(
 const formatTime = formatTimeShort;
 
 /** 跨天时在消息前插入日期分隔线 */
-function needDayDivider(index) {
+function needDayDivider(index: number) {
     const cur = props.messages[index]?.time;
     if (!cur) return false;
     if (index === 0) return true;
@@ -386,7 +386,7 @@ function needDayDivider(index) {
 }
 
 /** 日期分隔线文案：今天/昨天/M月D日 */
-function dayLabel(ts) {
+function dayLabel(ts: any) {
     const d = new Date(Number(ts) || 0);
     if (Number.isNaN(d.getTime())) return '';
     const today = new Date();
@@ -397,14 +397,14 @@ function dayLabel(ts) {
 }
 
 /** 最后一条 assistant 消息（非欢迎语）可重新生成 */
-function canRegenerate(index) {
+function canRegenerate(index: number) {
     if (props.isLoading || index === 0) return false;
     if (index !== props.messages.length - 1) return false;
-    return props.messages.some((m) => m.role === 'user');
+    return props.messages.some((m: any) => m.role === 'user');
 }
 
 /** 复制消息内容（assistant 回复剔除 think 块） */
-async function copyMessage(msg, index) {
+async function copyMessage(msg: any, index: number) {
     const raw = String(msg?.content || '');
     const text = msg?.role === 'assistant'
         ? raw.replace(/<think>[\s\S]*?<\/think>/g, '').trim() || raw

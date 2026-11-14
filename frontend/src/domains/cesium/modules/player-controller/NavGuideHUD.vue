@@ -42,7 +42,7 @@
     </Transition>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { computed } from 'vue';
 import { formatDistanceMeasure } from '@common/map-view/units';
 
@@ -66,7 +66,7 @@ const arrowAngle = computed(() => {
 });
 
 /** 格式化距离显示（跟随用户偏好单位制：公制 m/km、英制 ft/mi） */
-function formatDistance(dist) {
+function formatDistance(dist: number | null | undefined) {
     return formatDistanceMeasure(dist == null ? 0 : dist);
 }
 </script>

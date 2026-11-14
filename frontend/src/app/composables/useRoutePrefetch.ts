@@ -9,7 +9,7 @@
  *
  *   1. 路由守卫的 `ensureValidSession()`（已登录用户会 import API 层并请求
  *      `/api/auth/me`，全仓库只有守卫一处调用，落地页从不预热）；
- *   2. `RegisterView` 的惰性 chunk（36 KB JS + 35 KB CSS，`router/index.js` 用
+ *   2. `RegisterView` 的惰性 chunk（36 KB JS + 35 KB CSS，`router/index.ts` 用
  *      `() => import(...)` 声明）。
  *
  * 第二次点击之所以不卡，正是这两项都已进缓存（模块缓存 / `validatedToken`）。

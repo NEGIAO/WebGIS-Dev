@@ -60,7 +60,7 @@ const WeakRefSupported = typeof WeakRef !== 'undefined';
  * @param {any} feature OL Feature 实例
  * @returns {FeatureRef}
  */
-function createFeatureRef(feature) {
+function createFeatureRef(feature: any) {
     if (WeakRefSupported) {
         return { ref: new WeakRef(feature), fallback: null };
     }
@@ -72,7 +72,7 @@ function createFeatureRef(feature) {
  * @param {FeatureRef} featureRef
  * @returns {any|null}
  */
-function derefFeature(featureRef) {
+function derefFeature(featureRef: any) {
     if (!featureRef) return null;
     if (featureRef.ref) {
         const f = featureRef.ref.deref();
@@ -127,7 +127,7 @@ export const useFeatureStyleStore = defineStore('featureStyleStore', () => {
      * 当前高亮要素列表（用于 UI 展示）
      */
     const highlightedList = computed(() => {
-        const list = [];
+        const list: any[] = [];
         highlightedFeatures.value.forEach((featureRef, key) => {
             const feature = derefFeature(featureRef);
             if (!feature) return; // 已 GC
@@ -141,7 +141,7 @@ export const useFeatureStyleStore = defineStore('featureStyleStore', () => {
     /**
      * 判定要素是否被高亮
      */
-    function isHighlighted(layerId, featureId) {
+    function isHighlighted(layerId: any, featureId: any) {
         const key = buildFeatureKey(layerId, featureId);
         return key ? highlightedFeatures.value.has(key) : false;
     }
@@ -149,14 +149,14 @@ export const useFeatureStyleStore = defineStore('featureStyleStore', () => {
     /**
      * 获取某图层的高亮要素数
      */
-    function getLayerHighlightCount(layerId) {
+    function getLayerHighlightCount(layerId: any) {
         return layerHighlightCount.value.get(String(layerId)) || 0;
     }
 
     /**
      * 获取备份的原始样式
      */
-    function getOriginalStyle(layerId, featureId) {
+    function getOriginalStyle(layerId: any, featureId: any) {
         const key = buildFeatureKey(layerId, featureId);
         if (!key) return undefined;
         return originalStylesByFeature.value.has(key)
@@ -167,9 +167,9 @@ export const useFeatureStyleStore = defineStore('featureStyleStore', () => {
     /**
      * 获取某图层所有高亮要素的 featureKey
      */
-    function getHighlightedFeatureKeysInLayer(layerId) {
+    function getHighlightedFeatureKeysInLayer(layerId: any) {
         const targetLayerId = String(layerId);
-        const result = [];
+        const result: any[] = [];
         highlightedFeatures.value.forEach((_, key) => {
             if (getLayerIdFromFeatureKey(key) === targetLayerId) {
                 result.push(key);
@@ -185,7 +185,7 @@ export const useFeatureStyleStore = defineStore('featureStyleStore', () => {
      * @param {string} featureId
      * @param {any} style OL Style 实例或 null/undefined
      */
-    function saveOriginalStyle(layerId, featureId, style) {
+    function saveOriginalStyle(layerId: any, featureId: any, style: any) {
         const key = buildFeatureKey(layerId, featureId);
         if (!key) return;
         // 仅首次备份（已存在则保留最早的备份，避免被覆盖）
@@ -200,7 +200,7 @@ export const useFeatureStyleStore = defineStore('featureStyleStore', () => {
      * @param {string} featureId
      * @returns {any|null|undefined} 被删除的备份值；无备份返回 undefined
      */
-    function consumeOriginalStyle(layerId, featureId) {
+    function consumeOriginalStyle(layerId: any, featureId: any) {
         const key = buildFeatureKey(layerId, featureId);
         if (!key) return undefined;
         const value = originalStylesByFeature.value.get(key);
@@ -229,6 +229,14 @@ export const useFeatureStyleStore = defineStore('featureStyleStore', () => {
         applyHighlight = null,
         restoreStyle = null,
         resolveRangeTargets = null,
+    }: {
+        layerId: string;
+        featureId: string;
+        mode?: 'replace' | 'toggle' | 'range' | string;
+        feature?: any;
+        applyHighlight?: ((feature: any) => void) | null;
+        restoreStyle?: ((feature: any, originalStyle?: any) => void) | null;
+        resolveRangeTargets?: ((params: any) => any[]) | null;
     }) {
         const targetLayerId = String(layerId ?? '').trim();
         const targetFeatureId = String(featureId ?? '').trim();
@@ -303,7 +311,7 @@ export const useFeatureStyleStore = defineStore('featureStyleStore', () => {
      * 内部：添加单个高亮
      * @private
      */
-    function _addSingle(featureKey, feature, applyHighlight) {
+    function _addSingle(featureKey: any, feature: any, applyHighlight: any) {
         if (!isValidFeatureKey(featureKey)) return;
         if (highlightedFeatures.value.has(featureKey)) return;
 
@@ -345,7 +353,7 @@ export const useFeatureStyleStore = defineStore('featureStyleStore', () => {
      * 清除单个高亮（内部使用）
      * @private
      */
-    function _clearSingle(featureKey, restoreStyle) {
+    function _clearSingle(featureKey: any, restoreStyle?: any) {
         if (!isValidFeatureKey(featureKey)) return;
         if (!highlightedFeatures.value.has(featureKey)) return;
 
@@ -383,7 +391,7 @@ export const useFeatureStyleStore = defineStore('featureStyleStore', () => {
      * @param {string} [featureId] 不传则清该图层全部
      * @param {Function} [restoreStyle] 还原样式的回调
      */
-    function clearHighlight(layerId, featureId, restoreStyle) {
+    function clearHighlight(layerId: any, featureId?: any, restoreStyle?: any) {
         if (!layerId) {
             return clearAll(restoreStyle);
         }
@@ -398,7 +406,7 @@ export const useFeatureStyleStore = defineStore('featureStyleStore', () => {
      * 清除所有高亮
      * @param {Function} [restoreStyle] 还原样式的回调 (feature, originalStyle) => void
      */
-    function clearAll(restoreStyle) {
+    function clearAll(restoreStyle: any) {
         const keys = Array.from(highlightedFeatures.value.keys());
         keys.forEach((key) => _clearSingle(key, restoreStyle));
         layerHighlightCount.value.clear();
@@ -409,11 +417,11 @@ export const useFeatureStyleStore = defineStore('featureStyleStore', () => {
      * @param {string} layerId
      * @param {Function} [restoreStyle]
      */
-    function clearHighlightsByLayer(layerId, restoreStyle) {
+    function clearHighlightsByLayer(layerId: any, restoreStyle?: any) {
         const targetLayerId = String(layerId ?? '').trim();
         if (!targetLayerId) return 0;
 
-        const keysToRemove = [];
+        const keysToRemove: any[] = [];
         highlightedFeatures.value.forEach((_, key) => {
             if (getLayerIdFromFeatureKey(key) === targetLayerId) {
                 keysToRemove.push(key);
@@ -431,12 +439,12 @@ export const useFeatureStyleStore = defineStore('featureStyleStore', () => {
      * @param {string[]} currentFeatureIds 当前应保留高亮的 featureId 列表
      * @param {{applyHighlight?: Function, restoreStyle?: Function, lookupFeature?: Function}} [callbacks]
      */
-    function syncLayerHighlights(layerId, currentFeatureIds, callbacks) {
+    function syncLayerHighlights(layerId: any, currentFeatureIds: any[], callbacks?: any) {
         const cb = callbacks || {};
         const targetLayerId = String(layerId ?? '').trim();
         if (!targetLayerId) return { added: 0, removed: 0 };
 
-        const targetSet = new Set((currentFeatureIds || []).map((id) => String(id)));
+        const targetSet = new Set<string>((currentFeatureIds || []).map((id: any) => String(id)));
         const existingKeys = getHighlightedFeatureKeysInLayer(targetLayerId);
 
         let added = 0;
@@ -472,7 +480,7 @@ export const useFeatureStyleStore = defineStore('featureStyleStore', () => {
     function cleanup() {
         if (!WeakRefSupported) return 0;
         let removed = 0;
-        const staleKeys = [];
+        const staleKeys: any[] = [];
         highlightedFeatures.value.forEach((featureRef, key) => {
             if (!derefFeature(featureRef)) {
                 staleKeys.push(key);

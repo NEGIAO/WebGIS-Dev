@@ -51,7 +51,11 @@ WebGIS_Dev/
 │
 ├── Scripts/                           # 门禁与维护脚本
 │   ├── CheckConfigRegistry.py         # 配置登记门禁（裸 getenv / 未登记 key / 散落 VITE_ / 硬编码域名）
+│   ├── CheckDomainDeps.py             # 前端领域单向依赖门禁（禁止 common→ol/cesium、ol↔cesium）
 │   ├── CheckStructureTree.py          # 结构树漂移门禁（structure 文件 ⇄ 磁盘双向 diff）
+│   ├── CheckVueParadigm.py            # Vue 视图/实例分离范式完整性门禁（单 script src / 零宏 / 零保留前缀 / 零原型公有方法）
+│   ├── ExtractVueStyles.py            # 巨型 Vue 组件样式外置辅助脚本（幂等）
+│   ├── SyncStructureTree.py           # 结构树文档 .js → .ts 批量同步辅助脚本
 │   └── archive/                       # 已废弃脚本，仅留档不执行
 │       └── UpdateReadmeTree.py        # [已废弃 V3.6.37] 生成 FileTree.md（该文件已不存在）
 │
@@ -154,6 +158,7 @@ Docs/
 │   ├── bot-pr-playbook.md             # 依赖机器人 PR 操作手册（§12 的命令层补充）
 │   ├── ESRI_Wayback_Layers_List.md    # ESRI Wayback 196 个历史影像快照清单
 │   ├── compass-types-note.md          # compass/svg/types 类型说明
+│   ├── vue-component-template.md      # Vue 组件视图层（.vue）与实例层（.ts）物理分离标准模板与检查清单
 │   └── faq.md                         # 技术栈与 FAQ
 │
 ├── Example_prompt.md                  # 任务启动提示词模板（Bug/功能/重构/审计四类）
@@ -163,6 +168,7 @@ Docs/
 └── TODO/                              # 方案与待办（⚠️ 入口：README.md）
     ├── README.md                      # 索引 + 状态机（唯一索引入口，先读这个）
     ├── bugfix-optimization-plan.md    # 滚动修复主规划（P0–P3，顺带发现的登记处）
+    ├── 2026-11-13-vue-component-refactor-plan.md # Vue 组件范式化与巨型文件瘦身重构方案
     ├── 2026-10-31-turnstile-auth-hardening-plan.md     # Turnstile 人机校验加固（待批准）
     ├── 2026-10-25-tileset-large-area-terrain-fit-plan.md # 3D Tiles 大面积地形贴合（待确认）
     ├── 2026-10-17-landing-njnu-14-items-plan.md        # 落地页 14 条借鉴清单

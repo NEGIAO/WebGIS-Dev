@@ -349,7 +349,7 @@ export class DistrictManager {
         const layerName = String(options?.name || `行政区-${adcode}`).trim();
 
         // 创建或获取图层和数据源
-        const { _layer, source } = this.createLayerForDistrict(adcode, layerName);
+        const { source } = this.createLayerForDistrict(adcode, layerName);
 
         const response = await fetch(sourceUrl, {
             method: 'GET',

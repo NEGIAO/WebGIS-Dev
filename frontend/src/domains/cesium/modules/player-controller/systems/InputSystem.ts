@@ -15,6 +15,8 @@ const defaultKeyMap: Record<KeyAction, string[]> = {
 };
 
 export class InputSystem {
+
+
     private ctrl: playerController; // 主控制器引用
 
     fwd = false; // 前进键

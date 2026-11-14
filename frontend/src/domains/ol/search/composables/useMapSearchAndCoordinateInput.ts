@@ -1,0 +1,622 @@
+import { SEARCH_AOI_LAYER_NAME, closeLinearRing, parseCenterText, pickAoiProperties } from './aoiFeatureHelpers';
+
+/**
+ * 地图搜索和坐标输入功能库
+ * 负责地名搜索结果落图与手动坐标绘制
+ *
+ * 导出：
+ * - handleSearchJump(payload)
+ * - drawPointByCoordinatesInput(payload)
+ */
+// 1. 导入完整解析器，提取所有属性
+import { parseAmapAoiPayload } from '@common/data-import/parsers/amapAoiParser';
+import { fromLonLat } from 'ol/proj';
+import Feature from 'ol/Feature';
+import Point from 'ol/geom/Point';
+import Polygon from 'ol/geom/Polygon';
+import { fetchAmapPoiDetailAoi } from '@/api/map';
+
+
+/** 搜索 / 坐标输入工厂的宿主依赖（由 MapContainer 装配） */
+export interface MapSearchFeatureOptions {
+    /** 消息系统（warning/info/success 等） */
+    message?: any;
+    /** OL 地图实例 ref */
+    mapInstanceRef?: { value: any };
+    /** 创建托管矢量图层（返回 { layer, item } 或 null） */
+    createManagedVectorLayer?: (...args: any[]) => any;
+    /** GCJ02 → WGS84 坐标转换 */
+    gcj02ToWgs84?: (...args: any[]) => number[];
+    /** 搜索结果点样式 */
+    searchResultStyle?: any;
+    /** 搜索 AOI 面样式 */
+    searchAoiStyle?: any;
+    /** AOI 提取高亮样式（内部兜底） */
+    _amapExtractAoiStyle?: any;
+    /** 用户图层数组（响应式来源） */
+    userDataLayers?: any[];
+    /** 确保要素 id */
+    ensureFeatureId?: (...args: any[]) => string;
+    /** 序列化托管要素 */
+    serializeManagedFeatures?: (...args: any[]) => any[];
+    /** 用户图层变化回调 */
+    emitUserLayersChange?: (...args: any[]) => void;
+    /** 图形概览回调 */
+    emitGraphicsOverview?: (...args: any[]) => void;
+    /** POI 解析完成回调 */
+    onSearchPoiResolved?: (...args: any[]) => void;
+}
+
+/**
+ * 工厂函数 - 返回搜索和坐标输入相关的导出函数
+ * @param {Object} options 配置选项
+ * @param {Object} options.message - 消息系统
+ * @param {Object} options.mapInstanceRef - 地图实例 ref
+ * @param {Function} options.createManagedVectorLayer - 创建托管矢量图层的函数
+ * @param {Function} options.gcj02ToWgs84 - GCJ02转WGS84转换函数
+ * @param {Object} options.searchResultStyle - 搜索结果样式配置
+ * @returns {Object} 包含 handleSearchJump 和 drawPointByCoordinatesInput 的对象
+ */
+export function createMapSearchAndCoordinateInputFeature({
+    message = {},
+    mapInstanceRef = { value: null },
+    createManagedVectorLayer = () => null,
+    gcj02ToWgs84 = () => [0, 0],
+    searchResultStyle = {},
+    searchAoiStyle = {},
+    userDataLayers = [],
+    ensureFeatureId = () => '',
+    serializeManagedFeatures = () => [],
+    emitUserLayersChange = () => {},
+    emitGraphicsOverview = () => {},
+    onSearchPoiResolved = () => {},
+} = {} as MapSearchFeatureOptions) {
+    let searchAoiLayerId = '';
+    const verifyPromptedPoiIds = new Set();
+
+    function openAmapVerifyWindow(verifyUrl: string) {
+        if (typeof window === 'undefined') return false;
+
+        const finalUrl = String(verifyUrl || '').trim() || 'https://www.amap.com';
+        const popup = window.open(
+            finalUrl,
+            'amap-verify-window',
+            'width=960,height=760,left=80,top=80',
+        );
+
+        return !!popup;
+    }
+
+    function requestManualOpenVerifyWindow(verifyUrl: string) {
+        if (typeof window === 'undefined') return false;
+
+        const finalUrl = String(verifyUrl || '').trim() || 'https://www.amap.com';
+        const shouldOpen = window.confirm(
+            '高德触发验证，浏览器可能拦截了自动弹窗。是否立即手动打开验证窗口？',
+        );
+        if (!shouldOpen) return false;
+
+        const popup = window.open(finalUrl, '_blank');
+        return !!popup;
+    }
+
+    function handleAmapVerifyRequired(error: any, poiid: any) {
+        const verifyUrl = String(error?.verifyUrl || '').trim();
+        const idKey = String(poiid || '').trim();
+
+        if (!idKey) {
+            message.warning?.('高德触发验证，请前往高德地图页面完成滑块后重试');
+            return;
+        }
+
+        const alreadyPrompted = verifyPromptedPoiIds.has(idKey);
+        if (!alreadyPrompted) {
+            const opened = openAmapVerifyWindow(verifyUrl);
+            if (opened) {
+                verifyPromptedPoiIds.add(idKey);
+                message.warning?.('已打开高德验证窗口，请完成验证后重新点击该 POI');
+                return;
+            }
+
+            const manuallyOpened = requestManualOpenVerifyWindow(verifyUrl);
+            if (manuallyOpened) {
+                verifyPromptedPoiIds.add(idKey);
+                message.warning?.('请在新窗口完成高德验证，完成后回到地图重新点击该 POI');
+                return;
+            }
+        }
+
+        if (verifyUrl) {
+            message.warning?.(`高德需要人机验证，请先访问验证页后重试：${verifyUrl}`);
+        } else {
+            message.warning?.('高德需要人机验证，请先完成验证后重新点击该 POI');
+        }
+    }
+
+    function getSearchAoiLayerItem() {
+        if (searchAoiLayerId) {
+            const byId = userDataLayers.find((item) => item.id === searchAoiLayerId) || null;
+            if (byId) return byId;
+            searchAoiLayerId = '';
+        }
+
+        const byType =
+            userDataLayers.find(
+                (item) =>
+                    item?.sourceType === 'search' &&
+                    String(item?.type || '').toLowerCase() === 'search_aoi',
+            ) || null;
+
+        if (byType?.id) {
+            searchAoiLayerId = byType.id;
+        }
+        return byType;
+    }
+
+    function appendToManagedSearchAoiLayer(feature: any, metadata: any = {}) {
+        if (!feature) return null;
+
+        const existingLayer = getSearchAoiLayerItem();
+        if (!existingLayer) {
+            const createdId = createManagedVectorLayer?.({
+                name: SEARCH_AOI_LAYER_NAME,
+                type: 'search_aoi',
+                sourceType: 'search',
+                features: [feature],
+                styleConfig: searchAoiStyle,
+                autoLabel: false,
+                metadata: {
+                    ...(metadata || {}),
+                    category: 'search-aoi',
+                    labelField: '名称',
+                },
+                fitView: false,
+            });
+            if (createdId) {
+                searchAoiLayerId = createdId;
+            }
+            return createdId;
+        }
+
+        const source = existingLayer?.layer?.getSource?.();
+        if (!source) return null;
+
+        const currentCount = Number(source.getFeatures?.().length || 0);
+        ensureFeatureId(feature, SEARCH_AOI_LAYER_NAME, currentCount);
+        source.addFeature(feature);
+
+        const allFeatures = source.getFeatures?.() || [];
+        existingLayer.featureCount = allFeatures.length;
+        existingLayer.features = serializeManagedFeatures(allFeatures, SEARCH_AOI_LAYER_NAME);
+        existingLayer.metadata = {
+            ...(existingLayer.metadata || {}),
+            ...(metadata || {}),
+            category: 'search-aoi',
+            labelField: '名称',
+        };
+
+        emitUserLayersChange?.();
+        emitGraphicsOverview?.();
+        return existingLayer.id;
+    }
+
+    function convertGcjRingsToMapRings(gcjRings: any = []) {
+        return (gcjRings || [])
+            .map((ring: any) => {
+                const mapRing = (ring || [])
+                    .map((point: any) => {
+                        const gcjLng = Number(point?.[0]);
+                        const gcjLat = Number(point?.[1]);
+                        if (!Number.isFinite(gcjLng) || !Number.isFinite(gcjLat)) return null;
+
+                        const [wgsLng, wgsLat] = gcj02ToWgs84(gcjLng, gcjLat);
+                        if (!Number.isFinite(wgsLng) || !Number.isFinite(wgsLat)) return null;
+
+                        return fromLonLat([wgsLng, wgsLat]);
+                    })
+                    .filter((coord: any) => Array.isArray(coord) && coord.length === 2);
+
+                return closeLinearRing(mapRing);
+            })
+            .filter((ring: any) => Array.isArray(ring) && ring.length >= 4);
+    }
+
+    function convertWgsRingsToMapRings(wgsRings: any = []) {
+        return (wgsRings || [])
+            .map((ring: any) => {
+                const mapRing = (ring || [])
+                    .map((point: any) => {
+                        const wgsLng = Number(point?.[0]);
+                        const wgsLat = Number(point?.[1]);
+                        if (!Number.isFinite(wgsLng) || !Number.isFinite(wgsLat)) return null;
+                        return fromLonLat([wgsLng, wgsLat]);
+                    })
+                    .filter((coord: any) => Array.isArray(coord) && coord.length === 2);
+
+                return closeLinearRing(mapRing);
+            })
+            .filter((ring: any) => Array.isArray(ring) && ring.length >= 4);
+    }
+
+    function buildAoiMetadata(detail: any, payload: any = {}) {
+        const centerText =
+            detail?.raw?.data?.spec?.mining_shape?.center ||
+            detail?.raw?.spec?.mining_shape?.center ||
+            '';
+
+        let gcjCenter = parseCenterText(centerText);
+        if (!gcjCenter) {
+            const xVal = Number.parseFloat(detail?.base?.x);
+            const yVal = Number.parseFloat(detail?.base?.y);
+            if (Number.isFinite(xVal) && Number.isFinite(yVal)) {
+                gcjCenter = [xVal, yVal];
+            }
+        }
+
+        if (gcjCenter) {
+            const [metaLng, metaLat] = gcj02ToWgs84(gcjCenter[0], gcjCenter[1]);
+            if (Number.isFinite(metaLng) && Number.isFinite(metaLat)) {
+                return {
+                    longitude: Number(metaLng.toFixed(6)),
+                    latitude: Number(metaLat.toFixed(6)),
+                    crs: 'wgs84',
+                };
+            }
+        }
+
+        const fallbackLng = Number(payload?.lng);
+        const fallbackLat = Number(payload?.lat);
+        return {
+            longitude: Number.isFinite(fallbackLng) ? fallbackLng : undefined,
+            latitude: Number.isFinite(fallbackLat) ? fallbackLat : undefined,
+            crs: 'wgs84',
+        };
+    }
+
+    function drawAoiFeatureFromDetail(detail: any, payload: any = {}, pointLayerName: string = '') {
+        if (!detail?.shape) {
+            throw new Error('AOI 详情中未包含 shape 节点');
+        }
+
+        const mapRings = convertGcjRingsToMapRings(detail?.rings || []);
+        if (!mapRings.length) {
+            throw new Error('AOI 坐标转换失败，请检查 shape 数据');
+        }
+
+        const baseProperties = pickAoiProperties(detail?.base || {});
+        const nameFromBase = String(baseProperties?.name || '').trim();
+        const preferredName = String(payload?.layerName || '').trim();
+        const defaultAoiName = nameFromBase
+            ? `${nameFromBase}_AOI`
+            : pointLayerName
+              ? `${pointLayerName}_AOI`
+              : '手动导入_AOI';
+        const aoiName = preferredName || defaultAoiName;
+        const poiid = String(payload?.poiid || detail?.poiid || baseProperties?.poiid || '').trim();
+
+        const aoiFeature = new Feature({
+            geometry: new Polygon(mapRings),
+            type: 'search_aoi',
+            名称: aoiName,
+            ...(poiid ? { POI_ID: poiid } : {}),
+            来源服务: String(detail?.source || 'amap-detail'),
+            ...(payload?.raw?.address ? { 地址: String(payload.raw.address) } : {}),
+            ...baseProperties,
+        });
+
+        appendToManagedSearchAoiLayer(aoiFeature, buildAoiMetadata(detail, payload));
+
+        return {
+            name: aoiName,
+            poiid,
+            feature: aoiFeature,
+        };
+    }
+
+    async function _fetchAndDrawSearchAoi(payload: any, pointLayerName: string) {
+        const selectedService = String(payload?.service || payload?.raw?._service || '')
+            .trim()
+            .toLowerCase();
+        const poiid = String(payload?.poiid || payload?.raw?.id || '').trim();
+        if (!poiid) {
+            if (selectedService === 'amap') {
+                message.warning?.('该高德结果缺少 POI ID，已跳过 AOI 请求');
+            }
+            return;
+        }
+
+        // 不预置 null：try 内必然赋值后才被读取，catch 分支要么 return 要么 rethrow
+        let detail;
+        try {
+            detail = await fetchAmapPoiDetailAoi({
+                poiid,
+                extensions: 'all',
+            });
+        } catch (error: any) {
+            if (error?.code === 'AMAP_VERIFY_REQUIRED') {
+                handleAmapVerifyRequired(error, poiid);
+                return;
+            }
+            throw error;
+        }
+
+        // 没有 AOI shape 则直接返回，不影响主点位流程。
+        if (!detail?.shape) return;
+        drawAoiFeatureFromDetail(detail, { ...payload, poiid }, pointLayerName);
+    }
+
+    function drawAmapAoiByDetailJsonInput(payload: any = {}) {
+        try {
+            const jsonText = String(payload?.jsonText || '').trim();
+            if (!jsonText) {
+                message.warning?.('请先粘贴高德详情 JSON 内容');
+                return;
+            }
+
+            // --- 核心改动点：使用完整解析器，提取所有属性 ---
+            const detail = parseAmapAoiPayload(jsonText);
+            // ------------------------------------------------
+
+            const poiid = String(payload?.poiid || detail?.poiid || '').trim();
+            const layerName = detail.name
+                ? `${detail.name} - AOI范围`
+                : `AOI_${Date.now()} - AOI范围`;
+
+            // 3. 执行地图渲染逻辑 (注意坐标系的选择)
+            // 假设的地图需要的是 WGS84 坐标，使用 detail.ringsWgs84
+            // 如果是高德底图（GCJ02），使用 detail.ringsGcj02
+            const mapRings = convertWgsRingsToMapRings(detail.ringsWgs84);
+
+            if (!mapRings.length) {
+                message.warning?.('未发现边界数据');
+                return;
+            }
+
+            // 提取所有基础属性用于属性表显示
+            const baseProperties = detail.base || {};
+
+            const aoiFeature = new Feature({
+                geometry: new Polygon(mapRings),
+                名称: layerName,
+                POI_ID: poiid,
+                来源: detail.source,
+                ...baseProperties,
+            });
+
+            // 调用已有的图层创建函数
+            createManagedVectorLayer?.({
+                name: layerName,
+                features: [aoiFeature],
+                fitView: true,
+            });
+
+            message.success?.('解析成功！属性已同步至属性表');
+        } catch (error: any) {
+            // 下方 message.error?.() 已提示用户,此处不再重复 console.error
+            // console.error('AOI提取失败:', error);
+            message.error?.(error?.message || '解析失败');
+        }
+    }
+
+    /**
+     * 仅创建「搜索结果」受管图层（写入 TOC），不移动视口。
+     *
+     * 与 handleSearchJump 共用同一条建层逻辑：Agent 搜索命中后也走这里落图，
+     * 这样 2D 的搜索结果与前端的搜索面板行为一致（同一个 sourceType='search' 分组、
+     * 同一套 SEARCH_RESULT_STYLE 与自动标注），不需要另造一套点符号体系。
+     *
+     * 返回 `layerId` 可能为 null（map 未就绪 / 要素为空导致建层被拒）——调用方须据此判断
+     * 是否真的落图，不能只看返回值非空就报成功。
+     *
+     * @param {Object} payload 搜索结果 { lng, lat, name, poiid, service, raw }
+     * @returns {Promise<{layerId: string|null, layerName: string, lng: number, lat: number} | null>}
+     *   坐标非法时返回 null
+     */
+    async function createSearchResultLayer(payload: any) {
+        const lon = Number(payload?.lng);
+        const lat = Number(payload?.lat);
+        if (!Number.isFinite(lon) || !Number.isFinite(lat)) return null;
+
+        const coord = fromLonLat([lon, lat]);
+
+        const layerName = (payload.name || `搜索结果_${lon.toFixed(5)}_${lat.toFixed(5)}`).trim();
+        const poiid = String(payload?.poiid || payload?.raw?.id || '').trim();
+        const sourceService = String(payload?.service || payload?.raw?._service || '')
+            .trim()
+            .toLowerCase();
+
+        // 构建特征属性，包含 POI ID（来自 Amap 搜索结果）
+        const featureProperties: Record<string, any> = {
+            geometry: new Point(coord),
+            type: 'search',
+            名称: layerName,
+            经度: Number(lon.toFixed(6)),
+            纬度: Number(lat.toFixed(6)),
+            坐标系: 'wgs84',
+        };
+
+        // 如果检测到 POI ID，添加到属性中
+        if (poiid) {
+            featureProperties['POI_ID'] = poiid;
+        }
+
+        // 添加其他 Amap 特定字段
+        if (payload.raw?.address) {
+            featureProperties['地址'] = String(payload.raw.address);
+        }
+
+        const f = new Feature(featureProperties);
+        const layerId = await createManagedVectorLayer?.({
+            name: layerName,
+            type: 'search',
+            sourceType: 'search',
+            features: [f],
+            styleConfig: searchResultStyle,
+            autoLabel: true,
+            metadata: {
+                longitude: Number(lon.toFixed(6)),
+                latitude: Number(lat.toFixed(6)),
+                crs: 'wgs84',
+            },
+            fitView: false,
+        });
+
+        if (sourceService === 'amap' || poiid) {
+            onSearchPoiResolved?.({
+                poiid,
+                name: layerName,
+                service: sourceService,
+                raw: payload?.raw || null,
+            });
+        }
+
+        return { layerId: layerId || null, layerName, lng: lon, lat };
+    }
+
+    /**
+     * 处理地名搜索跳转
+     * 接收 LayerControlPanel 解析后的定位载荷并渲染搜索结果图层
+     * @param {Object} payload - 搜索结果 { lng, lat, name, zoom }
+     */
+    async function handleSearchJump(payload: any) {
+        if (!mapInstanceRef.value || !payload) return;
+
+        const created = await createSearchResultLayer(payload);
+        if (!created) {
+            message.warning?.('无法解析该结果的坐标');
+            return;
+        }
+        // 建层被拒（map 未就绪等）不阻断定位：用户至少能看到位置本身
+        if (!created.layerId) {
+            message.warning?.(`图层创建失败：${created.layerName}`);
+        }
+
+        // AOI 提取改为“点击 POI 项 -> 注入弹窗 -> 手动粘贴 JSON”流程。
+        // 这里不再自动请求 AOI，避免触发验证弹窗并减少无效请求。
+
+        // 动画缩放到位置
+        mapInstanceRef.value?.getView()?.animate?.({
+            center: fromLonLat([created.lng, created.lat]),
+            zoom: Number(payload.zoom) > 0 ? Number(payload.zoom) : 16,
+            duration: 700,
+        });
+    }
+
+    /**
+     * 手动坐标绘制
+     * 接收输入经纬度（WGS-84 / GCJ-02），落图并自动飞行到目标点
+     * @param {Object} payload - 坐标输入
+     * @param {number|string} payload.lng
+     * @param {number|string} payload.lat
+     * @param {'wgs84'|'gcj02'} [payload.crsType='wgs84']
+     * @param {string} [payload.displayName] 输入名称
+     * @param {string} [payload.label] 点位标注名称
+     * @param {string} [payload.layerName] 图层名称
+     * @param {number} [payload.zoom] 动画缩放级别
+     * @param {Object} [payload.properties] 额外属性（会并入 Feature 属性）
+     */
+    function drawPointByCoordinatesInput(payload: any) {
+        if (!mapInstanceRef.value || !payload) return;
+
+        const rawLng = Number(payload.lng);
+        const rawLat = Number(payload.lat);
+        const crsType = String(payload.crsType || 'wgs84').toLowerCase();
+
+        if (!Number.isFinite(rawLng) || !Number.isFinite(rawLat)) {
+            message.warning?.('输入坐标无效，请检查经纬度');
+            return;
+        }
+
+        if (rawLng < -180 || rawLng > 180 || rawLat < -90 || rawLat > 90) {
+            message.warning?.('输入坐标超出范围（经度 -180~180，纬度 -90~90）');
+            return;
+        }
+
+        let mapLng = rawLng;
+        let mapLat = rawLat;
+        if (crsType === 'gcj02') {
+            [mapLng, mapLat] = gcj02ToWgs84(rawLng, rawLat);
+        }
+
+        if (!Number.isFinite(mapLng) || !Number.isFinite(mapLat)) {
+            message.error?.('坐标转换失败，请稍后重试');
+            return;
+        }
+
+        const mapCoord = fromLonLat([mapLng, mapLat]);
+        const displayName = String(
+            payload.displayName || `输入点_${rawLng.toFixed(6)}_${rawLat.toFixed(6)}`,
+        ).trim();
+        const labelName = String(payload.label || displayName || '').trim() || displayName;
+        const layerName =
+            String(payload.layerName || labelName || displayName).trim() || displayName;
+        const labelField = String(payload.labelField || '名称').trim() || '名称';
+        // 标注能力默认开（保证菜单可手动打开），初始可见默认关（首屏无压盖，需手动打开）
+        const shouldAutoLabel = payload.autoLabel !== false;
+        const shouldLabelVisible = payload.labelVisible === true;
+        const extraProperties =
+            payload?.properties && typeof payload.properties === 'object'
+                ? { ...payload.properties }
+                : {};
+
+        delete extraProperties.geometry;
+        delete extraProperties.style;
+
+        const pointProperties: Record<string, any> = {
+            geometry: new Point(mapCoord),
+            type: 'Point',
+            名称: labelName,
+            输入名称: displayName,
+            经度: Number(rawLng.toFixed(6)),
+            纬度: Number(rawLat.toFixed(6)),
+            坐标系: crsType,
+            解析后经度: Number(mapLng.toFixed(6)),
+            解析后纬度: Number(mapLat.toFixed(6)),
+            ...extraProperties,
+        };
+
+        const labelFieldValue = pointProperties[labelField];
+        if (
+            labelFieldValue === null ||
+            labelFieldValue === undefined ||
+            String(labelFieldValue).trim() === ''
+        ) {
+            pointProperties[labelField] = labelName;
+        }
+
+        const pointFeature = new Feature(pointProperties);
+
+        createManagedVectorLayer?.({
+            name: layerName,
+            type: 'Point',
+            sourceType: 'draw',
+            features: [pointFeature],
+            autoLabel: shouldAutoLabel,
+            labelVisible: shouldLabelVisible,
+            metadata: {
+                longitude: Number(rawLng.toFixed(6)),
+                latitude: Number(rawLat.toFixed(6)),
+                crs: crsType,
+                labelField,
+            },
+            fitView: false,
+        });
+
+        const targetZoom = Number(payload.zoom);
+        mapInstanceRef.value?.getView()?.animate?.({
+            center: mapCoord,
+            zoom: Number.isFinite(targetZoom) && targetZoom > 0 ? targetZoom : 16,
+            duration: 700,
+        });
+
+        message.success?.(`已绘制点位：${layerName}`);
+    }
+
+    return {
+        handleSearchJump,
+        createSearchResultLayer,
+        drawPointByCoordinatesInput,
+        drawAmapAoiByDetailJsonInput,
+        fetchAndDrawSearchAoi: _fetchAndDrawSearchAoi,
+    };
+}

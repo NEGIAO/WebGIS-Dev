@@ -18,6 +18,17 @@ import { VECTOR_GROUND_LOAD_OPTIONS } from '../../terrain/groundPlacementCapabil
  * @param {import('vue').Ref} ctx.loadedDataSources
  * @param {{ current: number }} ctx.nextId
  */
+export interface ShpLoadOptions {
+    file: File;
+    sidecarFiles?: File[];
+    overrideCrs?: string;
+    getCesium: () => any;
+    getViewer: () => any;
+    message: { success: (msg: string) => any };
+    loadedDataSources: { value: any[] };
+    nextId: { current: number };
+}
+
 export async function loadSHP({
     file,
     sidecarFiles = [],
@@ -27,7 +38,7 @@ export async function loadSHP({
     message,
     loadedDataSources,
     nextId,
-}) {
+}: ShpLoadOptions) {
     const Cesium = getCesium();
     const viewer = getViewer();
     if (!Cesium || !viewer) throw new Error('Cesium 未初始化');

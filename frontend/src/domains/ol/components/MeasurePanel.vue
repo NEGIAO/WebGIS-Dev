@@ -34,7 +34,7 @@
     </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, computed } from 'vue';
 import { X, Info, Trash2, Ruler, SquareDashedBottom } from '@lucide/vue';
 import { useLocale } from '@common/app/useLocale';
@@ -60,7 +60,7 @@ const hint = computed(() => {
     }
 });
 
-function selectTool(type) {
+function selectTool(type: string) {
     activeType.value = type;
     emit('measure-type', type);
 }

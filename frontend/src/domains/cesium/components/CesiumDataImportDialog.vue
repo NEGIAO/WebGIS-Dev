@@ -127,7 +127,7 @@
     </Teleport>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import { Box, Send, TriangleAlert } from '@lucide/vue';
 
@@ -165,7 +165,7 @@ const emit = defineEmits(['confirm', 'cancel']);
 const lngStr = ref('');
 const latStr = ref('');
 const heightStr = ref('0');
-const lngInputRef = ref(null);
+const lngInputRef = ref<HTMLInputElement | null>(null);
 
 const lngError = ref('');
 const latError = ref('');
@@ -225,7 +225,7 @@ function handleConfirm() {
 /**
  * Esc 键显式取消（替代旧的背景点击取消，防误触）；busy 加载中禁止取消，防孤儿加载
  */
-function onGlobalKeydown(event) {
+function onGlobalKeydown(event: KeyboardEvent) {
     if (props.busy) return;
     if (event.key === 'Escape') {
         emit('cancel');

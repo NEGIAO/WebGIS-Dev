@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { apiDismissAnnouncement, apiGetCurrentAnnouncement } from '@/api/backend';
 import { useMessage } from '@common/shell/useMessage';
@@ -7,10 +7,10 @@ import { formatDateTime } from '@common/utils/datetime';
 const message = useMessage();
 
 const loading = ref(false);
-const announcement = ref(null);
-let msgId = null;
+const announcement = ref<{ id: number; message: string; created_by: string; updated_at: string } | null>(null);
+let msgId: any = null;
 
-let pollTimer = null;
+let pollTimer: number | null = null;
 
 /** 启动/停止公告 20s 轮询：仅页面可见时轮询，后台挂起即停（避免积压拖垮后端） */
 function startPolling() {
@@ -37,7 +37,7 @@ function handleVisibilityChange() {
     }
 }
 
-function normalizeAnnouncement(payload) {
+function normalizeAnnouncement(payload: any) {
     if (!payload || typeof payload !== 'object') return null;
 
     const id = Number(payload.id);
@@ -55,7 +55,7 @@ function normalizeAnnouncement(payload) {
     };
 }
 
-function formatTimeLabel(raw) {
+function formatTimeLabel(raw: any) {
     // 公告面向中文用户，固定 zh-CN；非法输入原样展示
     return formatDateTime(String(raw || '').trim(), { locale: 'zh-CN', invalidText: null });
 }
@@ -84,7 +84,7 @@ async function refreshAnnouncement({ silent = false } = {}) {
         ) {
             announcement.value = raw;
         }
-    } catch (error) {
+    } catch (error: any) {
         if (!silent) {
             message.warning(String(error?.message || '公告获取失败'));
         }
@@ -93,7 +93,7 @@ async function refreshAnnouncement({ silent = false } = {}) {
     }
 }
 
-async function dismissCurrentAnnouncement(idToDismiss) {
+async function dismissCurrentAnnouncement(idToDismiss: any) {
     if (!idToDismiss) return;
 
     try {
@@ -101,12 +101,12 @@ async function dismissCurrentAnnouncement(idToDismiss) {
         if (announcement.value && announcement.value.id === idToDismiss) {
             announcement.value = null;
         }
-    } catch (error) {
+    } catch (error: any) {
         message.error(String(error?.message || '公告隐藏失败'));
     }
 }
 
-function getAnnouncementText(ann) {
+function getAnnouncementText(ann: any) {
     const time = formatTimeLabel(ann.updated_at);
     const by = ann.created_by ? `发布者: ${ann.created_by}` : '';
     const meta = [by, time ? `更新时间: ${time}` : ''].filter(Boolean).join(' | ');

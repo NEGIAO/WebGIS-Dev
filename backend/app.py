@@ -269,15 +269,65 @@ if not _cors_origins:
         "请在前端来源白名单中登记域名后重启服务。"
     )
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=_cors_origins,
-    # SSE（EventSource withCredentials）要求响应带 Access-Control-Allow-Credentials: true，
-    # 故 credentials 恒开；正因如此白名单必须是精确来源，不能用通配。
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+
+def _cors_headers_for(request: Request) -> Dict[str, str]:
+    """
+    为「位于 CORSMiddleware 之外」的响应补 CORS 头。
+
+    只有 `ServerErrorMiddleware`（兜底 500）处在 CORS 层之外：它在异常穿出
+    所有中间件后才生成响应，CORSMiddleware 已经退栈，因此响应不带任何
+    `Access-Control-*`。浏览器会把 500 误报成 CORS 失败，掩盖真实故障。
+
+    这里按白名单回显精确 Origin（不能用 `*`：携带凭据的请求不接受通配）。
+    """
+    origin = request.headers.get("origin")
+    if not origin:
+        return {}
+    if origin not in _cors_origins:
+        return {}
+    return {
+        "Access-Control-Allow-Origin": origin,
+        "Access-Control-Allow-Credentials": "true",
+        "Vary": "Origin",
+    }
+
+
+# 已告警过的未登记来源：CORS 拒绝此前只在浏览器控制台可见，服务端零信号，
+# 排查时无从判断「是后端没放行」还是「后端根本没收到请求」。这里每个来源只告警一次。
+_warned_unknown_origins: set[str] = set()
+
+
+def _warn_origin_unlisted(origin: str, detail: str) -> None:
+    """未登记来源被 CORS 拒绝时，在服务端留一条可检索的告警（每来源仅一次）。"""
+    if not origin or origin in _cors_origins or origin in _warned_unknown_origins:
+        return
+    _warned_unknown_origins.add(origin)
+    logger.warning(
+        "CORS 拒绝了未登记来源 %s（%s）：响应不会带 Access-Control-Allow-Origin，"
+        "浏览器将报 CORS 失败。如需放行，请把该来源加入 CORS_ALLOWED_ORIGINS 后重启服务。",
+        origin,
+        detail,
+    )
+
+
+class LoggingCORSMiddleware(CORSMiddleware):
+    """
+    在 Starlette CORSMiddleware 之上补一条「来源被拒」的服务端告警。
+
+    必要性：预检被拒时浏览器不会发出真实请求，服务端除本层外没有任何代码会被执行，
+    因此 CORS 失败在日志里完全不可见——本次线上缺陷正是这样被误判为「前端问题」。
+    仅覆写预检路径（拒绝只发生在那里）；若上游改名该方法，本覆写自动失效且不影响功能。
+    """
+
+    def preflight_response(self, request_headers):  # type: ignore[override]
+        response = super().preflight_response(request_headers)
+        if response.status_code == 400:
+            _warn_origin_unlisted(
+                request_headers.get("origin") or "",
+                "OPTIONS 预检被拒",
+            )
+        return response
+
 
 # ==================== 启动状态检查中间件 ====================
 
@@ -291,6 +341,14 @@ async def check_startup_state(request: Request, call_next):
     """
     allowlist = {"/", "/health", "/docs", "/redoc", "/openapi.json", "/api/info", "/api/webhook"}
     if request.url.path in allowlist:
+        return await call_next(request)
+
+    # CORS 预检不得依赖数据库可用性。
+    # 跨源带凭据的 POST（如 presence/offline beacon）会先发 OPTIONS 预检；若在此
+    # 之前做存储检查，一次数据库抖动就会让预检返回 503，浏览器只报
+    # 「preflight 未通过 CORS 校验」，真实故障（503）被完全掩盖。
+    # OPTIONS 一律放行给 CORS 层直接应答，不触碰存储。
+    if request.method == "OPTIONS":
         return await call_next(request)
 
     if getattr(request.app.state, "startup_error", None):
@@ -327,6 +385,31 @@ async def check_startup_state(request: Request, call_next):
     return await call_next(request)
 
 
+# ==================== CORS 中间件注册（必须最后注册） ====================
+#
+# Starlette 的 `add_middleware` 实现是 `user_middleware.insert(0, ...)`，
+# 即「最后注册的中间件 = 最外层」。因此本段必须放在 check_startup_state 之后：
+#
+#   请求 → CORS → check_startup_state → 路由
+#
+# 只有这样，check_startup_state 在降级模式下直接返回的 503 才会被 CORS 层
+# 加上 `Access-Control-Allow-Origin` / `-Credentials`。若顺序反了（CORS 在内层），
+# 该 503 会绕过 CORS，浏览器把 503 报成 CORS 失败，排查方向被完全带偏。
+#
+# 唯一仍在 CORS 之外的是 `ServerErrorMiddleware`（兜底 500），其 CORS 头由
+# `global_exception_handler` 通过 `_cors_headers_for()` 自行补齐。
+app.add_middleware(
+    LoggingCORSMiddleware,
+    allow_origins=_cors_origins,
+    # SSE（EventSource withCredentials）与 presence beacon（fetch credentials: 'include'）
+    # 都要求响应带 Access-Control-Allow-Credentials: true，故 credentials 恒开；
+    # 正因如此白名单必须是精确来源，不能用通配。
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+
 # ==================== 全局异常处理器 ====================
 
 
@@ -349,6 +432,9 @@ async def global_exception_handler(request: Request, exc: Exception):
             "detail": error_detail,
             "data": None,
         },
+        # ServerErrorMiddleware 处于 CORS 层之外，此响应不会经过 CORSMiddleware，
+        # 必须自行补头，否则前端只能看到 CORS 报错而看不到 500 本身。
+        headers=_cors_headers_for(request),
     )
 
 

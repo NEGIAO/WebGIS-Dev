@@ -6,8 +6,8 @@
   Parent passes the user object and submission state; password change
   requests bubble up via the 'change-password' emit.
 -->
-<script setup>
-import { computed, onBeforeUnmount, ref, watch } from 'vue';
+<script setup lang="ts">
+import { computed, onBeforeUnmount, ref, watch, type PropType } from 'vue';
 import { getUserDisplayName, validateDisplayName } from '@common/user/composables/useAuthIdentity';
 import { useLocale } from '@common/app/useLocale';
 import { ASSET_BASE_URL } from '@/config/publicRuntime';
@@ -15,7 +15,7 @@ import { ASSET_BASE_URL } from '@/config/publicRuntime';
 const props = defineProps({
     /** Current user object (used to check role) */
     user: {
-        type: Object,
+        type: Object as PropType<Record<string, any> | null>,
         default: null,
     },
     /** Whether a form submission is currently in flight */
@@ -25,7 +25,7 @@ const props = defineProps({
     },
     /** Bound Google/GitHub/Hugging Face OAuth accounts for the current registered user */
     oauthAccounts: {
-        type: Array,
+        type: Array as PropType<any[]>,
         default: () => [],
     },
     /** Whether OAuth binding state is loading */
@@ -52,7 +52,7 @@ const { t } = useLocale();
 const hfLogoUrl = `${ASSET_BASE_URL.replace(/\/+$/, '')}/images/hf-logo.svg`;
 
 /** OAuth 提供商品牌名（按钮文案用，避免小写 google/github） */
-const PROVIDER_LABELS = Object.freeze({ google: 'Google', github: 'GitHub', huggingface: 'Hugging Face' });
+const PROVIDER_LABELS: Record<string, string> = Object.freeze({ google: 'Google', github: 'GitHub', huggingface: 'Hugging Face' });
 
 // 昵称框预填当前昵称（V3.4.62 A7）；仅在「用户未改动」时跟随外部 user 变化，
 // 防止 30s 轮询 mergeUserPatch 触发的 user 更新覆盖正在输入的内容
@@ -71,9 +71,9 @@ const nextPassword = ref('');
 const confirmPassword = ref('');
 
 /** 三个密码框的明文显隐状态 */
-const showPwd = ref({ current: false, next: false, confirm: false });
+const showPwd = ref<Record<string, boolean>>({ current: false, next: false, confirm: false });
 
-function togglePwd(key) {
+function togglePwd(key: string) {
     showPwd.value[key] = !showPwd.value[key];
 }
 
@@ -147,14 +147,14 @@ function handlePasswordSubmit() {
     emit('change-password', { oldPassword: oldPass, newPassword: newPass });
 }
 
-function getBoundAccount(provider) {
-    return props.oauthAccounts.find((account) => String(account?.provider || '') === provider) || null;
+function getBoundAccount(provider: string) {
+    return props.oauthAccounts.find((account: any) => String(account?.provider || '') === provider) || null;
 }
 
 // 解绑二段式确认（V3.4.62 A3）：首点进入待确认态（按钮变红提示），
 // 3s 内再点才真正解绑，超时自动还原——防误触且不打断式
 const pendingUnlink = ref('');
-let pendingUnlinkTimer = null;
+let pendingUnlinkTimer: ReturnType<typeof setTimeout> | null = null;
 
 function clearPendingUnlink() {
     pendingUnlink.value = '';
@@ -164,7 +164,7 @@ function clearPendingUnlink() {
     }
 }
 
-function handleOAuthAction(provider) {
+function handleOAuthAction(provider: string) {
     const account = getBoundAccount(provider);
     if (!account) {
         clearPendingUnlink();

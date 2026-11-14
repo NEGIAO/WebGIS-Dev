@@ -1,0 +1,288 @@
+import { isCloudPipelineActive } from '@cesium-domain/modules/cloud';
+
+export function configureSolarLighting(viewer: any) {
+    const scene = viewer?.scene;
+    const globe = scene?.globe;
+    if (!scene || !globe) return;
+
+    globe.enableLighting = true;
+
+    if (scene.sun) {
+        scene.sun.show = true;
+    }
+    if (scene.moon) {
+        scene.moon.show = true;
+    }
+    // 体积云 Bruneton 管线存活期间原生天空由管线接管，重开会双大气/白闪
+    if (scene.skyBox && !isCloudPipelineActive(viewer)) {
+        scene.skyBox.show = true;
+    }
+
+    scene.requestRender?.();
+}
+
+export function configureRealisticAtmosphere(viewer: any, Cesium: any) {
+    const scene = viewer?.scene;
+    const globe = scene?.globe;
+    if (!scene || !globe) return;
+
+    configureSunLight(scene, Cesium);
+    configureSceneFog(scene);
+
+    globe.enableLighting = true;
+    // 体积云 Bruneton 管线存活期间原生地面大气由互斥逻辑关闭，此处不得重开（白闪/双大气）
+    if (!isCloudPipelineActive(viewer)) {
+        globe.showGroundAtmosphere = true;
+    }
+
+    setIfExists(globe, 'dynamicAtmosphereLighting', true);
+    setIfExists(globe, 'dynamicAtmosphereLightingFromSun', true);
+    setIfExists(globe, 'atmosphereLightIntensity', 5.5);
+    setIfExists(globe, 'atmosphereHueShift', -0.015);
+    setIfExists(globe, 'atmosphereSaturationShift', 0.08);
+    setIfExists(globe, 'atmosphereBrightnessShift', 0.02);
+    setIfExists(globe, 'lightingFadeInDistance', 15000000.0);
+    setIfExists(globe, 'lightingFadeOutDistance', 22000000.0);
+    setIfExists(globe, 'nightFadeInDistance', 9000000.0);
+    setIfExists(globe, 'nightFadeOutDistance', 16000000.0);
+    setCartesian3IfExists(Cesium, globe, 'atmosphereRayleighCoefficient', 5.5e-6, 13.0e-6, 28.4e-6);
+    setCartesian3IfExists(Cesium, globe, 'atmosphereMieCoefficient', 21e-6, 21e-6, 21e-6);
+    setIfExists(globe, 'atmosphereRayleighScaleHeight', 10000.0);
+    setIfExists(globe, 'atmosphereMieScaleHeight', 3200.0);
+    setIfExists(globe, 'atmosphereMieAnisotropy', 0.92);
+
+    if (!scene.skyAtmosphere && Cesium?.SkyAtmosphere) {
+        scene.skyAtmosphere = createSkyAtmosphere(Cesium);
+    }
+
+    const sky = scene.skyAtmosphere;
+    if (sky) {
+        if (!isCloudPipelineActive(viewer)) sky.show = true;
+        setIfExists(sky, 'perFragmentAtmosphere', true);
+        setIfExists(sky, 'dynamicAtmosphereLighting', true);
+        setIfExists(sky, 'dynamicAtmosphereLightingFromSun', true);
+        setIfExists(sky, 'hueShift', -0.025);
+        setIfExists(sky, 'saturationShift', 0.08);
+        setIfExists(sky, 'brightnessShift', 0.03);
+        setIfExists(sky, 'atmosphereLightIntensity', 20.0);
+        setCartesian3IfExists(Cesium, sky, 'atmosphereRayleighCoefficient', 5.5e-6, 13.0e-6, 28.4e-6);
+        setCartesian3IfExists(Cesium, sky, 'atmosphereMieCoefficient', 21e-6, 21e-6, 21e-6);
+        setIfExists(sky, 'atmosphereRayleighScaleHeight', 10000.0);
+        setIfExists(sky, 'atmosphereMieScaleHeight', 3200.0);
+        setIfExists(sky, 'atmosphereMieAnisotropy', 0.92);
+    }
+
+    if (scene.sun) {
+        scene.sun.show = true;
+    }
+    if (scene.moon) {
+        scene.moon.show = true;
+    }
+    // 体积云 Bruneton 管线存活期间原生天空由管线接管，重开会双大气/白闪
+    if (scene.skyBox && !isCloudPipelineActive(viewer)) {
+        scene.skyBox.show = true;
+    }
+    if ('sunBloom' in scene) {
+        scene.sunBloom = true;
+    }
+    if ('highDynamicRange' in scene) {
+        scene.highDynamicRange = true;
+    }
+    configureBloom(scene);
+
+    scene.requestRender?.();
+}
+
+export function captureRealisticAtmosphereState(viewer: any) {
+    const scene = viewer?.scene;
+    const globe = scene?.globe;
+    if (!scene || !globe) return null;
+
+    const bloom = scene.postProcessStages?.bloom;
+    return {
+        scene: readProps(scene, ['highDynamicRange', 'sunBloom', 'light']),
+        fog: readProps(scene.fog, [
+            'enabled',
+            'density',
+            'minimumBrightness',
+            'screenSpaceErrorFactor',
+            'visualDensityScalar',
+        ]),
+        globe: readProps(globe, [
+            'enableLighting',
+            'showGroundAtmosphere',
+            'dynamicAtmosphereLighting',
+            'dynamicAtmosphereLightingFromSun',
+            'atmosphereLightIntensity',
+            'atmosphereHueShift',
+            'atmosphereSaturationShift',
+            'atmosphereBrightnessShift',
+            'lightingFadeInDistance',
+            'lightingFadeOutDistance',
+            'nightFadeInDistance',
+            'nightFadeOutDistance',
+            'atmosphereRayleighCoefficient',
+            'atmosphereMieCoefficient',
+            'atmosphereRayleighScaleHeight',
+            'atmosphereMieScaleHeight',
+            'atmosphereMieAnisotropy',
+        ]),
+        skyAtmosphereExisted: !!scene.skyAtmosphere,
+        sky: readProps(scene.skyAtmosphere, [
+            'show',
+            'perFragmentAtmosphere',
+            'dynamicAtmosphereLighting',
+            'dynamicAtmosphereLightingFromSun',
+            'hueShift',
+            'saturationShift',
+            'brightnessShift',
+            'atmosphereLightIntensity',
+            'atmosphereRayleighCoefficient',
+            'atmosphereMieCoefficient',
+            'atmosphereRayleighScaleHeight',
+            'atmosphereMieScaleHeight',
+            'atmosphereMieAnisotropy',
+        ]),
+        sun: readProps(scene.sun, ['show']),
+        moon: readProps(scene.moon, ['show']),
+        skyBox: readProps(scene.skyBox, ['show']),
+        bloom: {
+            props: readProps(bloom, ['enabled']),
+            uniforms: readProps(bloom?.uniforms, ['contrast', 'brightness', 'delta', 'sigma', 'stepSize']),
+        },
+    };
+}
+
+export function restoreRealisticAtmosphere(viewer: any, Cesium: any, snapshot: any) {
+    if (!snapshot) return;
+
+    const scene = viewer?.scene;
+    const globe = scene?.globe;
+    if (!scene || !globe) return;
+
+    // 体积云 Bruneton 管线存活期间原生天空由管线接管，写 show 前需门控
+    const cloudOwnsSky = isCloudPipelineActive(viewer);
+    writeProps(scene, snapshot.scene, Cesium);
+    writeProps(scene.fog, snapshot.fog, Cesium);
+    writeProps(globe, snapshot.globe, Cesium);
+    writeProps(scene.sun, snapshot.sun, Cesium);
+    writeProps(scene.moon, snapshot.moon, Cesium);
+    if (scene.skyBox && !cloudOwnsSky) {
+        writeProps(scene.skyBox, snapshot.skyBox, Cesium);
+    }
+
+    if (scene.skyAtmosphere) {
+        // 快照 sky 含 show 字段，管线存活期间不得随 writeProps 重开（白闪/双大气）；
+        // 色调/光强等纯渲染参数不受管线影响，照常恢复
+        const { show: _skyShow, ...skyRenderProps } = snapshot.sky || {};
+        writeProps(scene.skyAtmosphere, cloudOwnsSky ? skyRenderProps : snapshot.sky, Cesium);
+        if (!cloudOwnsSky && !snapshot.skyAtmosphereExisted) {
+            scene.skyAtmosphere.show = false;
+        }
+    }
+
+    const bloom = scene.postProcessStages?.bloom;
+    writeProps(bloom, snapshot.bloom?.props, Cesium);
+    writeProps(bloom?.uniforms, snapshot.bloom?.uniforms, Cesium);
+
+    scene.requestRender?.();
+}
+
+function configureSunLight(scene: any, Cesium: any) {
+    if (Cesium?.SunLight) {
+        try {
+            scene.light = new Cesium.SunLight({
+                color: Cesium.Color?.WHITE,
+                intensity: 2.35,
+            });
+        } catch {
+            scene.light = new Cesium.SunLight();
+        }
+    }
+
+    setIfExists(scene.light, 'intensity', 2.35);
+}
+
+function configureSceneFog(scene: any) {
+    const fog = scene?.fog;
+    if (!fog) return;
+
+    fog.enabled = true;
+    setIfExists(fog, 'density', 0.00012);
+    setIfExists(fog, 'minimumBrightness', 0.035);
+    setIfExists(fog, 'screenSpaceErrorFactor', 2.0);
+    setIfExists(fog, 'visualDensityScalar', 0.16);
+}
+
+function configureBloom(scene: any) {
+    const bloom = scene?.postProcessStages?.bloom;
+    if (!bloom) return;
+
+    bloom.enabled = true;
+    if (!bloom.uniforms) return;
+
+    setIfExists(bloom.uniforms, 'contrast', 128.0);
+    setIfExists(bloom.uniforms, 'brightness', -0.18);
+    setIfExists(bloom.uniforms, 'delta', 1.0);
+    setIfExists(bloom.uniforms, 'sigma', 2.5);
+    setIfExists(bloom.uniforms, 'stepSize', 4.2);
+}
+
+function createSkyAtmosphere(Cesium: any) {
+    try {
+        return new Cesium.SkyAtmosphere(Cesium.Ellipsoid?.WGS84);
+    } catch {
+        return new Cesium.SkyAtmosphere();
+    }
+}
+
+function setIfExists(target: any, key: string, value: any) {
+    if (target && key in target) {
+        target[key] = value;
+    }
+}
+
+function setCartesian3IfExists(Cesium: any, target: any, key: string, x: number, y: number, z: number) {
+    if (!target || !(key in target) || !Cesium?.Cartesian3) return;
+    target[key] = new Cesium.Cartesian3(x, y, z);
+}
+
+function readProps(target: any, keys: string[]) {
+    if (!target) return {};
+
+    return keys.reduce((props: any, key: string) => {
+        if (key in target) {
+            props[key] = cloneValue(target[key]);
+        }
+        return props;
+    }, {});
+}
+
+function writeProps(target: any, props: Record<string, any> = {}, Cesium: any) {
+    if (!target || !props) return;
+
+    Object.entries(props).forEach(([key, value]) => {
+        if (key in target) {
+            target[key] = reviveValue(value, Cesium);
+        }
+    });
+}
+
+function cloneValue(value: any) {
+    if (value && typeof value === 'object' && 'x' in value && 'y' in value && 'z' in value) {
+        return {
+            __type: 'Cartesian3',
+            x: value.x,
+            y: value.y,
+            z: value.z,
+        };
+    }
+    return value;
+}
+
+function reviveValue(value: any, Cesium: any) {
+    if (value?.__type === 'Cartesian3' && Cesium?.Cartesian3) {
+        return new Cesium.Cartesian3(value.x, value.y, value.z);
+    }
+    return value;
+}

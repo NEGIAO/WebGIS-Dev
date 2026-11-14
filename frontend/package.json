@@ -12,6 +12,7 @@
         "build:webgis": "VITE_BASE_URL=/WebGIS/ vite build --outDir dist-webgis",
         "build:posit": "VITE_BASE_URL=/WebGIS/ vite build --outDir dist-posit",
         "preview": "vite preview",
+        "typecheck": "vue-tsc --noEmit",
         "lint": "eslint src/ --fix",
         "format": "prettier --write src/",
         "docs:index": "node scripts/generate-boundary-index.mjs",
@@ -62,7 +63,9 @@
         "rollup-plugin-visualizer": "^7.1.1",
         "sass-embedded": "^1.106.1",
         "terser": "^5.51.2",
+        "typescript": "^6.0.3",
         "typescript-eslint": "^8.72.0",
+        "vue-tsc": "^3.1.5",
         "vite": "^8.3.5",
         "vite-plugin-vue-devtools": "^8.2.1"
     },

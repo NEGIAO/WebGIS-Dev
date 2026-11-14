@@ -7,15 +7,15 @@
  *   shpPacketBuilder.js — 浏览器文件列表的 SHP 包构建
  */
 
-import { decompressBuffer, detectMagicType } from './decompressFile.js';
-import { detectGeoJsonProjection, detectKmlProjectionHint, resolveProjectionOrDefault } from './crsAware.js';
-import { buildArchivePackets, decodeBufferToText, parseGeoJsonContent, setDispatchGisData } from './archiveProcessor.js';
+import { decompressBuffer, detectMagicType } from './decompressFile';
+import { detectGeoJsonProjection, detectKmlProjectionHint, resolveProjectionOrDefault } from './crsAware';
+import { buildArchivePackets, decodeBufferToText, parseGeoJsonContent, setDispatchGisData } from './archiveProcessor';
 import { parseCsvToGeoJSON, parseWktToGeoJSON } from './parsers/tabularParser';
 
-export { revokeAllBlobUrls } from './archiveProcessor.js';
-export { buildShpPacketsFromBrowserFiles } from './shpPacketBuilder.js';
+export { revokeAllBlobUrls } from './archiveProcessor';
+export { buildShpPacketsFromBrowserFiles } from './shpPacketBuilder';
 
-function normalizeType(type, name = '') {
+function normalizeType(type: any, name = '') {
     const normalizedType = String(type || '').toLowerCase();
     const filename = String(name || '')
         .trim()
@@ -46,9 +46,9 @@ export interface GisDispatchInput {
 
 export async function dispatchGisData(input: GisDispatchInput = {}) {
     const { content, type, name = '' } = input;
-    const warnings = [];
-    const blobUrls = [];
-    const errors = [];
+    const warnings: any[] = [];
+    const blobUrls: any[] = [];
+    const errors: any[] = [];
 
     const normalizedType = normalizeType(type, name);
     const topMagic = content instanceof ArrayBuffer ? detectMagicType(content) : 'unknown';
