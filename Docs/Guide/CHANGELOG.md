@@ -17,6 +17,22 @@
 > 注：V3.7.2 号段已于同日重新启用，对应《修复 OpenLayers 加载 OSM 标准瓦片 403》条目，与本条无冲突。
 > 分主题的原始过程记录保留在 `Docs/LLM_record/26-11/2026-11-14/`，不迁移、不改写。
 
+### V3.7.3 (2026-11-14) — 修复底图超出实际瓦片层级后仍持续请求（运行时层级学习 + 代理兜底收敛）
+
+> **一句话**：ArcGIS WMTS 服务 `China_Blender` 的能力文档与 `tileInfo.lods` 均声明 0–23 级，实测**只有 0–12 级有瓦片**（13 级起返回 `400`），元数据与实际缓存不一致，任何「按能力文档限级」的方案都失效。改为**运行时学习**图源真实可达层级：命中确定性缺瓦后自动下调上限、提示用户并停止后续请求，同时不再对 4xx 触发代理兜底。详见 [维护日志](../LLM_record/26-11/2026-11-14/2026-11-14-fix-ol-tile-level-cap.md)。
+
+1. **根因**：
+   - 服务元数据说谎：GetCapabilities 与 `?f=json` 的 `tileInfo.lods` 都列出 0–23 级，实测 12 级 `200 / 5046B`、13 级与 14 级均 `400`；
+   - `wmtsSource.ts` 依元数据构建 TileGrid，OL 因此认为 13–23 级合法，持续创建瓦片并请求；
+   - `tileLifecycle` 对所有 `!resp.ok` 一律触发代理兜底，`400` 也被代理重试一次，形成「双份 4xx + 一次必败往返」的控制台刷屏。
+2. **运行时层级学习**：新增 `maxServedLevel` / `levelMissCounter` 两个挂在 source 上的状态。收到 `400`（阈值 1）或 `410`（阈值 2）时累计判定，命中即把 `level - 1` 写为上限（**仅采信直连响应**，代理/镜像的 4xx 可能源于其自身，不作为层级证据），并以 `message.warning` 提示「该图源最高仅支持 N 级，已停止请求更高层级瓦片，请缩小地图查看」（8s 防抖）。
+3. **入口拦截**：`tileLoadFunction` 首段读取 `maxServedLevel`，超出层级的瓦片直接 `markTileAsError` 返回 —— **不发请求、不走代理**，从源头消除后续 4xx。
+4. **代理兜底收敛**：`400 / 404 / 410` 归为「确定性缺瓦」，代理重试结果必然相同，不再触发 `/proxy` 往返；`5xx` 与传输层失败仍保留代理兜底。
+5. **刻意排除 404 参与学习**：稀疏数据集（如仅覆盖某省市的瓦片）在无数据区域会大量 404，若据此降级会把「该层存在但此处无数据」误判为「该层不存在」。故 404 只跳过代理、不参与限级。
+6. **门禁**：`vue-tsc --noEmit` 0 错误、`eslint` 0 error、`vite build` 通过、`CheckStructureTree` 735/735、`CheckConfigRegistry` / `CheckVueParadigm` / `CheckDomainDeps` 全通过。
+
+---
+
 ### V3.7.2 (2026-11-14) — 修复 OpenLayers 加载 OSM 标准瓦片 403（双引擎 Referrer 策略归一）
 
 > **一句话**：站点响应头下发 `Referrer-Policy: same-origin`，`fetch()` 未显式声明策略时会继承该文档策略，导致 OL 的瓦片请求跨源时完全不带 Referer，被 OSM Tile Usage Policy 判定为未授权抓取并返回「Access blocked」；Cesium 侧此前已显式注入 `referrerPolicy` 故不受影响，形成「修好 3D 就坏 2D」的跷跷板。本次将 OSM 官方模板、德国镜像与拦截占位图字节特征收敛为单一真源，OL 侧显式声明 Referrer 策略并补齐拦截假图识别，两引擎恢复共存。详见 [维护日志](../LLM_record/26-11/2026-11-14/2026-11-14-fix-ol-osm-403-referrer-policy.md)。

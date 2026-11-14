@@ -127,7 +127,7 @@
 
 ## 🎯 项目简介
 
-**NEGIAO's WebGIS** 是一个功能完整、架构清晰的前后端分离 WebGIS 平台（当前版本 V3.7.2），前端托管于 GitHub Pages（正式域名 webgis.negiao.cn），后端以 Docker 部署在 Hugging Face Spaces，通过 RESTful API 通信，支持独立扩展。
+**NEGIAO's WebGIS** 是一个功能完整、架构清晰的前后端分离 WebGIS 平台（当前版本 V3.7.3），前端托管于 GitHub Pages（正式域名 webgis.negiao.cn），后端以 Docker 部署在 Hugging Face Spaces，通过 RESTful API 通信，支持独立扩展。
 
 > 📚 本 README 仅保留核心概览与导航。完整文档已模块化至 [`Docs/Guide/`](Docs/Guide/)，详见下方「文档导航」。
 >
@@ -614,10 +614,10 @@ tiles.negiao.cc.cd"]
 
 | 版本 | 日期 | 概要 |
 |------|------|------|
+| **V3.7.3** | 2026-11-14 | **修复底图超出实际瓦片层级后仍持续请求、触发无效代理与 4xx 刷屏**。ArcGIS WMTS 服务 `China_Blender` 的 GetCapabilities 与 `tileInfo.lods` 均声明 0–23 级，实测仅 0–12 级有瓦片（13 级起返回 400），元数据与实际缓存不一致，任何「按能力文档限级」的方案都失效。现改为**运行时学习**图源实际可达层级：收到 400/410 时累计判定并将 `maxServedLevel` 写回 source，命中后超出层级的瓦片在加载入口直接判错（不发请求、不走代理），并用 `message.warning` 提示「该图源最高仅支持 N 级，请缩小地图查看」；同时把 400/404/410 归为「确定性缺瓦」，不再触发代理兜底，消除双份 4xx 与无效往返。详见[完整更新日志](Docs/Guide/CHANGELOG.md) |
 | **V3.7.2** | 2026-11-14 | **修复 OpenLayers 引擎加载 OSM 标准瓦片 403（双引擎 Referrer 策略归一）**。站点响应头下发 `Referrer-Policy: same-origin`，`fetch()` 未显式声明策略时会继承文档策略，导致 OL 瓦片请求跨源时不带 Referer，被 OSM 判定未授权抓取并返回「Access blocked」；Cesium 侧此前已显式注入 `referrerPolicy` 故不受影响，形成「修好 3D 就坏 2D」的跷跷板。现将 OSM 官方模板、德国镜像与拦截占位图字节特征收敛至 `@common/basemap/osmTileFallback.ts` 单一真源，OL 侧显式声明 `referrerPolicy: 'origin-when-cross-origin'` 并识别 6987 字节拦截假图，降级顺序改为「直连 → 德国镜像 → 自建代理」，两引擎恢复共存。详见[完整更新日志](Docs/Guide/CHANGELOG.md) |
 | **V3.7.1** | 2026-11-14 | **Vue 组件「视图/实例」二元分离收官 + 跨引擎适配器契约落地 + 实时在线统计精度治理 + 性能瘦身**。① **组件范式收口**：10 份外置 `.scss` 全部回迁 `.vue` 内联 `<style scoped>`，72/72 含脚本组件统一 `<script lang="ts" src="./X.ts">`，10 个超 700 行业务模块按功能域拆分（拆分后均 < 700 行）；② **实时在线统计**：`OnlineUserTracker` 升级为 `conn_id` 粒度追踪，游客 `presence_id` 统一按设备指纹派生并在同浏览器已登录时压制游客身份，修复 SSE 断连探测漏 `await`、`_default` 幽灵心跳与卸载 Beacon 预检被拒；③ **三维底图容灾**：Cesium 侧注入 `referrerPolicy` 并建立「直连 → 后端代理 → OSM 德国镜像」三级链路，消除 OSM 瓦片 403 与黑屏；④ **引擎解耦基础设施**：新增 `@common/map-adapter`（`IMapEngineAdapter` / `EngineCapabilities` / `MapCommandBus`）与 OL、Cesium 双适配器原型；⑤ **性能瘦身**：下线境外挂死统计脚本、物理删除 8.78 MB 冗余 Cesium 产物、`@turf/turf` 改具名按需导入；⑥ **回归修复**：`engineTreePort` 端口表改 `shallowReactive`，修复三维绘制 / 测量 / 路线成品「入店不入树」。详见[完整更新日志](Docs/Guide/CHANGELOG.md) |
-| **V3.7.0** | 2026-11-14 | **前端全面从 JavaScript 过渡到 TypeScript 严格模式（`strict: true`）+ Vue 组件范式化架构升级 + 全仓 Code Review 收口**。① **全量 TS 迁移与严格编译收口**：前端业务 `.js` 全面清零（636 个 `.ts` + 1 个 `.mts` + 73 个 `.vue`），开启 `tsconfig.json` 完整严格编译开关（`strict`、`noImplicitAny`、`noUnusedLocals`、`noUnusedParameters`、`noImplicitReturns`、`noFallthroughCasesInSwitch`），清零 2,122 条 `vue-tsc` 诊断，新增 `shims-modules.d.ts` 与 `vue-router` `RouteMeta` 模块增强；② **Vue 组件范式化与领域解耦**：36 个复杂组件完成「`X.vue` 视图层 + `X.ts` `class Instance` 实例层」物理分离，7 个巨型组件样式外置为独立 `.scss`，8 类通用能力收拢至 `domains/common/composables/`，23 处跨域依赖（`common`/`ol`/`cesium`）通过模块上移、`engineTreePort` 注册式端口与 `catalogProjection` 目录投影彻底清零并接入 ESLint 门禁；③ **Code Review 缺陷修复与后端 CORS 加固**：修复 6 处批处理正则撕裂标识符、9 个文件 `: any[]` 错标、`LocationSearch.resolvePoiId` 与 `CesiumToolPanel.persistUiState` 原型方法/`this` 丢失、`TOCPanel`/`RegisterView` 的 Vue 保留 `_` 前缀警告、`LayerPropertiesDialog` 漏注册 `Ruler` 图标、路由/URL Store 高频 `console.warn` 刷屏，以及后端 `app.py` 降级 503 掩盖 CORS 预检缺陷（含 `LoggingCORSMiddleware` 与 6 项单测）。全仓 `tsc` / `vue-tsc` / `eslint` 0 错误，结构树 687/687 全绿。详见[完整更新日志](Docs/Guide/CHANGELOG.md) |
-更早版本（V3.6.45 及以前）请查阅 [完整更新日志 →](Docs/Guide/CHANGELOG.md)。
+更早版本（V3.7.0 及以前）请查阅 [完整更新日志 →](Docs/Guide/CHANGELOG.md)。
 
 ---
 
@@ -639,6 +639,6 @@ tiles.negiao.cc.cd"]
 |:------:|:--------:|:--------:|
 | [GitHub](https://github.com/NEGIAO/WebGIS-Dev) | [webgis.negiao.cn](https://webgis.negiao.cn)（正式域名，GitHub Pages 托管） | [Hugging Face](https://NEGIAO-WebGIS.hf.space) |
 
-<sub>V3.7.2 · 开发中 · 最后更新 2026-11-14</sub>
+<sub>V3.7.3 · 开发中 · 最后更新 2026-11-14</sub>
 
 </div>

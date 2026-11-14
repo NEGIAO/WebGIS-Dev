@@ -63,6 +63,81 @@ function notifyAlwaysProxy(): void {
     }
 }
 
+// ==================== 层级上限学习（图源元数据不可信时的兜底） ====================
+
+/** 该图源实际可服务的最高层级（学习结果，挂在 source 上） */
+const MAX_SERVED_LEVEL_KEY = 'maxServedLevel';
+/** 各层级「确定性缺瓦」计数（挂在 source 上） */
+const LEVEL_MISS_COUNTER_KEY = 'levelMissCounter';
+
+/**
+ * 判定「该层级整层不可用」所需的累计缺瓦次数。
+ *
+ * 只认 400 / 410：这两者是服务端明确声明「该请求不合法/已消失」，
+ * 例如 ArcGIS 对超出缓存层级的瓦片直接返回 400，可安全推断整层不存在。
+ *
+ * 刻意排除 404：稀疏数据集（如仅覆盖某省、某市的瓦片）在无数据区域会大量 404，
+ * 若据此降级会把「该层存在但此处无数据」误判成「该层不存在」，造成错误限级。
+ */
+const LEVEL_MISS_THRESHOLD_BY_STATUS: Record<number, number> = {
+    400: 1,
+    410: 2,
+};
+
+/**
+ * 属于「确定性缺瓦」的状态码：代理重试同样拿不到，不应触发兜底。
+ * 404 虽不参与层级学习，但同样没有代理价值（代理只会再拿一次 404）。
+ */
+const DEFINITIVE_MISS_STATUS = new Set([400, 404, 410]);
+
+let lastLevelCapNotifyAt = 0;
+const LEVEL_CAP_NOTIFY_DEBOUNCE_MS = 8000;
+
+/** 通知用户该图源已被自动限级（8s 防抖，避免每块瓦片都弹一次） */
+function notifyLevelCap(maxLevel: number): void {
+    const now = Date.now();
+    if (now - lastLevelCapNotifyAt < LEVEL_CAP_NOTIFY_DEBOUNCE_MS) return;
+    lastLevelCapNotifyAt = now;
+    try {
+        const { warning } = useMessage();
+        warning(`该图源最高仅支持 ${maxLevel} 级，已停止请求更高层级瓦片，请缩小地图查看`, {
+            duration: 5000,
+        });
+    } catch {
+        // 非 Vue 上下文（SSR/测试）静默
+    }
+}
+
+/** 读取已学习到的层级上限；未学习到返回 null */
+function getLearnedMaxLevel(source: any): number | null {
+    const raw = Number(source?.get?.(MAX_SERVED_LEVEL_KEY));
+    return Number.isFinite(raw) && raw >= 0 ? raw : null;
+}
+
+/**
+ * 记录一次确定性缺瓦；命中阈值时下调该源的层级上限并提示用户。
+ * 只认 400/404/410 —— 5xx 与网络错误属瞬时故障，不参与学习。
+ */
+function recordDefinitiveMiss(source: any, level: number, status: number): void {
+    const threshold = LEVEL_MISS_THRESHOLD_BY_STATUS[status];
+    if (!threshold || !Number.isFinite(level) || level <= 0) return;
+    if (!source || typeof source.get !== 'function' || typeof source.set !== 'function') return;
+
+    const counters = (source.get(LEVEL_MISS_COUNTER_KEY) as Map<number, number>) || new Map<number, number>();
+    const next = (counters.get(level) || 0) + 1;
+    counters.set(level, next);
+    source.set(LEVEL_MISS_COUNTER_KEY, counters);
+
+    if (next < threshold) return;
+
+    const inferred = level - 1;
+    const current = getLearnedMaxLevel(source);
+    if (current !== null && inferred >= current) return;
+
+    source.set(MAX_SERVED_LEVEL_KEY, inferred);
+    notifyLevelCap(inferred);
+}
+
 // ==================== 内部工具函数 ====================
 
 function markTileAsError(tile: any): void {
@@ -235,11 +310,19 @@ function resolveSourceAbortController(source: any): AbortController {
  */
 const TILE_FETCH_REFERRER_POLICY: ReferrerPolicy = 'origin-when-cross-origin';
 
+/** 单次瓦片请求的结果：成功时携带 blob URL，失败时携带 HTTP 状态（0 = 传输层失败） */
+interface TileFetchOutcome {
+    blobUrl: string | null;
+    status: number;
+    /** OSM 拦截占位图（HTTP 200 但内容是 403 拦截图） */
+    blocked: boolean;
+}
+
 async function requestTileAsBlobUrl(
     requestUrl: string,
     signal: AbortSignal,
     { osm = false }: { osm?: boolean } = {},
-): Promise<string | null> {
+): Promise<TileFetchOutcome> {
     try {
         const resp = await fetch(requestUrl, {
             signal,
@@ -251,17 +334,19 @@ async function requestTileAsBlobUrl(
         if (resp.status === 429) {
             const detail = await extractTileErrorDetail(resp);
             notifyTileRateLimited(detail);
-            return null;
+            return { blobUrl: null, status: 429, blocked: false };
         }
-        if (!resp.ok) return null;
+        if (!resp.ok) return { blobUrl: null, status: resp.status, blocked: false };
         const blob = await resp.blob();
         // OSM 拦截占位图：HTTP 200 但内容为固定字节的「403 Access blocked」提示图，
         // resp.ok 无法识别，必须显式丢弃，否则会被当作正常瓦片渲染到地图上。
-        if (osm && isOsmBlockedTileBlob(blob)) return null;
-        return URL.createObjectURL(blob);
+        if (osm && isOsmBlockedTileBlob(blob)) {
+            return { blobUrl: null, status: resp.status, blocked: true };
+        }
+        return { blobUrl: URL.createObjectURL(blob), status: resp.status, blocked: false };
     } catch {
-        // AbortError / TypeError(CORS) / 网络错误 → 返回 null
-        return null;
+        // AbortError / TypeError(CORS) / 网络错误 → 状态记 0
+        return { blobUrl: null, status: 0, blocked: false };
     }
 }
 
@@ -272,10 +357,16 @@ async function requestTileAsBlobUrl(
 async function requestOsmMirrorAsBlobUrl(
     srcUrl: string,
     signal: AbortSignal,
-): Promise<string | null> {
+): Promise<TileFetchOutcome> {
     const mirrorUrl = buildOsmMirrorUrl(srcUrl);
-    if (!mirrorUrl || signal.aborted) return null;
+    if (!mirrorUrl || signal.aborted) return { blobUrl: null, status: 0, blocked: false };
     return requestTileAsBlobUrl(mirrorUrl, signal);
+}
+
+/** 瓦片加载结果：missStatus > 0 表示「确定性缺瓦」，可用于学习该源的层级上限 */
+interface TileLoadOutcome {
+    blobUrl: string | null;
+    missStatus: number;
 }
 
 /**
@@ -294,38 +385,55 @@ async function requestOsmMirrorAsBlobUrl(
 async function fetchTileAsBlobUrl(
     srcUrl: string,
     signal: AbortSignal,
-): Promise<string | null> {
+): Promise<TileLoadOutcome> {
     const isOsm = isOsmTileUrl(srcUrl);
     const proxyUrl = buildTileProxyUrl(srcUrl);
 
     // always 模式：所有可代理的瓦片统一走后端
     if (TILE_PROXY_MODE === 'always' && proxyUrl) {
         const proxied = await requestTileAsBlobUrl(proxyUrl, signal, { osm: isOsm });
-        if (proxied) {
+        if (proxied.blobUrl) {
             notifyAlwaysProxy();
-            return proxied;
+            return { blobUrl: proxied.blobUrl, missStatus: 0 };
         }
-        return isOsm ? await requestOsmMirrorAsBlobUrl(srcUrl, signal) : null;
+        if (isOsm) {
+            const mirrored = await requestOsmMirrorAsBlobUrl(srcUrl, signal);
+            return { blobUrl: mirrored.blobUrl, missStatus: 0 };
+        }
+        // always 模式下失败状态来自代理本身，不能作为「上游该层不存在」的证据
+        return { blobUrl: null, missStatus: 0 };
     }
 
     // fallback 模式：直连优先
-    const directUrl = await requestTileAsBlobUrl(srcUrl, signal, { osm: isOsm });
-    if (directUrl) return directUrl;
-    if (signal.aborted) return null;
+    const direct = await requestTileAsBlobUrl(srcUrl, signal, { osm: isOsm });
+    if (direct.blobUrl) return { blobUrl: direct.blobUrl, missStatus: 0 };
+    if (signal.aborted) return { blobUrl: null, missStatus: 0 };
 
     // OSM 直连被策略拦截 → 先走社区镜像，再退回自建代理
     if (isOsm) {
-        const mirroredUrl = await requestOsmMirrorAsBlobUrl(srcUrl, signal);
-        if (mirroredUrl) return mirroredUrl;
-        if (signal.aborted) return null;
+        const mirrored = await requestOsmMirrorAsBlobUrl(srcUrl, signal);
+        if (mirrored.blobUrl) return { blobUrl: mirrored.blobUrl, missStatus: 0 };
+        if (signal.aborted) return { blobUrl: null, missStatus: 0 };
     }
 
-    if (TILE_PROXY_MODE === 'off' || !proxyUrl || signal.aborted) return null;
+    // 确定性缺瓦（400/404/410）与拦截假图：代理重试结果相同，
+    // 直接放弃可省掉一次必败的往返，也避免 4xx 在控制台连刷。
+    if (direct.blocked || DEFINITIVE_MISS_STATUS.has(direct.status)) {
+        return { blobUrl: null, missStatus: direct.status };
+    }
 
-    const proxiedUrl = await requestTileAsBlobUrl(proxyUrl, signal, { osm: isOsm });
+    if (TILE_PROXY_MODE === 'off' || !proxyUrl || signal.aborted) {
+        return { blobUrl: null, missStatus: 0 };
+    }
+
+    const proxied = await requestTileAsBlobUrl(proxyUrl, signal, { osm: isOsm });
     // 代理真正成功再提示，避免「已切换」但瓦片仍失败的误导
-    if (proxiedUrl) notifyProxyFallback();
-    return proxiedUrl;
+    if (proxied.blobUrl) {
+        notifyProxyFallback();
+        return { blobUrl: proxied.blobUrl, missStatus: 0 };
+    }
+    // 代理失败可能源于代理自身（目标改写、限流），不作为层级证据
+    return { blobUrl: null, missStatus: 0 };
 }
 
 function revokeBlobUrl(url: string | null): void {
@@ -373,6 +481,16 @@ export function prioritizeTileSourceRequest<T>(source: T): T {
             const currentEpoch = getSourceEpoch(src);
             stampTileEpoch(tile, currentEpoch);
 
+            // 层级上限守卫：已学习到该源的实际最高层级时，超出部分直接判错，
+            // 不发请求、不走代理，从源头消除 4xx 与无效代理往返。
+            const tileCoord = typeof tile?.getTileCoord === 'function' ? tile.getTileCoord() : null;
+            const tileZoom = Array.isArray(tileCoord) ? Number(tileCoord[0]) : NaN;
+            const learnedMaxLevel = getLearnedMaxLevel(src);
+            if (learnedMaxLevel !== null && Number.isFinite(tileZoom) && tileZoom > learnedMaxLevel) {
+                markTileAsError(tile);
+                return;
+            }
+
             const img = tile.getImage?.();
             if (img instanceof HTMLImageElement) {
                 let blobUrl: string | null = null;
@@ -398,7 +516,7 @@ export function prioritizeTileSourceRequest<T>(source: T): T {
                 }
 
                 fetchTileAsBlobUrl(srcUrl, combined.signal)
-                    .then((url) => {
+                    .then((outcome) => {
                         cleanupListeners();
                         combined.signal.removeEventListener('abort', onAbort);
 
@@ -406,12 +524,13 @@ export function prioritizeTileSourceRequest<T>(source: T): T {
                         const latestEpoch = getSourceEpoch(src);
                         const tileEpochNow = getTileEpoch(tile);
                         if (tileEpochNow < latestEpoch || combined.signal.aborted) {
-                            revokeBlobUrl(url);
+                            revokeBlobUrl(outcome.blobUrl);
                             markTileAsError(tile);
                             return;
                         }
 
-                        if (url) {
+                        if (outcome.blobUrl) {
+                            const url = outcome.blobUrl;
                             blobUrl = url;
                             // 成功加载后立即 revoke：图片数据已解码进 img 元素
                             img.addEventListener('load', () => {
@@ -423,6 +542,10 @@ export function prioritizeTileSourceRequest<T>(source: T): T {
                             }, { once: true });
                             img.src = url;
                         } else {
+                            // 确定性缺瓦：累计判定该层级不可用，命中后自动限级并提示用户
+                            if (outcome.missStatus > 0) {
+                                recordDefinitiveMiss(src, tileZoom, outcome.missStatus);
+                            }
                             markTileAsError(tile);
                         }
                     })
