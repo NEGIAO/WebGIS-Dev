@@ -18,6 +18,11 @@
 import { TILE_STATE_ERROR, TILE_REQUEST_TIMEOUT_MS } from './types';
 import { useMessage } from '@common/shell/useMessage';
 import { extractTileErrorDetail, notifyTileRateLimited } from '@common/utils/tileRateLimitNotify';
+import {
+    buildOsmMirrorUrl,
+    isOsmBlockedTileBlob,
+    isOsmTileUrl,
+} from '@common/basemap/osmTileFallback';
 import { TILE_PROXY_BASE_URL, TILE_PROXY_MODE, tileProxyUrl } from '@/config/publicRuntime';
 
 // ==================== 代理通知（去重防抖） ====================
@@ -220,15 +225,27 @@ function resolveSourceAbortController(source: any): AbortController {
     return controller;
 }
 
+/**
+ * 跨源瓦片统一显式声明 Referer 策略。
+ *
+ * 站点响应头下发 `Referrer-Policy: same-origin`，`fetch()` 未显式指定时会**继承文档策略**，
+ * 导致跨源瓦片请求完全不带 Referer —— OSM 据此判定为「未遵循 Tile Usage Policy」并返回 403。
+ * 显式覆盖为 `origin-when-cross-origin`（浏览器对 https→https 的默认行为），
+ * 让双引擎的 Referer 语义保持一致，不受页面级策略摆动影响。
+ */
+const TILE_FETCH_REFERRER_POLICY: ReferrerPolicy = 'origin-when-cross-origin';
+
 async function requestTileAsBlobUrl(
     requestUrl: string,
     signal: AbortSignal,
+    { osm = false }: { osm?: boolean } = {},
 ): Promise<string | null> {
     try {
         const resp = await fetch(requestUrl, {
             signal,
             mode: 'cors',
             credentials: 'omit',
+            referrerPolicy: TILE_FETCH_REFERRER_POLICY,
         });
         // 429：代理限流或上游限流 — 解析 body 后 toast，再按失败处理
         if (resp.status === 429) {
@@ -238,11 +255,27 @@ async function requestTileAsBlobUrl(
         }
         if (!resp.ok) return null;
         const blob = await resp.blob();
+        // OSM 拦截占位图：HTTP 200 但内容为固定字节的「403 Access blocked」提示图，
+        // resp.ok 无法识别，必须显式丢弃，否则会被当作正常瓦片渲染到地图上。
+        if (osm && isOsmBlockedTileBlob(blob)) return null;
         return URL.createObjectURL(blob);
     } catch {
         // AbortError / TypeError(CORS) / 网络错误 → 返回 null
         return null;
     }
+}
+
+/**
+ * OSM 专项降级：改写为德国社区镜像后重试一次。
+ * 仅当直连命中 403 / 拦截占位图时调用，其它图源不经过此路径。
+ */
+async function requestOsmMirrorAsBlobUrl(
+    srcUrl: string,
+    signal: AbortSignal,
+): Promise<string | null> {
+    const mirrorUrl = buildOsmMirrorUrl(srcUrl);
+    if (!mirrorUrl || signal.aborted) return null;
+    return requestTileAsBlobUrl(mirrorUrl, signal);
 }
 
 /**
@@ -253,25 +286,43 @@ async function requestTileAsBlobUrl(
  * - 浏览器对 <img> 的 HTTP 请求由内核管理，JS 无法中途取消
  * - 被墙的源会阻塞 30-60 秒占据并发连接槽位
  * - fetch() + AbortController 可以立即释放底层连接
+ *
+ * OSM 专用链路顺序：直连 → 德国社区镜像 → 自建代理。
+ * 镜像排在代理之前的原因：代理出口 IP 历史上曾被 OSM 封禁（返回 200 假图），
+ * 把已知更可能失败的链路放到后面，可少浪费一次往返。
  */
 async function fetchTileAsBlobUrl(
     srcUrl: string,
     signal: AbortSignal,
 ): Promise<string | null> {
+    const isOsm = isOsmTileUrl(srcUrl);
     const proxyUrl = buildTileProxyUrl(srcUrl);
 
     // always 模式：所有可代理的瓦片统一走后端
     if (TILE_PROXY_MODE === 'always' && proxyUrl) {
-        const proxied = await requestTileAsBlobUrl(proxyUrl, signal);
-        if (proxied) notifyAlwaysProxy();
-        return proxied;
+        const proxied = await requestTileAsBlobUrl(proxyUrl, signal, { osm: isOsm });
+        if (proxied) {
+            notifyAlwaysProxy();
+            return proxied;
+        }
+        return isOsm ? await requestOsmMirrorAsBlobUrl(srcUrl, signal) : null;
     }
 
-    // fallback 模式：直连优先，失败后走后端代理
-    const directUrl = await requestTileAsBlobUrl(srcUrl, signal);
-    if (directUrl || TILE_PROXY_MODE === 'off' || !proxyUrl || signal.aborted) return directUrl;
+    // fallback 模式：直连优先
+    const directUrl = await requestTileAsBlobUrl(srcUrl, signal, { osm: isOsm });
+    if (directUrl) return directUrl;
+    if (signal.aborted) return null;
 
-    const proxiedUrl = await requestTileAsBlobUrl(proxyUrl, signal);
+    // OSM 直连被策略拦截 → 先走社区镜像，再退回自建代理
+    if (isOsm) {
+        const mirroredUrl = await requestOsmMirrorAsBlobUrl(srcUrl, signal);
+        if (mirroredUrl) return mirroredUrl;
+        if (signal.aborted) return null;
+    }
+
+    if (TILE_PROXY_MODE === 'off' || !proxyUrl || signal.aborted) return null;
+
+    const proxiedUrl = await requestTileAsBlobUrl(proxyUrl, signal, { osm: isOsm });
     // 代理真正成功再提示，避免「已切换」但瓦片仍失败的误导
     if (proxiedUrl) notifyProxyFallback();
     return proxiedUrl;

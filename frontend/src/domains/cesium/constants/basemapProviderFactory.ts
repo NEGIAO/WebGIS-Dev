@@ -7,6 +7,12 @@ import type { BasemapTileSourceDescriptor as TileSourceDescriptor } from '@commo
 import { getDescriptorById } from '@common/basemap/catalogProjection';
 import { useMessage } from '@common/shell/useMessage';
 import { notifyTileRateLimited } from '@common/utils/tileRateLimitNotify';
+import {
+    OSM_DE_MIRROR_ORIGIN,
+    OSM_TILE_HOST,
+    OSM_TILE_TEMPLATE,
+    isOsmBlockedTileBlob,
+} from '@common/basemap/osmTileFallback';
 import { tileProxyUrl, TILE_PROXY_MODE } from '@/config/publicRuntime';
 
 /** 创建 Provider 所需的运行时上下文 */
@@ -69,9 +75,6 @@ export function abortAllDescriptorRequests(): void {
 }
 
 // ========== 瓦片请求容灾与代理兜底 ==========
-
-/** OSM 官方瓦片模板（单一真源：容灾包装器与 osm 分支共用，避免字面量漂移） */
-const OSM_TILE_TEMPLATE = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
 
 let lastCesiumProxyNotifyAt = 0;
 const CESIUM_PROXY_NOTIFY_DEBOUNCE_MS = 5000;
@@ -208,11 +211,11 @@ export function wrapProviderWithFetchFallback(
             .replace(/\{s\}/g, sub);
 
         const proxyUrl = options.isOsm
-            ? tileProxyUrl(`tile.openstreetmap.org/${level}/${x}/${y}.png`)
+            ? tileProxyUrl(`${OSM_TILE_HOST}/${level}/${x}/${y}.png`)
             : (buildCesiumTileProxyUrl(directUrl) || tileProxyUrl(directUrl.replace(/^https?:\/\//i, '')));
 
         const osmCommunityMirrorUrl = options.isOsm
-            ? `https://tile.openstreetmap.de/${level}/${x}/${y}.png`
+            ? `${OSM_DE_MIRROR_ORIGIN}/${level}/${x}/${y}.png`
             : null;
 
         const tryFetchBlob = async (targetUrl: string, useReferrer: boolean): Promise<Blob | null> => {
@@ -232,8 +235,8 @@ export function wrapProviderWithFetchFallback(
                 if (!resp.ok) return null;
 
                 const blob = await resp.blob();
-                // 拦截 OSM 官方 6987 字节的 403 假图（HTTP 200 但内容为拦截提示）
-                if (options.isOsm && blob.size === 6987) {
+                // 拦截 OSM 拦截占位图（HTTP 200 但内容为「403 Access blocked」提示图）
+                if (options.isOsm && isOsmBlockedTileBlob(blob)) {
                     return null;
                 }
                 if (blob.size < 64) {

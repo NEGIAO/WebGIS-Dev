@@ -13,8 +13,24 @@
 
 > **版本号归并（2026-11-14）**：V3.7.1 ~ V3.7.7 七条记录所记为**同一批未提交工作**的逐次增量。
 > 按用户「整合为一个统一的版本 V3.7.1」的指令，七条合并为单条 **V3.7.1**，曾用中间版本号
-> （V3.7.2 ~ V3.7.7）自本条起废弃；功能与修复内容、发布日期、结论均不变，仅版本号表述归一。
+> （V3.7.3 ~ V3.7.7）自本条起废弃；功能与修复内容、发布日期、结论均不变，仅版本号表述归一。
+> 注：V3.7.2 号段已于同日重新启用，对应《修复 OpenLayers 加载 OSM 标准瓦片 403》条目，与本条无冲突。
 > 分主题的原始过程记录保留在 `Docs/LLM_record/26-11/2026-11-14/`，不迁移、不改写。
+
+### V3.7.2 (2026-11-14) — 修复 OpenLayers 加载 OSM 标准瓦片 403（双引擎 Referrer 策略归一）
+
+> **一句话**：站点响应头下发 `Referrer-Policy: same-origin`，`fetch()` 未显式声明策略时会继承该文档策略，导致 OL 的瓦片请求跨源时完全不带 Referer，被 OSM Tile Usage Policy 判定为未授权抓取并返回「Access blocked」；Cesium 侧此前已显式注入 `referrerPolicy` 故不受影响，形成「修好 3D 就坏 2D」的跷跷板。本次将 OSM 官方模板、德国镜像与拦截占位图字节特征收敛为单一真源，OL 侧显式声明 Referrer 策略并补齐拦截假图识别，两引擎恢复共存。详见 [维护日志](../LLM_record/26-11/2026-11-14/2026-11-14-fix-ol-osm-403-referrer-policy.md)。
+
+1. **根因定位**：
+   - `webgis.negiao.cn` 响应头为 `Referrer-Policy: same-origin`（仓库内未设置，来自边缘配置）；`fetch()` 不传 `referrerPolicy` 时继承文档策略，故 OL 侧 `requestTileAsBlobUrl` 的跨源请求**不带 Referer**，命中 OSM 的反抓取策略；
+   - Cesium 侧 `wrapProviderWithFetchFallback` 已显式传 `referrerPolicy: 'origin-when-cross-origin'`，因此同一时刻仍然可用 —— 两侧策略不一致即「修一个坏一个」的成因；
+   - 二次伤害：自建代理出口 IP 历史上曾被 OSM 封禁，代理会返回 **HTTP 200 + 6987 字节「403 Access blocked」占位图**，OL 仅凭 `resp.ok` 无法识别，会把拦截图当作正常瓦片渲染。
+2. **单一真源收敛**：新增 `@common/basemap/osmTileFallback.ts`，集中定义 OSM 官方瓦片模板、德国社区镜像 origin、拦截占位图字节特征与 URL 判定/镜像改写；Cesium 侧删除本地 `6987` 魔数与镜像字面量改为引用该模块，杜绝两引擎再次漂移。
+3. **OL 侧修复**：`requestTileAsBlobUrl` 显式声明 `referrerPolicy: 'origin-when-cross-origin'`（恢复浏览器 https→https 的默认 Referer 语义，不受页面级策略摆动影响）；OSM 请求增加拦截占位图丢弃；降级顺序调整为**直连 → 德国镜像 → 自建代理**（镜像前置，因代理出口 IP 已知更可能被封禁）。
+4. **未改动 Cesium 降级顺序**：保持既有「直连 → 代理 → 镜像」，仅做常量去重，避免引入新回归。
+5. **门禁**：`vue-tsc --noEmit` 0 错误、`eslint src/` 0 error、`vite build` 通过、`CheckStructureTree` 735/735、`CheckConfigRegistry` / `CheckVueParadigm` / `CheckDomainDeps` 全通过。
+
+---
 
 ### V3.7.1 (2026-11-14) — Vue 组件二元分离收官 · 跨引擎适配器契约 · 实时在线统计精度治理 · 三维底图容灾与性能瘦身
 

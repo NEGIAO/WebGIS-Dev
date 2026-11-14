@@ -444,6 +444,7 @@ frontend/src/
 │   │   │   │   └── urlDetect.ts  # URL 形态识别、候选端点构建、查询参数工具
 │   │   │   ├── wmsService.ts  # WMS/ArcGIS 服务解析入口（解析顺序编排 + 结果缓存）
 │   │   │   ├── xyzWmtsCapabilities.ts  # XYZ 行序判定 + WMTS GetCapabilities 轻量解析（纯 JS 零 OL 依赖）
+│   │   │   ├── osmTileFallback.ts  # OSM 反拦截策略单一真源（官方模板/德国镜像/拦截占位图字节特征，OL 与 Cesium 共用）
 │   │   │   └── useSharedCustomBasemapUrl.ts  # OL/Cesium 共用的 custom/Wayback URL 运行时 SSOT 与本机持久化
 │   │   ├── chat/
 │   │   │   ├── agent/
