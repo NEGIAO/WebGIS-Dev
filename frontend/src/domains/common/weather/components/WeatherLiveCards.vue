@@ -69,71 +69,7 @@
     </div>
 </template>
 
-<script setup lang="ts">
-/**
- * 实况天气卡片与降雨聚焦面板
- * 所有数据由父组件通过 props 传入
- */
-import { computed } from 'vue';
-import { useLocale } from '@common/app/useLocale';
-
-const { t } = useLocale();
-
-const props = defineProps({
-    /** 天气 Emoji 图标 */
-    weatherIcon: { type: String, default: '🌤️' },
-    /** 城市显示标签 */
-    liveCityLabel: { type: String, default: '' },
-    /** 天气描述文本 */
-    liveWeatherText: { type: String, default: '' },
-    /** 温度文本 */
-    liveTemperatureText: { type: String, default: '--°C' },
-    /** 湿度文本 */
-    liveHumidityText: { type: String, default: '--' },
-    /** 风向文本 */
-    liveWindDirectionText: { type: String, default: '--' },
-    /** 风力文本 */
-    liveWindPowerText: { type: String, default: '--' },
-    /** 数据上报时间文本 */
-    liveReportTimeText: { type: String, default: '--' },
-    /** 当前 adcode */
-    currentAdcode: { type: String, default: '--' },
-    /** 降雨聚焦面板数据对象 */
-    rainFocus: {
-        type: Object,
-        default: null,
-    },
-});
-
-const rainFocusDefaults = computed(() => ({
-    hasRain: false,
-    level: 'unknown',
-    icon: '🌫️',
-    badge: t('weather.rainPending'),
-    title: t('weather.rainNoText'),
-    subtitle: t('weather.rainRetry'),
-    hits: [],
-}));
-
-const rainFocusResolved = computed(() => {
-    if (props.rainFocus && typeof props.rainFocus === 'object') {
-        return {
-            ...rainFocusDefaults.value,
-            ...props.rainFocus,
-            hits: Array.isArray(props.rainFocus.hits) ? props.rainFocus.hits : [],
-        };
-    }
-    return rainFocusDefaults.value;
-});
-
-// Expose i18n defaults for city/weather labels when parent passes empty strings
-const liveCityLabelResolved = computed(
-    () => props.liveCityLabel || t('weather.unknownCity'),
-);
-const liveWeatherTextResolved = computed(
-    () => props.liveWeatherText || t('weather.weatherUnknown'),
-);
-</script>
+<script lang="ts" src="./WeatherLiveCards.ts"></script>
 
 <style scoped>
 /* 实况卡片容器 - 启用容器查询 */

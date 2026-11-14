@@ -53,8 +53,7 @@ WebGIS_Dev/
 │   ├── CheckConfigRegistry.py         # 配置登记门禁（裸 getenv / 未登记 key / 散落 VITE_ / 硬编码域名）
 │   ├── CheckDomainDeps.py             # 前端领域单向依赖门禁（禁止 common→ol/cesium、ol↔cesium）
 │   ├── CheckStructureTree.py          # 结构树漂移门禁（structure 文件 ⇄ 磁盘双向 diff）
-│   ├── CheckVueParadigm.py            # Vue 视图/实例分离范式完整性门禁（单 script src / 零宏 / 零保留前缀 / 零原型公有方法）
-│   ├── ExtractVueStyles.py            # 巨型 Vue 组件样式外置辅助脚本（幂等）
+│   ├── CheckVueParadigm.py            # Vue 视图/实例分离范式完整性门禁（单 script src / 样式内聚禁外置 src / 零宏 / 零保留前缀 / 零原型公有方法）
 │   ├── SyncStructureTree.py           # 结构树文档 .js → .ts 批量同步辅助脚本
 │   └── archive/                       # 已废弃脚本，仅留档不执行
 │       └── UpdateReadmeTree.py        # [已废弃 V3.6.37] 生成 FileTree.md（该文件已不存在）
@@ -90,7 +89,7 @@ Docs/
 │   ├── 26-08/                         # 2026-08（底图 SSOT 重构、Review 修复、结构树同步）
 │   ├── 26-09/                         # 2026-09（瓦片代理 VPS 迁移、在线 presence 身份修复）
 │   ├── 26-10/                         # 2026-10（天地图多环裁剪、落地页 NJNU 重构、Cesium 绘制测量+贴地统一化、V3.6.24/3.6.36 归并）
-│   └── 26-11/                         # 2026-11（HF 推送 LFS 字体修复、规范 §12 机器人 PR、文档治理、V3.6.37 单版本整合复核）
+│   └── 26-11/                         # 2026-11（全量 TS 严格模式、Vue 范式化组件重构、Cesium OSM 容灾、在线用户统计高精度修复）
 │
 ├── Architecture/                      # 架构设计文档（仅现行态）
 │   ├── system-architecture.md         # 系统架构总览（五层：源码→CI/CD→部署→运行时→用户）

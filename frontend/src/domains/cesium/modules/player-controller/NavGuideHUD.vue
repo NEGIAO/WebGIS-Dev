@@ -42,34 +42,7 @@
     </Transition>
 </template>
 
-<script setup lang="ts">
-import { computed } from 'vue';
-import { formatDistanceMeasure } from '@common/map-view/units';
-
-const props = defineProps({
-    navTarget: {
-        type: Object,
-        default: null,
-    },
-});
-
-const ARRIVED_THRESHOLD = 10; // 到达判定距离（米）
-
-/** 是否已到达 */
-const isArrived = computed(() => {
-    return props.navTarget?.distance != null && props.navTarget.distance < ARRIVED_THRESHOLD;
-});
-
-/** 箭头旋转角度 */
-const arrowAngle = computed(() => {
-    return props.navTarget?.bearing ?? 0;
-});
-
-/** 格式化距离显示（跟随用户偏好单位制：公制 m/km、英制 ft/mi） */
-function formatDistance(dist: number | null | undefined) {
-    return formatDistanceMeasure(dist == null ? 0 : dist);
-}
-</script>
+<script lang="ts" src="./NavGuideHUD.ts"></script>
 
 <style scoped>
 /* ==========================================================================

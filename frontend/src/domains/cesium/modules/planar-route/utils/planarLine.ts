@@ -8,7 +8,7 @@ import globeConfig, { PLANAR_FALLBACK_POSITION_DEGREES } from '../config/planarC
 import { getImg } from './comm';
 import { reactive } from 'vue';
 import { translate as t } from '@common/app/useLocale';
-import * as turf from '@turf/turf';
+import { area, booleanContains, distance, lineSlice, lineString, point, polygon } from '@turf/turf';
 
 // 航线点数组
 export const airLinePointData: any = reactive({
@@ -221,9 +221,9 @@ export function calculateArea(positions: Array<Cesium.Cartesian3>) {
 
 	outPoint.push(outPoint[0]);
 
-	const polygon = turf.polygon([outPoint]);
+	const poly = polygon([outPoint]);
 
-	return turf.area(polygon);
+	return area(poly);
 }
 
 /**
@@ -234,32 +234,32 @@ export function calculateArea(positions: Array<Cesium.Cartesian3>) {
 export function handleLineOutOfBoundary(points: Array<[]>, sidePoint: any) {
 	const outPoint: any[] = [];
 
-	const polygon = turf.polygon([sidePoint]);
+	const poly = polygon([sidePoint]);
 
 	const np = [...sidePoint];
 
 	np.pop();
 
-	const line = turf.lineString(np);
+	const line = lineString(np);
 
 	for (let i = 0; i < points.length - 1; i++) {
-		const start = turf.point(points[i]);
+		const start = point(points[i]);
 
-		const stop = turf.point(points[i + 1]);
+		const stop = point(points[i + 1]);
 
-		const sliced = turf.lineSlice(start, stop, line);
+		const sliced = lineSlice(start, stop, line);
 
-		const nowLine = turf.lineString([points[i], points[i + 1]]);
+		const nowLine = lineString([points[i], points[i + 1]]);
 
 		// console.log('边缘计算', sliced);
-		const booleanContains = turf.booleanContains(polygon, nowLine);
+		const isContained = booleanContains(poly, nowLine);
 
-		if (sliced.geometry.coordinates.length >= 3 && !booleanContains) {
+		if (sliced.geometry.coordinates.length >= 3 && !isContained) {
 			// 判断方向
 			let slicedPoint = sliced.geometry.coordinates;
 
-			const dis1 = turf.distance(turf.point(slicedPoint[0]), points[i], { units: 'meters' });
-			const dis2 = turf.distance(turf.point(slicedPoint[slicedPoint.length - 1]), points[i], { units: 'meters' });
+			const dis1 = distance(point(slicedPoint[0]), points[i], { units: 'meters' });
+			const dis2 = distance(point(slicedPoint[slicedPoint.length - 1]), points[i], { units: 'meters' });
 
 			if (dis1 > dis2) {
 				slicedPoint = slicedPoint.reverse();

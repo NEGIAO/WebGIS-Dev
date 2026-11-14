@@ -7,6 +7,7 @@
  */
 import {
     defineComponent,
+    onUnmounted,
     ref,
     shallowRef,
     type ExtractPropTypes,
@@ -29,6 +30,8 @@ import { compassBgVars } from '@common/compass/utils/compassStyleUtils';
 import FengShuiCompassSvg from '@common/compass/svg/feng-shui-compass-svg.vue';
 import PalaceExplanationPanel from '@common/compass/components/PalaceExplanationPanel.vue';
 
+import { registerMapEngineAdapter, unregisterMapEngineAdapter } from '@common/map-adapter';
+import { OpenLayersAdapter } from '@ol/adapter';
 import { createLayerControlHandlers } from '@ol/layer/composables/useLayerControlHandlers';
 import { createOlRemoteServiceAdapter } from '@ol/services/olRemoteServiceAdapter';
 import { createMapEventHandlers } from '@ol/composables/useMapEventHandlers';
@@ -561,6 +564,16 @@ export class Instance {
                 removeManagedLayerById = layerAndRoute.userLayerFacade.removeUserLayer;
                 layerAndRoute.resetRouteBuilderApiCache();
             },
+        });
+
+        // ── 注册统一地图引擎适配器 (Phase 1 跨引擎架构) ──
+        const olAdapter = new OpenLayersAdapter({
+            getMap: () => this.mapInstance.value,
+        });
+        registerMapEngineAdapter(olAdapter);
+
+        onUnmounted(() => {
+            unregisterMapEngineAdapter('openlayers');
         });
 
         // ── 绑定全部公共方法与对外接口 ──

@@ -37,68 +37,7 @@
     </div>
 </template>
 
-<script setup lang="ts">
-/**
- * ChatInputBar - 对话输入栏（对标网页版输入区）
- *
- * 网页版形态：
- *   - 一体化输入壳（textarea + 内嵌圆形发送钮），聚焦时品牌色描边
- *   - 输入框随内容自适应高度（1~6 行）
- *   - Enter 发送 / Shift+Enter 换行（输入法组合键期间不触发发送）
- *   - 生成中切换为方块「停止」圆钮，输入壳描边同步转危险色
- *   - 快捷键提示默认淡出、聚焦/悬停淡入（高度常驻，避免输入区跳动）
- */
-import { computed, nextTick, ref } from 'vue';
-import { SendHorizontal, Square } from '@lucide/vue';
-import { useLocale } from '@common/app/useLocale';
-
-const { t } = useLocale();
-
-const props = defineProps({
-    /** v-model 输入文本 */
-    modelValue: { type: String, default: '' },
-    /** 占位提示（跟随服务状态；父组件通常会覆盖） */
-    placeholder: { type: String, default: '' },
-    /** 是否禁止发送（服务未就绪/额度用尽） */
-    disabled: { type: Boolean, default: false },
-    /** 是否正在生成（切换停止按钮） */
-    isLoading: { type: Boolean, default: false },
-});
-
-const emit = defineEmits(['update:modelValue', 'send', 'stop']);
-
-const textareaRef = ref<HTMLTextAreaElement | null>(null);
-
-const text = computed({
-    get: () => props.modelValue,
-    set: (v) => emit('update:modelValue', v),
-});
-
-const sendDisabled = computed(() => props.disabled || !String(props.modelValue || '').trim());
-
-/** 输入框高度自适应（上限约 6 行） */
-function autoResize() {
-    const el = textareaRef.value;
-    if (!el) return;
-    el.style.height = 'auto';
-    el.style.height = `${Math.min(el.scrollHeight, 132)}px`;
-}
-
-/** Enter 发送 / Shift+Enter 换行；输入法组合期间放行 */
-function onKeydown(event: KeyboardEvent) {
-    if (event.key !== 'Enter') return;
-    if (event.shiftKey) return; // Shift+Enter 换行
-    if (event.isComposing || event.keyCode === 229) return; // 输入法候选确认
-    event.preventDefault();
-    submit();
-}
-
-function submit() {
-    if (sendDisabled.value || props.isLoading) return;
-    emit('send');
-    nextTick(autoResize);
-}
-</script>
+<script lang="ts" src="./ChatInputBar.ts"></script>
 
 <style scoped>
 .chat-footer {

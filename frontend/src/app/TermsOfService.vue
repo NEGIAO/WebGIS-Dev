@@ -137,16 +137,7 @@
     </div>
 </template>
 
-<script setup lang="ts">
-import { onMounted } from 'vue';
-import { useRouter } from 'vue-router';
-
-useRouter();
-
-onMounted(() => {
-    document.title = '服务条款 - NEGIAO\'s WebGIS';
-});
-</script>
+<script lang="ts" src="./TermsOfService.ts"></script>
 
 <style scoped>
 .legal-container {

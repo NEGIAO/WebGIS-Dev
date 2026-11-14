@@ -33,6 +33,7 @@ import {
     createOlMapCommandAdapter,
 } from '@common/chat/agent/mapCommandAdapters';
 import type { RuntimeMapState } from '@common/chat/agent/mapCommand/shared';
+import { setActiveEngineType } from '@common/map-adapter';
 import { MAP_VIEW_CESIUM, MAP_VIEW_OL } from '@ol/url-state/useMapViewUrlState';
 import { importCesiumContainerWithRetry } from './useLazyModules';
 
@@ -436,6 +437,7 @@ export function useHomeEngineSwitch(deps: UseHomeEngineSwitchDeps) {
                 return false;
             }
             is3DMode.value = true;
+            setActiveEngineType('cesium');
 
             const target = lastOlToCesiumTarget;
             if (target && target.analyticHeight > 0) {
@@ -486,6 +488,7 @@ export function useHomeEngineSwitch(deps: UseHomeEngineSwitchDeps) {
                 }
             }
             is3DMode.value = false;
+            setActiveEngineType('openlayers');
             isCesiumLoading.value = false;
             hideLoading();
             isCesiumLoaded.value = false;
@@ -594,6 +597,7 @@ export function useHomeEngineSwitch(deps: UseHomeEngineSwitchDeps) {
         }
         if (view === MAP_VIEW_OL && is3DMode.value) {
             is3DMode.value = false;
+            setActiveEngineType('openlayers');
         }
     }
 

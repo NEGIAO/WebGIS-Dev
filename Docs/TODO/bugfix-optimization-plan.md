@@ -45,6 +45,14 @@
 - 验收口径：每项修复附「复现步骤 → 修后表现」到日志；**B 簇全清后打 V3.5.0 小版本线**（属性表 + 配置 + 架构治理聚合里程碑）。
 - 📌 状态（2026-07-27 V3.4.62）：**B1–B6 代码侧全清**。V3.5.0 打线前置条件 = B1（4 步）/B3（7 步）/B4（6 步）实机清单验证通过（见各日志），由用户冒烟后拍板。
 
+### P0-5 Dependabot 自动合并与 §12.7.1 禁令冲突（待用户裁决，Agent 不擅自处置）
+- **问题**：暂存区新增 `.github/workflows/dependabot-automerge.yml`（`gh pr merge --auto --squash` patch/minor）并移除 `.github/dependabot.yml` 的 `ignore` 块，等同于开启依赖自动合并；与 `Force_command.md` §12.7.1「禁止开启仓库级 auto-merge 或使用 `gh pr merge --auto`」及 §12.1「`allow_auto_merge=false`、机器人不自行合并」的事实基线冲突，且属 §2.3 部署面改动。
+- **现象边界**：仓库 `allow_auto_merge` 仍为 `false` 时该 workflow 会因无法启用 auto-merge 而失败（噪音但无害）；一旦用户在 GitHub 设置中打开该开关，patch/minor 依赖将在仅有检查通过的情况下自动进入 `main`。
+- **方案**（二选一，需用户明确选择）：
+  - a) 保留自动合并 → 同步修订 `Force_command.md` §12.1 事实基线与 §12.7.1 禁令，并在 §12.4 增加「workflow 自合并」例外口径；
+  - b) 撤销该能力 → 删除 workflow 文件并恢复 `dependabot.yml` 的 `ignore` 块（仅跟 major）。
+- **验收**：文档禁令与仓库实际行为一致，`rg "pr merge --auto" .github/ Docs/` 结果与选定方案相符。
+
 ## P1 — 安全与稳定（本周内）
 
 ### ✅ P1-1 后端 CORS 全开收敛 【已完成 · 日志 2026-07-26-p1-cors-style-batch.md】
@@ -129,26 +137,9 @@
 
 ## P3 — 可维护性债（穿插进行，每次只拆一个）
 
-### P3-1 巨型文件渐进拆分（规范 6 单一职责）
-> **行数基线已按 2026-11-13 实测重算**（原表 2026-07 数据已全面过期，最大偏差 +2311 行）。
-> 度量口径与完整分析见 [`2026-11-13-vue-component-refactor-plan.md`](2026-11-13-vue-component-refactor-plan.md)。
-
-| 文件 | 行数（实测） | 有效逻辑行 | 拆分方向 |
-|------|------|------|----------|
-| `CesiumContainer.vue` | 3226 | 1707 | 启动簇 / 大气簇 / 导航簇外移，目标 ~800 行 |
-| `MapContainer.vue` | 2942 | 1552 | 持续外移到 composables（既有方向，禁新增功能代码） |
-| `HomeView.vue` | 2866 | 1448 | 面板编排层拆 useHomePanels 类 composable |
-| `RegisterView.vue` | 2714 | 793 | 表单步骤组件化（登录/注册/重置/绑定四段） |
-| `CesiumToolPanel.vue` | 2703 | 371 | 各页签拆子组件（DataTab/ModulesTab…），模块渲染已是 LilGuiControls 可直接搬 |
-| `TOCPanel.vue` | 2518 | 397 | 动作处理层已外移一部分（contextActionManager/cesiumTocActions），继续拆上传/搜索区块 |
-| `AttributeTable.vue` | 2516 | 644 | 虚拟滚动 / 单元格编辑 / 面板拖拽已抽 composable，剩余为编排 |
-| `AdminControlPanel.vue` | 2515 | 728 | 已范式化；表格 CRUD 与页签拖拽已外移 |
-| `LayerControlPanel.vue` | 2090 | 665 | 已范式化；拖拽排序 / 右键定位 / 长按 / 请求令牌已外移 |
-| `LandingView.vue` | 5639 | 667 | **样式主导**（3881 行样式），需样式外置而非脚本拆分 |
-- **原则**：只搬不改逻辑、每次一个文件一份日志、拆后 ESLint+回归；与功能迭代穿插，不集中大爆改。
-- **容器二轮既有路线图**（V3.4.29 日志 `2026-07-26-container-components-slimming-round1.md`，factory 注入模式照抄一轮）：
-  MapContainer：`runDeferredStartupTasks`(~170) → `activateInteraction`(~121) → `syncAttributeTableMapExtent` 段 → 尾部 `getMapExtent` 簇，目标 ~1200 行；
-  CesiumContainer（实测 3226，原记录 ~915 已失效）：`bootCesium/initViewer/reset` 启动簇 → `applyAtmosphereParams` 簇 → `handleNavTargetSelect` 簇，目标 ~800 行。
+### P3-1 巨型文件渐进拆分与 Vue 组件视图/逻辑分离（✅ 2026-11-14 已完成）
+> **状态**：**✅ 已完成**。全仓 36 个有效逻辑行 `> 150` 的 Vue 组件均已完成「`X.vue`（DOM 模板 + 内联样式）+ `X.ts`（`class Instance` 逻辑实例层）」物理分离，且所有 `.ts` 实例层经功能域 Composable 拆分后全部控制在 `< 700` 行以内（`HomeView.ts` 375 行、`RegisterView.ts` 561 行、`CesiumContainer.ts` 587 行、`MapContainer.ts` 604 行、`FluidSimulationPanel.ts` 637 行、`LandingView.ts` 659 行、`CesiumAdvancedEffects.ts` 677 行、`FloatingAccountPanel.ts` 688 行、`LayerControlPanel.ts` 695 行）。
+> **规范强调**：`.vue` 组件完整承担 DOM 组织（`<template>`）与样式（内联 `<style>`），仅剥离 `<script>` 到同名 `.ts` 文件，**不将 `<style>` 剥离为外部 `.scss` 文件**。详见 [`2026-11-13-vue-component-refactor-plan.md`](2026-11-13-vue-component-refactor-plan.md)。
 
 ### P3-2 cesium-navigation 内嵌包上游 TODO（tracking 场景 2 处 bug 注释）
 - **定性**：上游遗留、仅实体追踪模式触发（项目暂未用 tracking）→ 挂起观察，触发时再修。
@@ -184,6 +175,16 @@
 ### P3-10 存疑缺陷待实机复现（不施工，复现后升级 P 级）
 - **罗盘旋转 90° / 文字倒置**：静态读码无法确认（`CompassManager.drawRadialText` 旋转逻辑为标注做法）；需实机复现后定性。
 - **Cesium GPU 资源泄漏**：wind/fluid 生命周期静态审查为合理管理；需 DevTools 帧缓冲监控实机复现。
+
+### P3-11 `registerCesiumTreePort.ts` 头注释过时（V3.7.1 顺带发现，只记不改）
+- **问题**：头注释写「注册必须早于图层树首次渲染」，但实际由懒加载的 `CesiumContainer` 模块注册，从未满足该前提；V3.7.1 已将 `engineTreePort` 端口表改为响应式，此约束不再必要。
+- **方案**：注释改为「端口表响应式，可晚于图层树首次渲染注册」。L1 微改。日志 `Docs/LLM_record/26-11/2026-11-14/2026-11-14-fix-cesium-draw-toc-registration.md`。
+
+### P3-12 注销后 SSE 静默停摆（V3.7.1 发现，只记不改）
+- **问题**：`useAccountSecurityAndActions` 的 `handleLogout` / `forceBackToLogin` 调用 `useRealtimeStats().disconnect()`，该函数会把 `_dead` 置 `true`、清掉鉴权监听与轮询句柄；若用户停留在同一路由（不触发 `HomeView` 重挂载），SSE 不会以游客身份自动恢复，该用户在在线统计中静默消失直至刷新页面。
+- **当前判定**：可接受的折衷（注销后不再计入在线）。不建议复用 `disconnect()` 承担「切身份」语义。
+- **方案**：新增 `suspendForIdentitySwitch()`：上送 offline beacon → 关闭 EventSource → 保留监听与 `_dead=false`，由 `AUTH_CHANGED_EVENT` 驱动重连。
+- **验收**：注销后 5s 内以 `g:` 身份重连；同浏览器另一已登录页签计数不受影响。
 
 ---
 

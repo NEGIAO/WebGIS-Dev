@@ -31,12 +31,43 @@ logger = logging.getLogger(__name__)
 
 # ==================== 活跃追踪辅助 ====================
 
-def _mark_active_safe(session: Dict[str, Any]) -> None:
-    """安全地标记用户活跃（不阻塞认证流程）。使用稳定 presence_id 计数。"""
+def _mark_active_safe(session: Dict[str, Any], request: Optional[Request] = None) -> None:
+    """安全地标记用户活跃（不阻塞认证流程），透传标签页 client_id 与设备 ID。"""
     try:
-        from api.realtime_stats import mark_presence_active
+        from api.realtime_stats import (
+            device_presence_id,
+            mark_presence_active,
+            normalize_client_id,
+            session_signature,
+        )
 
-        mark_presence_active(session)
+        client_id = ""
+        dev_pid = ""
+        raw_guest_device_id = session.get("guest_device_id")
+        token = str(session.get("token") or "")
+        if request is not None:
+            client_id = normalize_client_id(
+                request.headers.get("X-Presence-Client-Id")
+                or request.query_params.get("client_id")
+            )
+            raw_guest_device_id = (
+                request.headers.get("X-Guest-Device-Id")
+                or request.query_params.get("guest_device_id")
+                or session.get("guest_device_id")
+            )
+            dev_pid = device_presence_id(raw_guest_device_id)
+            if not token:
+                token = _extract_token(request)
+        elif session.get("guest_device_id"):
+            dev_pid = device_presence_id(session.get("guest_device_id"))
+
+        mark_presence_active(
+            session,
+            client_id=client_id,
+            session_sig=session_signature(token),
+            device_presence_id_val=dev_pid,
+            guest_device_id=raw_guest_device_id,
+        )
     except Exception:
         pass
 
@@ -91,12 +122,18 @@ def _has_auth_credential_header(request: Request) -> bool:
     return bool(str(request.headers.get("X-Auth-Token") or "").strip())
 
 
-async def require_login(request: Request) -> Dict[str, Any]:
+async def _resolve_session_with_options(
+    request: Request,
+    *,
+    touch_presence: bool,
+    update_last_seen: bool,
+) -> Dict[str, Any]:
     token = _extract_token(request)
     if not token:
         if _is_guest_allow_request(request):
             session = await _build_temporary_guest_session_async(request)
-            _mark_active_safe(session)
+            if touch_presence:
+                _mark_active_safe(session, request)
             return session
 
         raise HTTPException(
@@ -105,7 +142,7 @@ async def require_login(request: Request) -> Dict[str, Any]:
         )
 
     try:
-        session = await asyncio.to_thread(_get_session_sync, token)
+        session = await asyncio.to_thread(_get_session_sync, token, False, update_last_seen)
     except Exception as e:
         logger.error("require_login: 会话查询失败: %s", str(e), exc_info=True)
         raise HTTPException(
@@ -119,7 +156,8 @@ async def require_login(request: Request) -> Dict[str, Any]:
         # 仅当「未携带任何登录凭据」时才允许游客兜底。
         if not _has_auth_credential_header(request) and _is_guest_allow_request(request):
             session = await _build_temporary_guest_session_async(request)
-            _mark_active_safe(session)
+            if touch_presence:
+                _mark_active_safe(session, request)
             return session
 
         raise HTTPException(
@@ -127,18 +165,36 @@ async def require_login(request: Request) -> Dict[str, Any]:
             detail=_auth_error_detail("SESSION_EXPIRED", "登录状态已失效，请重新登录"),
         )
 
-    _mark_active_safe(session)
+    if touch_presence:
+        _mark_active_safe(session, request)
     return session
+
+
+async def require_login(request: Request) -> Dict[str, Any]:
+    return await _resolve_session_with_options(
+        request,
+        touch_presence=True,
+        update_last_seen=True,
+    )
+
+
+async def require_login_for_logout(request: Request) -> Dict[str, Any]:
+    """注销专用登录校验：校验当前会话但不触发在线标活或 last_seen_at 写入。"""
+    return await _resolve_session_with_options(
+        request,
+        touch_presence=False,
+        update_last_seen=False,
+    )
 
 
 async def resolve_optional_session(request: Request) -> Optional[Dict[str, Any]]:
     """可选鉴权：token 有效返回会话；无 token/会话失效/查询异常一律返回 None。
-    供访问追踪等"有身份更好、没身份也行"的端点使用，不消耗配额。"""
+    供访问追踪等"有身份更好、没身份也行"的端点使用，不消耗配额，不触发在线标活。"""
     token = _extract_token(request)
     if not token:
         return None
     try:
-        return await asyncio.to_thread(_get_session_sync, token)
+        return await asyncio.to_thread(_get_session_sync, token, False, False)
     except Exception:
         logger.debug("可选鉴权：会话查询失败", exc_info=True)
         return None
@@ -187,7 +243,7 @@ async def _authenticate_login_or_guest(request: Request) -> Dict[str, Any]:
 
     if token:
         try:
-            session = await asyncio.to_thread(_get_session_sync, token)
+            session = await asyncio.to_thread(_get_session_sync, token, False, True)
         except Exception as e:
             logger.error("require_api_access_or_guest: 会话查询失败: %s", str(e), exc_info=True)
 
@@ -195,14 +251,13 @@ async def _authenticate_login_or_guest(request: Request) -> Dict[str, Any]:
     if session is None:
         session = await _build_temporary_guest_session_async(request)
 
-    _mark_active_safe(session)
-
     if bool(session.get("requires_email_binding")):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail=_auth_error_detail("EMAIL_BINDING_REQUIRED", "请先绑定并验证邮箱后再使用完整功能"),
         )
 
+    _mark_active_safe(session, request)
     return session
 
 

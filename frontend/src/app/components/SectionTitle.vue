@@ -21,33 +21,7 @@
     </div>
 </template>
 
-<script setup lang="ts">
-/**
- * 通用节标题「三件套」组件（借鉴南京师大 .d-title1）：
- *   印章（::before）+ 标题 + 水印底纹（::after），全站复用。
- *
- * - 印章：外圈虚线 + 内圈实线 + 中心金点，是 Hero 三环的微缩版；
- * - 水印：纯 CSS 画的极淡「经纬 / 罗盘」徽记，品牌色 6%，垫在标题之后；
- * - 标题：衬线宋体（--font-serif），与正文无衬线形成编辑感对比。
- *
- * 注：本项目其它视图多为单文件内联，本组件是 LandingView 唯一抽出的子组件，
- * 用于消除 4 处近乎重复的节头结构（features / gallery / tech / oss）。
- */
-defineProps({
-    /** 小字眉标（如「功能亮点」），空则整行不渲染 */
-    eyebrow: { type: String, default: '' },
-    /** 主标题（必填） */
-    title: { type: String, required: true },
-    /** 副描述，空则不渲染 */
-    desc: { type: String, default: '' },
-    /** 对齐方式：center（默认）/ left */
-    align: { type: String, default: 'center' },
-    /** 紧凑：底部留白从 3rem 收到 1.5rem（OSS 区头后紧跟引导条时用） */
-    compact: { type: Boolean, default: false },
-    /** 是否显示水印底纹（默认显示） */
-    watermark: { type: Boolean, default: true },
-});
-</script>
+<script lang="ts" src="./SectionTitle.ts"></script>
 
 <style scoped>
 .section-head {

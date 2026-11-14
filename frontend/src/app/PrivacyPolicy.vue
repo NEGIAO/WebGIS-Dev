@@ -176,13 +176,7 @@
     </div>
 </template>
 
-<script setup lang="ts">
-import { onMounted } from 'vue';
-
-onMounted(() => {
-    document.title = '隐私政策 - NEGIAO\'s WebGIS';
-});
-</script>
+<script lang="ts" src="./PrivacyPolicy.ts"></script>
 
 <style scoped>
 .legal-container {

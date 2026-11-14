@@ -4,12 +4,11 @@ import { createCustomIonLayerManager } from './customIonLayer';
 import { createOverlayTilesetManager } from './overlayTilesets';
 import { createTdtOverlayManager } from './tdtOverlays';
 import { createTerrainManager } from './terrainManager';
+import { createImageryProviderBuilderSuite } from './imageryProviderBuilders';
 import { useSharedCustomBasemapUrl } from '@common/basemap/useSharedCustomBasemapUrl';
 import {
     looksLikeWmsSourceUrl,
     ensureWmsServiceInfo,
-    getCachedWmsInfo,
-    buildArcgisExportTemplate,
 } from '@common/basemap/wmsService';
 import { registerRemoteService } from '@common/basemap/remoteServices';
 import { createCesiumRemoteServiceAdapter } from '../../services/cesiumRemoteServiceAdapter';
@@ -23,15 +22,9 @@ import {
 } from '../core/cesiumStorage';
 import { resolvePresetLayerIds } from '@common/basemap/catalogProjection';
 import { DEFAULT_BASEMAP_PRESET_ID } from '@common/basemap/basemapPresets';
-import {
-    buildCesiumImageryProvidersForPreset,
-    abortAllDescriptorRequests,
-} from '@cesium-domain/constants/basemapProviderFactory';
+import { abortAllDescriptorRequests } from '@cesium-domain/constants/basemapProviderFactory';
 import { useCesiumBasemapSwitcher } from './useCesiumBasemapSwitcher';
-import { arcgisBboxParts } from './i3sWebMercator';
 import {
-    TDT_SERVICE_ROOT,
-    TDT_SUBDOMAINS,
     CUSTOM_XYZ_BASEMAP_ID,
     TDT_LEGACY_LABEL_LAYER_VISIBLE_KEY,
     TDT_BOUNDARY_LAYER_VISIBLE_KEY,
@@ -40,15 +33,8 @@ import {
     GOOGLE_PHOTOREALISTIC_3D_TILES_VISIBLE_KEY,
     getUnifiedBasemapOptions,
     terrainOptions,
-    getTerrainIconColor,
-    getTerrainIconText,
     readRuntimeValue,
-    getBasemapTooltip,
-    getPresetPickerColor,
-    getPresetPickerLabel,
     normalizeCustomXyzUrl,
-    createOfficialBasemapId,
-    createPickerIcon,
 } from './layerUtils';
 
 /** useCesiumLayers 宿主装配选项 */
@@ -75,21 +61,17 @@ export function useCesiumLayers({
     getViewer,
     getCesium,
     message,
-    // 参数保留（调用方仍传 backendBaseUrl 键），当前实现未消费，加 _ 前缀声明有意未用
     backendBaseUrl: _backendBaseUrl,
     tiandituToken,
     ovitalTdtkeyToken,
     cesiumIonToken,
     dataImport,
 } = {} as UseCesiumLayersOptions) {
-    // 能力文档代理兜底：内网自签/CORS 服务直连失败时经 VPS /proxy 重试（与 OL 引擎同语义）。
-    // 按 owner 注册：3D 容器卸载时注销 'cesium' 键，自动回落常驻 OL 构造器
     setCapabilitiesProxyBuilder(
         (url) => (url ? tileProxyUrl(url) : null),
         'cesium',
     );
 
-    // 在线服务注册表 → Cesium ImageryLayer 渲染适配器（TOC「在线服务」分组的 3D 渲染端）
     let cesiumRemoteAdapter: any = null;
     function ensureRemoteServiceAdapter() {
         if (cesiumRemoteAdapter) return cesiumRemoteAdapter;
@@ -119,10 +101,8 @@ export function useCesiumLayers({
     const terrainProviderIdByViewModel = new Map();
 
     const activeBasemap = ref(DEFAULT_BASEMAP_PRESET_ID);
-    // 本地与部署环境统一默认天地图世界地形（原 DEV 强制平面地形逻辑已移除）
     const activeTerrain = ref('tianditu');
     const { customBasemapUrl: customXyzBasemapUrl } = useSharedCustomBasemapUrl();
-    // 叠加层默认全部关闭：国界线 + 文字注记 + Cesium OSM Buildings + Google 倾斜摄影
     const legacyTdtLabelLayerVisible = readStoredBoolean(TDT_LEGACY_LABEL_LAYER_VISIBLE_KEY, false);
     const tdtBoundaryLayerVisible = ref(
         readStoredBoolean(TDT_BOUNDARY_LAYER_VISIBLE_KEY, legacyTdtLabelLayerVisible ?? false),
@@ -211,6 +191,27 @@ export function useCesiumLayers({
         flyCameraToServiceExtent,
     } = createArcgisIdentify({ getViewer, getCesium, message });
 
+    const {
+        updateCustomWmsLayerSelection,
+        createImageryProvidersById,
+        createImageryProviderViewModels,
+        createTerrainProviderViewModels,
+    } = createImageryProviderBuilderSuite({
+        getCesium,
+        getTiandituToken,
+        getOvitalTdtkey,
+        customXyzBasemapUrl,
+        activeBasemap,
+        applyBasemap,
+        message,
+        imageryProviderViewModelById,
+        imageryProviderIdByViewModel,
+        terrainProviderViewModelById,
+        terrainProviderIdByViewModel,
+        officialBasemapOptions,
+        createTerrainProviderById,
+    });
+
     const basemapOptions = computed(() => [
         ...getUnifiedBasemapOptions().map((option: any) => {
             if (option.value !== 'custom') return option;
@@ -226,7 +227,6 @@ export function useCesiumLayers({
         ...officialBasemapOptions.value,
     ]);
 
-    // ========== 熔断/降级切换器 ==========
     const basemapSwitcher = useCesiumBasemapSwitcher({
         getViewer,
         getCesium: () => getCesium?.(),
@@ -236,7 +236,6 @@ export function useCesiumLayers({
         message,
     });
 
-    /** 供 UI 绑定的熔断状态 */
     const basemapCircuitOpen = computed(() => basemapSwitcher.isCircuitOpen.value);
 
     const overlayOptions = computed(() => [
@@ -271,15 +270,11 @@ export function useCesiumLayers({
         applyBasemap(value);
     });
 
-    // ── 在线服务：注册表变化时自动同步 Cesium 图层 + 绑定点击查询 ──
-    // 无论用户从哪个入口加载服务（面板/TOC/Agent），都走同一条渲染和查询链路
     watch(customXyzBasemapUrl, () => {
         ensureRemoteServiceAdapter();
         bindCesiumArcgisIdentify();
     });
 
-    // ── 在线服务：无论从哪个入口加载，引擎就绪后自动挂载渲染适配器和点击查询 ──
-    // 轮询等待 viewer 就绪（Cesium viewer 创建是异步的），避免依赖特定操作路径触发
     const rsvcInitTimer = setInterval(() => {
         if (getViewer?.() && getCesium?.()) {
             clearInterval(rsvcInitTimer);
@@ -287,7 +282,7 @@ export function useCesiumLayers({
             bindCesiumArcgisIdentify();
         }
     }, 500);
-    setTimeout(() => clearInterval(rsvcInitTimer), 15000); // 15s 超时防泄漏
+    setTimeout(() => clearInterval(rsvcInitTimer), 15000);
 
     watch(activeTerrain, async (value) => {
         if (!getViewer?.() || !getCesium?.()) return;
@@ -322,72 +317,6 @@ export function useCesiumLayers({
         writeStoredString('cesium_custom_ion_asset_id', value);
     });
 
-
-    function createImageryProviderViewModels() {
-        const Cesium = getCesium?.();
-        if (!Cesium) return [];
-
-        imageryProviderViewModelById.clear();
-        imageryProviderIdByViewModel.clear();
-
-        // 从统一预设构建 ProviderViewModel 列表
-        const projectProviderViewModels = getUnifiedBasemapOptions().map((option: any) => {
-            const viewModel = new Cesium.ProviderViewModel({
-                name: option.label,
-                tooltip: getBasemapTooltip(option),
-                category: '项目底图',
-                iconUrl: createPickerIcon(
-                    getPresetPickerColor(option.value),
-                    getPresetPickerLabel(option.value, option.label),
-                ),
-                creationFunction: () => createImageryProvidersById(option.value),
-            });
-            imageryProviderViewModelById.set(option.value, viewModel);
-            imageryProviderIdByViewModel.set(viewModel, option.value);
-            return viewModel;
-        });
-
-        const officialProviderViewModels = getDefaultImageryProviderViewModels();
-        officialBasemapOptions.value = officialProviderViewModels.map((viewModel: any, index: number) => {
-            const label = String(viewModel?.name || `官方底图 ${index + 1}`).trim();
-            const value = createOfficialBasemapId(label, index);
-            imageryProviderViewModelById.set(value, viewModel);
-            imageryProviderIdByViewModel.set(viewModel, value);
-            return {
-                value,
-                label: `官方 · ${label}`,
-                description: String(viewModel?.tooltip || label),
-                source: 'official',
-            };
-        });
-
-        return [...projectProviderViewModels, ...officialProviderViewModels];
-    }
-
-    function createTerrainProviderViewModels() {
-        const Cesium = getCesium?.();
-        if (!Cesium) return [];
-
-        terrainProviderViewModelById.clear();
-        terrainProviderIdByViewModel.clear();
-
-        return terrainOptions.map((option) => {
-            const viewModel = new Cesium.ProviderViewModel({
-                name: option.label,
-                tooltip: option.description || option.label,
-                category: '项目地形',
-                iconUrl: createPickerIcon(
-                    getTerrainIconColor(option.value),
-                    getTerrainIconText(option.value),
-                ),
-                creationFunction: () => createTerrainProviderById(option.value),
-            });
-            terrainProviderViewModelById.set(option.value, viewModel);
-            terrainProviderIdByViewModel.set(viewModel, option.value);
-            return viewModel;
-        });
-    }
-
     function getSelectedImageryProviderViewModel(fallbackViewModels: any = []) {
         return imageryProviderViewModelById.get(activeBasemap.value) || fallbackViewModels[0];
     }
@@ -395,213 +324,6 @@ export function useCesiumLayers({
     function getSelectedTerrainProviderViewModel(fallbackViewModels: any = []) {
         return terrainProviderViewModelById.get(activeTerrain.value) || fallbackViewModels[0];
     }
-
-    function getDefaultImageryProviderViewModels() {
-        const Cesium = getCesium?.();
-        if (typeof Cesium?.createDefaultImageryProviderViewModels !== 'function') {
-            return [];
-        }
-
-        try {
-            return Cesium.createDefaultImageryProviderViewModels() || [];
-        } catch (error) {
-            console.warn('Cesium default imagery provider view models unavailable:', error);
-            return [];
-        }
-    }
-
-    function createImageryProvidersById(value: string) {
-        // 先检查是否为统一预设 ID（如 'custom_China_Blender_preset_2'）
-        const stackIds = resolvePresetLayerIds(value);
-        if (stackIds.length > 0) {
-            return createImageryProvidersFromPreset(value);
-        }
-
-        // 兼容旧的 Cesium 专用 ID
-        if (value === 'google') return createGoogleImageryProviders();
-        if (value === CUSTOM_XYZ_BASEMAP_ID) return createCustomXyzImageryProviders();
-        if (value === 'tianditu') return createTiandituImageryProviders();
-
-        // 默认 fallback
-        return createTiandituImageryProviders();
-    }
-
-    /** 从统一预设创建 Cesium ImageryProvider 数组 */
-    function createImageryProvidersFromPreset(presetId: string) {
-        const Cesium = getCesium?.();
-        if (!Cesium) return [];
-
-        const stackIds = resolvePresetLayerIds(presetId);
-        if (!stackIds.length) {
-            console.warn(`[useCesiumLayers] 预设 "${presetId}" 没有有效的图层栈`);
-            return createTiandituImageryProviders();
-        }
-
-        // 获取运行时 token
-        const tiandituTk = getTiandituToken();
-        const ovitalTdtkey = getOvitalTdtkey();
-        const customUrl = customXyzBasemapUrl.value;
-
-        const ctx = {
-            tiandituTk,
-            ovitalTdtkey,
-            customUrl: customUrl,
-            normBase: '',
-        };
-
-        return buildCesiumImageryProvidersForPreset(Cesium, stackIds, ctx);
-    }
-
-    function createTiandituImageryProviders() {
-        const Cesium = getCesium?.();
-        return [
-            new Cesium.UrlTemplateImageryProvider({
-                url: `${TDT_SERVICE_ROOT}DataServer?T=img_w&x={x}&y={y}&l={z}&tk=${getTiandituToken()}`,
-                subdomains: TDT_SUBDOMAINS,
-                tilingScheme: new Cesium.WebMercatorTilingScheme(),
-                maximumLevel: 18,
-            }),
-        ];
-    }
-
-    function createGoogleImageryProviders() {
-        const Cesium = getCesium?.();
-        return [
-            new Cesium.UrlTemplateImageryProvider({
-                url: tileProxyUrl('mt{s}.google.com/vt?lyrs=s&x={x}&y={y}&z={z}'),
-                subdomains: ['0', '1', '2', '3'],
-                tilingScheme: new Cesium.WebMercatorTilingScheme(),
-                maximumLevel: 20,
-            }),
-        ];
-    }
-
-    /**
-     * ArcGIS 原生协议：动态 export 出图
-     * customTags 按瓦片坐标计算 EPSG:3857 米制 BBOX（与 OL 侧共用模板构建器）
-     */
-    function createCustomArcgisImageryProviders(Cesium: any, info: any, selectedLayer: any) {
-        const template = buildArcgisExportTemplate(info, selectedLayer);
-        return [
-            new Cesium.UrlTemplateImageryProvider({
-                url: template,
-                customTags: {
-                    minx: (_: any, x: number, y: number, z: number) => arcgisBboxParts(z, x, y).minx,
-                    miny: (_: any, x: number, y: number, z: number) => arcgisBboxParts(z, x, y).miny,
-                    maxx: (_: any, x: number, y: number, z: number) => arcgisBboxParts(z, x, y).maxx,
-                    maxy: (_: any, x: number, y: number, z: number) => arcgisBboxParts(z, x, y).maxy,
-                    w: () => 256,
-                    h: () => 256,
-                },
-                tilingScheme: new Cesium.WebMercatorTilingScheme(),
-                maximumLevel: 24,
-                enablePickFeatures: false,
-            }),
-        ];
-    }
-
-    /**
-     * 根据解析好的 WMS 元信息创建 ImageryProvider
-     * 服务仅支持经纬度坐标系时切换 GeographicTilingScheme，保证 BBOX 与 SRS 一致
-     * 用户已选择图层时优先生效（customWmsSelectedLayer）
-     */
-    function createCustomWmsImageryProviders(Cesium: any, info: any) {
-        if (!Cesium || typeof Cesium.WebMapServiceImageryProvider !== 'function') {
-            console.warn('[useCesiumLayers] 当前 Cesium 运行时不支持 WebMapServiceImageryProvider');
-            return [];
-        }
-        // ArcGIS 原生协议
-        if (info.arcgis) {
-            // 切片缓存：直连 /tile/{z}/{y}/{x}（缺失瓦片 404 按透明处理）
-            if (info.tileMode === 'tiles') {
-                return [
-                    new Cesium.UrlTemplateImageryProvider({
-                        url: `${String(info.endpoint).replace(/\/+$/, '')}/tile/{z}/{y}/{x}`,
-                        tilingScheme: new Cesium.WebMercatorTilingScheme(),
-                        maximumLevel: Number.isFinite(info.maxLevel) ? Number(info.maxLevel) : 24,
-                        enablePickFeatures: false,
-                    }),
-                ];
-            }
-            // 动态出图（export）
-            const selected = (info.layerOptions?.length && customWmsSelectedLayer) || '';
-            return createCustomArcgisImageryProviders(Cesium, info, selected);
-        }
-        const layers =
-            (info.layerOptions?.length && customWmsSelectedLayer) || info.layers;
-        const tilingScheme = info.mercator
-            ? new Cesium.WebMercatorTilingScheme()
-            : new Cesium.GeographicTilingScheme();
-        const crsParamName = String(info.version || '').startsWith('1.3') ? 'crs' : 'srs';
-        return [
-            new Cesium.WebMapServiceImageryProvider({
-                url: info.endpoint,
-                layers,
-                parameters: {
-                    service: 'WMS',
-                    version: info.version || '1.1.1',
-                    request: 'GetMap',
-                    styles: '',
-                    format: info.format || 'image/png',
-                    transparent: true,
-                    [crsParamName]: info.srs,
-                },
-                tilingScheme,
-                enablePickFeatures: false,
-            }),
-        ];
-    }
-
-    // 用户在工具面板选择的 WMS 图层名；URL 变化时重置
-    let customWmsSelectedLayer = '';
-    let customWmsLayerForUrl = '';
-
-
-    let wmsResolvingNotifiedUrl = '';
-    let wmsFailureNotifiedUrl = '';
-
-    function createCustomXyzImageryProviders() {
-        const Cesium = getCesium?.();
-        const rawUrl = customXyzBasemapUrl.value;
-
-        // 自定义 WMS 图源分支：capabilities 异步解析，未就绪前先回落天地图并等待重载
-        if (rawUrl && looksLikeWmsSourceUrl(rawUrl)) {
-            const cachedInfo = getCachedWmsInfo(rawUrl);
-            if (cachedInfo) {
-                return createCustomWmsImageryProviders(Cesium, cachedInfo);
-            }
-            if (wmsResolvingNotifiedUrl !== rawUrl) {
-                wmsResolvingNotifiedUrl = rawUrl;
-                message.info('正在解析 WMS 服务元数据，完成后自动加载', { duration: 3000 });
-            }
-            void ensureWmsServiceInfo(rawUrl).then((info) => {
-                if (info && activeBasemap.value === CUSTOM_XYZ_BASEMAP_ID) {
-                    applyBasemap(CUSTOM_XYZ_BASEMAP_ID, { forceReload: true });
-                } else if (!info && wmsFailureNotifiedUrl !== rawUrl) {
-                    wmsFailureNotifiedUrl = rawUrl;
-                    message.warning('WMS 图源元数据解析失败，请检查服务地址是否可访问', { closable: true });
-                }
-            });
-            return createTiandituImageryProviders();
-        }
-
-        const config = normalizeCustomXyzUrl(rawUrl);
-        if (!config.valid) {
-            message.warning(config.message, { closable: true });
-            return createTiandituImageryProviders();
-        }
-
-        return [
-            new Cesium.UrlTemplateImageryProvider({
-                url: config.url,
-                subdomains: config.subdomains,
-                tilingScheme: new Cesium.WebMercatorTilingScheme(),
-                maximumLevel: 20,
-                enablePickFeatures: false,
-            }),
-        ];
-    }
-
 
     function bindLayerPickerStateSync() {
         unbindLayerPickerStateSync();
@@ -642,11 +364,8 @@ export function useCesiumLayers({
     }
 
     function addBaseImageryLayers() {
-        // 引擎初始化路径挂载在线服务适配器（applyBasemap 未必在初始加载时被调用）
         ensureRemoteServiceAdapter();
-        // 同步叠加层（国界线 / 文字注记）
         syncTdtOverlayLayers();
-        // 同步 Cesium OSM Buildings 与 Google 倾斜摄影
         void syncOsmBuildingsLayer();
         void syncGooglePhotorealistic3DTilesLayer();
         void syncCustomIonLayer();
@@ -674,13 +393,6 @@ export function useCesiumLayers({
         getViewer?.()?.scene?.requestRender?.();
     }
 
-
-    /**
-     * 远程服务提交处理器（数据 Tab 新卡片发出）。
-     * - Ion 类型 → 复用现有自动识别逻辑（3D Tiles → 地形 → 影像）
-     * - I3S / 3D Tiles 类型 → 走 loadCustomUrl3DTiles 新路径
-     * - GLB/GLTF → 直链 Entity 模型，自动放相机视野中心
-     */
     function handleRemoteServiceSubmit({ type, url }: any) {
         const normalized = String(url || '').trim();
         if (!normalized) {
@@ -720,22 +432,17 @@ export function useCesiumLayers({
         void loadCustomUrl3DTiles(type, normalized);
     }
 
-
     function applyBasemap(value: string, options: any = {}) {
         const viewer = getViewer?.();
         if (!viewer || !getCesium?.()) return false;
 
-        // 首次可用时机挂载在线服务渲染适配器（viewer 就绪后自动 reconcile 注册表）
         ensureRemoteServiceAdapter();
-
-        // 先中断所有旧请求，实现快速切换
         abortAllDescriptorRequests();
         clearBaseImageryLayers();
 
         const pickerViewModel = viewer.baseLayerPicker?.viewModel;
         const providerViewModel = imageryProviderViewModelById.get(value);
 
-        // 如果有对应的 ProviderViewModel，通过 baseLayerPicker 切换
         if (pickerViewModel && providerViewModel) {
             if (options.forceReload && pickerViewModel.selectedImagery === providerViewModel) {
                 const fallbackViewModel =
@@ -752,10 +459,9 @@ export function useCesiumLayers({
             return true;
         }
 
-        // 降级路径：直接操作 imageryLayers
         try {
             const providers = createImageryProvidersById(value);
-            providers.forEach((provider) => {
+            providers.forEach((provider: any) => {
                 if (provider) {
                     imageryLayerHandles.push(viewer.imageryLayers.addImageryProvider(provider));
                 }
@@ -770,28 +476,23 @@ export function useCesiumLayers({
         }
     }
 
-
     function handleOverlayToggle({ overlayId, value }: any) {
         if (overlayId === 'tdt-boundaries') {
             tdtBoundaryLayerVisible.value = Boolean(value);
             return;
         }
-
         if (overlayId === 'tdt-text-labels') {
             tdtTextLabelLayerVisible.value = Boolean(value);
             return;
         }
-
         if (overlayId === 'cesium-osm-buildings') {
             osmBuildingsVisible.value = Boolean(value);
             return;
         }
-
         if (overlayId === 'google-photorealistic-3d-tiles') {
             googlePhotorealistic3DTilesVisible.value = Boolean(value);
             return;
         }
-
         if (overlayId === 'custom-ion-3d-tiles') {
             customIon3DTilesVisible.value = Boolean(value);
         }
@@ -800,7 +501,6 @@ export function useCesiumLayers({
     async function handleCustomBasemapSubmit({ url, wmsLayer }: any) {
         const normalizedUrl = String(url || '').trim();
 
-        // 自定义 WMS/ArcGIS 图源：先解析服务元数据校验可达性，再落库切换
         if (normalizedUrl && looksLikeWmsSourceUrl(normalizedUrl)) {
             const info = await ensureWmsServiceInfo(normalizedUrl);
             if (!info || !info.layerOptions?.length) {
@@ -808,17 +508,9 @@ export function useCesiumLayers({
                 return;
             }
 
-            // 记录用户选择的图层；URL 变化时丢弃旧选择
-            if (customWmsLayerForUrl !== normalizedUrl) {
-                customWmsSelectedLayer = '';
-                customWmsLayerForUrl = normalizedUrl;
-            }
-            if (wmsLayer && info.layerOptions?.some((option) => option.name === wmsLayer)) {
-                customWmsSelectedLayer = wmsLayer;
-            }
-
+            const selectedLayer = updateCustomWmsLayerSelection(normalizedUrl, wmsLayer, info);
             const activeLayers =
-                customWmsSelectedLayer || (info.arcgis ? '全部可见图层' : info.layers);
+                selectedLayer || (info.arcgis ? '全部可见图层' : info.layers);
 
             customXyzBasemapUrl.value = normalizedUrl;
             if (activeBasemap.value === CUSTOM_XYZ_BASEMAP_ID) {
@@ -827,18 +519,15 @@ export function useCesiumLayers({
                 activeBasemap.value = CUSTOM_XYZ_BASEMAP_ID;
             }
 
-            // 小范围服务：相机自动飞到数据范围
             flyCameraToServiceExtent(info);
 
-            // 开放 Query 能力的服务：启用点击查属性
             if (info.arcgis && info.queryable) {
                 bindCesiumArcgisIdentify(info);
             } else {
                 setIdentifyInfo(null);
             }
 
-            // 同步注册到「在线服务」注册表（TOC 统一管理；同 url+同图层去重更新）
-            const rsvcSelected = customWmsSelectedLayer || '';
+            const rsvcSelected = selectedLayer || '';
             registerRemoteService({
                 kind: info.arcgis ? 'arcgis' : 'wms',
                 url: normalizedUrl,
@@ -846,10 +535,10 @@ export function useCesiumLayers({
                 title: info.title || normalizedUrl,
                 selectedLayerId: rsvcSelected,
                 layerLabel:
-                    info.layerOptions?.find((option) => option.name === rsvcSelected)?.title || '',
+                    info.layerOptions?.find((option: any) => option.name === rsvcSelected)?.title || '',
                 sublayers: (info.layerOptions || [])
-                    .filter((option) => option.name && !option.name.includes(','))
-                    .map((option) => ({ name: option.name, title: option.title, label: option.label })),
+                    .filter((option: any) => option.name && !option.name.includes(','))
+                    .map((option: any) => ({ name: option.name, title: option.title, label: option.label })),
                 selectedIds: rsvcSelected ? rsvcSelected.split(',') : [],
                 layersParam: info.arcgis
                     ? rsvcSelected
@@ -878,7 +567,6 @@ export function useCesiumLayers({
         customXyzBasemapUrl.value = normalizedUrl;
 
         if (activeBasemap.value === CUSTOM_XYZ_BASEMAP_ID) {
-            // URL 变化由共享 ref watcher 统一重载；重复提交同一 URL 时才主动强制刷新。
             if (!urlChanged) {
                 applyBasemap(CUSTOM_XYZ_BASEMAP_ID, { forceReload: true });
             }
@@ -901,7 +589,6 @@ export function useCesiumLayers({
         disposeCesiumArcgisIdentify();
         cesiumRemoteAdapter?.dispose?.();
         cesiumRemoteAdapter = null;
-        // 注销 3D 侧代理构造器：能力文档拉取回落常驻 OL 构造器（含 TILE_PROXY_MODE 门控）
         setCapabilitiesProxyBuilder(null, 'cesium');
     }
 
@@ -915,7 +602,6 @@ export function useCesiumLayers({
         basemapOptions,
         terrainOptions,
         overlayOptions,
-        /** 在线服务定位：委托 cesiumRemoteAdapter.flyTo（未挂载返回 false） */
         zoomToRemoteService: (serviceId: any) => cesiumRemoteAdapter?.flyTo?.(String(serviceId || '')) ?? false,
         createImageryProviderViewModels,
         createTerrainProviderViewModels,
@@ -931,7 +617,6 @@ export function useCesiumLayers({
         handleCustomIonAssetSubmit,
         handleRemoteServiceSubmit,
         cleanupLayers,
-        // 熔断/降级切换器
         basemapSwitcher,
         basemapCircuitOpen,
         resetCircuitBreaker: basemapSwitcher.resetCircuitBreaker,

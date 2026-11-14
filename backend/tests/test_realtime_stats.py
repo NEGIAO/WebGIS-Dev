@@ -173,3 +173,242 @@ def test_guest_username_derived_from_uid_is_stable():
     assert name1 == name2
     assert name1 != other
     assert name1 == "guest_0123456789abcdef"[:24]
+
+
+def test_multi_tab_close_only_drops_closed_tab(monkeypatch):
+    """同账号开两标签页，关闭其一时只撤销该标签页信号，另一标签页保持在线。"""
+    tracker = _tracker(monkeypatch)
+    c1 = tracker.mark_connection("u:alice", client_id="c_tab_one_123456")
+    c2 = tracker.mark_connection("u:alice", client_id="c_tab_two_123456")
+
+    assert c1 != c2
+    assert tracker.get_online_count() == 1
+    assert tracker.snapshot_debug()["sse_conn_count_total"] == 2
+
+    tracker.drop_presence("u:alice", client_id="c_tab_one_123456")
+    assert tracker.get_online_count() == 1
+    assert tracker.snapshot_debug()["sse_conn_count_total"] == 1
+
+    tracker.drop_presence("u:alice", client_id="c_tab_two_123456")
+    assert tracker.get_online_count() == 0
+    assert tracker.snapshot_debug()["sse_conn_count_total"] == 0
+
+
+def test_same_tab_identity_switch_supersedes_previous_connection(monkeypatch):
+    """同一标签页从游客切换为登录态时，旧游客连接与心跳必须被原子接管，避免双计。"""
+    evicted = []
+    monkeypatch.setattr(realtime_stats, "request_evict_conn_ids", lambda ids: evicted.extend(ids))
+    tracker = _tracker(monkeypatch)
+
+    c_guest = tracker.mark_connection("g:guest_abc123", client_id="c_tab_switch_1234")
+    assert tracker.get_online_users() == ["g:guest_abc123"]
+
+    tracker.mark_connection("u:alice", client_id="c_tab_switch_1234")
+    assert c_guest in evicted
+    assert tracker.get_online_count() == 1
+    assert tracker.get_online_users() == ["u:alice"]
+
+
+def test_same_browser_logged_in_suppresses_duplicate_guest_tab(monkeypatch):
+    """同一浏览器同时存在已登录标签与未登录游客标签时，合并计为 1 人；注销后游客立即显露。"""
+    tracker = _tracker(monkeypatch)
+    tracker.mark_connection(
+        "u:alice",
+        client_id="c_tab_logged_in_1234",
+        device_presence_id="g:guest_shared_browser",
+    )
+    tracker.mark_connection("g:guest_shared_browser", client_id="c_tab_guest_2345")
+    tracker.mark_connection("g:guest_other_browser", client_id="c_tab_other_3456")
+
+    assert tracker.get_online_count() == 2
+    assert set(tracker.get_online_users()) == {"u:alice", "g:guest_other_browser"}
+    assert tracker.snapshot_debug()["suppressed_guest_ids"] == ["g:guest_shared_browser"]
+
+    tracker.drop_presence("u:alice", client_id="c_tab_logged_in_1234")
+    assert tracker.get_online_count() == 2
+    assert set(tracker.get_online_users()) == {"g:guest_shared_browser", "g:guest_other_browser"}
+
+
+def test_drop_presence_by_session_sig_only_evicts_target_session(monkeypatch):
+    """单端注销只撤销当前 session_sig，不影响该账号在其他设备上的登录会话。"""
+    tracker = _tracker(monkeypatch)
+    tracker.mark_connection("u:alice", client_id="c_desktop_111111", session_sig="sig_desktop")
+    tracker.mark_connection("u:alice", client_id="c_phone_222222", session_sig="sig_phone")
+
+    evicted = tracker.drop_presence("", session_sig="sig_desktop")
+    assert len(evicted) == 1
+    assert tracker.get_online_count() == 1
+    assert tracker.snapshot_debug()["sse_conn_count_total"] == 1
+
+
+def test_stale_connection_prunes_per_conn_independently(monkeypatch):
+    """同一用户的两条 SSE 连接各自独立计时，单条超时剔除不误杀健康连接。"""
+    import time as _time
+
+    tracker = _tracker(monkeypatch)
+    stale_cid = tracker.mark_connection("u:alice", client_id="c_stale_111111")
+    fresh_cid = tracker.mark_connection("u:alice", client_id="c_fresh_222222")
+
+    with tracker._lock:
+        tracker._connections[stale_cid]["last_seen"] = _time.monotonic() - 9999
+
+    pruned = tracker.prune_stale_connections_with_ids(ttl=60)
+    assert pruned == [stale_cid]
+    assert tracker.get_online_count() == 1
+    assert fresh_cid in tracker._connections
+
+
+def test_sse_stream_awaits_is_disconnected_and_sends_keepalive(monkeypatch):
+    """regression：SSE 超时分支必须 await request.is_disconnected()，保持长连接保活并在真断开时退出。"""
+    import asyncio
+    from types import SimpleNamespace
+
+    tracker = _tracker(monkeypatch)
+    broadcaster = realtime_stats.StatsBroadcaster()
+    monkeypatch.setattr(realtime_stats, "_online_tracker", tracker)
+    monkeypatch.setattr(realtime_stats, "get_broadcaster", lambda: broadcaster)
+    monkeypatch.setattr(realtime_stats, "SSE_KEEPALIVE_SECONDS", 0.02)
+
+    async def _noop_broadcast():
+        return None
+
+    monkeypatch.setattr(realtime_stats, "_compute_and_broadcast_once", _noop_broadcast)
+
+    checks = {"n": 0}
+
+    async def _is_disconnected():
+        checks["n"] += 1
+        return checks["n"] >= 3
+
+    fake_request = SimpleNamespace(is_disconnected=_is_disconnected)
+    ticket = realtime_stats.create_stream_ticket(
+        "alice",
+        presence_id="u:alice",
+        client_id="c_sse_keepalive_test",
+    )
+
+    async def _run():
+        resp = await realtime_stats.statistics_stream(fake_request, ticket=ticket)
+        chunks = []
+        async for chunk in resp.body_iterator:
+            chunks.append(chunk)
+        return chunks
+
+    chunks = asyncio.run(_run())
+    # 前两次 is_disconnected 返回 False，应至少发送 2 次 keep-alive（旧 bug 无 await 会 0 次退出）
+    assert chunks.count(": keep-alive\n\n") == 2
+    assert tracker.get_online_count() == 0
+    assert broadcaster.client_count == 0
+
+
+def test_offline_beacon_accepts_sendbeacon_json_body(monkeypatch):
+    """游客 navigator.sendBeacon 无法发自定义请求头，offline 接口必须从 JSON body 解析设备 ID。"""
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    tracker = _tracker(monkeypatch)
+    broadcaster = realtime_stats.StatsBroadcaster()
+    monkeypatch.setattr(realtime_stats, "_online_tracker", tracker)
+    monkeypatch.setattr(realtime_stats, "get_broadcaster", lambda: broadcaster)
+
+    test_app = FastAPI()
+    test_app.include_router(realtime_stats.router)
+
+    guest_dev = "gd_beacon_test_device_01"
+    pid = realtime_stats.presence_id_from_fields(role="guest", guest_device_id=guest_dev)
+    tracker.mark_connection(pid, client_id="c_beacon_tab_01")
+    assert tracker.get_online_count() == 1
+
+    with TestClient(test_app) as client:
+        resp = client.post(
+            "/api/statistics/presence/offline",
+            json={"client_id": "c_beacon_tab_01", "guest_device_id": guest_dev},
+        )
+    assert resp.status_code == 200
+    assert resp.json()["online"] == 0
+    assert tracker.get_online_count() == 0
+
+
+def test_guest_uid_conflict_normalized_to_device_presence_id(monkeypatch):
+    """regression：游客会话自带不一致 guest_uid 且携带设备 ID 时，必须归并到规范化 device_presence_id。"""
+    tracker = _tracker(monkeypatch)
+    guest_dev = "gd_conflict_device_01"
+    canonical = realtime_stats.device_presence_id(guest_dev)
+
+    # 场景 1：旧/随机 guest_uid 与 X-Guest-Device-Id 并存时不再裂成两个 g:
+    pid_with_stale_uid = realtime_stats.presence_id_from_fields(
+        username="user_9",
+        role="guest",
+        guest_uid="guest_legacy_random",
+        guest_device_id=guest_dev,
+    )
+    assert pid_with_stale_uid == canonical
+
+    # 场景 2：会话本身无 guest_device_id，但请求透传了 X-Guest-Device-Id
+    pid_session_with_header = realtime_stats.presence_id_from_session(
+        {"username": "user_9", "role": "guest", "guest_uid": "guest_legacy_random"},
+        guest_device_id=guest_dev,
+    )
+    assert pid_session_with_header == canonical
+
+    # 同浏览器登录账号 u:alice 仅压制规范化的 canonical，上述两个信号均被正确去重为 1 人
+    tracker.mark_connection(pid_with_stale_uid, client_id="c_guest_tab_1")
+    tracker.mark_connection("u:alice", client_id="c_admin_tab_2", device_presence_id=canonical)
+    assert tracker.get_online_count() == 1
+    assert tracker.get_online_users() == ["u:alice"]
+
+
+def test_default_fallback_beat_cleaned_on_connect_and_drop_presence(monkeypatch):
+    """regression：无 client_id 留下的 _default 心跳在建连/切号/下线后不得作为幽灵保活 90s。"""
+    tracker = _tracker(monkeypatch)
+
+    # 模拟 _get_session_sync 或无 client_id 请求写入 _default 兜底心跳
+    tracker.mark_authenticated_activity("u:alice", session_sig="sig_alice_1")
+    assert tracker.get_online_count() == 1
+
+    # 同会话建立带 client_id 的 SSE 连接，应一并接管并清理 _default 心跳
+    conn_alice = tracker.mark_connection("u:alice", client_id="c_tab_switch_01", session_sig="sig_alice_1")
+    assert conn_alice
+    assert "u:alice" not in tracker._beat_clients
+
+    # 再次写入一个同 session_sig 的 _default 兜底心跳，随后带 client_id + session_sig 下线
+    tracker.mark_authenticated_activity("u:alice", session_sig="sig_alice_1")
+    evicted = tracker.drop_presence("u:alice", client_id="c_tab_switch_01", session_sig="sig_alice_1")
+    assert evicted == [conn_alice]
+    assert tracker.get_online_count() == 0
+
+    # 若同一 session_sig 仍有另一条存活 SSE，则仅退掉目标 client_id，不误杀其他页签
+    conn_other = tracker.mark_connection("u:alice", client_id="c_tab_keep_02", session_sig="sig_alice_shared")
+    tracker.mark_connection("u:alice", client_id="c_tab_close_03", session_sig="sig_alice_shared")
+    tracker.drop_presence("u:alice", client_id="c_tab_close_03", session_sig="sig_alice_shared")
+    assert tracker.get_online_count() == 1
+    assert conn_other in tracker._connections
+
+
+def test_offline_beacon_accepts_text_plain_cors_simple_payload(monkeypatch):
+    """regression：跨域卸载 sendBeacon 使用 text/plain 发送 JSON 字符串，后端必须正确解析。"""
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    tracker = _tracker(monkeypatch)
+    broadcaster = realtime_stats.StatsBroadcaster()
+    monkeypatch.setattr(realtime_stats, "_online_tracker", tracker)
+    monkeypatch.setattr(realtime_stats, "get_broadcaster", lambda: broadcaster)
+
+    test_app = FastAPI()
+    test_app.include_router(realtime_stats.router)
+
+    guest_dev = "gd_text_plain_device_01"
+    pid = realtime_stats.presence_id_from_fields(role="guest", guest_device_id=guest_dev)
+    tracker.mark_connection(pid, client_id="c_plain_tab_01")
+    assert tracker.get_online_count() == 1
+
+    with TestClient(test_app) as client:
+        resp = client.post(
+            "/api/statistics/presence/offline",
+            data='{"client_id":"c_plain_tab_01","guest_device_id":"gd_text_plain_device_01"}',
+            headers={"Content-Type": "text/plain;charset=UTF-8"},
+        )
+    assert resp.status_code == 200
+    assert resp.json()["online"] == 0
+    assert tracker.get_online_count() == 0

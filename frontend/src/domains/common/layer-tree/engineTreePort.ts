@@ -12,7 +12,9 @@
  *      保证依赖追踪成立（不得缓存快照）。
  *   2. 未注册时全部降级为空集合 / 未消费，2D-only 场景无需任何三维代码加载。
  *   3. 端口按节点前缀（如 `cesium:`）索引，未来新增引擎（如 `deck:`）直接注册即可。
+ *   4. 端口表本身为响应式（shallowReactive），允许端口晚于 computed 首次求值注册。
  */
+import { shallowReactive } from 'vue';
 
 /** 引擎图层记录的公共最小契约（各引擎自有字段不在此约束） */
 export type EngineLayerRecord = {
@@ -45,7 +47,13 @@ export type EngineTreePort = {
 	handleAction: (evt: Record<string, any>) => boolean;
 };
 
-const ports = new Map<string, EngineTreePort>();
+/**
+ * 端口表必须是响应式的（V3.7.1 修复）：三维端口由懒加载的 CesiumContainer 模块注册，
+ * 晚于 TOC computed 的首次求值。若用普通 Map，computed 首次拿到 null 后便永久丢失对
+ * 三维记录店的依赖追踪，导致绘制 / 路线成品「入店不入树」。
+ * 用 shallowReactive：注册 / 覆盖端口会触发重算，但不深代理端口对象本身。
+ */
+const ports = shallowReactive(new Map<string, EngineTreePort>());
 
 /** 注册（或覆盖）一个引擎端口；由各引擎域在自身入口调用 */
 export function registerEngineTreePort(port: EngineTreePort) {

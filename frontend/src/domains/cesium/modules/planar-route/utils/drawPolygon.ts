@@ -2,7 +2,7 @@ import Cesium from 'cesium';
 import globeConfig from '../config/planarConfig';
 import { calculateArea } from './planarLine';
 import { translate as t } from '@common/app/useLocale';
-import * as turf from '@turf/turf';
+import { kinks, polygon } from '@turf/turf';
 
 export interface PolygonDrawingResult {
 	polygonEntity: Cesium.Entity;
@@ -548,10 +548,10 @@ function iskinksBoolean() {
 
 	outPoint.push(outPoint[0]);
 
-	const polygon = turf.polygon([outPoint]);
-	const kinks = turf.kinks(polygon);
+	const poly = polygon([outPoint]);
+	const kinksResult = kinks(poly);
 
-	isKinks = kinks.features.length > 0;
+	isKinks = kinksResult.features.length > 0;
 
 	if (window.mainViewer) {
 		toggleKinksTip(window.mainViewer, isKinks);

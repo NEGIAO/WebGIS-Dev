@@ -44,20 +44,12 @@
                     （2）地图组件中，使用openlayers库，进行地图交互与逻辑判断   
                     
 -->
-<script setup lang="ts">
-import { RouterView } from 'vue-router';
-import GlobalLoading from '@common/shell/GlobalLoading.vue';
-import { useThemeStore } from '@common/app/stores/useThemeStore';
-
-// 初始化主题（从 localStorage 恢复）
-const themeStore = useThemeStore();
-themeStore.init();
-</script>
-
 <template>
     <RouterView />
     <GlobalLoading />
 </template>
+
+<script lang="ts" src="./App.ts"></script>
 
 <style>
 @import './assets/theme.css';

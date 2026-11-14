@@ -95,22 +95,7 @@
     </Transition>
 </template>
 
-<script setup lang="ts">
-import { FolderOpen, MapPin, Search } from '@lucide/vue';
-defineProps({
-    visible: {
-        type: Boolean,
-        default: false,
-    },
-});
-
-const emit = defineEmits(['close', 'select']);
-
-function handleOption(type: string) {
-    emit('select', type);
-    emit('close');
-}
-</script>
+<script lang="ts" src="./NavTargetPicker.ts"></script>
 
 <style scoped>
 /* ==========================================================================

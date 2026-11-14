@@ -1,27 +1,13 @@
 version: 2
 
-# ────────────────────────────────────────────────────────────────
-# Dependabot 更新策略：只跟大版本（major）
-# ────────────────────────────────────────────────────────────────
-# 背景：本仓库由 Agent 高频产出功能提交，依赖的 minor / patch 更新噪音过大。
-# 关键点：**安全更新（security updates）不受 schedule 约束**——GitHub 收录新
-# advisory 后立刻开 PR，表现为「每天冒出几个 PR」，与 schedule 的 weekly 无关。
-# 策略：忽略所有依赖的 minor / patch，只保留 major 更新，按周检查。
-#
-# ⚠️ 取舍（务必知悉）：Dependabot 的 ignore 对 version-updates 与
-# security-updates **同时生效**，因此 minor / patch 级别的安全补丁不再自动出 PR。
-# 需要定期人工复查：https://github.com/NEGIAO/WebGIS-Dev/security/dependabot
-# 若日后想恢复安全补丁，删掉下面两处 ignore 块即可。
-#
-# 机器人不合并、不推 main（2026-10-25 gh CLI 核查）：
-#   - 仓库 allow_auto_merge=false、无 rulesets、无 auto-merge workflow，
-#     历史依赖 PR #33/#34/#35 合并 actor 均为账号本人（人工点击）；
-#   - Dependabot 只开 PR、只写自己的 dependabot/* 分支，合不合并完全由你决定；
-#   - 唯一可能「代点合并」的是 GitHub 的 Copilot coding agent —— 它是**账号级能力**，
-#     不落在本仓库 .github/workflows/（该目录现仅 codeql / deploy / pre-check /
-#     traffic-counter 四个 workflow）。若日后启用，需到
-#     Settings → Copilot → Coding agent 确认 auto-merge 类开关为关闭。
-# ────────────────────────────────────────────────────────────────
+# ------------------------------------------------------------------
+# Dependabot 更新策略：patch / minor 自动合并，major 人工看
+# ------------------------------------------------------------------
+# - patch / minor：由 .github/workflows/dependabot-automerge.yml 在
+#   必过检查（PR Check / Build & Test Check）通过后自动 squash 合并。
+# - major：只出 PR，不自动合并，需人工确认（API 变更风险高）。
+# - 安全更新不受 schedule 约束，GitHub 收录新 advisory 后立刻开 PR。
+# ------------------------------------------------------------------
 
 updates:
   # ---------- 前端：npm ----------
@@ -32,19 +18,12 @@ updates:
       day: "monday"
       time: "09:00"
       timezone: "Asia/Shanghai"
-    # 只跟 major，PR 极少，限额调低
-    open-pull-requests-limit: 3
+    open-pull-requests-limit: 5
     labels:
       - "dependencies"
       - "javascript"
     commit-message:
       prefix: "chore(deps)"
-    ignore:
-      # 仅保留 major：minor / patch 一律不出 PR
-      - dependency-name: "*"
-        update-types:
-          - "version-update:semver-minor"
-          - "version-update:semver-patch"
 
   # ---------- 后端：uv ----------
   - package-ecosystem: "uv"
@@ -54,14 +33,9 @@ updates:
       day: "monday"
       time: "09:30"
       timezone: "Asia/Shanghai"
-    open-pull-requests-limit: 3
+    open-pull-requests-limit: 5
     labels:
       - "dependencies"
       - "python:uv"
     commit-message:
       prefix: "chore(deps)"
-    ignore:
-      - dependency-name: "*"
-        update-types:
-          - "version-update:semver-minor"
-          - "version-update:semver-patch"

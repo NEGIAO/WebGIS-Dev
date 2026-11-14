@@ -68,64 +68,7 @@
     </div>
 </template>
 
-<script setup lang="ts">
-import { computed, ref, watch } from 'vue';
-import { ChevronRight, Folder, FolderOpen } from '@lucide/vue';
-
-defineOptions({ name: 'SharedResourceTreeItem' });
-
-const props = defineProps({
-    node: { type: Object, required: true },
-    level: { type: Number, default: 0 },
-});
-
-const emit = defineEmits(['load-resource']);
-
-const isFolder = computed(() => props.node?.type === 'folder');
-const expanded = ref(true);
-
-const fileTypeLabel = computed(() => {
-    const type = String(props.node?.resource?.type || '').toUpperCase();
-    return type || 'FILE';
-});
-
-const displayName = computed(() => {
-    const raw = String(props.node?.name || '').trim();
-    if (!raw) return '';
-    try {
-        return decodeURIComponent(raw.replace(/\+/g, '%20'));
-    } catch {
-        return raw;
-    }
-});
-
-watch(
-    () => props.node,
-    (nextNode) => {
-        if (!nextNode || nextNode.type !== 'folder') {
-            expanded.value = false;
-            return;
-        }
-        // 新节点默认展开，便于首次查看全部共享目录结构。
-        expanded.value = true;
-    },
-    { immediate: true },
-);
-
-function toggleFolder() {
-    if (!isFolder.value) return;
-    expanded.value = !expanded.value;
-}
-
-function handleFileClick() {
-    if (!props.node?.resource) return;
-    emit('load-resource', props.node.resource);
-}
-
-function forwardLoad(resource: any) {
-    emit('load-resource', resource);
-}
-</script>
+<script lang="ts" src="./SharedResourceTreeItem.ts"></script>
 
 <style scoped>
 .shared-tree-item {

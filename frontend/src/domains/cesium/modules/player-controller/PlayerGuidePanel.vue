@@ -36,15 +36,7 @@
     </Transition>
 </template>
 
-<script setup lang="ts">
-import { Plane, Mouse, X } from '@lucide/vue';
-defineProps({
-    visible: { type: Boolean, default: false },
-    isFirstPerson: { type: Boolean, default: false },
-    isFlying: { type: Boolean, default: false },
-});
-defineEmits(['close']);
-</script>
+<script lang="ts" src="./PlayerGuidePanel.ts"></script>
 
 <style scoped>
 .player-guide {

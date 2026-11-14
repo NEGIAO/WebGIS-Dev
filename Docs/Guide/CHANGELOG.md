@@ -11,6 +11,45 @@
 > 零散升号、整合后即废弃，号段均高于当前版本）统一归并为 **V3.6.42**。
 > 条目所述功能与修复内容、发布日期、整合结论均不变，仅版本号表述归一，便于全文检索不再出现倒挂号。
 
+> **版本号归并（2026-11-14）**：V3.7.1 ~ V3.7.7 七条记录所记为**同一批未提交工作**的逐次增量。
+> 按用户「整合为一个统一的版本 V3.7.1」的指令，七条合并为单条 **V3.7.1**，曾用中间版本号
+> （V3.7.2 ~ V3.7.7）自本条起废弃；功能与修复内容、发布日期、结论均不变，仅版本号表述归一。
+> 分主题的原始过程记录保留在 `Docs/LLM_record/26-11/2026-11-14/`，不迁移、不改写。
+
+### V3.7.1 (2026-11-14) — Vue 组件二元分离收官 · 跨引擎适配器契约 · 实时在线统计精度治理 · 三维底图容灾与性能瘦身
+
+> **一句话**：将 10 份外置 `.scss` 全部回迁 `.vue` 内联样式、72/72 含脚本组件统一「`X.vue` 视图层 + `X.ts` 实例层」二元分离、10 个超 700 行业务模块按功能域拆分；同期完成实时在线统计的 `conn_id` 粒度重构与游客身份归一（单人在线不再虚高）、Cesium OSM 瓦片 403 三级容灾、`@common/map-adapter` 跨引擎适配器契约与双适配器原型、境外挂死脚本与 8.78 MB 冗余产物清理，并修复 `engineTreePort` 端口表非响应式导致的三维绘制成品「入店不入树」回归。详见 [V3.7.1 收口与整合日志](../LLM_record/26-11/2026-11-14/2026-11-14-v371-review-and-consolidation.md)。
+
+1. **Vue 组件范式收口与样式内聚（组件层）**：
+   - 纠正「`<style>` 外置为 `.scss`」的设计偏差：`HomeView`、`LandingView`、`CesiumContainer`、`CesiumToolPanel`、`TOCPanel`、`ApiManagementPanel`、`LogMonitor`、`MapContainer`、`AttributeTable` 共 9 个组件的 10 份外置 `.scss`（含 1 份全局样式）完整回迁 `.vue` 内联块，`styles/` 目录与 `Scripts/ExtractVueStyles.py` 一并删除；SCSS 专有语法同步降级为原生 CSS 嵌套，`vite build` 验证解析通过。
+   - 其余 36 个 `<script setup>` 组件全部剥离为同名 `.ts`（`defineComponent` + `export class Instance`），全仓 73 个 `.vue` 中 72 个含脚本组件统一为 `<script lang="ts" src="./X.ts">`，仅无脚本纯视图 `AuthGlobeStage.vue` 例外。
+   - `Scripts/CheckVueParadigm.py` 增加「禁止 `<style src="...">` 外置样式代理」门禁；`Guide/dev-conventions.md`、`Guide/vue-component-template.md` 与 `TODO/2026-11-13-vue-component-refactor-plan.md` 同步修正。
+2. **超长业务模块按功能域拆分（本次涉及的 10 个模块拆分后均 < 700 行）**：
+   - 按职责拆出 `drawHandleRegistry`、`imageryProviderBuilders`、`fluidRenderPrimitives`、`routeFlyTimelineAndIo`、`planarControllerSetup`、`playerModelLoader`、`tilesetSampleLoaders`、`tilesetLeafSampling`、`useHomeTocAndAttributeActions`、`useMapBasemapInstances` 等子模块，宿主文件改为再导出以保持既有导入路径不变；拆分前逐函数核对迁移完整性。
+3. **实时在线统计精度治理（前后端）**：
+   - `OnlineUserTracker` 由「身份引用计数」升级为 `conn_id` 粒度：同标签 `client_id` 重连原子接管、单标签关闭不误杀同用户其余页签、`_heartbeat_expiry_watch_loop` 剔除陈旧连接时同步 `evict_conn_ids` 回收广播队列。
+   - 修复 SSE 探活阻断性缺陷：`statistics_stream` 超时分支遗漏 `await request.is_disconnected()`（未 await 的协程对象布尔恒真）导致连接每 10s 必断并遗留 90s 幽灵心跳。
+   - 游客身份归一：`presence_id_from_fields` 在存在 `guest_device_id` 时一律按设备指纹派生 `g:` 主键，`ticket` / `heartbeat` / `offline` / 鉴权依赖与注销入口统一透传 `X-Guest-Device-Id`；同浏览器已登录 `u:` 活跃时压制其游客身份，单人开多页不再计为 2。
+   - 卸载信令加固：`pagehide` / `beforeunload` 改用 CORS 简单类型 `text/plain` 的 `sendBeacon`（零预检）并主动关闭 `EventSource`；切号前串行等待旧会话 `offline` 落库；注销接入不标活的 `require_login_for_logout`，删除会话时按 `session_signature` 精准剔除在线信号。
+   - 回归单测：`test_realtime_stats.py` 新增 10 组用例（多标签单关、身份接管、同浏览器压制、按会话指纹剔除、连接超时剔除、`await` 探活与 keep-alive、Beacon JSON body 解析），全量 24/24 通过。
+4. **三维底图 OSM 403 容灾链路**：
+   - Cesium 原生 `Resource` 无法指定 `referrerPolicy`，重写 `requestImage` 改用 `fetch(..., { referrerPolicy: 'origin-when-cross-origin' })`，并以 `createImageBitmapFromBlob` / `Image` 双路径解码保证纹理翻转对齐。
+   - 建立「直连优先 → 后端 `/proxy` 兜底 → `tile.openstreetmap.de` 社区镜像」三级链路，识别历史 6987 字节「403 Access blocked」假图；结合 `AbortController` 与 `request.cancelFunction` 在视锥离开/底图切换时秒级断开。
+   - 官方 `createDefaultImageryProviderViewModels` 的 OpenStreetMap 选项注入同一拦截器；OL 侧 `group-4.ts` 的 `vector_osm` 补齐 `prioritizeTileSourceRequest` 包装。
+5. **性能专项（P0 / P1）与 P2 架构蓝图**：
+   - 下线 `min-enhanced.js` 中 51.la 国际 SDK、MapMyVisitors 与 Google Analytics（国内不可达挂起 30s、占用关键连接槽位），脚本由 180 行瘦身至 34 行；仅保留国内合规节点。
+   - 物理删除 `public/cesium/index.cjs` 与 `index.js`（无任何模块引用），发布包减重 **8.78 MB**；`@turf/turf` 改为具名按需导入，触发 tree-shaking。
+   - 交付《P2 跨引擎 UI 解耦统一架构设计蓝图》（Mermaid 拓扑 + `IMapEngineAdapter` 契约 + 三阶段路线），作为下一步实施依据。
+6. **跨引擎适配器 Phase 1 原型**：
+   - 新增 `@common/map-adapter`：`IMapEngineAdapter` 契约、`EngineCapabilities` 能力矩阵、`MapCommandBus` 命令总线、`useMapEngineAdapter` 注册中心（`shallowReactive` 端口表）。
+   - 落地 `OpenLayersAdapter` 与 `CesiumAdapter` 原型，在 `MapContainer` / `CesiumContainer` 内注册与卸载，`useHomeEngineSwitch` 切换时联动 `setActiveEngineType`；命令总线加「仅活跃引擎响应」守卫，避免一次 `camera:flyTo` 同时驱动两个底座。
+   - `CheckDomainDeps.py` 四项跨域依赖均为 0。
+7. **回归修复与门禁收口**：
+   - `engineTreePort` 端口表由 `new Map()` 改为 `shallowReactive(new Map())`：三维端口随懒加载 `CesiumContainer` 注册、晚于 TOC computed 首次求值，普通 Map 使 computed 永久丢失依赖追踪，侧栏绘制 / 测量 / 路线成品「入店不入树」；改为响应式后一处修复覆盖全部消费方。
+   - 门禁：`vue-tsc --noEmit` 0 错误、`eslint src/` 0 error、`vite build` 通过、`CheckStructureTree` 734/734、`CheckConfigRegistry` 全绿、`CheckVueParadigm` 72/72、`CheckDomainDeps` 全 0、后端实时统计单测 24/24。
+
+---
+
 ### V3.7.0 (2026-11-14) — 前端全面从 JavaScript 过渡到 TypeScript 严格模式 + Vue 组件范式化架构升级 + 全仓 Code Review 收口
 
 > **一句话**：前端彻底告别旧 JavaScript（业务 `.js` 文件归零，全量 636 个 `.ts` + 1 个 `.mts` + 73 个 `.vue`），开启 `tsconfig.json` 完整严格编译模式（`strict: true` / `noImplicitAny: true`），完成 36 个复杂 Vue 组件「`X.vue` 视图层 + `X.ts` `class Instance` 实例层」物理分离、7 个巨型组件样式外置、8 类通用能力 composable 沉淀、23 处跨域依赖清零，并修复全仓 Code Review 检出的潜在运行时 Bug 与后端降级 503 掩盖 CORS 预检缺陷。

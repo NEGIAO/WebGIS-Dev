@@ -51,7 +51,7 @@ export function useCesiumAtmosphereAndHud(deps: UseCesiumAtmosphereAndHudDeps) {
         height: 0,
     });
 
-    /** 触屏能力判定（pointer: coarse）：触屏默认隐藏坐标 HUD，桌面默认显示 */
+    /** 触屏能力判定（pointer: coarse）：仅用于 HUD 的图标尺寸与布局，不参与默认显隐 */
     const isTouch = ref(
         typeof window !== 'undefined' &&
             typeof window.matchMedia === 'function' &&
@@ -124,8 +124,8 @@ export function useCesiumAtmosphereAndHud(deps: UseCesiumAtmosphereAndHudDeps) {
         }
     }
 
-    /** 坐标 HUD 显示开关：桌面默认显示、触屏默认隐藏 */
-    const hudVisible = ref(!isTouch.value);
+    /** 坐标 HUD 显示开关：默认关闭，用户点击显隐开关后才展开（桌面 / 触屏一致） */
+    const hudVisible = ref(false);
 
     const hudToggleTitle = computed(() =>
         hudVisible.value ? t('cesium.collapseCoordHud') : t('cesium.expandCoordHud'),

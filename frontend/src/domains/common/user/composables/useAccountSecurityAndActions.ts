@@ -16,6 +16,7 @@ import {
 	redirectToOAuthBindProvider,
 } from '@/api/backend';
 import { clearAuthSession } from '@common/user/services/auth';
+import { useRealtimeStats } from '@common/user/composables/useRealtimeStats';
 
 export interface AccountSecurityAndActionsDeps {
 	t: (key: string, params?: Record<string, any>) => string;
@@ -73,6 +74,8 @@ export function useAccountSecurityAndActions(deps: AccountSecurityAndActionsDeps
 	};
 
 	const forceBackToLogin = async (hintText = '') => {
+		// 先于 clearAuthSession 断开并上送 offline beacon，确保 Authorization 尚未清空
+		useRealtimeStats().disconnect();
 		clearAuthSession();
 		deps.closePanel();
 		if (hintText) deps.message.success(hintText);
@@ -82,6 +85,7 @@ export function useAccountSecurityAndActions(deps: AccountSecurityAndActionsDeps
 	const handleLogout = async () => {
 		if (deps.isSubmitting.value) return;
 		deps.isSubmitting.value = true;
+		useRealtimeStats().disconnect();
 		try {
 			await apiAuthLogout();
 		} catch {

@@ -350,54 +350,7 @@
     </div>
 </template>
 
-<script setup lang="ts">
-import { ref, watch } from 'vue';
-import { useRingPatternStyle } from '../composables/useRingPatternStyle';
-import { useSpinBoost } from '../composables/useSpinBoost';
-
-// 纹样 PNG 的 url() 必须由文档级样式表解析（相对路径写在 scoped CSS 里
-// 会按打包产物 /assets/ 解析而 404），注入实现与 Landing 共用同一份；
-// 本组件只负责几何与动画，不重复维护图源路径。
-useRingPatternStyle({
-    styleId: 'auth-decor-ring-pattern-style',
-    scope: '.auth-decor__orbits',
-    ringClass: 'auth-decor__ring',
-});
-
-// 宇航员的四肢摆动用 SMIL（rotate 可直接指定关节坐标），但 SMIL 不响应
-// prefers-reduced-motion —— 在 setup 期读一次系统偏好，关闭动效时干脆
-// 不渲染 <animateTransform>，保住"减少动态效果即整层静态"的承诺
-const motionEnabled =
-    typeof window === 'undefined' ||
-    !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-
-/**
- * 双轨 PNG 圆环的悬停加速
- *
- * 只作用于 `auth-orbit`（.auth-decor__ring--outer/mid/core 的自转），不牵动
- * 右上角渐变色轮、数据流、脉冲等其它动效。每轨三环必须一起提速——只提外环
- * 会让「综合圆环」视觉上被撕开，三环同步才读得成一个整体在转。
- * 由外层按钮的 hover/focus 驱动（props.boost）。
- */
-const rootEl = ref<HTMLElement | null>(null);
-const orbitSpin = useSpinBoost(() => rootEl.value, { match: 'auth-orbit' });
-
-const props = defineProps<{
-    /** 由外层按钮的 hover/focus 驱动：true 时渐变色轮加速 */
-    boost?: boolean;
-}>();
-
-watch(
-    () => props.boost === true,
-    (on) => {
-        if (on) {
-            orbitSpin.start();
-        } else {
-            orbitSpin.stop();
-        }
-    },
-);
-</script>
+<script lang="ts" src="./AuthDecorBackground.ts"></script>
 
 <style scoped>
 .auth-decor {

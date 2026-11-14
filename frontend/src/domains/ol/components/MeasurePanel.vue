@@ -34,42 +34,7 @@
     </div>
 </template>
 
-<script setup lang="ts">
-import { ref, computed } from 'vue';
-import { X, Info, Trash2, Ruler, SquareDashedBottom } from '@lucide/vue';
-import { useLocale } from '@common/app/useLocale';
-
-const { t } = useLocale();
-const emit = defineEmits(['measure-type', 'clear', 'close']);
-
-const activeType = ref('');
-
-const measureTools = computed(() => [
-    { type: 'MeasureDistance', label: t('measure.tools.MeasureDistance'), icon: Ruler },
-    { type: 'MeasureArea', label: t('measure.tools.MeasureArea'), icon: SquareDashedBottom },
-]);
-
-const hint = computed(() => {
-    switch (activeType.value) {
-        case 'MeasureDistance':
-            return t('measure.hints.MeasureDistance');
-        case 'MeasureArea':
-            return t('measure.hints.MeasureArea');
-        default:
-            return t('measure.hints.default');
-    }
-});
-
-function selectTool(type: string) {
-    activeType.value = type;
-    emit('measure-type', type);
-}
-
-function handleClear() {
-    activeType.value = '';
-    emit('clear');
-}
-</script>
+<script lang="ts" src="./MeasurePanel.ts"></script>
 
 <style scoped>
 .measure-panel {

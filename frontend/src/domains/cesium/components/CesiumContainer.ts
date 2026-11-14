@@ -9,6 +9,7 @@ import {
     defineAsyncComponent,
     defineComponent,
     markRaw,
+    onUnmounted,
     ref,
     type ComputedRef,
     type Ref,
@@ -18,6 +19,8 @@ import { Copy, Eye, EyeOff, House, Upload } from '@lucide/vue';
 import '@cesium-domain/vendors/cesium-navigation/styles/cesium-navigation.css';
 
 import { BACKEND_BASE_URL } from '@/api/backend';
+import { registerMapEngineAdapter, unregisterMapEngineAdapter } from '@common/map-adapter';
+import { CesiumAdapter } from '@cesium-domain/adapter';
 import { useMessage } from '@common/shell/useMessage';
 import { translate as t } from '@common/app/useLocale';
 import { getRuntimeMapTokensSync } from '@common/services/runtimeMapTokens';
@@ -220,6 +223,16 @@ export class Instance {
 
         this.getViewer = getViewer;
         this.getCesium = getCesium;
+
+        // ── 注册统一三维地图引擎适配器 (Phase 1 跨引擎架构) ──
+        const cesiumAdapter = new CesiumAdapter({
+            getViewer,
+        });
+        registerMapEngineAdapter(cesiumAdapter);
+
+        onUnmounted(() => {
+            unregisterMapEngineAdapter('cesium');
+        });
 
         const heightSampler = useCesiumHeightSampler({ getViewer, getCesium });
         this.heightSampler = heightSampler;

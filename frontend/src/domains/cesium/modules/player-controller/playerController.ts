@@ -1,5 +1,5 @@
 import {
-    Cartesian3, Matrix3, Matrix4, Model, Transforms, Math as CMath,
+    Cartesian3, Matrix4, Model, Transforms, Math as CMath,
 } from "cesium";
 import type { Viewer } from "cesium";
 
@@ -7,7 +7,12 @@ import type { DynamicObject as DynamicBody, DynamicBodyOpts } from "./systems/Ph
 import type { DynamicShape } from "./types";
 import { DynamicObject } from "./dynamicObject";
 import { LocalFrame } from "./utils/frame";
-import { getGltfBboxSize } from "./utils/gltfGeometry";
+import {
+    computeHeadWorldPosition,
+    isMobileDevice,
+    loadAndConfigurePlayerModel,
+    slerpAngle,
+} from "./utils/playerModelLoader";
 import { MobileControls } from "./utils/mobileControls";
 import { PhysicsSystem } from "./systems/PhysicsSystem";
 import { InputSystem } from "./systems/InputSystem";
@@ -17,13 +22,7 @@ import { DebugColliderSystem } from "./systems/DebugColliderSystem";
 import { smoothDamp } from "./utils/math";
 import type { PlayerControllerOptions, PlayerModelOptions, KeyMap } from "./types";
 
-function isMobileDevice() {
-    return /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
-}
-
 export class playerController {
-
-
     // ==================== 场景引用 ====================
     viewer!: Viewer; // Cesium 视图
     model: Model | null = null; // 玩家模型
@@ -65,13 +64,10 @@ export class playerController {
     private stepSmoothFactor = 12; // 贴地跟随平滑因子：坡度/台阶上渐进贴合，避免瞬移
 
     // ==================== 局部系重锚 ====================
-    // 远离初始锚点后，Rapier 局部坐标会变大导致站立/碰撞抖动，局部 Up 与真实竖直也会偏离；
-    // 超过该水平距离即以玩家当前位置重锚。默认 10km，传 Infinity 关闭。
     private physicsRebaseDistance = 10000;
-    private _rebaseScratch = new Cartesian3(); // 重锚判定用 scratch（避免每帧分配）
+    private _rebaseScratch = new Cartesian3();
 
     // ==================== 运动状态 ====================
-    // 速度在 ENU 局部系:E/N 为水平，U 为竖直
     private velE = 0; // 东向速度
     private velN = 0; // 北向速度
     private velU = 0; // 竖直速度
@@ -82,14 +78,14 @@ export class playerController {
     private posEcef = new Cartesian3(); // 当前位置（ECEF，胶囊中心）
 
     // ==================== 事件回调 ====================
-    onAnimationChange?: (name: string) => void; // 动画切换回调
-    onBeforeViewChange?: (isFirstPerson: boolean) => void; // 视角切换前回调
-    onViewChange?: (isFirstPerson: boolean) => void; // 视角切换后回调
-    onGroundChange?: (onGround: boolean) => void; // 落地状态回调
-    onTowardChange?: (dx: number, dy: number, speed: number) => void; // 朝向变化回调
+    onAnimationChange?: (name: string) => void;
+    onBeforeViewChange?: (isFirstPerson: boolean) => void;
+    onViewChange?: (isFirstPerson: boolean) => void;
+    onGroundChange?: (onGround: boolean) => void;
+    onTowardChange?: (dx: number, dy: number, speed: number) => void;
 
     // ==================== 动态物体 ====================
-    private dynamicObjects: DynamicObject[] = []; // 受物理模拟、可被角色推动的物体
+    private dynamicObjects: DynamicObject[] = [];
 
     // ==================== 子系统 ====================
     frame = new LocalFrame(); // ENU 局部坐标系
@@ -113,7 +109,6 @@ export class playerController {
         Cartesian3.clone(opts.initPos, this.initPos);
         Cartesian3.clone(opts.initPos, this.posEcef);
 
-        // 应用玩家参数
         this.gravity = (m.gravity ?? this.gravity) * s;
         this.jumpHeight = (m.jumpHeight ?? this.jumpHeight) * s;
         this.playerSpeed = (m.speed ?? this.playerSpeed) * s;
@@ -124,14 +119,12 @@ export class playerController {
         this.playerDeceleration = m.deceleration ?? this.playerDeceleration;
         this.yaw = m.rotateY ?? 0;
 
-        // 应用相机参数
-        // theta = 有效朝向 + PI（相机在人物背后），有效朝向 = yaw + facingOffset
         this.cam.theta = this.yaw + (this.playerModelConfig.facingOffset ?? 0) + Math.PI;
         this.cam.sensitivity = opts.mouseSensitivity ?? this.cam.sensitivity;
         this.cam.mouseMode = opts.thirdMouseMode ?? this.cam.mouseMode;
         this.cam.enableSpringCamera = opts.enableSpringCamera ?? this.cam.enableSpringCamera;
         this.cam.springCameraTime = opts.springCameraTime ?? this.cam.springCameraTime;
-        this.cam.saveBaseSpringTime(); // 保存初始弹簧时间，供速度动态调整使用
+        this.cam.saveBaseSpringTime();
         this.cam.zoomEnabled = opts.enableZoom ?? this.cam.zoomEnabled;
         this.cam.minDist = (opts.minCamDistance ?? this.cam.minDist) * s;
         this.cam.maxDist = (opts.maxCamDistance ?? this.cam.maxDist) * s;
@@ -145,22 +138,16 @@ export class playerController {
         this.physicsRebaseDistance = opts.rebaseDistance ?? this.physicsRebaseDistance;
         this.isShowMobileControls = (opts.isShowMobileControls ?? this.isShowMobileControls) && isMobileDevice();
 
-        // 自定义键位
         if (opts.keyMap) this.input.buildKeyMap(opts.keyMap);
 
-        // 初始化移动端控件
         if (this.isShowMobileControls) {
             this.mobileControls = new MobileControls(i => this.input.setInput(i));
             await this.mobileControls.init(opts.mobileControls);
         }
 
-        // 建立 ENU 局部坐标系
         this.frame.setAnchor(this.initPos);
-
-        // 初始化物理世界
         await this.physics.create(this.gravity);
 
-        // 创建玩家胶囊：用临时 r/h 算实际尺寸，存入 capsuleInfo
         const r = this.playerCapsuleRadius * s * this.playerCapsuleRadiusRatio;
         const h = this.playerCapsuleHeight * s;
         this.capsuleInfo = { radius: r, height: h };
@@ -172,94 +159,44 @@ export class playerController {
             autostepMaxHeight: 40 * s,
         });
 
-        // 构建静态碰撞体
         if (opts.staticCollider) await this.physics.addStaticColliders(this.viewer, opts.staticCollider);
-        // 初始化时注册动态碰撞体
         if (opts.kinematicCollider) {
             const list = Array.isArray(opts.kinematicCollider) ? opts.kinematicCollider : [opts.kinematicCollider];
             for (const d of list) await this.physics.addKinematicCollider(this.viewer, d);
         }
 
-        // 加载玩家模型
         await this.loadPlayerModel();
 
-        // 接管相机、绑定输入事件
         this.cam.takeOver();
         this.input.bindEvents();
         if (this.isFirstPerson) this.cam.setFirstPerson();
-        else this.cam.setOverShoulder(this.enableOverShoulderView); // 第三人称应用初始越肩状态
+        else this.cam.setOverShoulder(this.enableOverShoulderView);
 
         callback?.();
     }
 
     // ==================== 玩家模型 ====================
 
-    private modelScale = 1; // 模型归一化系数（胶囊高度 / 模型包围盒高度）
+    private modelScale = 1;
 
-    // 加载模型与动画（使用 Model.boundingSphere 避免冗余 fetch）
     private async loadPlayerModel(): Promise<Model> {
-        // 先用 scale=1 加载，ready 后量包围盒算 modelScale，再设最终矩阵
-        const modelMatrix = this.frame.composeModelMatrix(this.posEcef, this.yaw);
-        const url = this.playerModelConfig.url;
-        // 加载失败异常向上抛给 usePlayerController 的 message?.error?.() 提示,此处不重复 console.error
-        this.model = await Model.fromGltfAsync({
-            url,
-            modelMatrix,
-            scene: this.viewer.scene,
+        const { model, modelScale } = await loadAndConfigurePlayerModel({
+            viewer: this.viewer,
+            frame: this.frame,
+            posEcef: this.posEcef,
+            yaw: this.yaw,
+            playerModelConfig: this.playerModelConfig,
+            playerCapsuleHeight: this.playerCapsuleHeight,
+            capsuleHeight: this.capsuleInfo.height,
         });
-        this.viewer.scene.primitives.add(this.model);
-        await this.waitForModelReady(this.model); // 等待模型 ready 后再注册动画
-
-        // 计算胶囊体尺寸：从 Model.boundingSphere 获取包围盒高度，无需二次 fetch
-        const bs = this.model.boundingSphere;
-        if (bs && bs.radius > 0) {
-            // boundingSphere.radius 是半径，模型高度约等于 2*radius
-            const modelHeight = bs.radius * 2;
-            this.modelScale = this.playerCapsuleHeight / modelHeight;
-        } else {
-            // 兜底：如果 boundingSphere 不可用，回退到 fetch 方式
-            const res = await fetch(url);
-            if (!res.ok) throw new Error(`fetch 模型失败: ${url} HTTP ${res.status}`);
-            const glbBytes = await res.arrayBuffer();
-            const size = await getGltfBboxSize(glbBytes, url);
-            if (size.y > 0) this.modelScale = this.playerCapsuleHeight / size.y;
-        }
-
-        // 挂载模型：最终缩放 = modelScale * s,并下移半个胶囊高让脚对齐胶囊底（lookAt 朝向）
-        const s = this.playerModelConfig.scale;
-        const fwdEN = { e: Math.sin(this.yaw), n: Math.cos(this.yaw) };
-        this.frame.composeModelMatrixLookAt(this.posEcef, fwdEN, this.modelScale * s, this.model.modelMatrix, -this.capsuleInfo.height / 2, this.playerModelConfig.facingOffset ?? 0);
-
+        this.model = model;
+        this.modelScale = modelScale;
         this.animation.setup(this.model);
         return this.model;
     }
 
-    // 等待模型 ready
-    private waitForModelReady(model: Model): Promise<void> {
-        if (model.ready) return Promise.resolve();
-        return new Promise<void>((resolve, reject) => {
-            let settled = false;
-            const offReady = model.readyEvent.addEventListener(() => {
-                if (settled) return;
-                settled = true;
-                offReady();
-                offErr();
-                resolve();
-            });
-            const offErr = model.errorEvent.addEventListener(() => {
-                if (settled) return;
-                settled = true;
-                offReady();
-                offErr();
-                // 携带 Error，避免上层 catch 读取 error.message 时二次抛错
-                reject(new Error(`玩家模型加载失败: ${this.playerModelConfig.url}`));
-            });
-        });
-    }
-
     // ==================== 主循环 ====================
 
-    // 主循环
     update(delta?: number) {
         if (!this.isupdate || !this.model || !this.physics.world) return;
         if (delta === undefined) {
@@ -273,19 +210,14 @@ export class playerController {
         this.updatePlayer(delta);
     }
 
-    // 玩家帧更新
     private updatePlayer(delta: number) {
-        // 远距离漫游：先重锚局部系，再提交上一帧的运动学目标，
-        // 使本帧的地面检测与移动解算都基于最新、且数值稳定的坐标。
         this.maybeRebase();
         this.physics.step(delta);
 
-        // 计算移动方向
-        const camYaw = this.getCameraYaw(); // 相机水平朝向（绕 Up）
+        const camYaw = this.getCameraYaw();
         let dirE = 0, dirN = 0, dirU = 0;
-        let groundCorrectionU = 0; // 贴地修正位移：与竖直速度分离，避免速度尖峰导致的抖动
+        let groundCorrectionU = 0;
         const i = this.input;
-        // 按键移动方向（相对相机朝向）
         if (i.fwd) { dirE += Math.sin(camYaw); dirN += Math.cos(camYaw); }
         if (i.bkd) { dirE -= Math.sin(camYaw); dirN -= Math.cos(camYaw); }
         if (i.lft) { dirE -= Math.cos(camYaw); dirN += Math.sin(camYaw); }
@@ -293,17 +225,14 @@ export class playerController {
 
         if (this.isFlying) {
             this.curPlayerSpeed = i.shift ? this.playerFlySpeed * 2 : this.playerFlySpeed;
-            // 飞行前进：沿相机视线向量（含俯仰），覆盖按键水平方向
             if (i.fwd) { const c = this.getCameraDirEnu(); dirE = c.e; dirN = c.n; dirU = c.u; }
             if (i.space) dirU += 1;
         } else {
             this.curPlayerSpeed = i.shift ? this.playerSpeed * 2 : this.playerSpeed;
         }
 
-        // 根据当前速度动态调整相机弹簧时间（速度越快，相机跟得越紧）
         this.cam.updateSpringTimeBySpeed(this.curPlayerSpeed, this.playerSpeed, delta);
 
-        // 归一化方向向量（飞行按 3D 归一化以保留俯仰；地面只归一化水平）
         if (this.isFlying) {
             const len = Math.hypot(dirE, dirN, dirU);
             if (len > 0) { dirE /= len; dirN /= len; dirU /= len; }
@@ -312,41 +241,32 @@ export class playerController {
             if (hLen > 0) { dirE /= hLen; dirN /= hLen; }
         }
 
-        // 速度驱动（smoothDamp 平滑加速/减速，空中控制衰减）
-        const targetE = dirE * this.curPlayerSpeed; // 目标速度 E
-        const targetN = dirN * this.curPlayerSpeed; // 目标速度 N
+        const targetE = dirE * this.curPlayerSpeed;
+        const targetN = dirN * this.curPlayerSpeed;
         const hasInput = dirE !== 0 || dirN !== 0;
-        // 空中时降低操控响应，保留惯性感
         const airFactor = (!this.isFlying && !this.playerIsOnGround) ? this.airControl : 1;
         const smoothTime = hasInput ? this.moveSmoothTime / airFactor : this.moveSmoothTime * 1.5 / airFactor;
         this.velE = smoothDamp(this.velE, targetE, smoothTime, delta);
         this.velN = smoothDamp(this.velN, targetN, smoothTime, delta);
 
-        // 跳跃：叠加当前竖直速度（保留起跳前的运动状态）
         if (!this.isFlying && this.pendingJump) {
-            this.velU = Math.max(this.velU, 0) + this.jumpHeight; // 叠加而非覆盖，向上速度取正
+            this.velU = Math.max(this.velU, 0) + this.jumpHeight;
             this.pendingJump = false;
         }
 
         if (this.isFlying) {
-            // 飞行：竖直方向 smoothDamp 平滑
             const targetU = dirU * this.curPlayerSpeed;
             this.velU = smoothDamp(this.velU, targetU, smoothTime, delta);
         } else {
-            // 地面检测
-            const snapH = this.capsuleInfo.height / 2; // 胶囊中心静止离地高度
-            const maxH = snapH * 1.2;                  // 1.2 倍容差带，吸收抖动
-            const dist = this.physics.groundDistance(maxH * 4); // 胶囊中心到地面距离
+            const snapH = this.capsuleInfo.height / 2;
+            const maxH = snapH * 1.2;
+            const dist = this.physics.groundDistance(maxH * 4);
 
             if (dist > maxH) {
-                // 离地超出容差 → 加重力下落
                 this.velU += this.gravity * delta;
                 this.setOnGround(false);
             } else if (this.velU <= 0) {
                 if (this.playerIsOnGround) {
-                    // 已在地面：把"贴地修正"作为独立位移处理，竖直速度归零。
-                    // 小落差（台阶/坡度）按 stepSmoothFactor 渐进贴合，避免瞬移；
-                    // 大落差（地形骤降）则一次修正到位，避免悬空滞后。
                     const correction = snapH - dist;
                     const smoothThreshold = this.capsuleInfo.height * 0.25;
                     groundCorrectionU = Math.abs(correction) <= smoothThreshold
@@ -355,10 +275,8 @@ export class playerController {
                     this.velU = 0;
                     this.setOnGround(true);
                 } else {
-                    // 从空中落下：本帧速度能到落点才吸附，否则继续下落
                     const predicted = dist + this.velU * delta;
                     if (predicted <= snapH) {
-                        // 落地缓冲：首帧只吸收部分修正，后续帧继续收敛，形成软着陆
                         groundCorrectionU = (snapH - dist) * this.landingDamping;
                         this.velU = 0;
                         this.setOnGround(true);
@@ -368,13 +286,11 @@ export class playerController {
                     }
                 }
             } else {
-                // velU > 0（跳跃上升中）：加重力，不在地面
                 this.velU += this.gravity * delta;
                 this.setOnGround(false);
             }
         }
 
-        // 碰撞移动：贴地修正并入本帧位移，竖直速度本身保持干净
         const desiredEnu = {
             e: this.velE * delta,
             n: this.velN * delta,
@@ -382,80 +298,61 @@ export class playerController {
         };
         this.physics.moveCharacter(desiredEnu, this.posEcef);
 
-        // 同步已绑定视觉的动态物体位姿，未 attach 的跳过
         for (const o of this.dynamicObjects) {
             if (o.visual) this.physics.getDynamicModelMatrix(o.body.body, o.visual.modelMatrix);
         }
 
-        // 玩家朝向（对齐原库 setToward 后的朝向逻辑，按鼠标模式分支）。
         if (!this.isFirstPerson) {
-            const moveYaw = Math.atan2(dirE, dirN); // 移动方向 yaw（atan2(E,N)）
+            const moveYaw = Math.atan2(dirE, dirN);
             const mode = this.cam.mouseMode;
             const lerpT = Math.min(1, this.rotationSpeed * delta);
-            let targetPitch = 0; // 默认不俯仰（地面/悬停）
+            let targetPitch = 0;
             if (!this.isFlying) {
                 if (mode === 4 || mode === 5) {
-                    // mode 4/5：人物朝向始终与相机水平朝向一致（鼠标转向即驱动人物转向），硬设
                     this.yaw = camYaw;
                 } else if (mode === 0 || mode === 2) {
-                    // mode 0/2：有移动输入朝移动方向，否则朝相机方向，slerp
-                    this.yaw = this.slerpAngle(this.yaw, hasInput ? moveYaw : camYaw, lerpT);
+                    this.yaw = slerpAngle(this.yaw, hasInput ? moveYaw : camYaw, lerpT);
                 } else if (hasInput) {
-                    // 其他模式（默认 1）：仅有移动输入时朝移动方向
-                    this.yaw = this.slerpAngle(this.yaw, moveYaw, lerpT);
+                    this.yaw = slerpAngle(this.yaw, moveYaw, lerpT);
                 }
             } else {
-                // 飞行：前进时朝移动方向，否则朝相机方向
-                this.yaw = this.slerpAngle(this.yaw, this.input.fwd && hasInput ? moveYaw : camYaw, lerpT);
-                // 前进时身体俯仰对齐 3D 移动方向（含上下），对齐 three 版 moveDirFlat（保留 Y）
+                this.yaw = slerpAngle(this.yaw, this.input.fwd && hasInput ? moveYaw : camYaw, lerpT);
                 if (this.input.fwd) targetPitch = Math.asin(Math.max(-1, Math.min(1, dirU)));
             }
-            this.pitch = this.slerpAngle(this.pitch, targetPitch, lerpT);
+            this.pitch = slerpAngle(this.pitch, targetPitch, lerpT);
         }
 
-        // 更新模型变换
         const cosP = Math.cos(this.pitch);
         const fwdEN = { e: Math.sin(this.yaw) * cosP, n: Math.cos(this.yaw) * cosP, u: Math.sin(this.pitch) };
         this.frame.composeModelMatrixLookAt(this.posEcef, fwdEN, this.modelScale * this.playerModelConfig.scale, this.model!.modelMatrix, -this.capsuleInfo.height / 2, this.playerModelConfig.facingOffset ?? 0);
 
-        // 设置动画、更新混合器
         this.animation.setAnimationByPressed();
         this.animation.update(delta);
-        // 更新相机
         this.cam.update(delta);
 
-        // 刷新调试线框
         if (this.debugCollider.isEnabled) { this.debugCollider.updateCapsuleDebug(); this.debugCollider.updateDynamicDebug(); }
     }
 
-    // 水平方向远离锚点超过阈值时，重锚 Rapier 局部系（位置在 ECEF 中保持不变）
     private maybeRebase() {
         if (!Number.isFinite(this.physicsRebaseDistance) || this.physicsRebaseDistance <= 0) return;
         const local = this.frame.ecefToLocal(this.posEcef, this._rebaseScratch);
         if (Math.hypot(local.x, local.y) >= this.physicsRebaseDistance) {
             this.physics.rebase(this.posEcef);
-            // 重锚保持 ECEF 位置不变，落地状态仍然有效，故不重置，避免动画抖动
         }
     }
 
     // ==================== 内部辅助 ====================
-    // 相机水平朝向（绕本地 Up 的 yaw）
     private getCameraYaw(): number {
         const d = this.getCameraDirEnu();
-        return Math.atan2(d.e, d.n); // atan2(E, N)
+        return Math.atan2(d.e, d.n);
     }
 
-    // scratch 对象（避免每帧分配）
     private _enuScratch = new Matrix4();
     private _camDirResult = { e: 0, n: 0, u: 0 };
 
-    // 相机朝向在本地 ENU 下的单位向量 {e,n,u}（含俯仰，供飞行沿视线方向用）
-    // ENU 基是正交单位阵，直接用其列向量与相机方向做点积即可，
-    // 无需构造 4x4 逆矩阵再相乘（省掉每帧一次 Matrix4.inverse）。
     private getCameraDirEnu(): { e: number; n: number; u: number } {
         const dir = this.viewer.camera.directionWC;
         const m = Transforms.eastNorthUpToFixedFrame(this.posEcef, undefined, this._enuScratch);
-        // 列主序：列0=E(0..2)、列1=N(4..6)、列2=U(8..10)
         const r = this._camDirResult;
         r.e = dir.x * m[0] + dir.y * m[1] + dir.z * m[2];
         r.n = dir.x * m[4] + dir.y * m[5] + dir.z * m[6];
@@ -465,15 +362,6 @@ export class playerController {
         return r;
     }
 
-    // 角度插值
-    private slerpAngle(from: number, to: number, t: number): number {
-        const d = CMath.negativePiToPi(to - from);
-        return from + d * t;
-    }
-
-    // ==================== 内部辅助 ====================
-
-    // 设置落地状态
     setOnGround(val: boolean) {
         if (this.playerIsOnGround === val) return;
         this.playerIsOnGround = val;
@@ -484,52 +372,34 @@ export class playerController {
 
     // ==================== 调试 ====================
 
-    // 切换调试显示
     setDebug(debug: boolean) {
         this.debugCollider.setEnabled(debug);
     }
 
-    // 同步 debug 可见性（外部可强制刷新）
     syncDebugVisibility() {
         this.debugCollider.syncVisibility();
     }
 
-    // 请求一次跳跃（供输入系统调用）
     requestJump() { this.pendingJump = true; }
-    // 清零速度（进入飞行时调用）
     resetVelocity() { this.velE = this.velN = this.velU = 0; }
-    // 鼠标驱动玩家朝向（第一人称，供相机系统调用）
     addYaw(d: number) { this.yaw = CMath.negativePiToPi(this.yaw + d); }
-    // 获取玩家朝向
     getYaw() { return this.yaw; }
 
-    // 第一人称相机位置：胶囊顶部 + offset
-    // offset 在玩家朝向系（x=右、y=前、z=上），随 yaw 转动，乘 scale
     getHeadWorldPosition(offset?: [number, number, number]): Cartesian3 {
-        const base = Cartesian3.add(
+        return computeHeadWorldPosition(
             this.posEcef,
-            Cartesian3.multiplyByScalar(
-                Cartesian3.normalize(this.posEcef, new Cartesian3()),
-                this.capsuleInfo.height * 0.5,
-                new Cartesian3(),
-            ),
-            new Cartesian3(),
+            this.capsuleInfo.height,
+            this.playerModelConfig.scale,
+            this.yaw,
+            offset,
         );
-        const s = this.playerModelConfig.scale;
-        const [x, y, z] = offset ?? [0, 0, 0];
-        // ENU 绕 Up 旋转 -yaw，使 +y 对齐玩家朝向 (sin yaw, cos yaw)、+x 为其右侧
-        const enu = Transforms.eastNorthUpToFixedFrame(base, undefined, new Matrix4());
-        const heading = Matrix4.multiplyByMatrix3(enu, Matrix3.fromRotationZ(-this.yaw, new Matrix3()), new Matrix4());
-        return Matrix4.multiplyByPoint(heading, new Cartesian3(x * s, y * s, z * s), new Cartesian3());
     }
 
-    // 动态修改缩放
     setPlayerScale(newScale: number) {
         if (newScale <= 0) return;
         const ratio = newScale / this.playerModelConfig.scale;
         this.playerModelConfig.scale = newScale;
 
-        // 更新比例相关参数
         this.gravity *= ratio;
         this.jumpHeight *= ratio;
         this.playerSpeed *= ratio;
@@ -542,33 +412,26 @@ export class playerController {
         this.cam.maxDist *= ratio;
         this.cam.originMaxDist *= ratio;
         this.physics.setGravity(this.gravity);
-        // 重建角色胶囊 collider 尺寸
         const cr = this.capsuleInfo.radius;
         const ch = this.capsuleInfo.height;
         this.physics.updateCharacterShape({
             radius: cr,
             halfHeight: Math.max(0.01, (ch - 2 * cr) / 2),
         });
-        // 重建胶囊体 debug
         this.debugCollider.rebuildCapsule();
     }
 
-    // 切换玩家模型
     async switchPlayerModel(newPlayerModel: PlayerModelOptions) {
-        // 保存当前状态
         const savedPos = Cartesian3.clone(this.posEcef, new Cartesian3());
         const savedYaw = this.yaw;
         const wasFirstPerson = this.isFirstPerson;
 
-        // 移除旧模型
         if (this.model) {
             this.viewer.scene.primitives.remove(this.model);
             this.model = null;
         }
-        // 清除旧动画资源
         this.animation.reset();
 
-        // 更新比例相关参数
         const ratio = newPlayerModel.scale / this.playerModelConfig.scale;
         this.playerModelConfig = { ...this.playerModelConfig, ...newPlayerModel };
         this.gravity *= ratio;
@@ -576,7 +439,6 @@ export class playerController {
         this.playerSpeed *= ratio;
         this.playerFlySpeed *= ratio;
         this.curPlayerSpeed *= ratio;
-        // 胶囊碰撞尺寸随模型尺度同步，否则换模型后碰撞体与视觉不一致
         this.capsuleInfo.radius *= ratio;
         this.capsuleInfo.height *= ratio;
         this.physics.updateCharacterShape({
@@ -588,9 +450,8 @@ export class playerController {
         this.cam.maxDist *= ratio;
         this.cam.originMaxDist *= ratio;
 
-        await this.loadPlayerModel(); // 重新加载（会重算 modelScale）
+        await this.loadPlayerModel();
 
-        // 恢复位置、朝向、视角
         Cartesian3.clone(savedPos, this.posEcef);
         this.yaw = savedYaw;
         this.physics.teleportCharacter(this.posEcef);
@@ -600,36 +461,24 @@ export class playerController {
 
     // ==================== API ====================
 
-    // 获取当前位置
     getPosition(out = new Cartesian3()): Cartesian3 { return Cartesian3.clone(this.posEcef, out); }
-    // 获取第一人称状态
     getIsFirstPerson() { return this.isFirstPerson; }
-    // 获取飞行状态
     getIsFlying() { return this.isFlying; }
-    // 获取落地状态
     getIsOnGround() { return this.playerIsOnGround; }
-    // 获取本帧实际使用的 delta（已钳制 + timeScale）
     getCurrentDelta() { return this.currentDelta; }
-    // 获取玩家模型
     getPlayerModel() { return this.model; }
-    // 获取速度
     getVelocity() { return { e: this.velE, n: this.velN, u: this.velU }; }
-    // 获取胶囊体（实际尺寸）
     getPlayerCapsule() { return this.capsuleInfo; }
-    // 获取当前站立的运动学碰撞体
     getActiveKinematicCollider() { return this.physics.activeKinematicSource; }
-    // 获取碰撞体
     getCollider() { return this.physics.charCollider ?? null; }
 
     // ==================== 动态物体 ====================
 
-    // 添加一个受物理模拟、可被角色推动的动态物体
     addDynamicObject(positionEcef: Cartesian3, shape: DynamicShape, opts?: DynamicBodyOpts): DynamicObject {
         const body = this.physics.createDynamicBody(positionEcef, shape, opts);
         return this.registerDynamicObject(body);
     }
 
-    // 移除一个动态物体
     removeDynamicObject(obj: DynamicObject) {
         const i = this.dynamicObjects.indexOf(obj);
         if (i >= 0) this.dynamicObjects.splice(i, 1);
@@ -638,7 +487,6 @@ export class playerController {
         obj.detachVisual();
     }
 
-    // 清除所有动态物体
     clearDynamicObjects() {
         for (const o of this.dynamicObjects) {
             this.physics.removeDynamicObject(o.body);
@@ -648,102 +496,64 @@ export class playerController {
         this.dynamicObjects = [];
     }
 
-    // 建句柄并登记进每帧同步列表
     private registerDynamicObject(body: DynamicBody): DynamicObject {
         const obj = new DynamicObject(body, this.physics);
         this.dynamicObjects.push(obj);
         return obj;
     }
 
-    // 注册运动学碰撞体
     async addKinematicCollider(collider: import("./types").ColliderSource, source?: object) {
         const body = await this.physics.addKinematicCollider(this.viewer, collider);
         if (body && source) this.physics.kinematicBySource.set(source, body);
         return body;
     }
-    // 注销运动学碰撞体
     removeKinematicCollider(source: object) { this.physics.removeKinematicCollider(source); }
-    // 清除所有运动学碰撞体
     clearKinematicColliders() { this.physics.clearKinematicColliders(); }
 
     // --- 玩家参数 ---
-    // 设置鼠标灵敏度
     setMouseSensitivity(v: number) { this.cam.sensitivity = v; }
-    // 设置重力
     setGravity(g: number) { this.gravity = g * this.playerModelConfig.scale; this.physics.setGravity(this.gravity); }
-    // 设置跳跃高度
     setJumpHeight(j: number) { this.jumpHeight = j * this.playerModelConfig.scale; }
-    // 设置行走速度
     setPlayerSpeed(sp: number) { this.playerSpeed = sp * this.playerModelConfig.scale; this.curPlayerSpeed = this.playerSpeed; }
-    // 设置飞行速度
     setPlayerFlySpeed(f: number) { this.playerFlySpeed = f * this.playerModelConfig.scale; }
-    // 设置加速惯性（值越大加速越快）
     setAcceleration(a: number) { this.playerAcceleration = a; }
-    // 设置减速惯性（值越大松手后停得越快）
     setDeceleration(d: number) { this.playerDeceleration = d; }
-    // 设置朝向开关
     setEnableToward(v: boolean) { this.enableToward = v; }
 
     // --- 局部系重锚 ---
-    // 手动把 Rapier 局部系重锚到指定 ECEF（默认当前玩家位置）
     rebase(anchorEcef?: Cartesian3) { this.physics.rebase(anchorEcef ?? this.posEcef); }
-    // 设置自动重锚距离（米），Infinity 关闭
     setRebaseDistance(d: number) { this.physicsRebaseDistance = d; }
-    // 获取自动重锚距离（米）
     getRebaseDistance() { return this.physicsRebaseDistance; }
 
     // --- 相机参数 ---
-    // 设置相机最近距
     setMinCamDistance(d: number) { this.cam.minDist = d * this.playerModelConfig.scale; }
-    // 设置相机最远距
     setMaxCamDistance(d: number) { this.cam.maxDist = d * this.playerModelConfig.scale; this.cam.originMaxDist = this.cam.maxDist; }
-    // 设置相机看向点高度比例
     setCamLookAtHeightRatio(r: number) { this.cam.lookAtHeightRatio = r; }
-    // 设置鼠标模式
     setThirdMouseMode(mode: 0 | 1 | 2 | 3 | 4 | 5) { this.cam.mouseMode = mode; this.cam.setPointerLock(); }
-    // 设置缩放开关：滚轮缩放由自定义 zoomByWheel 接管（cam.zoomEnabled 控制），
-    // Cesium 原生 dolly 必须始终保持关闭，否则会与自定义滚轮叠加成双重缩放。
     setEnableZoom(e: boolean) { this.cam.zoomEnabled = e; this.viewer.scene.screenSpaceCameraController.enableZoom = false; }
 
     // --- 相机 ---
-    // 切换视角模式
     changeView() { this.cam.changeView(); }
-    // 设置第一人称
     setFirstPersonCamera(v = 0) { this.cam.setFirstPerson(v); }
-    // 运行时调整第一人称相机偏移（玩家朝向系 x=右 / y=前 / z=上，按 scale 缩放）
     setFirstPersonCameraOffset(offset: [number, number, number]) { this.playerModelConfig.firstPersonCameraOffset = offset; }
-    // 设置越肩视角
     setOverShoulderView(v: boolean) { this.enableOverShoulderView = v; this.cam.setOverShoulder(v); }
-    // 屏幕中心检测
     getCenterScreenRaycastHit() { return this.cam.getCenterHit(); }
 
     // --- 动画 ---
-    // 按名播放动画
     playPlayerAnimationByName(name: string) { this.animation.playByName(name); }
-    // 获取当前动画名
     getCurrentPlayerAnimationName() { return this.animation.getCurrentName(); }
-    // 注册自定义动画
     registerAnimation(key: string, clipName: string, opts?: Parameters<AnimationSystem["register"]>[2]) { this.animation.register(key, clipName, opts); }
-    // 播放已注册动画
     playAnimation(key: string, opts?: Parameters<AnimationSystem["play"]>[1]) { this.animation.play(key, opts); }
-    // 注册移动动作组
     registerLocomotionSet(setName: string, map: Parameters<AnimationSystem["registerLocomotionSet"]>[1]) { this.animation.registerLocomotionSet(setName, map); }
-    // 切换移动动作组
     switchLocomotionSet(setName: string) { this.animation.switchLocomotionSet(setName); }
-    // 获取当前移动动作组名
     getCurrentLocomotionSet() { return this.animation.currentLocomotionSet; }
 
     // --- 输入 ---
-    // 设置输入状态
     setInput(input: Parameters<InputSystem["setInput"]>[0]) { this.input.setInput(input); }
-    // 运行时自定义键位
     setKeyMap(map?: KeyMap) { this.input.buildKeyMap(map); }
-    // 绑定输入事件
     onAllEvent() { this.input.bindEvents(); }
-    // 解绑输入事件
     offAllEvent() { this.input.unbindEvents(); }
 
-    // 重置玩家位置
     reset(position?: Cartesian3) {
         this.velE = this.velN = this.velU = 0;
         Cartesian3.clone(position ?? this.initPos, this.posEcef);
@@ -754,20 +564,16 @@ export class playerController {
     destroy() {
         this.input.unbindEvents();
 
-        // 销毁移动端控件
         this.mobileControls?.destroy();
         this.mobileControls = null;
 
-        // 清理 debug 图元（静态碰撞体 + 动态物体线框）
         this.debugCollider.removeAll();
 
-        // 清除玩家对象与动画资源（reset 会移除 animationRemoved 监听并清空动作缓存）
         this.animation.reset();
         if (this.model) { this.viewer.scene.primitives.remove(this.model); this.model = null; }
         this.clearDynamicObjects();
         this.physics.destroy();
 
-        // 恢复 Cesium 默认相机交互
         const sscc = this.viewer.scene.screenSpaceCameraController;
         sscc.enableRotate = true; sscc.enableTranslate = true; sscc.enableZoom = true;
         sscc.enableTilt = true; sscc.enableLook = true;

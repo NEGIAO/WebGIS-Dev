@@ -2,6 +2,10 @@ const AUTH_TOKEN_KEY = 'webgis_auth_token';
 const AUTH_USER_KEY = 'webgis_auth_user';
 const GUEST_DEVICE_ID_KEY = 'webgis_guest_device_id';
 const PENDING_POSITION_CODE_KEY = 'webgis_pending_position_code';
+export const AUTH_CHANGED_EVENT = 'webgis:auth-changed';
+
+let _memoryGuestDeviceId = '';
+let _presenceClientId = '';
 
 import { normalizeBinaryFlag } from '@common/utils/normalize';
 import { useMessage } from '@common/shell/useMessage';
@@ -51,6 +55,15 @@ export function getAuthUser() {
     }
 }
 
+function emitAuthChanged() {
+    if (typeof window === 'undefined' || typeof window.dispatchEvent !== 'function') return;
+    try {
+        window.dispatchEvent(new CustomEvent(AUTH_CHANGED_EVENT));
+    } catch {
+        /* ignore */
+    }
+}
+
 export function setAuthSession(payload: any = {}) {
     const storage = getStorage();
     if (!storage) return;
@@ -65,6 +78,7 @@ export function setAuthSession(payload: any = {}) {
 
     storage.setItem(AUTH_TOKEN_KEY, token);
     storage.setItem(AUTH_USER_KEY, JSON.stringify(user));
+    emitAuthChanged();
 }
 
 export function clearAuthSession() {
@@ -73,6 +87,19 @@ export function clearAuthSession() {
 
     storage.removeItem(AUTH_TOKEN_KEY);
     storage.removeItem(AUTH_USER_KEY);
+    emitAuthChanged();
+}
+
+export function getBackendBearerToken() {
+    const token = getAuthToken();
+    if (!token) return '';
+    const user = getAuthUser();
+    // injectGuestTokenForShareMode 注入的本地占位 token 形如 guest_<ts>_<deviceId>，
+    // 并非后端 DB 会话令牌；发送 Authorization 头会触发 require_login 返回 401 SESSION_EXPIRED。
+    if (user?.role === 'visitor' && /^guest_\d+_/.test(token)) {
+        return '';
+    }
+    return token;
 }
 
 export function isAuthenticated() {
@@ -109,24 +136,90 @@ function normalizeGuestDeviceId(rawValue: any) {
     return compact.slice(0, 128);
 }
 
+function getLocalStorageSafely() {
+    if (typeof window === 'undefined') return null;
+    try {
+        return window.localStorage || null;
+    } catch {
+        return null;
+    }
+}
+
 export function getGuestDeviceId() {
-    const storage = getStorage();
-    if (!storage) return '';
-    return normalizeGuestDeviceId(storage.getItem(GUEST_DEVICE_ID_KEY) || '');
+    // 访客设备 ID 优先落 localStorage：同一浏览器多标签页共享同一访客身份，
+    // 避免开多个标签页被统计成多个独立在线用户；保留 sessionStorage 兼容迁移。
+    const local = getLocalStorageSafely();
+    if (local) {
+        try {
+            const fromLocal = normalizeGuestDeviceId(local.getItem(GUEST_DEVICE_ID_KEY) || '');
+            if (fromLocal) return fromLocal;
+        } catch {
+            /* ignore localStorage read failure */
+        }
+    }
+
+    const session = getStorage();
+    if (session) {
+        try {
+            const fromSession = normalizeGuestDeviceId(session.getItem(GUEST_DEVICE_ID_KEY) || '');
+            if (fromSession) {
+                if (local) {
+                    try {
+                        local.setItem(GUEST_DEVICE_ID_KEY, fromSession);
+                    } catch {
+                        /* ignore */
+                    }
+                }
+                return fromSession;
+            }
+        } catch {
+            /* ignore sessionStorage read failure */
+        }
+    }
+
+    return _memoryGuestDeviceId;
 }
 
 export function getOrCreateGuestDeviceId() {
-    const storage = getStorage();
-    if (!storage) return '';
-
     const existing = getGuestDeviceId();
-    if (existing) return existing;
+    if (existing) {
+        _memoryGuestDeviceId = existing;
+        return existing;
+    }
 
     const generated = normalizeGuestDeviceId(`gd_${randomGuestDeviceSeed()}`);
     if (!generated) return '';
 
-    storage.setItem(GUEST_DEVICE_ID_KEY, generated);
+    _memoryGuestDeviceId = generated;
+    const local = getLocalStorageSafely();
+    if (local) {
+        try {
+            local.setItem(GUEST_DEVICE_ID_KEY, generated);
+            return generated;
+        } catch {
+            /* fallback to sessionStorage */
+        }
+    }
+    const session = getStorage();
+    if (session) {
+        try {
+            session.setItem(GUEST_DEVICE_ID_KEY, generated);
+        } catch {
+            /* keep memory fallback */
+        }
+    }
     return generated;
+}
+
+/**
+ * 当前文档实例（单标签页本次加载）的唯一在线实例 ID（不跨标签/不跨刷新持久化），
+ * 用于后端区分「同人多个标签页」与「同标签重连/刷新」，做到关一页不误杀其余页。
+ */
+export function getPresenceClientId() {
+    if (_presenceClientId) return _presenceClientId;
+    const raw = `c_${randomGuestDeviceSeed().slice(0, 24)}`;
+    _presenceClientId = raw.replace(/[^A-Za-z0-9._-]/g, '').slice(0, 64);
+    return _presenceClientId;
 }
 
 export function readShareModeFromUrl() {
