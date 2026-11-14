@@ -11,6 +11,29 @@
 > 零散升号、整合后即废弃，号段均高于当前版本）统一归并为 **V3.6.42**。
 > 条目所述功能与修复内容、发布日期、整合结论均不变，仅版本号表述归一，便于全文检索不再出现倒挂号。
 
+### V3.7.4 (2026-11-14) — 性能专项治理（P0全部 + P1产物与网络搜身）与 P2 跨引擎 UI 解耦统一架构蓝图
+
+> **一句话**：系统性清除境外挂死请求与无效臃肿产物，从 `min-enhanced.js` 剔除 51.la 国际 SDK、MapMyVisitors 与 Google Analytics（终结国内 30s 挂起阻塞与 403 报错）；物理删除 `public/cesium/` 冗余的 `index.cjs` 与 `index.js`（直接瘦身 **8.78 MB**）；将全仓 `@turf/turf` 引用改造为具名按需导入（触发 tree-shaking 消除全量打包）；完成 Font Awesome 现状审计；并严格遵循架构重构门禁，交付首份《P2 跨引擎 UI 解耦统一架构设计蓝图》（含 Mermaid 拓扑、`IMapEngineAdapter` 标准契约与三阶段演进路线）。详见 [维护日志](../LLM_record/26-11/2026-11-14/2026-11-14-p0-p1-perf-optimization-and-p2-blueprint.md)。
+
+1. **P0-1：`min-enhanced.js` 境外挂死请求彻底清理**：
+   - 彻底下线 51.la 国际版 SDK（`sdk.51.la/js-sdk-pro.min.js`，线上报 403/503）、MapMyVisitors 统计地图与 Google Analytics（`gtag/js` 国内不可达，请求挂起 30s 占用关键 HTTP 连接槽位并报错）；
+   - 仅保留国内合规节点 `//js.users.51.la/22001747.js`（带安全 try-catch 兜底），脚本行数由 180 行瘦身至 34 行，大幅净化控制台并加速首屏网络管线。
+2. **P0-2：`public/cesium/` 冗余包产物物理清理（-8.78 MB）**：
+   - 排查发现运行时仅通过 `<script>` 加载 `Cesium.js`，而 `public/cesium/index.cjs` (4.42MB) 与 `public/cesium/index.js` (4.37MB) 没有任何业务或打包模块引用；
+   - 物理删除上述两个文件，直接为工程静态目录与发布包减重 **8.78 MB**。
+3. **P1-1：`@turf/turf` 全量打包改为按需精确 Tree-shaking**：
+   - 在 `drawPolygon.ts` 中改用具名导入 `import { kinks, polygon } from '@turf/turf'`；
+   - 在 `planarLine.ts` 中改用具名导入 `import { area, booleanContains, distance, lineSlice, lineString, point, polygon } from '@turf/turf'`；
+   - 利用 `@turf/turf` 声明的 `sideEffects: false` 机制，使 Rollup/Vite 彻底剔除其余 60+ 个无用 Turf 子包。
+4. **P1-2：网络搜身与全局 Font Awesome 现状审计**：
+   - 全仓排查发现个人中心（`FloatingAccountPanel` 等）与落地页品牌图标仍有约 60 处 FA 引用，当前已由 `index.html` 采用 `media="print"` + onload 异步机制加载（未阻塞关键渲染路径）；
+   - 遵循实事求是与免破坏原则，保留现有通道，将全局 FA 下线收敛至后续个人中心统一重构专项中推进。
+5. **P2：跨引擎 UI 解耦统一架构规范蓝图（L3 架构设计）**：
+   - 严格按照 `Docs/Force_command.md` 规则，编制跨引擎解耦架构规范蓝图；
+   - 确立 `IMapEngineAdapter` 接口协议、`EngineCapabilities` 动态能力协商机制、`MapCommandBus` 统一消息总线设计，并制定三阶段演进路线。
+
+---
+
 ### V3.7.3 (2026-11-14) — 用户中心全站实时在线统计高精度修复与连接生命周期治理
 
 > **一句话**：系统性解决用户中心「全站实时 → 在线用户」统计对不上实际人数（长期虚高、多开标签翻倍、关页未及时清理）的问题，修复后端 SSE 断连探测遗漏 `await` 导致连接每 10 秒必断的协程 Bug，将访客设备 ID 升级为 `localStorage` 浏览器级共享，重构 `OnlineUserTracker` 为 `conn_id` 粒度追踪并引入同浏览器已登录账号压制重复游客机制，补齐 `navigator.sendBeacon` JSON body 离线解析并规避注销标活竞态，全量 21 项在线追踪回归单测全绿。详见 [维护日志](../LLM_record/26-11/2026-11-14/2026-11-14-realtime-online-presence-accuracy-fix.md)。
