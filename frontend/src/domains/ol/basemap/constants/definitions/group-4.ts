@@ -64,7 +64,7 @@ const definitions: LayerSourceDefinition[] = [
         group: '矢量',
         url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
         serviceType: 'osm',
-        createSource: () => new OSM(),
+        createSource: () => prioritizeTileSourceRequest(new OSM()),
     },
     {
         id: 'vector_cyclosm',

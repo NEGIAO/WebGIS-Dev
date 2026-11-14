@@ -40,7 +40,12 @@
  */
 import { onBeforeUnmount, ref } from 'vue';
 import backendAPI, { BACKEND_BASE_URL } from '@/api/backend/client';
-import { getAuthToken, getOrCreateGuestDeviceId } from '@common/user/services/auth';
+import {
+    AUTH_CHANGED_EVENT,
+    getBackendBearerToken,
+    getOrCreateGuestDeviceId,
+    getPresenceClientId,
+} from '@common/user/services/auth';
 
 const SSE_ENDPOINT = '/api/statistics/stream';
 const TICKET_ENDPOINT = '/api/statistics/ticket';
@@ -50,6 +55,8 @@ const INITIAL_RETRY_MS = 2000;
 const MAX_RETRY_MS = 30000;
 /** SSE 断开时的轻量保活间隔（仅内存 tracker，不查统计 DB） */
 const FALLBACK_PING_MS = 25000;
+/** 后端每 30s 周期广播：若超过 65s 仍无事件到达（如休眠/半开断网），切回前台时强制重连 */
+const SILENT_STALL_MS = 65000;
 
 // ─── 模块级单例状态（所有调用方共享同一连接）───
 const stats = ref<any>(null);
@@ -62,8 +69,11 @@ let _connecting = false;
 let _connectionGeneration = 0;
 let _fallbackPingTimer: any = null;
 let _offlineBeaconBound = false;
+let _offlineBeaconSent = false;
+let _lastStatsEventAt = 0;
 let _authWatchHandle: any = null;
-let _lastAuthToken = typeof getAuthToken === 'function' ? getAuthToken() : '';
+let _authListenerBound = false;
+let _lastAuthToken = typeof getBackendBearerToken === 'function' ? getBackendBearerToken() : '';
 /** 已注册的 onStats 回调集合（多消费者共享同一连接） */
 const _callbacks = new Set<(data: any) => void>();
 
@@ -109,14 +119,17 @@ function _scheduleNotify(data: any) {
 }
 
 async function _fetchTicket() {
-    const resp = await backendAPI.get(TICKET_ENDPOINT);
+    const clientId = typeof getPresenceClientId === 'function' ? getPresenceClientId() : '';
+    const resp = await backendAPI.get(TICKET_ENDPOINT, {
+        params: clientId ? { client_id: clientId } : undefined,
+    });
     const ticket = resp?.ticket ?? resp?.data?.ticket;
     return typeof ticket === 'string' && ticket ? ticket : '';
 }
 
 /**
  * SSE URL 仅能带一次性 ticket；EventSource 无法附带 Authorization / X-Guest-Device-Id。
- * 后端 ticket 已在换取时解析 presence_id，连接侧只消费 ticket 载荷。
+ * 后端 ticket 已在换取时绑定 presence_id 与 client_id，连接侧只消费 ticket 载荷。
  */
 
 function _buildUrl() {
@@ -125,9 +138,17 @@ function _buildUrl() {
     return `${String(BACKEND_BASE_URL || '').replace(/\/$/, '')}${SSE_ENDPOINT}`;
 }
 
-function _buildPresenceHeaders(extra: any = {}) {
+function _buildPresenceHeaders(
+    extra: Record<string, any> = {},
+    tokenOverride?: string,
+) {
     const headers: Record<string, any> = { ...extra };
-    const token = typeof getAuthToken === 'function' ? getAuthToken() : '';
+    const token =
+        tokenOverride !== undefined
+            ? tokenOverride
+            : typeof getBackendBearerToken === 'function'
+                ? getBackendBearerToken()
+                : '';
     if (token) {
         headers.Authorization = `Bearer ${token}`;
     }
@@ -136,17 +157,49 @@ function _buildPresenceHeaders(extra: any = {}) {
         if (deviceId) {
             headers['X-Guest-Device-Id'] = deviceId;
         }
+        const clientId = typeof getPresenceClientId === 'function' ? getPresenceClientId() : '';
+        if (clientId) {
+            headers['X-Presence-Client-Id'] = clientId;
+        }
     } catch {
         /* storage 不可用时忽略 */
     }
     return headers;
 }
 
-async function _sendPresenceBeacon(path: any) {
-    const url = `${String(BACKEND_BASE_URL || '').replace(/\/$/, '')}${path}`;
-    const headers = _buildPresenceHeaders({ 'Content-Type': 'application/json' });
-    const token = typeof getAuthToken === 'function' ? getAuthToken() : '';
-    const body = JSON.stringify({});
+async function _sendPresenceBeacon(
+    path: string,
+    { tokenOverride, force = false }: { tokenOverride?: string; force?: boolean } = {},
+) {
+    const isOfflinePath = path === PRESENCE_OFFLINE_ENDPOINT;
+    if (isOfflinePath) {
+        if (!force && (_dead || _offlineBeaconSent)) return;
+        _offlineBeaconSent = true;
+    }
+
+    const clientId = typeof getPresenceClientId === 'function' ? getPresenceClientId() : '';
+    let deviceId = '';
+    try {
+        deviceId = getOrCreateGuestDeviceId();
+    } catch {
+        /* ignore */
+    }
+
+    const base = `${String(BACKEND_BASE_URL || '').replace(/\/$/, '')}${path}`;
+    const url = clientId ? `${base}?client_id=${encodeURIComponent(clientId)}` : base;
+    const headers = _buildPresenceHeaders({ 'Content-Type': 'application/json' }, tokenOverride);
+    const token =
+        tokenOverride !== undefined
+            ? tokenOverride
+            : typeof getBackendBearerToken === 'function'
+                ? getBackendBearerToken()
+                : '';
+    // sendBeacon 无法附带自定义 Header；把 client_id 与 guest_device_id 同步放进 JSON body，
+    // 确保游客关页 beacon 也能精确撤销对应标签页的 g: 在线信号。
+    const body = JSON.stringify({
+        client_id: clientId || undefined,
+        guest_device_id: deviceId || undefined,
+    });
     const fetchOptions: RequestInit = {
         method: 'POST',
         headers,
@@ -155,8 +208,6 @@ async function _sendPresenceBeacon(path: any) {
         keepalive: true,
     };
     try {
-        // 登录用户必须走带 Authorization 的 keepalive fetch：sendBeacon 无法附带
-        // 认证头，若先用 beacon 成功则后端只会撤销 g:device 侧，u: 身份会残留到 TTL。
         if (token) {
             await fetch(url, fetchOptions);
             return;
@@ -184,9 +235,16 @@ function _startFallbackPing() {
     _fallbackPingTimer = setInterval(async () => {
         if (_dead || connected.value) return;
         try {
+            const clientId = typeof getPresenceClientId === 'function' ? getPresenceClientId() : '';
+            let deviceId = '';
+            try {
+                deviceId = getOrCreateGuestDeviceId();
+            } catch {
+                /* ignore */
+            }
             await backendAPI.post(
                 PRESENCE_PING_ENDPOINT,
-                {},
+                { client_id: clientId || undefined, guest_device_id: deviceId || undefined },
                 { headers: _buildPresenceHeaders() },
             );
         } catch {
@@ -198,6 +256,7 @@ function _startFallbackPing() {
 function _bindOfflineBeacon() {
     if (_offlineBeaconBound || typeof window === 'undefined') return;
     const handler = () => {
+        if (_dead) return;
         void _sendPresenceBeacon(PRESENCE_OFFLINE_ENDPOINT);
     };
     window.addEventListener('pagehide', handler, { passive: true });
@@ -205,30 +264,65 @@ function _bindOfflineBeacon() {
     _offlineBeaconBound = true;
 }
 
-function _watchAuthChanges() {
-    if (typeof window === 'undefined') return;
-    if (_authWatchHandle) return;
-    _authWatchHandle = setInterval(() => {
-        const token = typeof getAuthToken === 'function' ? getAuthToken() : '';
-        if (token === _lastAuthToken) return;
-        _lastAuthToken = token;
-        if (_dead) return;
-        // 登录/登出后身份键会变（u:name ↔ g:guest_uid），必须重建 SSE
-        reconnect();
-    }, 2000);
+function _syncAuthStateAndReconnectIfChanged() {
+    const token = typeof getBackendBearerToken === 'function' ? getBackendBearerToken() : '';
+    if (token === _lastAuthToken) return;
+    const prevToken = _lastAuthToken;
+    _lastAuthToken = token;
+    if (_dead) return;
+    // 登录/登出后身份键会变（u:name ↔ g:guest_uid）：先撤回旧身份在线信号再重建 SSE
+    if (prevToken) {
+        void _sendPresenceBeacon(PRESENCE_OFFLINE_ENDPOINT, {
+            tokenOverride: prevToken,
+            force: true,
+        });
+    }
+    reconnect();
 }
 
-/** 切回前台：SSE 已断时立即重置退避并重连（仅恢复连接，不发数据请求）。 */
+function _watchAuthChanges() {
+    if (typeof window === 'undefined') return;
+    if (!_authListenerBound) {
+        window.addEventListener(AUTH_CHANGED_EVENT, _syncAuthStateAndReconnectIfChanged);
+        _authListenerBound = true;
+    }
+    if (_authWatchHandle) return;
+    _authWatchHandle = setInterval(_syncAuthStateAndReconnectIfChanged, 2000);
+}
+
+/** 切回前台 / 网络恢复：SSE 已断或疑似静默半开时立即恢复重连。 */
 function _handleVisibilityChange() {
-    if (document.hidden) return;
-    if (!connected.value && !_eventSource && !_connecting && !_dead) {
+    if (typeof document !== 'undefined' && document.hidden) return;
+    if (_dead) return;
+    if (!connected.value && !_eventSource && !_connecting) {
         _retryMs = INITIAL_RETRY_MS;
         if (_retryTimer) {
             clearTimeout(_retryTimer);
             _retryTimer = null;
         }
         void connect();
+        return;
     }
+    if (
+        connected.value &&
+        _lastStatsEventAt > 0 &&
+        Date.now() - _lastStatsEventAt > SILENT_STALL_MS
+    ) {
+        reconnect();
+    }
+}
+
+function _handleNetworkOnline() {
+    if (_dead) return;
+    if (!connected.value && !_connecting) {
+        reconnect();
+    }
+}
+
+function _handlePageShow(event: PageTransitionEvent) {
+    if (_dead || !event?.persisted) return;
+    _offlineBeaconSent = false;
+    reconnect();
 }
 
 let _visibilityListenerBound = false;
@@ -236,12 +330,20 @@ let _visibilityListenerBound = false;
 function _bindVisibilityListener() {
     if (_visibilityListenerBound || typeof document === 'undefined') return;
     document.addEventListener('visibilitychange', _handleVisibilityChange, { passive: true });
+    if (typeof window !== 'undefined') {
+        window.addEventListener('online', _handleNetworkOnline, { passive: true });
+        window.addEventListener('pageshow', _handlePageShow as EventListener, { passive: true });
+    }
     _visibilityListenerBound = true;
 }
 
 function _unbindVisibilityListener() {
     if (!_visibilityListenerBound || typeof document === 'undefined') return;
     document.removeEventListener('visibilitychange', _handleVisibilityChange);
+    if (typeof window !== 'undefined') {
+        window.removeEventListener('online', _handleNetworkOnline);
+        window.removeEventListener('pageshow', _handlePageShow as EventListener);
+    }
     _visibilityListenerBound = false;
 }
 
@@ -249,6 +351,8 @@ async function connect() {
     if (_dead || _connecting || _eventSource) return;
     const generation = ++_connectionGeneration;
     _connecting = true;
+    _offlineBeaconSent = false;
+    _lastAuthToken = typeof getBackendBearerToken === 'function' ? getBackendBearerToken() : '';
     _bindVisibilityListener();
     _bindOfflineBeacon();
     _watchAuthChanges();
@@ -268,7 +372,10 @@ async function connect() {
     } catch {
         url = '';
     }
-    if (_dead || generation !== _connectionGeneration) return;
+    if (_dead || generation !== _connectionGeneration) {
+        _connecting = false;
+        return;
+    }
     if (!url) {
         _connecting = false;
         _startFallbackPing();
@@ -295,12 +402,14 @@ async function connect() {
         }
         connected.value = true;
         _retryMs = INITIAL_RETRY_MS; // 连接成功后重置退避
+        _lastStatsEventAt = Date.now();
         _stopFallbackPing();
     };
 
     es.addEventListener('online_stats', (event) => {
         try {
             const data = JSON.parse(event.data);
+            _lastStatsEventAt = Date.now();
             _scheduleNotify(data); // rAF 合并，防护回前台积压爆发
         } catch (_e) {
             // 解析失败静默跳过
@@ -343,11 +452,21 @@ function _disconnect() {
     }
 }
 
-function disconnect() {
+function disconnect(options: { sendOffline?: boolean } = {}) {
+    const { sendOffline = true } = options || {};
+    const shouldSend = sendOffline && !_dead;
+    // 在 _dead 置 true 与清空会话令牌前发送离线通知，确保仍携带当前身份凭证
+    if (shouldSend) {
+        void _sendPresenceBeacon(PRESENCE_OFFLINE_ENDPOINT, { force: true });
+    }
     _dead = true;
     _disconnect();
     _stopFallbackPing();
     _unbindVisibilityListener();
+    if (_authListenerBound && typeof window !== 'undefined') {
+        window.removeEventListener(AUTH_CHANGED_EVENT, _syncAuthStateAndReconnectIfChanged);
+        _authListenerBound = false;
+    }
     if (_authWatchHandle) {
         clearInterval(_authWatchHandle);
         _authWatchHandle = null;
@@ -362,11 +481,11 @@ function disconnect() {
     _notifyScheduled = false;
     _notifyHandle = null;
     _pendingData = null;
-    void _sendPresenceBeacon(PRESENCE_OFFLINE_ENDPOINT);
 }
 
 function reconnect() {
     _dead = false;
+    _offlineBeaconSent = false;
     _retryMs = INITIAL_RETRY_MS;
     _disconnect();
     void connect();

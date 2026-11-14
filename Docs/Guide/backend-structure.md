@@ -22,7 +22,7 @@ backend/
 │   ├── location.py                                # 定位相关接口
 │   ├── monitor.py                                 # 日志监控接口
 │   ├── statistics.py                              # 访问统计接口（center/realtime 合并 tracker presence；online_users 统一实时口径）
-│   ├── realtime_stats.py                          # 实时在线统计 SSE（presence_id tracker + 连接 TTL + ticket + 广播 + presence ping/offline + admin online-debug）
+│   ├── realtime_stats.py                          # 实时在线统计 SSE（conn_id / presence_id tracker + 同浏览器去重 + 广播回收 + beacon JSON + admin debug）
 │   ├── historical_imagery.py                      # 历史影像公开目录接口（ESRI Wayback 只读缓存目录）
 │   ├── webhook.py                                 # Hugging Face Hub Webhook 接收 + Space 失败邮件告警
 │   ├── agent_chat/                                # AI 对话代理（模块化拆分）
@@ -92,7 +92,7 @@ backend/
 │   ├── test_config_env_loading.py                 # 配置与环境变量加载测试
 │   ├── test_historical_imagery.py                 # 历史影像 _normalize_entries 排序/去重/XYZ URL 生成测试
 │   ├── test_webhook_helpers.py                    # HF Webhook 密钥头 / Space id 信任边界 / stage 提取单元测试
-│   ├── test_realtime_stats.py                     # presence_id / e: 不计入 / TTL 剔幽灵 / beacon / 游客名派生回归
+│   ├── test_realtime_stats.py                     # 实时在线追踪回归（多标签隔离/同浏览器去重/注销清理/TTL/beacon/is_disconnected await 21 例）
 │   └── test_sqlite_recovery.py                    # SQL 清理、维护事件、恢复成功/失败与激活回滚测试
 │
 └── core/                                          # 横切基础能力

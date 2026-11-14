@@ -80,12 +80,8 @@ frontend/src/
 │   ├── theme.css  # 全局主题令牌（含自托管思源宋体 @font-face + box-sizing 重置 + 移动端基线）
 │   ├── toc-theme.css
 │   ├── ui-panel-theme.css  # 通用 UI 面板模板（白色面板 + 品牌渐变横幅 + 经纬网格，全局面板观感基准）
-│   ├── fonts/
-│   │   └── noto-serif-sc-700.woff2  # 思源宋体 700 子集（122 字符，落地页标题用字；相对路径经 Vite 打包）
-│   └── data/
-│       └── compass-metadata/
-│           ├── compass-data.ts  # 罗盘基础数据
-│           └── twentyEightConstellations.ts  # 二十八宿数据
+│   └── fonts/
+│       └── noto-serif-sc-700.woff2  # 思源宋体 700 子集（122 字符，落地页标题用字；相对路径经 Vite 打包）
 ├── config/
 │   └── publicRuntime.ts  # 后端/瓦片代理基址单点派生（VITE_* → URL 拼接 helper，禁止硬编码域名）
 ├── constants/
@@ -845,7 +841,6 @@ frontend/src/
 │       │   ├── useMapDecorations.ts  # 地图装饰图层（经纬网 + 中心点标记）
 │       │   ├── useMapBasemapInstances.ts  # 2D 底图图层实例管理（按需挂载源、显隐/ZIndex 刷新与隐藏层清理）
 │       │   ├── useMapSwipe.ts
-│       │   ├── useMapSwipeTest.ts
 │       │   ├── useMapUIEventHandlers.ts
 │       │   ├── useRightDragZoom.ts
 │       │   ├── useRuntimeMapTokenPool.ts
@@ -909,7 +904,6 @@ frontend/src/
 │       │   │   ├── useRouteStepInteraction.ts
 │       │   │   └── useRouteStepStyles.ts
 │       │   └── utils/
-│       │       ├── drawTransitRoute.ts  # 公交路线绘制
 │       │       ├── driveXmlParser.ts  # 驾车路线 XML 解析
 │       │       └── transitRouteBuilder.ts  # 路线渲染数据构建
 │       ├── search/

@@ -8,8 +8,9 @@
 import axios from 'axios';
 import {
     clearAuthSession,
-    getAuthToken,
+    getBackendBearerToken,
     getOrCreateGuestDeviceId,
+    getPresenceClientId,
     readShareModeFromUrl,
 } from '@common/user/services/auth';
 import { getHttpStatusMessage, buildHttpErrorMessage } from '../httpStatusMap';
@@ -89,16 +90,20 @@ const backendAPI: any = axios.create({
  */
 backendAPI.interceptors.request.use(
     async (config: any) => {
-        const token = getAuthToken();
+        const token = getBackendBearerToken();
         if (token) {
             config.headers.Authorization = `Bearer ${token}`;
         }
 
-        // 恒发稳定设备身份（sessionStorage 每标签页独立）：登录/未登录都要带上，
-        // 后端 presence 统计依赖它区分游客身份；分享模式额外放行头。
+        // 恒发浏览器级稳定设备身份（localStorage 多标签页共享）与单页签实例 ID，
+        // 登录/未登录都要带上，后端据此准确去重同人多标签与同浏览器访客兜底。
         const guestDeviceId = getOrCreateGuestDeviceId();
         if (guestDeviceId) {
             config.headers['X-Guest-Device-Id'] = guestDeviceId;
+        }
+        const clientId = getPresenceClientId();
+        if (clientId && !config.headers['X-Presence-Client-Id']) {
+            config.headers['X-Presence-Client-Id'] = clientId;
         }
         if (readShareModeFromUrl()) {
             config.headers['X-Share-Mode'] = '1';

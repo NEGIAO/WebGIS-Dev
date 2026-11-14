@@ -31,7 +31,7 @@ from .constants import (
     normalize_role,
     resolve_quota_subject,
 )
-from .dependencies import _auth_error_detail, require_login, require_admin
+from .dependencies import _auth_error_detail, require_login, require_login_for_logout, require_admin
 from .models import (
     BindEmailRequest,
     ChangeAvatarRequest,
@@ -880,9 +880,37 @@ async def get_current_user(session: Dict[str, Any] = Depends(require_login)) -> 
 
 
 @router.post("/logout")
-async def logout_user(session: Dict[str, Any] = Depends(require_login)) -> Dict[str, Any]:
-    """功能：注销当前登录会话。"""
-    await asyncio.to_thread(_delete_session_sync, str(session.get("token", "")))
+async def logout_user(
+    request: Request,
+    session: Dict[str, Any] = Depends(require_login_for_logout),
+) -> Dict[str, Any]:
+    """功能：注销当前登录会话，并即时撤销对应的实时在线信号。"""
+    token = str(session.get("token", "") or "")
+    if token:
+        await asyncio.to_thread(_delete_session_sync, token)
+
+    client_id = str(
+        request.headers.get("X-Presence-Client-Id")
+        or request.query_params.get("client_id")
+        or ""
+    ).strip()
+    if client_id or not token:
+        try:
+            from api.realtime_stats import (
+                get_broadcaster,
+                get_online_tracker,
+                normalize_client_id,
+                presence_id_from_session,
+            )
+
+            cid = normalize_client_id(client_id)
+            pid = presence_id_from_session(session)
+            evicted = get_online_tracker().drop_presence(pid, client_id=cid)
+            if evicted:
+                await get_broadcaster().evict_conn_ids(evicted)
+        except Exception:
+            pass
+
     return {
         "status": "success",
         "message": "已退出登录",

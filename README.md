@@ -127,7 +127,7 @@
 
 ## 🎯 项目简介
 
-**NEGIAO's WebGIS** 是一个功能完整、架构清晰的前后端分离 WebGIS 平台（当前版本 V3.7.1），前端托管于 GitHub Pages（正式域名 webgis.negiao.cn），后端以 Docker 部署在 Hugging Face Spaces，通过 RESTful API 通信，支持独立扩展。
+**NEGIAO's WebGIS** 是一个功能完整、架构清晰的前后端分离 WebGIS 平台（当前版本 V3.7.3），前端托管于 GitHub Pages（正式域名 webgis.negiao.cn），后端以 Docker 部署在 Hugging Face Spaces，通过 RESTful API 通信，支持独立扩展。
 
 > 📚 本 README 仅保留核心概览与导航。完整文档已模块化至 [`Docs/Guide/`](Docs/Guide/)，详见下方「文档导航」。
 >
@@ -614,11 +614,10 @@ tiles.negiao.cc.cd"]
 
 | 版本 | 日期 | 概要 |
 |------|------|------|
+| **V3.7.3** | 2026-11-14 | **用户中心全站实时在线统计高精度修复与连接生命周期治理**。修复后端 SSE 断连探测缺失 `await` 导致连接每 10s 必断并堆积幽灵心跳的协程 Bug；访客设备 ID 迁移至 localStorage 共享，实现多标签页不重复计数；重构 Tracker 为 conn_id 粒度并引入同浏览器已登录账号压制重复游客机制；离线 beacon 兼容 JSON body 突破 sendBeacon Header 限制，消灭注销时序竞态，21 项在线追踪单测全绿。详见[完整更新日志](Docs/Guide/CHANGELOG.md) |
+| **V3.7.2** | 2026-11-14 | **修复 Cesium 引擎 OSM 瓦片 403 访问受限缺陷（引入同构 Referrer 策略与多级代理/镜像容灾链路）**。① **Cesium 侧 OSM 请求拦截与 Referrer 策略注入**：在 `basemapProviderFactory.ts` 新增 `wrapProviderWithFetchFallback`，接管 `requestImage` 请求并显式下发 `referrerPolicy: 'origin-when-cross-origin'` 与 `mode: 'cors'`，解除 OSM 官方 Tile Usage Policy 严格反爬策略对三维底图的 403 封锁；② **多级代理兜底与假图智能识别**：直连 403/429/网络异常时自动回退至 `tileProxyUrl`（`vpn.negiao.cn/proxy/...`），并智能识别 OSM 官方 6987 字节「403 Access blocked」拦截假图，自动无缝降级至 OpenStreetMap 德国社区合规镜像（`tile.openstreetmap.de`）；③ **Abort 级生命周期与点选底座联动**：关联 Cesium `Request.cancelFunction` 与底图切换 `AbortSignal`，相机移开即刻中断 TCP 连接释放并发槽位；同步拦截官方 `BaseLayerPicker` 的 OpenStreetMap 模型；并补齐 OpenLayers 动态切换路径 `group-4.ts` 中 `vector_osm` 的 `prioritizeTileSourceRequest` 包装。详见[完整更新日志](Docs/Guide/CHANGELOG.md) |
 | **V3.7.1** | 2026-11-14 | **Vue 组件样式内聚还原（移除外置 `.scss`）与实例层 `X.ts` 粒度全面收官**。① **恢复 `.vue` 样式内聚**：纠正将 `<style>` 剥离为 `.scss` 的设计偏差，将 `HomeView`、`LandingView`、`CesiumContainer`、`CesiumToolPanel`、`TOCPanel`、`ApiManagementPanel`、`LogMonitor`、`MapContainer`、`AttributeTable` 共 9 个组件的 10 份外置 `.scss` 完整还原为 `.vue` 内联 `<style>`，清理全部 `styles/*.scss` 与 `ExtractVueStyles.py`，并在 `CheckVueParadigm.py` 新增禁 `<style src>` 门禁，确立「`X.vue` 承载 DOM 模板与样式、`X.ts` 承载业务逻辑」的二元分离规范；② **实例层粒度全面达标**：新增 `useLayerCustomWmsAndSearch.ts` 与 `useAccountSecurityAndActions.ts`，将 `LayerControlPanel.ts`（811→695 行）与 `FloatingAccountPanel.ts`（792→688 行）压降至 700 行以内，全仓 36 个范式化 `.ts` 实例层 100% 达标。详见[完整更新日志](Docs/Guide/CHANGELOG.md) |
-| **V3.7.0** | 2026-11-14 | **前端全面从 JavaScript 过渡到 TypeScript 严格模式（`strict: true`）+ Vue 组件范式化架构升级 + 全仓 Code Review 收口**。① **全量 TS 迁移与严格编译收口**：前端业务 `.js` 全面清零（636 个 `.ts` + 1 个 `.mts` + 73 个 `.vue`），开启 `tsconfig.json` 完整严格编译开关（`strict`、`noImplicitAny`、`noUnusedLocals`、`noUnusedParameters`、`noImplicitReturns`、`noFallthroughCasesInSwitch`），清零 2,122 条 `vue-tsc` 诊断，新增 `shims-modules.d.ts` 与 `vue-router` `RouteMeta` 模块增强；② **Vue 组件范式化与领域解耦**：36 个复杂组件完成「`X.vue` 视图层 + `X.ts` `class Instance` 实例层」物理分离，8 类通用能力收拢至 `domains/common/composables/`，23 处跨域依赖（`common`/`ol`/`cesium`）通过模块上移、`engineTreePort` 注册式端口与 `catalogProjection` 目录投影彻底清零并接入 ESLint 门禁；③ **Code Review 缺陷修复与后端 CORS 加固**：修复 6 处批处理正则撕裂标识符、9 个文件 `: any[]` 错标、`LocationSearch.resolvePoiId` 与 `CesiumToolPanel.persistUiState` 原型方法/`this` 丢失、`TOCPanel`/`RegisterView` 的 Vue 保留 `_` 前缀警告、`LayerPropertiesDialog` 漏注册 `Ruler` 图标、路由/URL Store 高频 `console.warn` 刷屏，以及后端 `app.py` 降级 503 掩盖 CORS 预检缺陷（含 `LoggingCORSMiddleware` 与 6 项单测）。详见[完整更新日志](Docs/Guide/CHANGELOG.md) |
-| **V3.6.45** | 2026-11-13 | **三维白模 + TOC 菜单可达性与导出项收敛 + 暂存区 JS→TS 与超长文件按职责拆分**。三维矢量导入改为随机纯色不透明白模；移动端 TOC 菜单增加视口高度约束与内部滚动；图层「导入到 3D」支持自动切换三维视图并等待就绪后落图；Cesium InfoBox iframe 高度随内容自适应；2D/3D 四种导出格式（CSV/TXT-WKT/GeoJSON/KML）补齐全部要素属性并打通「导出 → 再导入」闭环，TOC 导出菜单项收敛为「导出数据」手风琴子菜单；20+ 个超 600 行逻辑库按单一职责拆分为独立 TS 子模块。详见[完整更新日志](Docs/Guide/CHANGELOG.md) |
-| **V3.6.44** | 2026-11-11 | **修复天地图 MVT 矢量底图切换无法渲染缺陷（OpenLayers 2D 引擎）**。底图引导期按 `serviceType === 'vector-tile'` 原生实例化 `VectorTileLayer`，消除跨类型图层置换开销；修复 `refreshLayerInstances` 中闭包变量未重同步导致的可见性丢失与 zIndex/opacity 失效。详见[完整更新日志](Docs/Guide/CHANGELOG.md) |
-更早版本（V3.6.43 及以前）请查阅 [完整更新日志 →](Docs/Guide/CHANGELOG.md)。
+更早版本（V3.7.0 及以前）请查阅 [完整更新日志 →](Docs/Guide/CHANGELOG.md)。
 
 ---
 
@@ -640,6 +639,6 @@ tiles.negiao.cc.cd"]
 |:------:|:--------:|:--------:|
 | [GitHub](https://github.com/NEGIAO/WebGIS-Dev) | [webgis.negiao.cn](https://webgis.negiao.cn)（正式域名，GitHub Pages 托管） | [Hugging Face](https://NEGIAO-WebGIS.hf.space) |
 
-<sub>V3.7.1 · 开发中 · 最后更新 2026-11-14</sub>
+<sub>V3.7.3 · 开发中 · 最后更新 2026-11-14</sub>
 
 </div>

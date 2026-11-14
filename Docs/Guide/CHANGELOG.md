@@ -11,6 +11,46 @@
 > 零散升号、整合后即废弃，号段均高于当前版本）统一归并为 **V3.6.42**。
 > 条目所述功能与修复内容、发布日期、整合结论均不变，仅版本号表述归一，便于全文检索不再出现倒挂号。
 
+### V3.7.3 (2026-11-14) — 用户中心全站实时在线统计高精度修复与连接生命周期治理
+
+> **一句话**：系统性解决用户中心「全站实时 → 在线用户」统计对不上实际人数（长期虚高、多开标签翻倍、关页未及时清理）的问题，修复后端 SSE 断连探测遗漏 `await` 导致连接每 10 秒必断的协程 Bug，将访客设备 ID 升级为 `localStorage` 浏览器级共享，重构 `OnlineUserTracker` 为 `conn_id` 粒度追踪并引入同浏览器已登录账号压制重复游客机制，补齐 `navigator.sendBeacon` JSON body 离线解析并规避注销标活竞态，全量 21 项在线追踪回归单测全绿。详见 [维护日志](../LLM_record/26-11/2026-11-14/2026-11-14-realtime-online-presence-accuracy-fix.md)。
+
+1. **后端 SSE 异步探活与长连接稳定性修复**：
+   - 修复 `backend/api/realtime_stats.py` 中 `statistics_stream` 超时分支遗漏 `await request.is_disconnected()` 的阻断性缺陷（未 await 的协程对象布尔求值恒为 `True`，导致以往所有 SSE 客户端在 10s 超时时必定异常断开重连并留下 90s 兜底幽灵心跳）；恢复正常的 `: keep-alive\n\n` 探活，并在收到退出哨兵时即刻安全退出。
+2. **连接级（conn_id）追踪与同浏览器去重治理**：
+   - `OnlineUserTracker` 升级为按单连接 `conn_id` 独立管理生命周期与超时，结合标签页实例 `client_id` 实现「关闭单个标签页仅剔除对应连接，不误杀同用户其余正常页面」；
+   - 引入同浏览器去重机制：当用户在当前浏览器已登录账号 `u:xxx` 时，自动压制该浏览器下多开的未登录访客页签（`g:guest_*`），杜绝 1 人开多页被重复计为 2+ 人的统计失真；在登录页关闭或注销后，访客身份即刻自动恢复；
+   - `_heartbeat_expiry_watch_loop` 扫描超时连接时同步调用 `StatsBroadcaster.evict_conn_ids`，彻底回收陈旧队列，保持订阅数与在线人数一致。
+3. **前端浏览器级设备身份共享与单文档实例隔离**：
+   - `frontend/src/domains/common/user/services/auth.ts` 将 `GUEST_DEVICE_ID_KEY` 存储迁移至 `localStorage`（兼顾 `sessionStorage` 历史平滑迁移与内存降级），实现同一浏览器所有标签页共享同一稳定访客设备身份；
+   - 新增内存级单文档实例 ID `getPresenceClientId()`，在全局请求头注入 `X-Presence-Client-Id`，精准标识单标签页连接与断开；
+   - 新增 `getBackendBearerToken()`，过滤分享模式本地占位 token（`guest_<ts>_<id>`），消除未登录场景因伪 Token 触发后端 `401 SESSION_EXPIRED` 导致的重连中断。
+4. **离线信令通道与会话注销链路加固**：
+   - 后端 `/statistics/presence/offline` 与 `/presence/ping` 支持从请求体 JSON 提取 `client_id` 与 `guest_device_id`，彻底解决浏览器 `navigator.sendBeacon` 无法携带自定义 HTTP Header 导致游客关页无法撤销的顽疾；同时采用免触活会话查询，严防离线信令反向刷活；
+   - 后端 `/api/auth/logout` 接入免标活依赖 `require_login_for_logout`，并在删除会话时按 `session_signature` 与 `client_id` 即时清除对应在线信号与广播队列；
+   - 前端 `useAccountSecurityAndActions.ts` 的注销与强制登录拦截在清空本地 Token 前优先调用 `useRealtimeStats().disconnect()`，确保发出的离线信令携带有效凭据。
+5. **单元测试与门禁验证**：
+   - `backend/tests/test_realtime_stats.py` 新增 7 个回归用例（覆盖多标签页单关不影响、同标签身份切换接管、同浏览器登录压制游客、按 session_sig 精准剔除、连接超时独立剔除、`await request.is_disconnected()` 与 keep-alive、sendBeacon JSON body 离线解析），全量 21 项实时统计单测 100% 通过；
+   - ESLint、`vue-tsc --noEmit`、`vite build`、`CheckStructureTree.py`、`CheckConfigRegistry.py` 全绿。
+
+---
+
+### V3.7.2 (2026-11-14) — 修复 Cesium 引擎 OSM 瓦片 403 访问受限缺陷（引入同构 Referrer 策略与多级代理/镜像容灾链路）
+
+> **一句话**：在 Cesium 侧 `basemapProviderFactory.ts` 引入与 OpenLayers 同构的瓦片请求代理与容灾拦截器 `wrapProviderWithFetchFallback`，显式注入 `referrerPolicy: 'origin-when-cross-origin'` 突破 OSM 官方 Tile Usage Policy 限制，配合 `AbortController` 与 `Request.cancelFunction` 实现秒级网络断开，构建「直连优先 → 后端 /proxy 代理兜底 → 德国社区镜像（tile.openstreetmap.de）容灾」的三级防护体系并精准识别 6987 字节假图，彻底消除三维视图 OSM 底图 403 报错与黑屏/空白。详见 [维护日志](../LLM_record/26-11/2026-11-14/2026-11-14-fix-cesium-osm-403-referrer-proxy.md)。
+
+1. **Cesium 侧 OSM 请求拦截与 Referrer 策略注入**：
+   - 解决 Cesium 原生 `Resource`（XHR/Image）无法指定 `referrerPolicy` 导致命中 OSM Tile Usage Policy 403 封锁的问题：重写 `requestImage`，通过原生 `fetch(..., { mode: 'cors', credentials: 'omit', referrerPolicy: 'origin-when-cross-origin' })` 发起请求，并在解码期优先使用 `Cesium.Resource.createImageBitmapFromBlob`（或 `createImageBitmap(..., { imageOrientation: 'flipY' })`）保证 WebGL 纹理渲染性能与垂直翻转对齐。
+2. **多级代理兜底、假图智能检测与社区镜像容灾**：
+   - 当直连触发 403/429/CORS/网络错误或 `TILE_PROXY_MODE === 'always'` 时，自动切入 `tileProxyUrl`（`https://vpn.negiao.cn/proxy/...`），成功后带 5s 防抖 toast 提示；
+   - 针对历史曾出现的 `tile.openstreetmap.org` 代理出口 IP 遭 OSM 拦截并返回 HTTP 200「6987 字节 403 Access blocked」占位图问题，新增字节特征检测；一旦命中假图或代理失败，自动无缝降级至德国开源社区镜像源 `https://tile.openstreetmap.de/{z}/{x}/{y}.png`，确保底图 100% 可用。
+3. **网络级连接中断（AbortController + cancelFunction）与官方底座联动**：
+   - 结合 Cesium `request.cancelFunction` 与底图切换 `abortSignal`，在视锥离开、地图缩放或底图切换时即刻调用 `tileController.abort()`，释放浏览器并发连接槽位，避免无效连接堆积阻塞后续瓦片；
+   - 在 `imageryProviderBuilders.ts` 对官方 `createDefaultImageryProviderViewModels` 中的 `OpenStreetMap` 底图选项注入相同拦截器，保证从右侧底座选择器切入时同样免于 403；
+   - 同步修正 OpenLayers 侧 `group-4.ts` 中 `vector_osm` 图层定义，补齐缺失的 `prioritizeTileSourceRequest` 包装，对齐动态切换路径的代理与中断能力。
+
+---
+
 ### V3.7.1 (2026-11-14) — Vue 组件样式内聚还原（移除外置 `.scss`）、全量 72 个组件 `<script>` 剥离与业务 `.ts` 功能域拆分全面收官
 
 > **一句话**：纠正 Vue 组件重构中将 `<style>` 外置为 `.scss` 的设计偏差，将全部 9 个组件的 10 份 `.scss` 样式完整还原回对应 `.vue` 组件内部（确立「`X.vue` 承载 DOM 模板与组件样式、`X.ts` 承载业务逻辑」的二元分离规范），完成全仓全部 72 个含脚本 `.vue` 组件的 `<script lang="ts" src="./X.ts">` 剥离，并将 10 个超 700 行业务 `.ts` 模块按功能域拆分为专用子模块，实现全仓业务 `.ts` 文件 100% 控制在 `< 700` 行以内。

@@ -104,7 +104,31 @@ def _create_session_sync(
     }
 
 
-def _get_session_sync(token: str) -> Optional[Dict[str, Any]]:
+def _drop_presence_on_session_delete(
+    *,
+    username: str = "",
+    session_sig: str = "",
+) -> None:
+    """会话注销或密码重置使令牌失效时，同步撤销内存实时在线追踪器中的对应信号。"""
+    try:
+        from api.realtime_stats import get_online_tracker, presence_id_from_fields
+
+        tracker = get_online_tracker()
+        if session_sig:
+            tracker.drop_presence("", session_sig=session_sig)
+        elif username:
+            pid = presence_id_from_fields(username=username, role="registered")
+            if pid:
+                tracker.drop_presence(pid)
+    except Exception:
+        pass
+
+
+def _get_session_sync(
+    token: str,
+    touch_presence: bool = True,
+    update_last_seen: bool = True,
+) -> Optional[Dict[str, Any]]:
     with _db_connection() as conn:
         row = conn.execute(
             """
@@ -134,41 +158,51 @@ def _get_session_sync(token: str) -> Optional[Dict[str, Any]]:
             return None
 
         # 心跳触活（V3.4.60）：节流刷新 last_seen_at，统计侧据此按活跃窗口判在线。
-        # 空串经 _safe_parse_iso 得 None → 立即写；写失败不阻断会话验证主流程。
-        # 每次鉴权请求都标记内存活跃（含心跳与普通请求）。
-        # V3.5.19：SSE 即时推送统一由 realtime_stats.mark_active 在"新用户上线"时触发，
-        # 不再依赖此处的广播桥接（原 get_event_loop 在 worker 线程拿不到运行中循环，静默失效）。
-        last_seen = _safe_parse_iso(str(data.get("last_seen_at") or ""))
-        if last_seen is None or (now - last_seen).total_seconds() >= SESSION_TOUCH_THROTTLE_SECONDS:
+        # 注：注销/离线 beacon/可选追踪路径显式传入 update_last_seen=False，避免无意义写库。
+        if update_last_seen:
+            last_seen = _safe_parse_iso(str(data.get("last_seen_at") or ""))
+            if last_seen is None or (now - last_seen).total_seconds() >= SESSION_TOUCH_THROTTLE_SECONDS:
+                try:
+                    now_iso = _iso(now)
+                    conn.execute(
+                        "UPDATE sessions SET last_seen_at = ? WHERE token = ?",
+                        (now_iso, token),
+                    )
+                    conn.commit()
+                    data["last_seen_at"] = now_iso
+                except Exception:
+                    pass  # 心跳属尽力而为，不因统计辅助字段影响鉴权
+
+        # 直接调用 _get_session_sync 的历史路径仍兼容标记活跃；
+        #FastAPI 依赖注入路径由 dependencies._mark_active_safe 携带 client_id 统一处理。
+        if touch_presence:
             try:
-                now_iso = _iso(now)
-                conn.execute(
-                    "UPDATE sessions SET last_seen_at = ? WHERE token = ?",
-                    (now_iso, token),
+                from api.realtime_stats import (
+                    device_presence_id,
+                    mark_user_active,
+                    presence_id_from_fields,
+                    session_signature,
                 )
-                conn.commit()
-                data["last_seen_at"] = now_iso
+
+                pid = presence_id_from_fields(
+                    username=str(data.get("username") or ""),
+                    role=str(data.get("role") or ""),
+                    guest_uid=str(data.get("guest_uid") or ""),
+                    guest_device_id=str(data.get("guest_device_id") or ""),
+                    client_ip=str(data.get("ip") or ""),
+                    user_agent=str(data.get("user_agent") or ""),
+                )
+                if pid:
+                    from api.realtime_stats import get_online_tracker
+
+                    get_online_tracker().mark_authenticated_activity(
+                        pid,
+                        session_sig=session_signature(token),
+                        device_presence_id=device_presence_id(data.get("guest_device_id")),
+                    )
+                    _ = mark_user_active
             except Exception:
-                pass  # 心跳属尽力而为，不因统计辅助字段影响鉴权
-
-        # 每次成功鉴权都标记用户活跃（用于实时在线统计；presence_id 稳定身份）
-        try:
-            from api.realtime_stats import presence_id_from_fields
-
-            pid = presence_id_from_fields(
-                username=str(data.get("username") or ""),
-                role=str(data.get("role") or ""),
-                guest_uid=str(data.get("guest_uid") or ""),
-                guest_device_id=str(data.get("guest_device_id") or ""),
-                client_ip=str(data.get("ip") or ""),
-                user_agent=str(data.get("user_agent") or ""),
-            )
-            if pid:
-                from api.realtime_stats import mark_user_active
-
-                mark_user_active(pid)
-        except Exception:
-            pass  # 在线统计为辅助功能，任何异常不影响鉴权
+                pass  # 在线统计为辅助功能，任何异常不影响鉴权
 
         old_role = str(data.get("role") or "")
         resolved_role = normalize_role(old_role, str(data.get("username") or ""))
@@ -222,6 +256,7 @@ def _get_session_sync(token: str) -> Optional[Dict[str, Any]]:
 
 def _delete_session_sync(token: str) -> None:
     now = _utc_now()
+    username = ""
 
     with _db_connection() as conn:
         row = conn.execute(
@@ -232,14 +267,23 @@ def _delete_session_sync(token: str) -> None:
             return
 
         data = dict(row)
+        username = str(data.get("username") or "")
         _apply_logout_duration_sync(
             conn,
-            str(data.get("username") or ""),
+            username,
             str(data.get("created_at") or ""),
             now,
         )
         conn.execute("DELETE FROM sessions WHERE token = ?", (token,))
         conn.commit()
+
+    try:
+        from api.realtime_stats import session_signature
+
+        sig = session_signature(token)
+    except Exception:
+        sig = ""
+    _drop_presence_on_session_delete(username=username, session_sig=sig)
 
 
 def _delete_sessions_by_username_sync(username: str) -> None:
@@ -262,6 +306,8 @@ def _delete_sessions_by_username_sync(username: str) -> None:
 
         conn.execute("DELETE FROM sessions WHERE username = ?", (username,))
         conn.commit()
+
+    _drop_presence_on_session_delete(username=username)
 
 
 def _update_user_password_sync(username: str, new_password: str) -> bool:

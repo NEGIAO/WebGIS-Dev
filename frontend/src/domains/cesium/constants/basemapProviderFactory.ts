@@ -7,6 +7,7 @@ import type { BasemapTileSourceDescriptor as TileSourceDescriptor } from '@commo
 import { getDescriptorById } from '@common/basemap/catalogProjection';
 import { useMessage } from '@common/shell/useMessage';
 import { notifyTileRateLimited } from '@common/utils/tileRateLimitNotify';
+import { tileProxyUrl, TILE_PROXY_MODE } from '@/config/publicRuntime';
 
 /** 创建 Provider 所需的运行时上下文 */
 export type CesiumProviderContext = {
@@ -65,6 +66,219 @@ export function abortAllDescriptorRequests(): void {
         controller.abort();
     });
     abortControllerMap.clear();
+}
+
+// ========== 瓦片请求容灾与代理兜底 ==========
+
+let lastCesiumProxyNotifyAt = 0;
+const CESIUM_PROXY_NOTIFY_DEBOUNCE_MS = 5000;
+
+function notifyCesiumProxyFallback(): void {
+    const now = Date.now();
+    if (now - lastCesiumProxyNotifyAt < CESIUM_PROXY_NOTIFY_DEBOUNCE_MS) return;
+    lastCesiumProxyNotifyAt = now;
+    try {
+        useMessage().info('部分瓦片直连受限，已自动切换至代理/镜像加速加载', { duration: 4000 });
+    } catch {
+        // 非 Vue 上下文（SSR/测试）静默
+    }
+}
+
+/**
+ * 将 Blob 解码为 Cesium 支持的图片对象（优先使用 createImageBitmap 保持高性能与 flipY，回退 HTMLImageElement）
+ */
+async function decodeBlobToImage(
+    Cesium: CesiumRuntime,
+    blob: Blob,
+): Promise<ImageBitmap | HTMLImageElement> {
+    if (typeof createImageBitmap === 'function') {
+        try {
+            if (Cesium?.Resource?.createImageBitmapFromBlob) {
+                return await Cesium.Resource.createImageBitmapFromBlob(blob, {
+                    flipY: true,
+                    premultiplyAlpha: false,
+                    skipColorSpaceConversion: false,
+                });
+            }
+            return await createImageBitmap(blob, {
+                imageOrientation: 'flipY',
+                premultiplyAlpha: 'none',
+                colorSpaceConversion: 'default',
+            });
+        } catch {
+            // 解码失败时回退到 HTMLImageElement 路径
+        }
+    }
+
+    return new Promise((resolve, reject) => {
+        const img = new Image();
+        img.crossOrigin = 'anonymous';
+        const blobUrl = URL.createObjectURL(blob);
+        img.onload = () => {
+            URL.revokeObjectURL(blobUrl);
+            resolve(img);
+        };
+        img.onerror = (err) => {
+            URL.revokeObjectURL(blobUrl);
+            reject(err);
+        };
+        img.src = blobUrl;
+    });
+}
+
+function buildCesiumTileProxyUrl(srcUrl: string): string | null {
+    if (TILE_PROXY_MODE === 'off') return null;
+    try {
+        const url = new URL(srcUrl);
+        const hostAndPath = `${url.host}${url.pathname}${url.search}`;
+        return tileProxyUrl(hostAndPath);
+    } catch {
+        return null;
+    }
+}
+
+export interface WrapFetchFallbackOptions {
+    isOsm?: boolean;
+    descriptorId?: string;
+    templateUrl?: string;
+    subdomains?: string[];
+}
+
+/**
+ * 包装 ImageryProvider 的 requestImage 方法，提供与 OL 侧同构的容灾与中断能力：
+ * 1. 显式 referrerPolicy: 'origin-when-cross-origin'，规避 OSM 官方 Tile Usage Policy 403 封锁；
+ * 2. 结合 AbortController 与 Cesium Request.cancelFunction，实现相机离开与底图切换时的秒级网络中断；
+ * 3. 遇到 403 / 429 / 网络错误 或 TILE_PROXY_MODE === 'always' 时，自动回退到后端 /proxy 代理；
+ * 4. 遇到 OSM 官方 6987 字节「403 Access blocked」拦截图时，自动回退到 OpenStreetMap 德国社区合规镜像；
+ * 5. 将获取的 Blob 通过 createImageBitmap(..., { imageOrientation: 'flipY' }) 或 new Image() 解码交付渲染。
+ */
+export function wrapProviderWithFetchFallback(
+    Cesium: CesiumRuntime,
+    provider: any,
+    abortSignal?: AbortSignal,
+    options: WrapFetchFallbackOptions = {},
+): any {
+    if (!provider || typeof provider.requestImage !== 'function') return provider;
+
+    const originalRequestImage = provider.requestImage.bind(provider);
+    const subdomains = options.subdomains && options.subdomains.length > 0 ? options.subdomains : ['a', 'b', 'c'];
+    const rawTemplate =
+        options.templateUrl ||
+        provider._resource?.url ||
+        'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
+
+    provider.requestImage = async function (x: number, y: number, level: number, request?: any) {
+        if (abortSignal?.aborted) {
+            throw new Error('Tile request aborted by provider');
+        }
+
+        const tileController = new AbortController();
+        const onProviderAbort = () => tileController.abort();
+
+        if (abortSignal) {
+            abortSignal.addEventListener('abort', onProviderAbort, { once: true });
+        }
+
+        if (request) {
+            const originalCancel = request.cancelFunction;
+            request.cancelFunction = () => {
+                try { originalCancel?.(); } catch { /* 忽略 */ }
+                tileController.abort();
+            };
+        }
+
+        const cleanup = () => {
+            if (abortSignal) {
+                abortSignal.removeEventListener('abort', onProviderAbort);
+            }
+        };
+
+        const sub = subdomains[Math.abs(x + y + level) % subdomains.length] || '';
+        const directUrl = rawTemplate
+            .replace(/\{z\}/g, String(level))
+            .replace(/\{x\}/g, String(x))
+            .replace(/\{y\}/g, String(y))
+            .replace(/\{s\}/g, sub);
+
+        const proxyUrl = options.isOsm
+            ? tileProxyUrl(`tile.openstreetmap.org/${level}/${x}/${y}.png`)
+            : (buildCesiumTileProxyUrl(directUrl) || tileProxyUrl(directUrl.replace(/^https?:\/\//i, '')));
+
+        const osmCommunityMirrorUrl = options.isOsm
+            ? `https://tile.openstreetmap.de/${level}/${x}/${y}.png`
+            : null;
+
+        const tryFetchBlob = async (targetUrl: string, useReferrer: boolean): Promise<Blob | null> => {
+            try {
+                const resp = await fetch(targetUrl, {
+                    signal: tileController.signal,
+                    mode: 'cors',
+                    credentials: 'omit',
+                    referrerPolicy: useReferrer ? 'origin-when-cross-origin' : 'no-referrer',
+                });
+
+                if (resp.status === 429) {
+                    notifyTileRateLimited();
+                    return null;
+                }
+
+                if (!resp.ok) return null;
+
+                const blob = await resp.blob();
+                // 拦截 OSM 官方 6987 字节的 403 假图（HTTP 200 但内容为拦截提示）
+                if (options.isOsm && blob.size === 6987) {
+                    return null;
+                }
+                if (blob.size < 64) {
+                    return null;
+                }
+                return blob;
+            } catch {
+                return null;
+            }
+        };
+
+        try {
+            let blob: Blob | null = null;
+            let usedFallback = false;
+
+            if (TILE_PROXY_MODE === 'always' && proxyUrl) {
+                blob = await tryFetchBlob(proxyUrl, false);
+            } else {
+                // fallback 模式：先直连（显式带 origin-when-cross-origin Referer 对齐 OL）
+                blob = await tryFetchBlob(directUrl, true);
+
+                // 直连 403 / 失败且允许代理时，回退到代理
+                if (!blob && TILE_PROXY_MODE !== 'off' && proxyUrl && !tileController.signal.aborted) {
+                    blob = await tryFetchBlob(proxyUrl, false);
+                    if (blob) usedFallback = true;
+                }
+
+                // 若直连与代理均不可用（如代理返回 6987 假图），自动回退到 OSM 德国镜像
+                if (!blob && osmCommunityMirrorUrl && !tileController.signal.aborted) {
+                    blob = await tryFetchBlob(osmCommunityMirrorUrl, true);
+                    if (blob) usedFallback = true;
+                }
+            }
+
+            if (!blob) {
+                if (!tileController.signal.aborted) {
+                    return await originalRequestImage(x, y, level, request);
+                }
+                throw new Error(`Tile fetch aborted: ${level}/${x}/${y}`);
+            }
+
+            if (usedFallback) {
+                notifyCesiumProxyFallback();
+            }
+
+            return await decodeBlobToImage(Cesium, blob);
+        } finally {
+            cleanup();
+        }
+    };
+
+    return provider;
 }
 
 // ========== URL 模板解析工具 ==========
@@ -296,17 +510,20 @@ export function createCesiumImageryProvider(
             }
 
             case 'osm': {
-                if (typeof Cesium.OpenStreetMapImageryProvider === 'function') {
-                    provider = new Cesium.OpenStreetMapImageryProvider({
-                        maximumLevel: maxLevel,
-                    });
-                } else {
-                    // 降级为 UrlTemplateImageryProvider
-                    provider = new Cesium.UrlTemplateImageryProvider({
-                        url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                        maximumLevel: maxLevel,
-                    });
-                }
+                const osmUrl = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
+                provider = new Cesium.UrlTemplateImageryProvider({
+                    url: osmUrl,
+                    subdomains: ['a', 'b', 'c'],
+                    tilingScheme: new Cesium.WebMercatorTilingScheme(),
+                    maximumLevel: Math.min(maxLevel, 19),
+                    enablePickFeatures: false,
+                });
+                wrapProviderWithFetchFallback(Cesium, provider, abortSignal, {
+                    isOsm: true,
+                    descriptorId: descriptor.id,
+                    templateUrl: osmUrl,
+                    subdomains: ['a', 'b', 'c'],
+                });
                 break;
             }
 
@@ -336,6 +553,15 @@ export function createCesiumImageryProvider(
                     maximumLevel: maxLevel,
                     enablePickFeatures: false,
                 });
+
+                if (templateUrl.includes('openstreetmap.org')) {
+                    wrapProviderWithFetchFallback(Cesium, provider, abortSignal, {
+                        isOsm: true,
+                        descriptorId: descriptor.id,
+                        templateUrl,
+                        subdomains: subdomains.length > 0 ? subdomains : undefined,
+                    });
+                }
                 break;
             }
         }

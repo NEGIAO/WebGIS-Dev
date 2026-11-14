@@ -6,7 +6,10 @@ import {
 } from '@common/basemap/wmsService';
 import { tileProxyUrl } from '@/config/publicRuntime';
 import { resolvePresetLayerIds } from '@common/basemap/catalogProjection';
-import { buildCesiumImageryProvidersForPreset } from '@cesium-domain/constants/basemapProviderFactory';
+import {
+    buildCesiumImageryProvidersForPreset,
+    wrapProviderWithFetchFallback,
+} from '@cesium-domain/constants/basemapProviderFactory';
 import { arcgisBboxParts } from './i3sWebMercator';
 import {
     TDT_SERVICE_ROOT,
@@ -276,6 +279,20 @@ export function createImageryProviderBuilderSuite({
         officialBasemapOptions.value = officialProviderViewModels.map((viewModel: any, index: number) => {
             const label = String(viewModel?.name || `官方底图 ${index + 1}`).trim();
             const value = createOfficialBasemapId(label, index);
+            if (label.toLowerCase().includes('openstreetmap') && typeof viewModel?.creationFunction === 'function') {
+                const originalCreation = viewModel.creationFunction.bind(viewModel);
+                viewModel.creationFunction = () => {
+                    const rawProvider = originalCreation();
+                    const CesiumRuntime = getCesium?.();
+                    if (CesiumRuntime && rawProvider) {
+                        wrapProviderWithFetchFallback(CesiumRuntime, rawProvider, undefined, {
+                            isOsm: true,
+                            descriptorId: 'official_osm',
+                        });
+                    }
+                    return rawProvider;
+                };
+            }
             imageryProviderViewModelById.set(value, viewModel);
             imageryProviderIdByViewModel.set(viewModel, value);
             return {
