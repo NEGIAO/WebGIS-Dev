@@ -303,18 +303,21 @@
                         </div>
                         <h4>{{ feature.title }}</h4>
                         <p>{{ feature.desc }}</p>
+                        <!-- 响应式预览图：不再 fetchpriority=high —— Lighthouse 实测 LCP 元素是
+                             hero-bg__ring（CSS 装饰环）而非本图，high 会与主 CSS/JS 抢带宽 -->
                         <div
                             v-if="feature.hero"
                             class="feature-hero-preview"
                         >
                             <img
                                 :src="previewUrl"
+                                :srcset="previewSrcset"
+                                sizes="(max-width: 794px) 68vw, 540px"
                                 :alt="feature.title"
                                 class="feature-hero-preview__img"
-                                fetchpriority="high"
                                 decoding="async"
-                                width="1996"
-                                height="769"
+                                width="540"
+                                height="313"
                                 draggable="false"
                             />
                         </div>

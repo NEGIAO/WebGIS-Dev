@@ -17,6 +17,7 @@
         "format": "prettier --write src/",
         "docs:index": "node scripts/generate-boundary-index.mjs",
         "shaders": "node scripts/bundle-shaders.mjs",
+        "fonts:subset": "python scripts/subset-fontawesome.py",
         "shaders:check": "node scripts/bundle-shaders.mjs --check"
     },
     "dependencies": {

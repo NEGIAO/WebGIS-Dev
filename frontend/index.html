@@ -42,31 +42,152 @@
         <!-- 多设备自适应：shrink-to-fit=no 禁止 iOS Safari 在横向溢出时整页缩小（F12 模拟不会复现该行为）；
              viewport-fit=cover 适配刘海屏安全区 -->
 
-        <!-- Font Awesome 6.4.0（BootCDN，国内节点）
-             2026-11 回退：V3.6.35 曾改为自托管（public/fontawesome/，该目录已于 V3.6.40 删除），
-             但自托管走的是本站源（GitHub Pages），国内访问反而比 BootCDN 慢，
-             故改回 CDN。CSS 与字体同源于 cdn.bootcdn.net，一次 DNS 解析内并行取回。
-             media="print" + onload 交换：CSS 异步加载不阻塞首屏（图标可能晚到约百毫秒）；
-             noscript 兜底保证无 JS 环境仍能加载图标样式。 -->
+        <!-- Font Awesome 样式已内置（V3.6.45）：
+             原 https://cdn.bootcdn.net/.../all.min.css 全量 102KB，其中约 99KB 用不到
+             （Lighthouse unused CSS 审计 + 一条 render-blocking 跨域请求）。
+             现由 src/assets/fontawesome-subset.css 提供：仅 50 个在用图标的规则 + 基础布局
+             + fa-spin 动画（3.6KB，随主 CSS 打包）。字体仍走 BootCDN（见下条 preload 注释）。
+             生成器：scripts/subset-fontawesome.py（npm run fonts:subset）。 -->
+        <!-- 图标字体预加载（字体仍用 BootCDN，不走自托管）：
+             取舍结论（2026-11 实测后回归）：字体文件自托管在 GitHub Pages 上，
+             国内访问显著慢于 BootCDN 国内节点，故字体保留 CDN 加速；
+             仅把 CSS 规则本地化（官方 all.min.css 102KB → 3.6KB，见上条）。
+             preload 让字体与主 CSS 并行取回（字体在 CSS 应用后才请求，会晚一步）；
+             跨域字体 preload 必须带 crossorigin（匿名 CORS），否则与 @font-face 的
+             凭据模式不匹配会重复下载一次。只预加载 solid（首屏图标主力）。 -->
         <link
-            rel="preconnect"
-            href="https://cdn.bootcdn.net"
+            rel="preload"
+            href="https://cdn.bootcdn.net/ajax/libs/font-awesome/6.4.0/webfonts/fa-solid-900.woff2"
+            as="font"
+            type="font/woff2"
             crossorigin
         />
-        <link
-            rel="stylesheet"
-            href="https://cdn.bootcdn.net/ajax/libs/font-awesome/6.4.0/css/all.min.css"
-            media="print"
-            onload="this.media='all'; this.onload=null;"
-        />
-        <noscript>
-            <link
-                rel="stylesheet"
-                href="https://cdn.bootcdn.net/ajax/libs/font-awesome/6.4.0/css/all.min.css"
-            />
-        </noscript>
 
-        <title>NEGIAO's WebGIS</title>
+        <!-- ==================== Font Awesome @font-face 覆盖（仅改 font-display，字体走 CDN） ====================
+             官方 CSS 对全部字体声明 font-display: block——字体未就位时图标所在文本整段不可见，
+             最长阻塞 3s（Lighthouse: Font display 可省 1080ms FCP）。同 family/style/weight 的
+             @font-face 后定义者优先，故此处以相同 src 重新声明为 swap。
+             字体来源保持 BootCDN（官方 woff2，国内加速）；曾试过子集化自托管（7KB），
+             但 GitHub Pages 在国内的字体传输比 CDN 慢，实测后回归 CDN。
+             版本号与官方 CSS 的 6.4.0 绑定，升级 FA 版本时需同步此处 URL。 -->
+        <style>
+            /* FA6 主字体族（当前 fas/far/fab 类名实际使用这三档） */
+            @font-face {
+                font-family: 'Font Awesome 6 Brands';
+                font-style: normal;
+                font-weight: 400;
+                font-display: swap;
+                src: url('https://cdn.bootcdn.net/ajax/libs/font-awesome/6.4.0/webfonts/fa-brands-400.woff2')
+                    format('woff2');
+            }
+            @font-face {
+                font-family: 'Font Awesome 6 Free';
+                font-style: normal;
+                font-weight: 400;
+                font-display: swap;
+                src: url('https://cdn.bootcdn.net/ajax/libs/font-awesome/6.4.0/webfonts/fa-regular-400.woff2')
+                    format('woff2');
+            }
+            @font-face {
+                font-family: 'Font Awesome 6 Free';
+                font-style: normal;
+                font-weight: 900;
+                font-display: swap;
+                src: url('https://cdn.bootcdn.net/ajax/libs/font-awesome/6.4.0/webfonts/fa-solid-900.woff2')
+                    format('woff2');
+            }
+            /* FA5 兼容字体族（老 class 写法兜底，成本为零一并覆盖） */
+            @font-face {
+                font-family: 'Font Awesome 5 Brands';
+                font-style: normal;
+                font-weight: 400;
+                font-display: swap;
+                src: url('https://cdn.bootcdn.net/ajax/libs/font-awesome/6.4.0/webfonts/fa-brands-400.woff2')
+                    format('woff2');
+            }
+            @font-face {
+                font-family: 'Font Awesome 5 Free';
+                font-style: normal;
+                font-weight: 400;
+                font-display: swap;
+                src: url('https://cdn.bootcdn.net/ajax/libs/font-awesome/6.4.0/webfonts/fa-regular-400.woff2')
+                    format('woff2');
+            }
+            @font-face {
+                font-family: 'Font Awesome 5 Free';
+                font-style: normal;
+                font-weight: 900;
+                font-display: swap;
+                src: url('https://cdn.bootcdn.net/ajax/libs/font-awesome/6.4.0/webfonts/fa-solid-900.woff2')
+                    format('woff2');
+            }
+        </style>
+
+        <title>NEGIAO's WebGIS - 地理信息可视化平台</title>
+
+        <!-- ==================== SEO 元信息（Google/Bing/百度 收录用，V3.6.45） ====================
+             背景：GSC 报「URL is unknown to Google」——站点无 sitemap、无 meta description、
+             无 canonical、首屏纯 SPA 空壳，缺少一切被"发现"和"理解"的信号。
+             此处补齐 description / canonical / Open Graph；sitemap 见 public/sitemap.xml；
+             robots 见 public/robots.txt（注意 Cloudflare 的 Managed robots.txt 会覆盖源站版本）。 -->
+        <meta
+            name="description"
+            content="NEGIAO's WebGIS 是一个开源的二维/三维一体化地理信息可视化平台：基于 Vue 3 + OpenLayers + Cesium，支持三维地球漫游、地形与影像加载、矢量/栅格数据导入（SHP/KML/GeoJSON/GeoTIFF/GLTF）、建筑白模、空间分析与在线地图服务聚合。"
+        />
+        <meta
+            name="keywords"
+            content="WebGIS,三维地图,地理信息系统,GIS可视化,Cesium,OpenLayers,地图开发,地形,空间分析,倾斜摄影,数字地球"
+        />
+        <meta
+            name="author"
+            content="NEGIAO"
+        />
+        <link
+            rel="canonical"
+            href="https://webgis.negiao.cn/"
+        />
+
+        <!-- Open Graph / 社交分享卡片 -->
+        <meta
+            property="og:type"
+            content="website"
+        />
+        <meta
+            property="og:site_name"
+            content="NEGIAO's WebGIS"
+        />
+        <meta
+            property="og:title"
+            content="NEGIAO's WebGIS - 三维地理信息可视化平台"
+        />
+        <meta
+            property="og:description"
+            content="基于 Vue 3 + OpenLayers + Cesium 的二维/三维一体化 WebGIS 平台：三维漫游、地形影像、矢量栅格导入、建筑白模与空间分析。"
+        />
+        <meta
+            property="og:url"
+            content="https://webgis.negiao.cn/"
+        />
+        <meta
+            property="og:image"
+            content="https://webgis.negiao.cn/images/icon.webp"
+        />
+        <meta
+            name="twitter:card"
+            content="summary_large_image"
+        />
+        <meta
+            name="twitter:title"
+            content="NEGIAO's WebGIS - 三维地理信息可视化平台"
+        />
+        <meta
+            name="twitter:description"
+            content="基于 Vue 3 + OpenLayers + Cesium 的二维/三维一体化 WebGIS 平台。"
+        />
+        <meta
+            name="twitter:image"
+            content="https://webgis.negiao.cn/images/icon.webp"
+        />
         <!-- Google Identity Services 不在此处加载：
              V3.6.35 起改由 RegisterView.vue 的 ensureGsiScript() 按需注入（仅登录/注册页），
              本文件曾遗留一个 async 的 <script>，会让落地页/地图页等无关页面
@@ -75,7 +196,27 @@
     </head>
 
     <body>
-        <div id="app"></div>
+        <!-- 首屏静态兜底内容（爬虫/无 JS/弱网可见；Vue 挂载时整体替换，正常用户几乎无感）。
+             SEO 目的：SPA 空壳会让 Google 判「无内容」而长期不索引；
+             此块提供可解析的标题与描述文本，作为被抓取与理解的最小静态内容。 -->
+        <div id="app">
+            <header>
+                <h1>NEGIAO's WebGIS - 三维地理信息可视化平台</h1>
+                <p>
+                    这是一个基于 Vue 3 + OpenLayers + Cesium 构建的开源二维 / 三维一体化
+                    WebGIS 平台，提供三维地球漫游、地形与影像底图、矢量与栅格数据导入
+                    （SHP / KML / GeoJSON / GeoTIFF / GLTF / 3D Tiles）、建筑白模、
+                    卷帘对比、空间分析与在线地图服务（WMS / WMTS / ArcGIS）聚合等能力。
+                </p>
+                <nav>
+                    <ul>
+                        <li><a href="/">首页 / 地图工作台</a></li>
+                        <li><a href="/#/terms">服务条款</a></li>
+                        <li><a href="/#/privacy">隐私政策</a></li>
+                    </ul>
+                </nav>
+            </header>
+        </div>
         <script
             type="module"
             src="./src/main.ts"

@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    注意：本站为 SPA 且路由使用 hash 模式（createWebHashHistory），
+    形如 /#/terms 的路径中 # 之后的部分不会被搜索引擎作为独立 URL 索引
+    （Google/Bing 会忽略 fragment）。因此 sitemap 只声明首页这一个可索引 URL。
+    若未来改为 history 路由并为各页做预渲染，再追加 /terms、/privacy 等条目。
+-->
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+    <url>
+        <loc>https://webgis.negiao.cn/</loc>
+        <lastmod>2026-11-16</lastmod>
+        <changefreq>weekly</changefreq>
+        <priority>1.0</priority>
+    </url>
+</urlset>

@@ -1,0 +1,62 @@
+# NEGIAO's WebGIS robots.txt
+# 目的：允许搜索引擎（Google / Bing / 百度）正常抓取与索引；
+#       禁止 AI 训练类爬虫（内容不用于模型训练）。
+#
+# 注意：本文件位于源站（GitHub Pages）。若 Cloudflare 开启了
+# "Managed robots.txt / AI Crawl Control"，代理层会注入一份覆盖本文件的版本，
+# 需在 Cloudflare Dashboard 关闭该功能后本文件才生效。
+
+User-agent: *
+Allow: /
+
+# ---------- 搜索引擎（显式允许，避免被上层的 AI 规则误伤） ----------
+User-agent: Googlebot
+Allow: /
+
+User-agent: Googlebot-Image
+Allow: /
+
+User-agent: Bingbot
+Allow: /
+
+User-agent: Baiduspider
+Allow: /
+
+User-agent: Sogou web spider
+Allow: /
+
+User-agent: 360Spider
+Allow: /
+
+# ---------- AI 训练爬虫（禁止抓取训练） ----------
+User-agent: GPTBot
+Disallow: /
+
+User-agent: Google-Extended
+Disallow: /
+
+User-agent: ClaudeBot
+Disallow: /
+
+User-agent: Claude-Web
+Disallow: /
+
+User-agent: anthropic-ai
+Disallow: /
+
+User-agent: CCBot
+Disallow: /
+
+User-agent: Bytespider
+Disallow: /
+
+User-agent: PerplexityBot
+Disallow: /
+
+User-agent: cohere-ai
+Disallow: /
+
+User-agent: Diffbot
+Disallow: /
+
+Sitemap: https://webgis.negiao.cn/sitemap.xml

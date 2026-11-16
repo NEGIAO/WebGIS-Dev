@@ -178,6 +178,8 @@ export class Instance {
 	// ── 品牌资源 ──
 	public logoUrl = '';
 	public previewUrl = '';
+	/** 响应式预览图候选集：540w（1x，容器上限 540px）/ 800w（≈1.5x，兼顾 2x 屏清晰度与体积） */
+	public previewSrcset = '';
 	public hfLogoUrl = '';
 	public brandBadgeStyle: Record<string, string> = {};
 
@@ -254,7 +256,10 @@ export class Instance {
 
 		const normalizedBase = ASSET_BASE_URL.endsWith('/') ? ASSET_BASE_URL : `${ASSET_BASE_URL}/`;
 		this.logoUrl = `${normalizedBase}images/icon.webp`;
-		this.previewUrl = `${normalizedBase}images/preview.webp`;
+		// 原图 1996×1156 / 95KB，实际最大显示 540px —— 按显示尺寸出两档（24KB / 45KB），
+		// Lighthouse「Improve image delivery」实测可省 70KB+；旧的全尺寸文件保留未引用）
+		this.previewUrl = `${normalizedBase}images/preview-540.webp`;
+		this.previewSrcset = `${normalizedBase}images/preview-540.webp 540w, ${normalizedBase}images/preview-800.webp 800w`;
 		this.hfLogoUrl = `${normalizedBase}images/hf-logo.svg`;
 		// URL 不进自定义属性：品牌徽牌 mask-image 走行内样式，轨道环纹样走文档级 <style> 注入
 		this.brandBadgeStyle = {

@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="zh-CN">
+    <head>
+        <meta charset="UTF-8" />
+        <title>NEGIAO's WebGIS - 页面跳转中</title>
+        <meta
+            name="robots"
+            content="noindex"
+        />
+        <script>
+            // GitHub Pages 对任意未知路径返回本 404 页。
+            // 本站为 hash 路由 SPA（createWebHashHistory），把路径转成 hash 后回首页，
+            // 由前端路由接管渲染（例如 /terms => /#/terms）。
+            // 注：HTTP 状态码仍为 404，仅改善分享链接/收藏直达的用户体验，不用于 SEO 收录。
+            (function () {
+                var path = location.pathname || '/';
+                var search = location.search || '';
+                var target = '/#' + path.replace(/^\/+/, '/');
+                if (search) target += search;
+                location.replace(target);
+            })();
+        </script>
+    </head>
+    <body>
+        <p>正在跳转到 NEGIAO's WebGIS… 若未自动跳转，请<a href="/">点击此处返回首页</a>。</p>
+    </body>
+</html>

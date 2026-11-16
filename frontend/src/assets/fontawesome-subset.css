@@ -1,0 +1,84 @@
+/* Font Awesome 子集样式（由 scripts/subset-fontawesome.py 生成，勿手改）
+ *
+ * 来源：Font Awesome 6.4.0 all.min.css（MIT 代码 / SIL OFL 1.1 字体 / CC BY 4.0 图标）
+ * 生成内容：仅本项目实际使用的 51 个图标 + 基础布局 + fa-spin 动画。
+ * 官方全量 CSS 约 100KB，其中约 99KB 为未使用规则（Lighthouse unused CSS 审计）。
+ * 维护：新增 fa-* 图标后重跑 `npm run fonts:subset`，字体与规则会同步再生。
+ */
+
+/* ---------- 基础布局（等价官方 .fa,.fa-brands,.fa-solid,… 选择器组） ---------- */
+.fa, .fas, .far, .fab, .fa-solid, .fa-regular, .fa-brands {
+    -moz-osx-font-smoothing: grayscale;
+    -webkit-font-smoothing: antialiased;
+    display: var(--fa-display, inline-block);
+    font-style: normal;
+    font-variant: normal;
+    line-height: 1;
+    text-rendering: auto;
+}
+
+/* ---------- 字体族 / 字重（与 index.html 内联 @font-face 的子集文件对应） ---------- */
+.fa, .fas, .fa-solid { font-family: "Font Awesome 6 Free"; font-weight: 900; }
+.far, .fa-regular { font-family: "Font Awesome 6 Free"; font-weight: 400; }
+.fab, .fa-brands { font-family: "Font Awesome 6 Brands"; font-weight: 400; }
+
+/* ---------- 旋转动画（实际使用的唯一修饰类 fa-spin；其余修饰类未使用） ---------- */
+.fa-spin { animation: fa-spin 2s linear infinite; }
+@keyframes fa-spin {
+    0% { transform: rotate(0deg); }
+    to { transform: rotate(1turn); }
+}
+
+/* ---------- 图标内容码点 ---------- */
+
+.fa-arrow-left:before { content: "\f060"; }
+.fa-bolt:before { content: "\f0e7"; }
+.fa-chart-line:before { content: "\f201"; }
+.fa-check:before { content: "\f00c"; }
+.fa-check-circle:before { content: "\f058"; }
+.fa-check-double:before { content: "\f560"; }
+.fa-chevron-up:before { content: "\f077"; }
+.fa-circle:before { content: "\f111"; }
+.fa-comments:before { content: "\f086"; }
+.fa-compress-alt:before { content: "\f422"; }
+.fa-copy:before { content: "\f0c5"; }
+.fa-database:before { content: "\f1c0"; }
+.fa-display:before { content: "\e163"; }
+.fa-docker:before { content: "\f395"; }
+.fa-exclamation-triangle:before { content: "\f071"; }
+.fa-expand-alt:before { content: "\f424"; }
+.fa-eye:before { content: "\f06e"; }
+.fa-eye-slash:before { content: "\f070"; }
+.fa-file-contract:before { content: "\f56c"; }
+.fa-gauge-high:before { content: "\f625"; }
+.fa-github:before { content: "\f09b"; }
+.fa-globe:before { content: "\f0ac"; }
+.fa-google:before { content: "\f1a0"; }
+.fa-home:before { content: "\f015"; }
+.fa-id-badge:before { content: "\f2c1"; }
+.fa-id-card:before { content: "\f2c2"; }
+.fa-key:before { content: "\f084"; }
+.fa-language:before { content: "\f1ab"; }
+.fa-lock:before { content: "\f023"; }
+.fa-map:before { content: "\f279"; }
+.fa-palette:before { content: "\f53f"; }
+.fa-paper-plane:before { content: "\f1d8"; }
+.fa-right-from-bracket:before { content: "\f2f5"; }
+.fa-robot:before { content: "\f544"; }
+.fa-rotate:before { content: "\f2f1"; }
+.fa-ruler-combined:before { content: "\f546"; }
+.fa-save:before { content: "\f0c7"; }
+.fa-shield-alt:before { content: "\f3ed"; }
+.fa-sign-in-alt:before { content: "\f2f6"; }
+.fa-sign-out-alt:before { content: "\f2f5"; }
+.fa-sliders-h:before { content: "\f1de"; }
+.fa-spinner:before { content: "\f110"; }
+.fa-star:before { content: "\f005"; }
+.fa-stopwatch:before { content: "\f2f2"; }
+.fa-times:before { content: "\f00d"; }
+.fa-undo-alt:before { content: "\f2ea"; }
+.fa-user:before { content: "\f007"; }
+.fa-user-clock:before { content: "\f4fd"; }
+.fa-user-shield:before { content: "\f505"; }
+.fa-users:before { content: "\f0c0"; }
+.fa-vuejs:before { content: "\f41f"; }

@@ -76,6 +76,8 @@ frontend/src/
 │       └── useRoutePrefetch.ts  # 注册页资源预取：落地页空闲时预取 `RegisterView` chunk、入口 pointerenter/focusin/touchstart 上补会话校验，并向过渡层暴露 `isRegisterRouteReady()`；解决的问题是「过渡回调里等 chunk / `/api/auth/me` 会冻结旧快照」导致的首次点击卡顿
 ├── assets/
 │   ├── cesium-tool-theme.css
+│   ├── fontawesome-subset.css  # FA 最小图标样式（50 个在用图标 + 基础布局 + fa-spin，3.6KB；
+│   │   # 由 scripts/subset-fontawesome.py 生成，替代官方 102KB all.min.css，勿手改）
 │   ├── logo.svg
 │   ├── theme.css  # 全局主题令牌（含自托管思源宋体 @font-face + box-sizing 重置 + 移动端基线）
 │   ├── toc-theme.css
@@ -998,4 +1000,4 @@ frontend/src/
     └── tiffWorker.ts  # TIF 解码 Worker（TS 类型化消息协议 + Transferable 契约）
 ```
 
-> 注：`frontend/src/` 之外的 `frontend/scripts/` 存放构建辅助脚本（如 [bundle-shaders.mjs](../../frontend/scripts/bundle-shaders.mjs)：将体积云 Shaders/ 真源打包为 lib/shaders/bundledShaders.js 并同步 public 镜像，已由 vite.config 求值期自动调用——dev/build 全覆盖；`--check` 模式供 CI 与本地校验），不属于本树扫描范围，改动时仍需保持与本文件注释一致。
+> 注：`frontend/src/` 之外的 `frontend/scripts/` 存放构建辅助脚本（如 [bundle-shaders.mjs](../../frontend/scripts/bundle-shaders.mjs)：将体积云 Shaders/ 真源打包为 lib/shaders/bundledShaders.js 并同步 public 镜像，已由 vite.config 求值期自动调用——dev/build 全覆盖；`--check` 模式供 CI 与本地校验；[subset-fontawesome.py](../../frontend/scripts/subset-fontawesome.py)：扫描源码在用 fa-* 图标并生成 `src/assets/fontawesome-subset.css`，`npm run fonts:subset` 调用，`--check` 校验产物，字体本身走 BootCDN 不生成），不属于本树扫描范围，改动时仍需保持与本文件注释一致。

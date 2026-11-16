@@ -17,6 +17,24 @@
 > 注：V3.7.2 号段已于同日重新启用，对应《修复 OpenLayers 加载 OSM 标准瓦片 403》条目，与本条无冲突。
 > 分主题的原始过程记录保留在 `Docs/LLM_record/26-11/2026-11-14/`，不迁移、不改写。
 
+### V3.7.3 (2026-11-16) — 暂存区整合：SEO 收录修复 + Font Awesome 样式瘦身 + 预览图响应式
+
+> **一句话**：将多次未整合的暂存改动归一为单一版本，完成 Code Review 缺陷修复与文档/版本号/结构树同步。详见 [维护日志](../LLM_record/26-11/2026-11-16/2026-11-16-staged-code-review-v3.7.3.md)。
+
+1. **Code Review 修复 4 处**：
+   - `scripts/subset-fontawesome.py` 的 `--check` 默认模式把「字体走 CDN、size=0」误判为 MISSING（实测退出码 1）→ 按模式分支校验；
+   - 同脚本 docstring 声称「@font-face 指向子集文件」与已撤回的 CDN 方案矛盾 → 改为准确描述；
+   - `index.html` 的 `<title>` 与 og:title / twitter:title / 首屏 h1 文案三处不一致 → 统一为「三维地理信息可视化平台」；
+   - CSS 模板注释「全项目唯一修饰类 fa-spin」与脚本 MODIFIERS 集合矛盾 → 措辞更正并重生 CSS。
+2. **SEO 收录修复**：新增 `public/sitemap.xml`（仅首页，hash 路由下 fragment 不被索引）、`public/robots.txt`（搜索爬虫 Allow / AI 训练禁入）、`public/404.html`（hash 路由跳转兜底）；`index.html` 补 description / canonical / OG / Twitter 卡片与首屏静态兜底内容，解决 GSC「URL is unknown to Google」。
+3. **Font Awesome 样式瘦身**：官方 `all.min.css` 102KB → 在用 51 图标的 3.6KB 规则表（`src/assets/fontawesome-subset.css`，由 `npm run fonts:subset` 生成）；字体文件实测自托管慢于 BootCDN，保留 CDN 加载并用 `@font-face` 覆盖把 `font-display: block` 改为 `swap`（Lighthouse Font display 项 1080ms）。
+4. **预览图响应式**：`LandingView` 按显示尺寸出 540w / 800w 两档（原 1996×1156 / 95KB → 24KB / 45KB），`sizes` 对齐容器 `min(68%, 540px)`；移除 `fetchpriority=high`（实测 LCP 元素为 CSS 装饰环而非本图）。
+5. **依赖 patch 升级**：`backend/uv.lock` 中 fastapi 0.162.4→0.162.5、python-multipart 0.0.32→0.0.33，均在 `pyproject.toml` 约束内，来自 Dependabot 自动合并。
+6. **文档与门禁**：README 三处版本 + CHANGELOG + 结构树同步；`tsc` / `eslint` / `build` / 结构树 736/736 / 配置登记全绿。
+
+### 版本说明
+> V3.7.3 号段曾在 2026-11-14 作为同一批未提交工作的中间号使用并归并至 V3.7.1（见下方归并注记）；本次按用户明确指令重新启用该号段，仅代表本次整合版本，不回滚历史归并结论。
+
 ### V3.7.2 (2026-11-14) — 修复 OpenLayers 加载 OSM 标准瓦片 403（双引擎 Referrer 策略归一）
 
 > **一句话**：站点响应头下发 `Referrer-Policy: same-origin`，`fetch()` 未显式声明策略时会继承该文档策略，导致 OL 的瓦片请求跨源时完全不带 Referer，被 OSM Tile Usage Policy 判定为未授权抓取并返回「Access blocked」；Cesium 侧此前已显式注入 `referrerPolicy` 故不受影响，形成「修好 3D 就坏 2D」的跷跷板。本次将 OSM 官方模板、德国镜像与拦截占位图字节特征收敛为单一真源，OL 侧显式声明 Referrer 策略并补齐拦截假图识别，两引擎恢复共存。详见 [维护日志](../LLM_record/26-11/2026-11-14/2026-11-14-fix-ol-osm-403-referrer-policy.md)。

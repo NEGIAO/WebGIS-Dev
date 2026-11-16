@@ -52,6 +52,8 @@
 <script lang="ts" src="./App.ts"></script>
 
 <style>
+/* Font Awesome 最小子集（图标规则，生成器 scripts/subset-fontawesome.py） */
+@import './assets/fontawesome-subset.css';
 @import './assets/theme.css';
 @import './assets/ui-panel-theme.css';
 @import './assets/toc-theme.css';
