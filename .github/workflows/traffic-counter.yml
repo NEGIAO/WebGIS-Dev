@@ -11,6 +11,8 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      # 创建 PR 与 gh pr merge --auto 需要写 PR 权限（PAT 自身的权限同样要够）
+      pull-requests: write
 
     steps:
       - uses: actions/checkout@v4
@@ -138,10 +140,27 @@ jobs:
 
             fs.writeFileSync(path, JSON.stringify(data, null, 2));
 
-      - name: Commit and push
-        uses: EndBug/add-and-commit@v9
+      # 不再直接推送 main（受保护分支要求 Build & Test Check，直推会被 GH006 拒绝）。
+      # 改为开 PR，让 pre-check.yml 的 Build & Test Check 跑起来，检查通过后自动合并。
+      - name: Create PR for traffic data
+        id: cpr
+        uses: peter-evans/create-pull-request@v7
         with:
-          add: '.github/traffic.json'
-          message: "chore: update traffic statistics [auto]"
-          default_author: github_actions
-          pull: '--rebase --autostash'
+          # 必须用 PAT：GITHUB_TOKEN 创建的 PR 不会触发 pull_request 工作流，
+          # 也就不会触发 Build & Test Check，auto-merge 会一直卡住。
+          token: ${{ secrets.TRAFFIC_TOKEN }}
+          add-paths: '.github/traffic.json'
+          commit-message: 'chore: update traffic statistics [auto]'
+          branch: automation/traffic-stats
+          delete-branch: true
+          title: 'chore: 自动更新访问统计'
+          body: |
+            由 .github/workflows/traffic-counter.yml 自动创建。
+            `Build & Test Check` 通过后由 auto-merge 自动 squash 合并。
+          labels: automation
+
+      - name: Enable auto-merge
+        if: steps.cpr.outputs.pull-request-number
+        run: gh pr merge --auto --squash "${{ steps.cpr.outputs.pull-request-url }}"
+        env:
+          GH_TOKEN: ${{ secrets.TRAFFIC_TOKEN }}
