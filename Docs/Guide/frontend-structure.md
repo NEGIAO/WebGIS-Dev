@@ -620,8 +620,8 @@ frontend/src/
 │   │   │   │   ├── tencentBuildingFetcher.ts  # 腾讯建筑白模矢量抓取（浏览器直跑，输出 WGS-84 GeoJSON）
 │   │   │   │   └── tifLoader.ts  # GeoTIFF 加载
 │   │   │   ├── components/
-│   │   │   │   └── TencentBuildingPanel.vue  # 建筑抓取面板（腾讯/高德/天地图 + 天地图 12 层多选分层 + 入库/下载，V3.6.17）
-│   │   │   │   └── TencentBuildingPanel.ts  # 建筑抓取实例层（三源桥接/合规确认/范围表单/入库）
+│   │   │   │   └── BuildingFetchPanel.vue  # 建筑抓取面板（腾讯/高德/天地图三源通用 + 天地图分层多选 + 入库/下载）
+│   │   │   │   └── BuildingFetchPanel.ts  # 建筑抓取实例层（三源桥接/合规确认/范围表单/入库）
 │   │   │   └── stores/
 │   │   │       └── useDownloadStore.ts  # 下载任务状态
 │   │   ├── data-protocol/

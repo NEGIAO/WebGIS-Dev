@@ -40,7 +40,7 @@ function preloadToolboxPanel() {
 const ToolboxPanel = defineAsyncComponent(() => preloadToolboxPanel());
 const RoutePlannerPanel = defineAsyncComponent(() => import('@ol/routing/components/RoutePlannerPanel.vue'));
 const CompassControlPanel = defineAsyncComponent(() => import('@common/compass/components/CompassControlPanel.vue'));
-const TencentBuildingPanel = defineAsyncComponent(() => import('@common/data-import/components/TencentBuildingPanel.vue'));
+const BuildingFetchPanel = defineAsyncComponent(() => import('@common/data-import/components/BuildingFetchPanel.vue'));
 const WeatherChartPanel = defineAsyncComponent(() => import('@common/weather/components/WeatherChartPanel.vue'));
 
 // ========== 1. 热点新闻平台配置（label 随语言切换）==========
@@ -135,7 +135,7 @@ type EmitsType = [
 // 三、组件注册入口
 export default defineComponent({
 	name: 'SidePanel',
-	components: { ChatPanelContent, ToolboxPanel, RoutePlannerPanel, CompassControlPanel, TencentBuildingPanel, WeatherChartPanel },
+	components: { ChatPanelContent, ToolboxPanel, RoutePlannerPanel, CompassControlPanel, BuildingFetchPanel, WeatherChartPanel },
 	props: propDefine,
 	emits: [
 		'toggle-panel',
