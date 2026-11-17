@@ -1,7 +1,7 @@
 /* Font Awesome 子集样式（由 scripts/subset-fontawesome.py 生成，勿手改）
  *
  * 来源：Font Awesome 6.4.0 all.min.css（MIT 代码 / SIL OFL 1.1 字体 / CC BY 4.0 图标）
- * 生成内容：仅本项目实际使用的 51 个图标 + 基础布局 + fa-spin 动画。
+ * 生成内容：仅本项目实际使用的 52 个图标 + 基础布局 + fa-spin 动画。
  * 官方全量 CSS 约 100KB，其中约 99KB 为未使用规则（Lighthouse unused CSS 审计）。
  * 维护：新增 fa-* 图标后重跑 `npm run fonts:subset`，字体与规则会同步再生。
  */
@@ -32,6 +32,7 @@
 /* ---------- 图标内容码点 ---------- */
 
 .fa-arrow-left:before { content: "\f060"; }
+.fa-arrow-up-right-from-square:before { content: "\f08e"; }
 .fa-bolt:before { content: "\f0e7"; }
 .fa-chart-line:before { content: "\f201"; }
 .fa-check:before { content: "\f00c"; }

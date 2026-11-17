@@ -55,9 +55,11 @@ export function looksLikeXYZTemplate(url: string): boolean {
 }
 
 export function looksLikeVectorTileUrl(url: string): boolean {
-    // 仅基于文件扩展名(.pbf/.mvt)检测矢量切片
-    // 移除过于宽泛的 /tile(s)?/ 检测，避免误判标准 XYZ 栅格切片（如 ArcGIS tile 服务）
-    return /\.pbf(\?|$)/i.test(url) || /\.mvt(\?|$)/i.test(url);
+    // 文件扩展名(.pbf/.mvt)
+    if (/\.pbf(\?|$)/i.test(url) || /\.mvt(\?|$)/i.test(url)) return true;
+    // 无扩展名但路径明确含矢量语义（如天地图 MVT 二次封装 .../mvt/{z}/{x}/{y}）。
+    // 用词边界 /mvt/ /vector/ 而非宽泛的 /tile/，避免误判 ArcGIS/标准 XYZ 栅格瓦片。
+    return /\/mvt\//i.test(url) || /\/vector\//i.test(url) || /\/pbf\//i.test(url);
 }
 
 export function toErrorMessage(error: unknown): string {

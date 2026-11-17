@@ -98,6 +98,7 @@
             :layer-list="layerList"
             :selected-layer="selectedLayer"
             :custom-map-url="customMapUrl"
+            :custom-map-style-url="customMapStyleUrl"
             :active-graticule="showDynamicSplitLines"
             :basemap-circuit-open="basemapCircuitOpen"
             :tianditu-tk="tiandituTk"

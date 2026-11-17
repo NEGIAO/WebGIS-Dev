@@ -195,6 +195,9 @@ export function createCesiumRemoteServiceAdapter({ getViewer, getCesium }: Cesiu
     }
 
     function syncRecord(record: RemoteServiceRecord) {
+        // 矢量瓦片（MVT/PBF）仅 OL 端支持，Cesium 无对应 ImageryProvider —— 显式跳过，
+        // 防止落入下方 ArcGIS export 兜底分支拼出错误 URL。
+        if (record.kind === 'vector-tile') return;
         const viewer = getViewer?.();
         const Cesium = getCesium?.();
         if (!viewer?.imageryLayers || !Cesium) return;

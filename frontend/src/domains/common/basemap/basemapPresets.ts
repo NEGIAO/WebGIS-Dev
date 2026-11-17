@@ -22,7 +22,7 @@ export const DEFAULT_BASEMAP_PRESET_ID = 'custom_China_Blender_preset_2';
 // ========== 配置2：底图预设 ==========
 export const BASEMAP_PRESETS: BasemapPresetDefinition[] = [
     { id: 'local_tiles_preset', label: '本地瓦片', stack: ['local_tiles'] },
-    { id: 'custom', label: 'WMS/WMTS/XYZ', stack: ['custom'] },
+    { id: 'custom', label: 'WMS/WMTS/MVT/XYZ', stack: ['custom'] },
 
     // 天地图系列
     {
@@ -347,6 +347,12 @@ export const BASEMAP_PRESETS: BasemapPresetDefinition[] = [
         id: 'label_minedata_preset',
         label: 'MineMap注记',
         stack: ['label_minedata'],
+    },
+    // OpenFreeMap Liberty 矢量样式（OSM 数据 + ol-mapbox-style 全量样式），追加在末尾以保持 l 索引契约
+    {
+        id: 'vector_openfreemap_liberty_preset',
+        label: 'OpenFreeMap矢量',
+        stack: ['vector_openfreemap_liberty'],
     },
 ];
 

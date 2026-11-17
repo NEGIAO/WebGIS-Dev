@@ -141,6 +141,7 @@ export class Instance {
     public mapInstance = shallowRef<Map | null>(null);
     public selectedLayer = ref<string>(DEFAULT_BASEMAP_PRESET_ID);
     public customMapUrl!: Ref<string>;
+    public customMapStyleUrl!: Ref<string>;
     public showDynamicSplitLines = ref(false);
     public basemapCircuitOpen = ref(false);
     public currentZoom = ref(17);
@@ -260,8 +261,9 @@ export class Instance {
         let OVITAL_TDTKEY = getRuntimeMapTokensSync().ovitalTdtkey;
         const ovitalTdtkey = ref(OVITAL_TDTKEY);
 
-        const { customBasemapUrl: customMapUrl } = useSharedCustomBasemapUrl();
+        const { customBasemapUrl: customMapUrl, customMapStyleUrl } = useSharedCustomBasemapUrl();
         this.customMapUrl = customMapUrl;
+        this.customMapStyleUrl = customMapStyleUrl;
 
         const LAYER_CONFIGS = createLayerConfigs(TIANDITU_TK, OVITAL_TDTKEY);
         const layerList = ref(
@@ -403,6 +405,7 @@ export class Instance {
         const { handleLayerChange, handleLayerOrderUpdate } = createLayerControlHandlers({
             selectedLayerRef: this.selectedLayer,
             customMapUrlRef: customMapUrl,
+            customMapStyleUrlRef: customMapStyleUrl,
             layerListRef: layerList,
             layerInstances,
             refreshLayersState: () => bootstrapApi?.refreshLayersState(),

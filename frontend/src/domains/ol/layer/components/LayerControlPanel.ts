@@ -58,6 +58,7 @@ const propDefine = {
 	basemapCircuitOpen: { type: Boolean, default: false },
 	selectedLayer: { type: String, default: 'google' },
 	customMapUrl: { type: String, default: '' },
+	customMapStyleUrl: { type: String, default: '' },
 	tiandituTk: { type: String, default: '' },
 	isDomestic: { type: Boolean, default: true },
 	services: { type: Array as PropType<any[]>, default: () : any => [] },
@@ -185,6 +186,7 @@ export class Instance {
 
 	// ── 自定义 URL / WMS 与地名检索（useLayerCustomWmsAndSearch 能力层成员） ──
 	public customUrlInput!: Ref<string>;
+	public customStyleUrlInput!: Ref<string>;
 	public detectedServiceInfo!: Ref<any>;
 	public wmsLayerOptions!: Ref<any[]>;
 	public selectedWmsLayer!: Ref<string>;
@@ -246,12 +248,14 @@ export class Instance {
 		// 自定义 URL / WMS 与地名检索转发能力层
 		const customWmsAndSearch = useLayerCustomWmsAndSearch({
 			customMapUrl: () => this.props.customMapUrl,
+			customMapStyleUrl: () => this.props.customMapStyleUrl,
 			mapInstance: () => this.props.mapInstance,
 			tiandituTk: () => this.props.tiandituTk,
 			emitChangeLayer: (payload) => this.ctx.emit('change-layer', payload),
 			emitSearchJump: (payload) => this.ctx.emit('search-jump', payload),
 		});
 		this.customUrlInput = customWmsAndSearch.customUrlInput;
+		this.customStyleUrlInput = customWmsAndSearch.customStyleUrlInput;
 		this.detectedServiceInfo = customWmsAndSearch.detectedServiceInfo;
 		this.wmsLayerOptions = customWmsAndSearch.wmsLayerOptions;
 		this.selectedWmsLayer = customWmsAndSearch.selectedWmsLayer;

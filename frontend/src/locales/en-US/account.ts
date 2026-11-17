@@ -117,6 +117,7 @@ export default {
         thirdPartyLabel: 'Third-party · 51.la',
         todayVisitors: 'Today Visitors', todayPv: 'Today Pageviews', totalPv: 'Total Pageviews',
         dataUpdatedAt: 'Updated {time}',
+        statsReport: 'View Full Report',
         adminContact: 'Admin Contact', copied: 'Copied',
         clickToCopy: 'Click to copy', notConfigured: 'Not configured',
         messages: 'Messages',

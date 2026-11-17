@@ -260,6 +260,7 @@ export default {
         langToggleAria: 'Interface language',
         /* Footer visitor stats (third-party source: 51.la) */
         visitorTitle: 'Site Traffic',
+        statsReport: 'View Full Report',
         visitorActiveRecent: 'Active Visitors',
         visitorTodayUsers: 'Today Visitors',
         visitorTodayPv: 'Today Pageviews',

@@ -49,6 +49,8 @@ export class Instance {
 	public t!: (key: string, params?: Record<string, any>) => string;
 
 	public messageMaxLen = MESSAGE_MAX_LEN;
+	/** 51.la 完整统计报表（公开只读分享页，与第三方口径数据行同源） */
+	public statsReportUrl = 'https://v6.51.la/s/mgk5Bj40SftrO77';
 	public newMessageText = ref('');
 	public contactCopied = ref(false);
 	public visitorSnapshot = ref<any>(null);

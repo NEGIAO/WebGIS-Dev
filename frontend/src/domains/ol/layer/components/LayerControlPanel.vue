@@ -201,6 +201,11 @@
                 class="custom-url-input"
                 placeholder="支持 XYZ / WMS / WMTS / 矢量切片 URL"
             />
+            <input
+                v-model="customStyleUrlInput"
+                class="custom-url-input"
+                placeholder="MapLibre 样式 URL（矢量切片可选）"
+            />
             <button
                 class="custom-url-btn"
                 title="加载"

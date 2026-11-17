@@ -265,6 +265,7 @@ export default {
         langToggleAria: '界面语言',
         /* 页脚访客数据（第三方口径 51.la）—— 指标名与 51.la 后台保持一致 */
         visitorTitle: '网站数据概况',
+        statsReport: '查看完整统计报表',
         visitorActiveRecent: '最近活跃访客',
         visitorTodayUsers: '今日访问人数',
         visitorTodayPv: '今日访问量',

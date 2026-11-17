@@ -4,28 +4,18 @@
         NEGIAO's WebGIS
         联系作者：yaonaigao@qq.com
         GitHub: https://github.com/NEGIAO
-        update:2026-10-31
-        Version: 3.6.35
+        update:2026-11-17
+        Version: 3.7.4
 -->
 
     <head>
         <meta charset="UTF-8" />
-        <!-- 隐藏 Referer 信息避免被跟踪 -->
-        <!-- <meta name="referrer" content="no-referrer"> -->
-        <!-- 品牌 icon.webp 同时作为 favicon 与首屏 logo <img>；
-             二者同为同源请求，浏览器 HTTP 缓存会共享同一条响应，无需额外 preload。
-             preload 因 credentials mode 与 favicon 不匹配反而产生一次冗余请求并触发
-             控制台告警，已于 V3.6.35 移除（实测 icon 由 3 次请求降为缓存共享）。 -->
         <link
             rel="icon"
             href="./images/icon.webp"
             type="image/webp"
         />
-        <!-- 自定义网页的logo：favicon / LandingView / TopBar / RegisterView 共用同一资源 -->
 
-        <!-- LCP 纹样图预加载：该图作为 <img src> 由组件挂载后才出现，
-             初始 HTML 不可发现，性能追踪实测造成约 480ms 的资源加载延迟。
-             按断点分别预加载（仅命中其一），fetchpriority=high 提升抓取优先级。 -->
         <link
             rel="preload"
             href="./images/njnu-media/d-bg2_1.png"
@@ -35,26 +25,13 @@
             media="(min-width: 768px)"
         />
 
+        <!-- 多设备自适应-->
         <meta
             name="viewport"
             content="width=device-width, initial-scale=1, shrink-to-fit=no, viewport-fit=cover"
         />
-        <!-- 多设备自适应：shrink-to-fit=no 禁止 iOS Safari 在横向溢出时整页缩小（F12 模拟不会复现该行为）；
-             viewport-fit=cover 适配刘海屏安全区 -->
 
-        <!-- Font Awesome 样式已内置（V3.6.45）：
-             原 https://cdn.bootcdn.net/.../all.min.css 全量 102KB，其中约 99KB 用不到
-             （Lighthouse unused CSS 审计 + 一条 render-blocking 跨域请求）。
-             现由 src/assets/fontawesome-subset.css 提供：仅 50 个在用图标的规则 + 基础布局
-             + fa-spin 动画（3.6KB，随主 CSS 打包）。字体仍走 BootCDN（见下条 preload 注释）。
-             生成器：scripts/subset-fontawesome.py（npm run fonts:subset）。 -->
-        <!-- 图标字体预加载（字体仍用 BootCDN，不走自托管）：
-             取舍结论（2026-11 实测后回归）：字体文件自托管在 GitHub Pages 上，
-             国内访问显著慢于 BootCDN 国内节点，故字体保留 CDN 加速；
-             仅把 CSS 规则本地化（官方 all.min.css 102KB → 3.6KB，见上条）。
-             preload 让字体与主 CSS 并行取回（字体在 CSS 应用后才请求，会晚一步）；
-             跨域字体 preload 必须带 crossorigin（匿名 CORS），否则与 @font-face 的
-             凭据模式不匹配会重复下载一次。只预加载 solid（首屏图标主力）。 -->
+        <!-- 字体使用CDN加速，不要自托管 -->
         <link
             rel="preload"
             href="https://cdn.bootcdn.net/ajax/libs/font-awesome/6.4.0/webfonts/fa-solid-900.woff2"
@@ -63,15 +40,8 @@
             crossorigin
         />
 
-        <!-- ==================== Font Awesome @font-face 覆盖（仅改 font-display，字体走 CDN） ====================
-             官方 CSS 对全部字体声明 font-display: block——字体未就位时图标所在文本整段不可见，
-             最长阻塞 3s（Lighthouse: Font display 可省 1080ms FCP）。同 family/style/weight 的
-             @font-face 后定义者优先，故此处以相同 src 重新声明为 swap。
-             字体来源保持 BootCDN（官方 woff2，国内加速）；曾试过子集化自托管（7KB），
-             但 GitHub Pages 在国内的字体传输比 CDN 慢，实测后回归 CDN。
-             版本号与官方 CSS 的 6.4.0 绑定，升级 FA 版本时需同步此处 URL。 -->
         <style>
-            /* FA6 主字体族（当前 fas/far/fab 类名实际使用这三档） */
+            /* FA6 主字体族 */
             @font-face {
                 font-family: 'Font Awesome 6 Brands';
                 font-style: normal;
@@ -96,7 +66,7 @@
                 src: url('https://cdn.bootcdn.net/ajax/libs/font-awesome/6.4.0/webfonts/fa-solid-900.woff2')
                     format('woff2');
             }
-            /* FA5 兼容字体族（老 class 写法兜底，成本为零一并覆盖） */
+            /* FA5 兼容字体族 */
             @font-face {
                 font-family: 'Font Awesome 5 Brands';
                 font-style: normal;
@@ -125,11 +95,122 @@
 
         <title>NEGIAO's WebGIS - 地理信息可视化平台</title>
 
-        <!-- ==================== SEO 元信息（Google/Bing/百度 收录用，V3.6.45） ====================
-             背景：GSC 报「URL is unknown to Google」——站点无 sitemap、无 meta description、
-             无 canonical、首屏纯 SPA 空壳，缺少一切被"发现"和"理解"的信号。
-             此处补齐 description / canonical / Open Graph；sitemap 见 public/sitemap.xml；
-             robots 见 public/robots.txt（注意 Cloudflare 的 Managed robots.txt 会覆盖源站版本）。 -->
+        <!-- SEO与首屏过渡 -->
+        <style>
+            html,
+            body {
+                margin: 0;
+                padding: 0;
+                height: 100%;
+                background: #e8f5e9;
+                color: #333;
+                font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            }
+            #app:not(:empty) > header.boot-screen {
+                position: fixed;
+                inset: 0;
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                justify-content: center;
+                gap: 18px;
+                text-align: center;
+                background: radial-gradient(circle at 50% 40%, #ffffff 0%, #e8f5e9 70%);
+            }
+            #app > header.boot-screen .boot-logo-wrap {
+                width: 96px;
+                height: 96px;
+                border-radius: 50%;
+                background: #4caf50;
+                box-shadow: 0 6px 20px rgba(46, 125, 50, 0.18);
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                animation: boot-pulse 1.6s ease-in-out infinite;
+            }
+            #app > header.boot-screen .boot-logo {
+                width: 74px;
+                height: 60px;
+                object-fit: contain;
+                display: block;
+            }
+            #app > header.boot-screen h1 {
+                margin: 0;
+                font-size: 22px;
+                font-weight: 600;
+                color: #2e7d32;
+                letter-spacing: 0.5px;
+            }
+            #app > header.boot-screen .boot-status {
+                margin: 0;
+                font-size: 13px;
+                color: #5b6b5e;
+            }
+            #app > header.boot-screen .boot-seo {
+                position: absolute;
+                width: 1px;
+                height: 1px;
+                overflow: hidden;
+                clip: rect(0 0 0 0);
+                clip-path: inset(50%);
+                white-space: nowrap;
+            }
+            #app > header.boot-screen .boot-spinner {
+                width: 38px;
+                height: 38px;
+                border: 3px solid #c8e6c9;
+                border-top-color: #4caf50;
+                border-radius: 50%;
+                animation: boot-spin 0.9s linear infinite;
+            }
+            @keyframes boot-spin {
+                to {
+                    transform: rotate(360deg);
+                }
+            }
+            @keyframes boot-pulse {
+                0%,
+                100% {
+                    opacity: 1;
+                    transform: scale(1);
+                }
+                50% {
+                    opacity: 0.75;
+                    transform: scale(0.94);
+                }
+            }
+            @media (prefers-reduced-motion: reduce) {
+                #app > header.boot-screen .boot-logo-wrap,
+                #app > header.boot-screen .boot-spinner {
+                    animation: none;
+                }
+            }
+        </style>
+        <noscript>
+            <style>
+                #app > header.boot-screen {
+                    position: static !important;
+                    display: block !important;
+                    background: #fff !important;
+                    padding: 24px !important;
+                }
+                #app > header.boot-screen .boot-seo {
+                    position: static !important;
+                    width: auto !important;
+                    height: auto !important;
+                    overflow: visible !important;
+                    clip: auto !important;
+                    clip-path: none !important;
+                    white-space: normal !important;
+                }
+                #app > header.boot-screen .boot-spinner,
+                #app > header.boot-screen .boot-logo-wrap {
+                    display: none !important;
+                }
+            </style>
+        </noscript>
+
+        <!-- SEO 元信息 -->
         <meta
             name="description"
             content="NEGIAO's WebGIS 是一个开源的二维/三维一体化地理信息可视化平台：基于 Vue 3 + OpenLayers + Cesium，支持三维地球漫游、地形与影像加载、矢量/栅格数据导入（SHP/KML/GeoJSON/GeoTIFF/GLTF）、建筑白模、空间分析与在线地图服务聚合。"
@@ -188,46 +269,60 @@
             name="twitter:image"
             content="https://webgis.negiao.cn/images/icon.webp"
         />
-        <!-- Google Identity Services 不在此处加载：
-             V3.6.35 起改由 RegisterView.vue 的 ensureGsiScript() 按需注入（仅登录/注册页），
-             本文件曾遗留一个 async 的 <script>，会让落地页/地图页等无关页面
-             也去连 accounts.google.com（国内不可达，白占连接槽并拖 load）。
-             如需恢复预加载，先确认这一点是否仍成立。 -->
     </head>
 
     <body>
-        <!-- 首屏静态兜底内容（爬虫/无 JS/弱网可见；Vue 挂载时整体替换，正常用户几乎无感）。
-             SEO 目的：SPA 空壳会让 Google 判「无内容」而长期不索引；
-             此块提供可解析的标题与描述文本，作为被抓取与理解的最小静态内容。 -->
+        <!-- 首屏静态兜底内容（爬虫/无 JS/弱网可见；Vue 挂载时整体替换，正常用户几乎无感）。 -->
         <div id="app">
-            <header>
-                <h1>NEGIAO's WebGIS - 三维地理信息可视化平台</h1>
-                <p>
-                    这是一个基于 Vue 3 + OpenLayers + Cesium 构建的开源二维 / 三维一体化
-                    WebGIS 平台，提供三维地球漫游、地形与影像底图、矢量与栅格数据导入
-                    （SHP / KML / GeoJSON / GeoTIFF / GLTF / 3D Tiles）、建筑白模、
-                    卷帘对比、空间分析与在线地图服务（WMS / WMTS / ArcGIS）聚合等能力。
-                </p>
-                <nav>
-                    <ul>
-                        <li><a href="/">首页 / 地图工作台</a></li>
-                        <li><a href="/#/terms">服务条款</a></li>
-                        <li><a href="/#/privacy">隐私政策</a></li>
-                    </ul>
-                </nav>
+            <header class="boot-screen">
+                <div class="boot-logo-wrap">
+                    <img
+                        class="boot-logo"
+                        src="./images/icon.webp"
+                        alt="NEGIAO's WebGIS"
+                    />
+                </div>
+                <h1>NEGIAO's WebGIS</h1>
+                <div
+                    class="boot-spinner"
+                    role="status"
+                    aria-label="正在加载"
+                ></div>
+                <p class="boot-status">正在加载地理信息可视化平台…</p>
+                <!-- SEO 文本：视觉隐藏但保留在 DOM，供搜索引擎抓取 -->
+                <div class="boot-seo">
+                    <h2>三维地理信息可视化平台</h2>
+                    <p>
+                        这是一个基于 Vue 3 + OpenLayers + Cesium 构建的开源二维 / 三维一体化 WebGIS
+                        平台，提供三维地球漫游、地形与影像底图、矢量与栅格数据导入 （SHP / KML /
+                        GeoJSON / GeoTIFF / GLTF / 3D Tiles）、建筑白模、
+                        卷帘对比、空间分析与在线地图服务（WMS / WMTS / ArcGIS）聚合等能力。
+                    </p>
+                    <nav>
+                        <ul>
+                            <li><a href="/">首页 / 地图工作台</a></li>
+                            <li><a href="/#/terms">服务条款</a></li>
+                            <li><a href="/#/privacy">隐私政策</a></li>
+                        </ul>
+                    </nav>
+                </div>
             </header>
         </div>
+
+        <!-- 导入SPA js文件 -->
         <script
             type="module"
             src="./src/main.ts"
         ></script>
-        <!-- 导入js文件 -->
+        
 
-        <script defer src="/min-enhanced.js"></script>
         <!--
-        导入增强功能的js文件（51.la立即执行，其他延迟3秒 ）
+        导入51LA依赖
         defer：不阻塞 HTML 解析，DOMContentLoaded 前按顺序执行
-        该文件不在本仓库，位于个人主页index.html同级目录：negiao/negiao.github.io/WebGIS/min-enhanced.js
      -->
+        <script
+            defer
+            src="/min-enhanced.js"
+        ></script>
     </body>
 </html>

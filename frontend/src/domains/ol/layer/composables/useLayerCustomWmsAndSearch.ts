@@ -13,12 +13,14 @@ import { useRequestToken } from '@common/composables/useRequestToken';
 
 export interface LayerCustomWmsAndSearchDeps {
 	customMapUrl: () => string;
+	customMapStyleUrl: () => string;
 	mapInstance: () => any;
 	tiandituTk: () => string;
 	emitChangeLayer: (payload: {
 		layerId: string;
 		source: string;
 		customUrl?: string;
+		customMapStyleUrl?: string;
 		wmsLayers?: string;
 	}) => void;
 	emitSearchJump: (payload: {
@@ -34,6 +36,7 @@ export interface LayerCustomWmsAndSearchDeps {
 
 export function useLayerCustomWmsAndSearch(deps: LayerCustomWmsAndSearchDeps) {
 	const customUrlInput = ref(deps.customMapUrl() || '');
+	const customStyleUrlInput = ref(deps.customMapStyleUrl() || '');
 	const detectedServiceInfo = ref<any>(null);
 	const wmsLayerOptions = ref<any[]>([]);
 	const selectedWmsLayer = ref('');
@@ -68,6 +71,7 @@ export function useLayerCustomWmsAndSearch(deps: LayerCustomWmsAndSearchDeps) {
 			layerId: 'custom',
 			source: 'custom-url',
 			customUrl: customUrlInput.value,
+			customMapStyleUrl: customStyleUrlInput.value.trim(),
 			wmsLayers: wmsLayerOptions.value.length ? selectedWmsLayer.value : undefined,
 		});
 	};
@@ -131,6 +135,10 @@ export function useLayerCustomWmsAndSearch(deps: LayerCustomWmsAndSearchDeps) {
 		customUrlInput.value = value || '';
 	});
 
+	watch(deps.customMapStyleUrl, (value) => {
+		customStyleUrlInput.value = value || '';
+	});
+
 	watch(customUrlInput, (newUrl) => {
 		if (!newUrl || !newUrl.trim()) {
 			detectedServiceInfo.value = null;
@@ -148,6 +156,7 @@ export function useLayerCustomWmsAndSearch(deps: LayerCustomWmsAndSearchDeps) {
 
 	return {
 		customUrlInput,
+		customStyleUrlInput,
 		detectedServiceInfo,
 		wmsLayerOptions,
 		selectedWmsLayer,

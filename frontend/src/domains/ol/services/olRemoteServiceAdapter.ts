@@ -21,9 +21,12 @@ import WMTS, { optionsFromCapabilities } from 'ol/source/WMTS';
 import WMTSCapabilities from 'ol/format/WMTSCapabilities';
 import TileLayer from 'ol/layer/Tile';
 import { transformExtent } from 'ol/proj';
+import VectorTileLayer from 'ol/layer/VectorTile';
+import { applyStyle } from 'ol-mapbox-style';
 import {
     useRemoteServices,
     computeLayersParam,
+    effectiveSelectedIds,
     renderSignature,
     usesPerSublayerRequests,
     visualOrderedSublayerIds,
@@ -32,7 +35,12 @@ import {
 } from '@common/basemap/remoteServices';
 import { detectTileYScheme } from '@common/basemap/xyzWmtsCapabilities';
 import { buildArcgisExportTemplate, renderArcgisTileUrl } from '@common/basemap/wmsService';
-import { createTileWmsSource, toOlProjection } from '@ol/tile-source/index';
+import {
+    createTileWmsSource,
+    createVectorTileSourceFromUrl,
+    resolveVectorTileUrl,
+    toOlProjection,
+} from '@ol/tile-source/index';
 import { Z_BAND } from '@ol/layer/zIndexBands';
 
 const REMOTE_CAPACITY = 50; // 在线服务子带容量上限（100~149），见 zIndexBands 注释
@@ -207,6 +215,69 @@ export function createOlRemoteServiceAdapter({ mapInstanceRef }: { mapInstanceRe
         });
     }
 
+    /**
+     * 构建 MVT 矢量瓦片图层（kind==='vector-tile'）。
+     * - 瓦片 URL 走 resolveVectorTileUrl（OpenFreeMap planet 无版本戳 → TileJSON 真实 URL）
+     * - 样式走 ol-mapbox-style.applyStyle(updateSource:false)，与 custom 底图同源
+     * - 子层显隐：applyStyle 后包裹 style function，过滤掉未勾选 source-layer 的要素
+     * 异步步骤（URL resolve / style fetch）用 signature 校验，防止过期结果覆盖。
+     */
+    function buildVectorTileLayer(record: any, signature: string) {
+        const styleUrl = String(record.styleUrl || '').trim();
+        // 用 effectiveSelectedIds 而非裸 selectedIds：未触碰选择集时按「默认全选」消费，
+        // 与 TOC 勾选态一致。hasDeclaredSublayers 用于区分「未声明子层（全渲染）」与
+        // 「声明了但全取消（全隐藏）」——后者裸集合为空，不能因 size=0 短路成全渲染。
+        const allowed = new Set<string>(effectiveSelectedIds(record));
+        const hasDeclaredSublayers = !!(record.sublayers && record.sublayers.length);
+        const layer = new VectorTileLayer({
+            visible: record.visible !== false,
+            opacity: Number.isFinite(record.opacity) ? record.opacity : 1,
+            zIndex: 0, // 由 syncRecord 统一设置 bandZIndex
+            declutter: true,
+        });
+        layer.set('basemapLayerKind', 'vector-tile');
+
+        const isCurrent = () =>
+            layerMap.get(record.id) === layer && signatureMap.get(record.id) === signature;
+
+        // 串行：先解析瓦片 URL 设置 source，再拉样式 applyStyle，最后包裹过滤函数
+        resolveVectorTileUrl(String(record.endpoint || record.url || ''))
+            .then(async (tileUrl) => {
+                if (!isCurrent()) return;
+                layer.setSource(createVectorTileSourceFromUrl(tileUrl));
+                if (!styleUrl) return;
+                const resp = await fetch(styleUrl);
+                const styleJson = resp.ok ? await resp.json() : null;
+                if (!isCurrent() || !styleJson) return;
+                // 背景色：与 vectorTileStyleAdapter 一致，避免海洋/背景镂空透明
+                const bgLayer = Array.isArray(styleJson.layers)
+                    ? styleJson.layers.find((l: any) => l.type === 'background')
+                    : null;
+                const bgColor = bgLayer?.paint?.['background-color'];
+                if (bgColor && typeof layer.setBackground === 'function') {
+                    layer.setBackground(bgColor);
+                }
+                await applyStyle(layer, styleJson, { updateSource: false, styleUrl });
+                if (!isCurrent()) return;
+                const baseStyle = layer.getStyle();
+                if (typeof baseStyle !== 'function') return;
+                // 按勾选的 source-layer 过滤：
+                // - 声明了子层但全取消（allowed 为空）→ 全部隐藏（避免 size=0 短路成全渲染）
+                // - 未声明子层 → 不过滤，整层渲染
+                layer.setStyle((feature: any, resolution: number) => {
+                    if (hasDeclaredSublayers && allowed.size === 0) return undefined;
+                    const sourceLayer =
+                        typeof feature?.get === 'function' ? feature.get('layer') : undefined;
+                    if (sourceLayer != null && allowed.size && !allowed.has(String(sourceLayer))) {
+                        return undefined;
+                    }
+                    return baseStyle(feature, resolution);
+                });
+            })
+            .catch((error) => console.warn('[RemoteServices] MVT 瓦片/样式加载失败:', error));
+        return layer;
+    }
+
     /** zIndex：records 头部（TOC 列表上方）= 视觉上层，反向映射 */
     function bandZIndex(index: number, recordsCount: number) {
         return Z_BAND.REMOTE_SERVICES + Math.min(recordsCount - 1 - index, REMOTE_CAPACITY - 1);
@@ -265,6 +336,15 @@ export function createOlRemoteServiceAdapter({ mapInstanceRef }: { mapInstanceRe
                 layerMap.set(record.id, layer);
                 signatureMap.set(record.id, signature);
                 scheduleWmtsSource(record, signature, layer);
+                return;
+            }
+            // MVT 矢量瓦片：VectorTileLayer + 服务端样式 + source-layer 过滤
+            if (record.kind === 'vector-tile') {
+                const layer = buildVectorTileLayer(record, signature);
+                layer.setZIndex(bandZIndex(index, recordsCount));
+                map.addLayer(layer);
+                layerMap.set(record.id, layer);
+                signatureMap.set(record.id, signature);
                 return;
             }
             let source;

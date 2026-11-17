@@ -6,7 +6,7 @@
  * 2. 优化并发槽位释放，解决国外底图加载导致的“卡死”问题
  */
 import { watch } from 'vue';
-import { abortTileSourceRequests, buildRequestProxyUrl } from '@ol/tile-source/index';
+import { abortTileSourceRequests, buildRequestProxyUrl, looksLikeVectorTileUrl } from '@ol/tile-source/index';
 import { createBasemapLayerFromSource, isVectorTileLayer, buildRasterBasemapSource } from '@ol/basemap/composables/basemapLayerFactory';
 import { ensureWmsServiceInfo, queryCandidateAtPoint } from '@common/basemap/wmsService';
 import { composeIdentifyHeading } from '@common/basemap/identifyPresentation';
@@ -22,6 +22,7 @@ import { transformExtent, toLonLat } from 'ol/proj';
 export interface LayerControlHandlersOptions {
     selectedLayerRef?: any;
     customMapUrlRef?: any;
+    customMapStyleUrlRef?: any;
     layerListRef?: any;
     layerInstances?: any;
     refreshLayersState?: any;
@@ -36,12 +37,14 @@ export interface LayerControlHandlersOptions {
 /** loadCustomMap 的参数载荷 */
 export interface LoadCustomMapPayload {
     wmsLayers?: string;
+    customMapStyleUrl?: string;
 }
 
 /** handleLayerChange 的参数载荷 */
 export interface LayerChangePayload {
     layerId?: string;
     customUrl?: string;
+    customMapStyleUrl?: string;
     source?: string;
     wmsLayers?: string;
 }
@@ -59,6 +62,7 @@ export interface LayerOrderUpdatePayload {
 export function createLayerControlHandlers({
     selectedLayerRef,
     customMapUrlRef,
+    customMapStyleUrlRef,
     layerListRef,
     layerInstances,
     refreshLayersState,
@@ -304,7 +308,11 @@ export function createLayerControlHandlers({
         }
 
         const preferredWmsLayers = String(payload?.wmsLayers || '').trim();
-        console.warn('[RSVC] loadCustomMap url=', normalizedUrl, '| wmsLayers=', preferredWmsLayers || '(空=默认全量)');
+        // 服务端样式 URL：优先本次提交的载荷，回退共享 ref（刷新后从 localStorage 恢复的场景）
+        const styleUrl = String(
+            payload?.customMapStyleUrl ?? customMapStyleUrlRef?.value ?? '',
+        ).trim();
+        console.warn('[RSVC] loadCustomMap url=', normalizedUrl, '| wmsLayers=', preferredWmsLayers || '(空=默认全量)', '| styleUrl=', styleUrl || '(空)');
 
         try {
             /**
@@ -315,6 +323,11 @@ export function createLayerControlHandlers({
 
             const detected = await createAutoTileSourceFromUrl(normalizedUrl, {
                 preferredLayers: preferredWmsLayers || undefined,
+                // 强制 MVT 只依据「URL 自身的矢量特征」：.pbf/.mvt 后缀或 /mvt/ /vector/ /pbf/ 路径。
+                // 不能用 styleUrl 是否存在来判定——它可能是上一次加载 MVT 后残留的持久化值，
+                // 那样会把随后输入的普通栅格 XYZ/WMS 误判成 MVT 并套上不匹配的样式。
+                // 无扩展名的二次封装 MVT（如 .../tdt-mvt/mvt/{z}/{x}/{y}）由 urlUtils 路径特征覆盖。
+                forceVectorTile: looksLikeVectorTileUrl(normalizedUrl),
             });
             const customLayer = layerInstances?.custom;
             const layerState = resolveLayerPresentation('custom', customLayer);
@@ -334,13 +347,38 @@ export function createLayerControlHandlers({
             const isVectorTile = detected.kind === 'vector-tile';
 
             if (isVectorTile) {
-                if (customLayer && isVectorTileLayer(customLayer) && customLayer.setSource) {
-                    customLayer.setSource(detected.source);
-                } else {
-                    const nextLayer = createBasemapLayerFromSource(detected.source, layerState);
-                    replaceLayerInstance('custom', nextLayer);
+                // MVT 注册进「在线服务」注册表（TOC 单节点 + 子层 = source-layer），
+                // 由 olRemoteServiceAdapter 统一渲染；custom 底图实例退位，避免重复渲染。
+                let sublayers: { name: string; title: string; label: string }[] = [];
+                if (styleUrl) {
+                    try {
+                        const styleResp = await fetch(styleUrl);
+                        const styleJson = styleResp.ok ? await styleResp.json() : null;
+                        const names = new Set<string>();
+                        for (const l of styleJson?.layers || []) {
+                            if (l?.['source-layer']) names.add(String(l['source-layer']));
+                        }
+                        sublayers = [...names].map((n) => ({ name: n, title: n, label: n }));
+                    } catch { /* 子层枚举失败时按无子层注册 */ }
                 }
+                registerRemoteService({
+                    kind: 'vector-tile',
+                    url: normalizedUrl,
+                    endpoint: normalizedUrl,
+                    title: `MVT · ${(() => { try { return new URL(normalizedUrl).host; } catch { return normalizedUrl; } })()}`,
+                    selectedLayerId: '',
+                    layerLabel: '',
+                    layersParam: '',
+                    sublayers,
+                    styleUrl,
+                    queryable: false,
+                });
+                message?.info?.('已同步至图层面板「在线服务」分组', { duration: 2500 });
+                retireCustomBasemapInstance();
             } else {
+                // 栅格图源不需要样式：清空持久化样式 URL，避免下次刷新恢复或切换时把旧 MVT 样式
+                // 错误地套用到栅格源（loadCustomMap 的 styleUrl 回退读的就是这个 ref）。
+                if (customMapStyleUrlRef) customMapStyleUrlRef.value = '';
                 if (customLayer && !isVectorTileLayer(customLayer) && customLayer.setSource) {
                     customLayer.setSource(buildRasterBasemapSource(detected.source));
                 } else {
@@ -499,6 +537,7 @@ export function createLayerControlHandlers({
     async function handleLayerChange(payload: LayerChangePayload = {}) {
         const nextLayerId = String(payload.layerId || '').trim();
         const normalizedCustomUrl = String(payload.customUrl || '').trim();
+        const normalizedStyleUrl = String(payload.customMapStyleUrl || '').trim();
         let customLoadResult: any = null;
 
         const isCustomUrlSelection =
@@ -506,8 +545,17 @@ export function createLayerControlHandlers({
 
         if (isCustomUrlSelection && customMapUrlRef) {
             customMapUrlRef.value = normalizedCustomUrl;
+            // 仅当载荷显式携带样式 URL 字段时才覆盖 ref；未携带时保留已持久化/已加载的样式
+            if (customMapStyleUrlRef && payload.customMapStyleUrl !== undefined) {
+                customMapStyleUrlRef.value = normalizedStyleUrl;
+            }
             if (customMapUrlRef.value) {
-                customLoadResult = await loadCustomMap({ wmsLayers: payload.wmsLayers });
+                // 未显式携带样式字段时传 undefined，让 loadCustomMap 回退到 ref/localStorage 的持久化样式
+                customLoadResult = await loadCustomMap({
+                    wmsLayers: payload.wmsLayers,
+                    customMapStyleUrl:
+                        payload.customMapStyleUrl !== undefined ? normalizedStyleUrl : undefined,
+                });
             } else {
                 customLoadResult = {
                     success: false,
@@ -532,7 +580,13 @@ export function createLayerControlHandlers({
         }
 
         if (resolvedLayerId === 'custom' && customMapUrlRef?.value && !isCustomUrlSelection) {
-            customLoadResult = await loadCustomMap({ wmsLayers: payload.wmsLayers });
+            customLoadResult = await loadCustomMap({
+                wmsLayers: payload.wmsLayers,
+                customMapStyleUrl:
+                    payload.customMapStyleUrl !== undefined
+                        ? normalizedStyleUrl
+                        : customMapStyleUrlRef?.value,
+            });
         }
 
         return {

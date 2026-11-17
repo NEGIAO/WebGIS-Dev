@@ -664,6 +664,27 @@
                             >
                         </span>
                     </li>
+                    <li>
+                        <span class="footer-link-pop">
+                            <a
+                                :href="statsReportUrl"
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                class="footer-entry"
+                                :aria-label="t('landing.statsReport')"
+                            >
+                                <ChartArea
+                                    :size="17"
+                                    aria-hidden="true"
+                                />
+                            </a>
+                            <span
+                                class="footer-pop"
+                                role="tooltip"
+                                >{{ t('landing.statsReport') }}</span
+                            >
+                        </span>
+                    </li>
                 </ul>
                 <!-- 51.la 访客数据：取数在 fetchVisitorStats()，这里只负责渲染。
                      不让第三方脚本往 DOM 插节点 —— 该元素在 vnode 里无子节点，

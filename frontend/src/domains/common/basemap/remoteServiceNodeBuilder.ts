@@ -24,6 +24,7 @@ const KIND_META: Record<string, { layerType: string; formatLabel: string }> = {
     arcgis: { layerType: 'arcgis-rest', formatLabel: 'ArcGIS 切片' },
     xyz: { layerType: 'xyz-tiles', formatLabel: 'XYZ 瓦片' },
     wmts: { layerType: 'wmts', formatLabel: 'WMTS' },
+    'vector-tile': { layerType: 'vector-tile', formatLabel: 'MVT 矢量' },
 };
 
 function kindMeta(record: RemoteServiceRecord) {

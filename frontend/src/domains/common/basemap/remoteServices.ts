@@ -24,7 +24,7 @@ export interface RemoteServiceSublayer {
 /** 在线服务元数据记录（禁止出现任何引擎对象字段） */
 export interface RemoteServiceRecord {
     id: string;
-    kind: 'wms' | 'arcgis' | 'xyz' | 'wmts';
+    kind: 'wms' | 'arcgis' | 'xyz' | 'wmts' | 'vector-tile';
     /** 用户输入的原始地址 */
     url: string;
     /** 解析后的服务端点（WMS GetMap 基地址 / ArcGIS 服务基址） */
@@ -62,6 +62,8 @@ export interface RemoteServiceRecord {
     matrixSet?: string;
     /** WMTS 命名样式（缺省空串 = default） */
     style?: string;
+    /** 矢量瓦片（vector-tile）专属：MapLibre/Mapbox 服务端样式 URL */
+    styleUrl?: string;
     geographicBbox?: [number, number, number, number];
     queryable: boolean;
     visible: boolean;
@@ -105,6 +107,10 @@ export function computeLayersParam(record: RemoteServiceRecord): string {
         const ordered = renderOrderedIds(record);
         return ordered.length ? [...ordered].reverse().join(',') : '';
     }
+    if (record.kind === 'vector-tile') {
+        // 矢量瓦片：勾选的 source-layer 集合（作为签名因子与 adapter 过滤依据），非 WMS LAYERS
+        return renderOrderedIds(record).join(',');
+    }
     return fallback;
 }
 
@@ -136,7 +142,10 @@ export function renderOrderedIds(record: RemoteServiceRecord): string[] {
 export function effectiveSelectedIds(record: RemoteServiceRecord): string[] {
     const ids = record.selectedIds || [];
     if (ids.length || record.selectionTouched) return ids;
-    const defaultAllKind = record.kind === 'wms' || (record.kind === 'arcgis' && record.tileMode !== 'tiles');
+    const defaultAllKind =
+        record.kind === 'wms' ||
+        record.kind === 'vector-tile' ||
+        (record.kind === 'arcgis' && record.tileMode !== 'tiles');
     if (defaultAllKind && record.sublayers?.length) {
         return record.sublayers.map((item) => item.name);
     }
@@ -187,6 +196,7 @@ export function renderSignature(record: RemoteServiceRecord): string {
         record.yScheme,
         record.matrixSet,
         record.style,
+        record.styleUrl,
     ].join('|');
 }
 
@@ -197,7 +207,7 @@ export function renderSignature(record: RemoteServiceRecord): string {
  * @returns 记录 id
  */
 export function registerRemoteService(payload: {
-    kind: 'wms' | 'arcgis' | 'xyz' | 'wmts';
+    kind: 'wms' | 'arcgis' | 'xyz' | 'wmts' | 'vector-tile';
     url: string;
     endpoint: string;
     title: string;
@@ -214,6 +224,8 @@ export function registerRemoteService(payload: {
     yScheme?: 'zxy' | 'zyx' | 'tms';
     matrixSet?: string;
     style?: string;
+    /** 矢量瓦片服务端样式 URL */
+    styleUrl?: string;
     geographicBbox?: [number, number, number, number];
     queryable: boolean;
 }): string {
@@ -225,7 +237,9 @@ export function registerRemoteService(payload: {
     // 保证「输入 MapServer 地址直接加载」= 整卷可见 + TOC 叶子全部勾选。
     let selectedIds = Array.isArray(payload.selectedIds) ? [...payload.selectedIds] : [];
     const defaultAllKind =
-        payload.kind === 'wms' || (payload.kind === 'arcgis' && payload.tileMode !== 'tiles');
+        payload.kind === 'wms' ||
+        payload.kind === 'vector-tile' ||
+        (payload.kind === 'arcgis' && payload.tileMode !== 'tiles');
     if (!selectedIds.length && defaultAllKind && Array.isArray(payload.sublayers)) {
         selectedIds = payload.sublayers.map((item) => item.name);
     }
@@ -259,7 +273,9 @@ export function registerRemoteService(payload: {
         // - ArcGIS REST f=json 的 layers 数组 = 地图文档自上而下（首层=视觉最上）→ 原序即约定
         // - WMS Capabilities 文档序 = 首层画最底（自底向上）→ 反转成头部=视觉上层
         layerOrder: selectedIds.length
-            ? (payload.kind === 'arcgis' ? [...selectedIds] : [...selectedIds].reverse())
+            ? payload.kind === 'arcgis' || payload.kind === 'vector-tile'
+                ? [...selectedIds]
+                : [...selectedIds].reverse()
             : [],
         id: makeId(),
         visible: true,

@@ -17,9 +17,9 @@
 > 注：V3.7.2 号段已于同日重新启用，对应《修复 OpenLayers 加载 OSM 标准瓦片 403》条目，与本条无冲突。
 > 分主题的原始过程记录保留在 `Docs/LLM_record/26-11/2026-11-14/`，不迁移、不改写。
 
-### V3.7.3 (2026-11-16) — 暂存区整合：SEO 收录修复 + Font Awesome 样式瘦身 + 预览图响应式
+### V3.7.4 (2026-11-17) — 暂存区整合：OL 矢量瓦片(MVT)接入 TOC + FOUC 首屏加载屏 + 51.la 监控与报表
 
-> **一句话**：将多次未整合的暂存改动归一为单一版本，完成 Code Review 缺陷修复与文档/版本号/结构树同步。详见 [维护日志](../LLM_record/26-11/2026-11-16/2026-11-16-staged-code-review-v3.7.3.md)。
+> **一句话**：将多次未整合的暂存改动归一为单一版本，新增 OpenLayers 端 MVT 矢量瓦片（TOC 单节点+子层、样式URL、无扩展名识别）、修复首屏无样式闪烁（FOUC）、接入 51.la 应用监控与报表外链，并完成 Code Review 缺陷修复与文档/版本号同步。详见 [维护日志](../LLM_record/26-11/2026-11-17/2026-11-17-staged-code-review-v3.7.4.md)。
 
 1. **Code Review 修复 4 处**：
    - `scripts/subset-fontawesome.py` 的 `--check` 默认模式把「字体走 CDN、size=0」误判为 MISSING（实测退出码 1）→ 按模式分支校验；
@@ -31,9 +31,13 @@
 4. **预览图响应式**：`LandingView` 按显示尺寸出 540w / 800w 两档（原 1996×1156 / 95KB → 24KB / 45KB），`sizes` 对齐容器 `min(68%, 540px)`；移除 `fetchpriority=high`（实测 LCP 元素为 CSS 装饰环而非本图）。
 5. **依赖 patch 升级**：`backend/uv.lock` 中 fastapi 0.162.4→0.162.5、python-multipart 0.0.32→0.0.33，均在 `pyproject.toml` 约束内，来自 Dependabot 自动合并。
 6. **文档与门禁**：README 三处版本 + CHANGELOG + 结构树同步；`tsc` / `eslint` / `build` / 结构树 736/736 / 配置登记全绿。
+7. **51.la 应用性能监控接入**：`public/min-enhanced.js` 新增 `LingQue.Monitor` 初始化（应用 ID `3RqgbbZKGnrTOJ2i`，`sendSuspicious: true` 可疑脚本上报；因站点为 hash 路由 SPA 显式开启 `sendSpaPv: true` 保证切页 PV 上报）；动态 script 异步加载保持非阻塞，与既有流量统计（不同 ID）并存。实测两 SDK 均 HTTP 200、`LingQue.Monitor` 初始化成功。
+8. **51.la 完整报表外链**：README 徽章区、landing footer 第 4 枚快捷入口（Lucide `ChartArea`）、用户中心「全站实时」第三方数据行三处均加入只读分享页 `https://v6.51.la/s/mgk5Bj40SftrO77`；双语文案同步，外链统一 `target="_blank" rel="noopener noreferrer"`；用户中心新增 Font Awesome `fa-arrow-up-right-from-square` 图标（子集 CSS 已重生）。
+9. **OpenLayers 矢量瓦片(MVT)支持（仅 2D）**：自定义底图面板新增「MapLibre 样式 URL」输入框，MVT 注册进「在线服务」TOC（单服务节点 + 子层 = style 的 `source-layer`，可单独勾选显隐）；`olRemoteServiceAdapter` 用 `VectorTileLayer` + `applyStyle` 渲染并按勾选过滤 source-layer；`remoteServices` 新增 `vector-tile` kind / `styleUrl` 字段 / 默认全选与签名；`resolveVectorTileUrl` 修复 OpenFreeMap planet 无版本戳返回空瓦片问题（运行时解析 TileJSON），`looksLikeVectorTileUrl` 增 `/mvt/ /vector/ /pbf/` 路径特征以兼容无扩展名的二次封装 MVT（天地图）；Cesium 端不渲染 MVT 并显式跳过，避免误拼 ArcGIS export URL。
+10. **FOUC 首屏加载屏**：`index.html` 内联 Critical CSS，把 `#app` 的 SEO 静态兜底内容渲染为品牌化居中加载屏（logo/标题/spinner），Vue mount 时由 `<RouterView/>` 整体替换；SEO 文本视觉隐藏但保留 DOM，`<noscript>` 恢复普通文档流；logo 白色圆形衬底 + `object-fit: contain` 保证 512×409 原图等比完整显示不被裁剪。
 
 ### 版本说明
-> V3.7.3 号段曾在 2026-11-14 作为同一批未提交工作的中间号使用并归并至 V3.7.1（见下方归并注记）；本次按用户明确指令重新启用该号段，仅代表本次整合版本，不回滚历史归并结论。
+> V3.7.3 号段曾在 2026-11-14 作为同一批未提交工作的中间号使用并归并至 V3.7.1（见下方归并注记）；本次按用户明确指令将本批暂存整合版本定为 V3.7.4（不复用已归并号段），仅代表本次整合成果，不回滚历史归并结论。
 
 ### V3.7.2 (2026-11-14) — 修复 OpenLayers 加载 OSM 标准瓦片 403（双引擎 Referrer 策略归一）
 

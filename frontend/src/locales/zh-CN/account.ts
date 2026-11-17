@@ -143,6 +143,7 @@ export default {
         todayPv: '今日访问量',
         totalPv: '总访问量',
         dataUpdatedAt: '更新于 {time}',
+        statsReport: '查看完整报表',
         adminContact: '管理员联系',
         copied: '已复制',
         clickToCopy: '点击复制',

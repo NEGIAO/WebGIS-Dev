@@ -180,6 +180,8 @@ export class Instance {
 	public previewUrl = '';
 	/** 响应式预览图候选集：540w（1x，容器上限 540px）/ 800w（≈1.5x，兼顾 2x 屏清晰度与体积） */
 	public previewSrcset = '';
+	/** 51.la 完整统计报表（公开只读分享页，footer 第 4 枚快捷入口） */
+	public statsReportUrl = 'https://v6.51.la/s/mgk5Bj40SftrO77';
 	public hfLogoUrl = '';
 	public brandBadgeStyle: Record<string, string> = {};
 

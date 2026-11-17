@@ -41,9 +41,11 @@ export function createMapContainerActions(deps: UseMapContainerActionsDeps) {
 
     /**
      * 通过 XYZ URL 切换到自定义底图
+     * @param styleUrl 可选的服务端样式 URL（矢量切片场景），与瓦片 URL 配套
      */
-    async function setCustomBasemapByUrl(url: string) {
+    async function setCustomBasemapByUrl(url: string, styleUrl?: string) {
         const normalizedUrl = String(url || '').trim();
+        const normalizedStyleUrl = String(styleUrl || '').trim();
         const customLayerIndex = getLayerIndexById('custom');
 
         if (!normalizedUrl) {
@@ -76,11 +78,16 @@ export function createMapContainerActions(deps: UseMapContainerActionsDeps) {
         }
 
         try {
-            const switchResult = await handleLayerChange({
+            const switchPayload: any = {
                 layerId: 'custom',
                 source: 'custom-url',
                 customUrl: normalizedUrl,
-            });
+            };
+            // 仅显式传入样式 URL 时才覆盖；不传则保留已持久化/已加载的样式（如刷新恢复场景）
+            if (styleUrl !== undefined) {
+                switchPayload.customMapStyleUrl = normalizedStyleUrl;
+            }
+            const switchResult = await handleLayerChange(switchPayload);
 
             if (switchResult?.success === false) {
                 return {

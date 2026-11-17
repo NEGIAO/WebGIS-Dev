@@ -124,6 +124,13 @@
                     class="realtime-third__stamp"
                     >{{ t('overview.dataUpdatedAt', { time: visitorUpdatedAt }) }}</span
                 >
+                <a
+                    class="realtime-third__report"
+                    :href="statsReportUrl"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    >{{ t('overview.statsReport') }} <i class="fas fa-arrow-up-right-from-square"></i
+                ></a>
             </p>
             <div class="info-row contact-row">
                 <span class="info-label">{{ t('overview.adminContact') }}</span>
@@ -459,6 +466,25 @@
 .realtime-third__stamp {
     color: var(--text-muted);
     font-variant-numeric: tabular-nums;
+}
+
+/* 完整报表外链：与数据行同色，hover 才提亮，避免抢主指标注意力 */
+.realtime-third__report {
+    margin-left: auto;
+    color: var(--text-muted);
+    text-decoration: none;
+    white-space: nowrap;
+    transition: color 0.18s ease;
+}
+
+.realtime-third__report:hover,
+.realtime-third__report:focus-visible {
+    color: var(--brand-primary, #4caf50);
+    text-decoration: underline;
+}
+
+.realtime-third__report i {
+    font-size: 10px;
 }
 
 .contact-row {

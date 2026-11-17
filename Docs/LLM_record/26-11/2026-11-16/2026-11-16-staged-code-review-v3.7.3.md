@@ -95,3 +95,60 @@
 - 字体文件保留 BootCDN 依赖（国内加速优先）；若 CDN 故障图标将回退系统字体，可接受。
 - 未对 `/WebGIS/` 子路径部署做 404 跳转回归（正式域名为根路径）。
 - 未执行任何 Git 写操作（用户明确要求）；所有改动在工作区，需用户自行 add/commit。
+
+---
+
+## 补充任务（2026-11-16 22:40）：接入 51.la 应用性能监控（LingQue.Monitor）
+
+### 问题分析
+- **核心症状**：站点仅有 51.la 流量统计（`js-sdk-pro.min.js`，id=`3OVJu4iCpXi3wE8k`），缺应用级异常 / 性能 / 外链监控，无法定位前端报错与卡顿。
+- **根本原因**：V3.7.1 网络瘦身下线了海外统计（GA / MapMyVisitors），但国内 51.la 的性能监控产品（`js-sdk-perf.min.js` / `LingQue.Monitor`）未纳入。
+- **受影响模块**：`frontend/public/min-enhanced.js`（唯一外部统计脚本入口，被 `index.html` 以 `defer` 加载）。
+- **候选方案对比**：
+  1. 在 `index.html` 直接插 `<script src>` + 内联 `new LingQue.Monitor().init(...)`（用户提供的形式）——同步阻塞、拆解脚本单一职责，弃用。
+  2. 在 `min-enhanced.js` 中动态创建 script 并 `onload` 初始化——与现有流量统计写法一致、保持 defer 非阻塞、单一入口，**选用**。
+- **关键决策**：站点使用 `createWebHashHistory()`，而 `sendSpaPv` 默认为 `false`；若沿用默认，hash 路由跳转 PV 会全部丢失，与"应用监控"目的相悖 → 显式设 `sendSpaPv: true`。`sendSuspicious: true` 按用户提供值启用（可疑脚本 / iframe 上报）。其余参数保持官方默认值，不臆造。
+- **verify**：SDK `https://sdk.51.la/perf/js-sdk-perf.min.js` 实测 HTTP 200 / 34409B / `application/javascript`。
+
+### 修改内容
+- `frontend/public/min-enhanced.js`：新增 IIFE `loadLingQuePerfMonitor()`，动态加载 perf SDK（`crossOrigin='anonymous'`、`async=true`），`onload` 内 `new LingQue.Monitor().init({ id: '3RqgbbZKGnrTOJ2i', sendSuspicious: true, sendSpaPv: true })`；带 `LingQue` 存在性守卫与 try/catch，加载失败不影响页面。
+
+### 影响范围
+前端统计链路（新增一个非阻塞请求），无业务代码、无配置 key、无场景数据变更。
+
+### 测试方案
+**Agent 已执行**：`node --check min-enhanced.js` 语法通过；`npm run build` 通过；SDK URL 可达性验证；代码 review 确认 defer 链路与幂等守卫。
+**实测结果（浏览器 preview）**：`window.LingQue` 为 object、`LingQue.Monitor` 存在、`LINGQUE_PERF_SDK` 已注入；console 出现「51.la 应用监控已初始化」；网络面板两个 SDK 均 200（`js-sdk-pro` / `js-sdk-perf`），数据上报请求 `collect-v6.51.la/v6/collect` 已发出。`collect-perf.51.la/health/collect` 在 preview 下 `ERR_CONNECTION_RESET`，系 SDK 内部健康上报走 http 被本地环境重置，不影响初始化与业务上报。
+**待用户实机验证**：部署后 51.la 后台确认应用 ID `3RqgbbZKGnrTOJ2i` 收到 PV / 性能 / 异常数据；hash 路由（如 `#/home`）切换产生独立 PV 上报。
+
+---
+
+## 补充任务（2026-11-16 23:11）：添加 51.la 统计报表公开链接
+
+### 问题分析
+- **核心症状**：站点已接入 51.la 流量统计与应用监控，但用户/访客无入口查看完整统计报表（`https://v6.51.la/s/mgk5Bj40SftrO77`，已授权只读分享页）。
+- **根本原因**：README 只有动态指标徽章、landing footer 只有三个外链圆钮、用户中心「全站实时」只有数字——三处都展示数据但无「查看完整报表」的跳转。
+- **受影响模块**：`README.md`、`frontend/src/app/LandingView.{ts,vue}` + 双语文案、`frontend/src/domains/common/user/components/tabs/OverviewTab.vue` + 双语文案。
+- **候选方案**：
+  1. 只放 README（成本低但普通访客看不到）；
+  2. README + landing footer + 用户中心总览三处齐备（覆盖开发者、普通访客、登录用户三类受众）——**选用**。
+- **落点选择依据**：
+  - README：51.la 徽章表格下的「数据统计时间」行后，语义相邻；
+  - Landing：`footer-quick` 三个圆钮（GitHub / 个人主页 / 官网）后加第 4 枚，与「footer-visitor 数据条」呼应，用 Lucide 图标（遵守 §2 UI 图标规范，禁 emoji）；
+  - 用户中心：`OverviewTab` 的 `realtime-third`（第三方口径 51.la 数据行）末尾，与数据来源直接关联。
+- **verify**：链接实测 HTTP 200（页面 6136B），确认公开可读；用户明确「无修改权限」→ 仅作外链展示，不做任何接口写入。
+
+### 修改内容
+- README：统计徽章区追加「完整报表」链接（Markdown 行内）。
+- `LandingView.ts`：新增 `statsReportUrl` 常量；`LandingView.vue`：footer-quick 第 4 枚圆钮（Lucide `ChartNoAxesCombined` 图标 + tooltip + aria-label）。
+- `locales/{core/zh-CN,core/en-US}.ts`：新增 `landing.statsReport` 文案。
+- `OverviewTab.vue`：`realtime-third` 行末尾加「查看完整报表」外链；`locales/{zh-CN,en-US}/account.ts`：新增 `overview.statsReport` 文案。
+
+### 影响范围
+静态外链 + i18n 文案，无业务逻辑、无配置 key、无场景数据；外链统一 `target="_blank" rel="noopener noreferrer"`。
+
+### 测试方案
+**Agent 已执行**：链接可达性（HTTP 200）；`tsc` / `eslint` / `build` / 结构树 / 配置登记；浏览器实测三处链接指向正确。
+**实测中修复的 2 个自查缺陷**：① 首次编辑因 shell heredoc 中文 GBK 编码问题，`statsReportUrl` 与四个 locale 文案的替换静默失败（浏览器测出 `aria-label` 显示原始 key、`<a>` 无 href）→ 改用脚本文件写入并逐个 grep 验证；② 新增 Lucide 图标未注册进 `components:` → 改为复用已注册的 `ChartArea`。
+**实测结果（浏览器 preview）**：landing footer 第 4 枚圆钮 `href=https://v6.51.la/s/mgk5Bj40SftrO77`、中文 aria-label/tooltip「查看完整统计报表」、`target=_blank` + `rel=noopener noreferrer`、Lucide SVG 已渲染；点击实测新标签正常打开 51.la 报表页。
+**待用户实机验证**：三处点击均能在新标签打开报表且只读可见。

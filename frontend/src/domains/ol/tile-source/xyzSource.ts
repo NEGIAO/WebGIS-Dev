@@ -116,6 +116,34 @@ export function createVectorTileSourceFromUrl(rawUrl: string): VectorTileSource 
     });
 }
 
+/**
+ * 解析矢量瓦片 URL 到「真正能取到数据」的模板。
+ *
+ * OpenFreeMap 的 `.../planet/{z}/{x}/{y}.pbf`（无版本段）虽然返回 200，
+ * 但瓦片体为空（size=0）；真实瓦片 URL 带版本戳（如 `.../planet/20261101_080013_pt/{z}/{x}/{y}.pbf`），
+ * 且版本会随数据更新变化，不能写死。这里对这类 URL 拉一次 TileJSON 取 `tiles[0]`。
+ *
+ * 其它矢量源原样返回，不影响既有行为。
+ */
+export async function resolveVectorTileUrl(rawUrl: string): Promise<string> {
+    const url = normalizeTemplateTokens(normalizeCustomServiceUrl(rawUrl));
+    // 匹配 .../planet/{z}/{x}/{y}.pbf，且 planet 后没有版本段（版本段形如 /planet/<version>/{z}/...）
+    const ofmPlanet = /^(https?:\/\/[^\s]+\/planet)\/\{z\}\/\{x\}\/\{y\}\.pbf(\?.*)?$/i.exec(url);
+    if (!ofmPlanet) return url;
+    try {
+        const response = await fetch(ofmPlanet[1], { signal: AbortSignal.timeout(8000) });
+        if (!response.ok) return url;
+        const tileJson: any = await response.json();
+        const tiles = tileJson?.tiles;
+        if (Array.isArray(tiles) && tiles.length && typeof tiles[0] === 'string') {
+            return normalizeTemplateTokens(tiles[0]);
+        }
+    } catch {
+        // 拉取失败则保持原 URL，交由瓦片加载流程报错/回退
+    }
+    return url;
+}
+
 // ==================== 配置化服务源创建 ====================
 
 export function createConfiguredServiceSource(
@@ -213,15 +241,20 @@ export function detectCustomTileServiceKind(
 
 // ==================== 自动检测编排器 ====================
 
-function createVectorTileSourceStrict(url: string): AutoTileSourceResult {
-    if (!looksLikeVectorTileUrl(url)) {
+async function createVectorTileSourceStrict(
+    url: string,
+    forceVectorTile = false,
+): Promise<AutoTileSourceResult> {
+    if (!forceVectorTile && !looksLikeVectorTileUrl(url)) {
         throw new Error('未识别为矢量切片服务');
     }
     if (!looksLikeXYZTemplate(url)) {
         throw new Error('矢量切片 URL 缺少 {…} 模板占位符');
     }
+    // 解析到真实瓦片 URL（如 OpenFreeMap planet 无版本模板 → TileJSON 里的带版本戳 URL）
+    const resolvedUrl = await resolveVectorTileUrl(url);
     return {
-        source: createVectorTileSourceFromUrl(url),
+        source: createVectorTileSourceFromUrl(resolvedUrl),
         kind: 'vector-tile',
         detail: 'MVT/PBF',
     };
@@ -267,7 +300,7 @@ export async function createAutoTileSourceFromUrl(
     const errors: string[] = [];
 
     try {
-        return createVectorTileSourceStrict(normalizedUrl);
+        return await createVectorTileSourceStrict(normalizedUrl, options.forceVectorTile === true);
     } catch (error) {
         errors.push(`VectorTile: ${toErrorMessage(error)}`);
     }
