@@ -5,7 +5,6 @@
  */
 import XYZ from 'ol/source/XYZ';
 import VectorTileSource from 'ol/source/VectorTile';
-import MVT from 'ol/format/MVT';
 import {
     buildTiandituUrl,
     NON_STANDARD_XYZ_ADAPTERS,
@@ -19,21 +18,17 @@ import { bd2wgsProxyUrl, gcj2wgsProxyUrl } from '@/config/publicRuntime';
 import type { LayerSourceDefinition } from '../basemapCore';
 
 /**
- * OpenFreeMap 的 /planet/{z}/{x}/{y}.pbf（无版本段）返回空瓦片，真实瓦片 URL 在 TileJSON 中，
- * 且带会随数据更新变化的版本戳（如 /planet/20261101_080013_pt/{z}/{x}/{y}.pbf）。
- * 因此不能把带版本戳的 URL 写死在配置里：运行时解析 TileJSON 拿到当前版本模板再 setUrl。
+ * OpenFreeMap 矢量瓦片源。
+ * 使用官方稳定别名 /planet/latest/{z}/{x}/{y}.pbf —— 自动指向最新版本、瓦片非空，
+ * 避免写死版本戳（会随数据更新过期），也免去运行时拉取 TileJSON 解析。
+ * 无版本段的 /planet/{z}/{x}/{y}.pbf 返回空瓦片，故这里显式用 latest。
  * 样式走 basemapLayerFactory 的 styleUrl 管线（applyStyle updateSource:false），只消费矢量数据。
  */
 function createOpenFreeMapVectorSource(): VectorTileSource {
-    const source = new VectorTileSource({ format: new MVT() });
+    const source = createVectorTileSourceFromUrl(
+        'https://tiles.openfreemap.org/planet/latest/{z}/{x}/{y}.pbf',
+    );
     source.set('styleUrl', 'https://tiles.openfreemap.org/styles/liberty');
-    fetch('https://tiles.openfreemap.org/planet')
-        .then((resp) => (resp.ok ? resp.json() : null))
-        .then((tileJson: any) => {
-            const tiles = tileJson?.tiles;
-            if (Array.isArray(tiles) && tiles.length) source.setUrl(tiles[0]);
-        })
-        .catch(() => {});
     return source;
 }
 
@@ -368,8 +363,8 @@ const definitions: LayerSourceDefinition[] = [
         name: 'OpenFreeMap矢量',
         category: 'vector',
         group: '矢量',
-        // url 供 Cesium 描述符派生/展示；真实瓦片 URL 由 createSource 运行时从 TileJSON 解析（带版本戳）
-        url: 'https://tiles.openfreemap.org/planet/{z}/{x}/{y}.pbf',
+        // 稳定别名 latest 自动指向最新版本，瓦片非空且不会因版本戳更新过期
+        url: 'https://tiles.openfreemap.org/planet/latest/{z}/{x}/{y}.pbf',
         styleUrl: 'https://tiles.openfreemap.org/styles/liberty',
         serviceType: 'vector-tile',
         maxZoom: 14,

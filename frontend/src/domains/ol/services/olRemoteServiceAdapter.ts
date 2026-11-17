@@ -217,7 +217,7 @@ export function createOlRemoteServiceAdapter({ mapInstanceRef }: { mapInstanceRe
 
     /**
      * 构建 MVT 矢量瓦片图层（kind==='vector-tile'）。
-     * - 瓦片 URL 走 resolveVectorTileUrl（OpenFreeMap planet 无版本戳 → TileJSON 真实 URL）
+     * - 瓦片 URL 走 resolveVectorTileUrl（OpenFreeMap planet 无版本戳 → /latest/ 稳定别名）
      * - 样式走 ol-mapbox-style.applyStyle(updateSource:false)，与 custom 底图同源
      * - 子层显隐：applyStyle 后包裹 style function，过滤掉未勾选 source-layer 的要素
      * 异步步骤（URL resolve / style fetch）用 signature 校验，防止过期结果覆盖。
