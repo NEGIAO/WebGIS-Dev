@@ -220,7 +220,7 @@ frontend/src/
 │   │   │       ├── cesiumTocActions.ts  # cesium: 前缀动作直调元数据店（solo/label/copy/export/批量 全支持；未识别动作 return false 交回通用分发器——历史上 default:true 会吞掉样式页签等新动作）
 │   │   │       └── registerCesiumTreePort.ts  # Cesium TOC 端口注册（图层树 ↔ 引擎树桥接）
 │   │   ├── services/
-│   │   │   └── cesiumRemoteServiceAdapter.ts  # 在线服务注册表 → Cesium ImageryLayer 渲染适配器（WMS/WMTS/XYZ/ArcGIS Provider 构建 + 显隐/叠放同步）
+│   │   │   └── cesiumRemoteServiceAdapter.ts  # 在线服务注册表 → Cesium ImageryLayer 渲染适配器（WMS/WMTS/XYZ/ArcGIS；WMTS 每子层独立 Provider 与 TOC 层序同步）
 │   │   ├── modules/
 │   │   │   ├── analysis/
 │   │   │   │   ├── analysisMath.ts  # 共享纯函数：拾取兜底/大圆推算/扇形顶点（零 turf 依赖）
@@ -430,8 +430,8 @@ frontend/src/
 │   │   │   ├── basemapPresets.ts  # 底图预设纯数据（BASEMAP_PRESETS + ALL_BASEMAP_PRESETS + URL_LAYER_OPTIONS，零 ol/cesium 依赖，自 ol 域迁入）
 │   │   │   ├── basemapOptions.ts  # 底图选项常量 + 公开 1-based URL 图层编号双向 helper
 │   │   │   ├── basemapRegistry.ts  # 双引擎底图选择规范化、旧路由兼容与历史年份分组
-│   │   │   ├── remoteServices.ts  # 在线服务注册表（wms/arcgis/xyz/wmts 元数据 SSOT：computeLayersParam/renderSignature/parseRsvcNodeId/引擎定位 API 注册）
-│   │   │   ├── remoteServiceNodeBuilder.ts  # 注册表记录 → TOC「在线服务」分组节点（folder + 子图层叶子）
+│   │   │   ├── remoteServices.ts  # 在线服务注册表（WMS/WMTS/MVT/XYZ/ArcGIS 元数据 SSOT：多子层选择/顺序、逐层参数、渲染签名、TOC 动作与引擎定位 API）
+│   │   │   ├── remoteServiceNodeBuilder.ts  # 注册表记录 → TOC「在线服务」分组节点（folder + 多选子图层叶子；WMS/WMTS/ArcGIS 动态支持拖拽排序）
 │   │   │   ├── remoteServiceTocActions.ts  # rsvc: 前缀 TOC 动作分流器（显隐/子图层勾选/移除/引擎定位直调注册表）
 │   │   │   ├── arcgisAttributeQuery.ts  # ArcGIS REST 属性查询（/{layerId}/query 点查 + 多子层合并 + esri 类型映射）
 │   │   │   ├── identifyPresentation.ts  # 要素点查结果展示渲染（HTML 构建 + HTML 转义，OL/Cesium 双引擎共用）
@@ -620,8 +620,8 @@ frontend/src/
 │   │   │   │   ├── tencentBuildingFetcher.ts  # 腾讯建筑白模矢量抓取（浏览器直跑，输出 WGS-84 GeoJSON）
 │   │   │   │   └── tifLoader.ts  # GeoTIFF 加载
 │   │   │   ├── components/
-│   │   │   │   └── TencentBuildingPanel.vue  # 建筑抓取面板（腾讯/高德/天地图 + 天地图 12 层多选分层 + 入库/下载，V3.6.17）
-│   │   │   │   └── TencentBuildingPanel.ts  # 建筑抓取实例层（三源桥接/合规确认/范围表单/入库）
+│   │   │   │   └── BuildingFetchPanel.vue  # 建筑抓取面板（腾讯/高德/天地图三源通用 + 天地图分层多选 + 入库/下载）
+│   │   │   │   └── BuildingFetchPanel.ts  # 建筑抓取实例层（三源桥接/合规确认/范围表单/入库）
 │   │   │   └── stores/
 │   │   │       └── useDownloadStore.ts  # 下载任务状态
 │   │   ├── data-protocol/
@@ -896,7 +896,7 @@ frontend/src/
 │       │   │   ├── useCreateManagedVectorLayer.ts
 │       │   │   ├── useDeferredUserLayerApis.ts
 │       │   │   ├── useLayerControlHandlers.ts
-│       │   │   ├── useLayerCustomWmsAndSearch.ts  # 自定义 WMS/XYZ 图源加载、能力探测与地点检索转发
+│       │   │   ├── useLayerCustomWmsAndSearch.ts  # 自定义 WMS/WMTS/XYZ 图源加载、能力探测与地点检索转发
 │       │   │   ├── useLayerCrsRedeclare.ts  # 图层「重设源坐标系」：按快照原始数值重新投影并替换要素（与 toggleLayerCRS 的 GCJ-02 偏移换算职责分离）
 │       │   │   ├── useManagedLayerRegistry.ts
 │       │   │   ├── useTileHDRendering.ts
@@ -930,7 +930,7 @@ frontend/src/
 │       │   │   └── useMapSearchAndCoordinateInput.ts  # 地图搜索与坐标输入（AMAP AOI 落图工厂）
 │       ├── services/
 │       │   ├── DistrictManager.ts  # 行政区划管理器
-│       │   └── olRemoteServiceAdapter.ts  # 在线服务注册表 → OL 图层渲染适配器（WMS/WMTS/XYZ/ArcGIS source 构建 + zIndex 子带同步）
+│       │   └── olRemoteServiceAdapter.ts  # 在线服务注册表 → OL 渲染适配器（WMS/WMTS/MVT/XYZ/ArcGIS；WMTS 每子层独立 Source、显隐/排序与请求清理）
 │       ├── spatial-analysis/
 │       │   └── composables/
 │       │       ├── useDistrictManager.ts

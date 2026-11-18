@@ -13,10 +13,19 @@ const MERCATOR_CRS_PATTERN = /^(EPSG(:|\/)?(3857|900913|102100|102113)|OSGEO:410
 /** 地理坐标（经纬度）常见 CRS 代号 */
 const GEOGRAPHIC_CRS_PATTERN = /^(CRS:?84|EPSG:?4326|EPSG:?4269|EPSG:?4258)$/i;
 
+function hasLocalName(node: Element | null | undefined, tagName: string): boolean {
+    return !!node && (node.localName === tagName || node.tagName === tagName);
+}
+
+function descendantsByLocalName(root: Element, tagName: string): Element[] {
+    const namespaced = Array.from(root.getElementsByTagNameNS('*', tagName));
+    return namespaced.length ? namespaced : Array.from(root.getElementsByTagName(tagName));
+}
+
 function directChild(node: Element | null | undefined, tagName: string): Element | null {
     const children = node?.children || [];
     for (const child of children) {
-        if (child.tagName === tagName) return child;
+        if (hasLocalName(child, tagName)) return child;
     }
     return null;
 }
@@ -31,10 +40,10 @@ function collectLayerCrsList(layerNode: Element): string[] {
     let current: Element | null = layerNode;
     while (current) {
         for (const child of current.children || []) {
-            if (child.tagName === 'CRS' || child.tagName === 'SRS') {
+            if (hasLocalName(child, 'CRS') || hasLocalName(child, 'SRS')) {
                 const text = textOf(child);
                 if (text) values.push(text);
-            } else if (child.tagName === 'BoundingBox') {
+            } else if (hasLocalName(child, 'BoundingBox')) {
                 const crs = child.getAttribute('CRS') || child.getAttribute('SRS');
                 if (crs) values.push(crs);
             }
@@ -45,7 +54,7 @@ function collectLayerCrsList(layerNode: Element): string[] {
 }
 
 function findFirstNamedLayer(root: Element): { node: Element; name: string; title: string } | null {
-    const layerNodes = root.getElementsByTagName('Layer');
+    const layerNodes = descendantsByLocalName(root, 'Layer');
     for (const node of Array.from(layerNodes)) {
         const nameNode = directChild(node, 'Name');
         if (nameNode && textOf(nameNode)) {
@@ -63,7 +72,7 @@ function findFirstNamedLayer(root: Element): { node: Element; name: string; titl
 function collectNamedLayerOptions(layerNode: Element, parentPath: string[] = []): WmsLayerOption[] {
     const options: WmsLayerOption[] = [];
     for (const child of layerNode?.children || []) {
-        if (child.tagName !== 'Layer') continue;
+        if (!hasLocalName(child, 'Layer')) continue;
         const name = textOf(directChild(child, 'Name'));
         const title = textOf(directChild(child, 'Title')) || name;
         if (!name) {
@@ -93,9 +102,9 @@ function extractGetMapFormats(root: Element): string[] {
     const formats: string[] = [];
     // 直接找 GetMap 节点下的 Format 子元素（兼容大小写命名风格）
     for (const node of Array.from(root.getElementsByTagName('*'))) {
-        if (!/getmap$/i.test(node.tagName)) continue;
+        if (!/getmap$/i.test(node.localName || node.tagName)) continue;
         for (const child of node.children || []) {
-            if (child.tagName === 'Format' && textOf(child)) formats.push(textOf(child));
+            if (hasLocalName(child, 'Format') && textOf(child)) formats.push(textOf(child));
         }
         if (formats.length) break;
     }
@@ -108,6 +117,20 @@ function pickPreferredFormat(formats: string[]): string {
         formats.find((fmt) => /image/i.test(fmt)) ||
         'image/png'
     );
+}
+
+/** WMS Capabilities 的 GetMap 可与 GetCapabilities 不同端点，优先使用文档声明 */
+function extractGetMapEndpoint(root: Element, fallbackEndpoint: string): string {
+    const getMap = Array.from(root.getElementsByTagName('*'))
+        .find((node) => hasLocalName(node, 'GetMap'));
+    const onlineResource = getMap
+        ? descendantsByLocalName(getMap, 'OnlineResource')[0]
+        : null;
+    const href = onlineResource?.getAttributeNS?.('http://www.w3.org/1999/xlink', 'href')
+        || onlineResource?.getAttribute?.('xlink:href')
+        || onlineResource?.getAttribute?.('href')
+        || '';
+    return String(href || fallbackEndpoint).replace(/[?&]+$/, '');
 }
 
 /**
@@ -135,13 +158,13 @@ export function resolveCrsStrategy(
  */
 function findRootCapabilityLayer(doc: Document): Element | null {
     for (const child of doc.documentElement?.children || []) {
-        if (child.tagName === 'Capability') {
+        if (hasLocalName(child, 'Capability')) {
             const rootLayer = directChild(child, 'Layer');
             if (rootLayer) return rootLayer;
         }
     }
     // 兜底：个别服务不规范时全文搜索第一个 Layer 节点
-    return doc.getElementsByTagName('Layer')[0] || null;
+    return descendantsByLocalName(doc.documentElement, 'Layer')[0] || null;
 }
 
 /** 合成单条图层选项（枚举兜底用） */
@@ -152,7 +175,7 @@ function toSingleOption(name: string, title: string): WmsLayerOption {
 /** 从 Layer 元素读取地理范围（兼容 1.3.0 EX_GeographicBoundingBox 与 1.1.1 LatLonBoundingBox） */
 function readLayerGeographicBbox(layerNode: Element | null | undefined): number[] | null {
     for (const child of layerNode?.children || []) {
-        if (child.tagName === 'EX_GeographicBoundingBox') {
+        if (hasLocalName(child, 'EX_GeographicBoundingBox')) {
             const pick = (tag: string): number => {
                 const node = directChild(child, tag);
                 const value = Number.parseFloat(textOf(node));
@@ -164,7 +187,7 @@ function readLayerGeographicBbox(layerNode: Element | null | undefined): number[
             const north = pick('northBoundLatitude');
             const box = [west, south, east, north];
             if (isValidLonLatBbox(box)) return box;
-        } else if (child.tagName === 'LatLonBoundingBox') {
+        } else if (hasLocalName(child, 'LatLonBoundingBox')) {
             const box = [
                 Number.parseFloat(child.getAttribute('minx') ?? ''),
                 Number.parseFloat(child.getAttribute('miny') ?? ''),
@@ -210,7 +233,7 @@ export function parseCapabilitiesXml(xmlText: string, fallbackEndpoint: string):
     // 服务地理范围：并集所有图层声明的经纬度范围，供前端自动缩放定位
     let geographicBbox: number[] | null = null;
     if (rootLayerNode) {
-        for (const node of [rootLayerNode, ...rootLayerNode.getElementsByTagName('Layer')]) {
+        for (const node of [rootLayerNode, ...descendantsByLocalName(rootLayerNode, 'Layer')]) {
             geographicBbox = bboxUnion(geographicBbox, readLayerGeographicBbox(node));
         }
     }
@@ -231,7 +254,7 @@ export function parseCapabilitiesXml(xmlText: string, fallbackEndpoint: string):
         format,
         crsList,
         ...strategy,
-        endpoint: fallbackEndpoint,
+        endpoint: extractGetMapEndpoint(doc.documentElement, fallbackEndpoint),
         source: 'capabilities',
     };
 }

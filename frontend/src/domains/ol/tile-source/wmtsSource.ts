@@ -36,12 +36,41 @@ export function normalizeWmtsResourceTemplate(url: string): string {
         .replace(/\{tilecol\}/gi, '{x}');
 }
 
-function pickWmtsMatrixSet(layer: any): string {
-    const sets = layer?.TileMatrixSetLink;
-    if (Array.isArray(sets) && sets.length) {
-        return String(sets[0]?.TileMatrixSet || '');
+function normalizeWmtsUrlProtocol(url: string, protocol: string): string {
+    if (protocol === 'https:' && /^http:\/\//i.test(url)) {
+        return url.replace(/^http:\/\//i, 'https://');
     }
-    return '';
+    return url;
+}
+
+/** Capabilities 内的 http:// KVP/ResourceURL 端点随输入协议升级，避免 HTTPS 页面混合内容拦截 */
+export function normalizeWmtsOptionsProtocol(options: any, protocol: string): any {
+    if (!options || protocol !== 'https:') return options;
+    return {
+        ...options,
+        url: options.url ? normalizeWmtsUrlProtocol(options.url, protocol) : options.url,
+        urls: Array.isArray(options.urls)
+            ? options.urls.map((url: string) => normalizeWmtsUrlProtocol(url, protocol))
+            : options.urls,
+    };
+}
+
+function pickWmtsMatrixSet(layer: any, capabilities: any): string {
+    const sets = Array.isArray(layer?.TileMatrixSetLink) ? layer.TileMatrixSetLink : [];
+    const linkedIds = sets.map((item: any) => String(item?.TileMatrixSet || '')).filter(Boolean);
+    const definitions = Array.isArray(capabilities?.Contents?.TileMatrixSet)
+        ? capabilities.Contents.TileMatrixSet
+        : [];
+    const compatible = linkedIds.filter((id: string) => {
+        const definition = definitions.find((item: any) => item?.Identifier === id);
+        return /3857|900913|googlemapscompatible/i.test(
+            `${id} ${definition?.SupportedCRS || ''}`,
+        );
+    });
+    return compatible.find((id: string) => /googlemapscompatible/i.test(id))
+        || compatible[0]
+        || linkedIds[0]
+        || '';
 }
 
 export function buildWmtsGetTileTemplateUrl(urlObj: URL): string {
@@ -69,6 +98,7 @@ export function buildWmtsGetTileTemplateUrl(urlObj: URL): string {
 export async function createWmtsSourceStrict(
     rawUrl: string,
     adapters: Record<string, NonStandardXYZAdapter>,
+    preferredLayer = '',
 ): Promise<AutoTileSourceResult> {
     const parsed = parseUrlSafe(rawUrl);
     if (!parsed || !detectWmtsByUrl(parsed)) {
@@ -113,22 +143,29 @@ export async function createWmtsSourceStrict(
           ? [capabilities.Contents.Layer]
           : [];
 
-    const layer = layers.find((item: any) => item?.Identifier) || layers[0];
+    const layer = preferredLayer
+        ? layers.find((item: any) => String(item?.Identifier || '') === preferredLayer)
+        : layers.find((item: any) => item?.Identifier) || layers[0];
     const layerId = String(layer?.Identifier || '').trim();
     if (!layerId) {
-        throw new Error('WMTS Capabilities 未找到可用图层');
+        throw new Error(
+            preferredLayer
+                ? `WMTS Capabilities 未找到指定图层: ${preferredLayer}`
+                : 'WMTS Capabilities 未找到可用图层',
+        );
     }
 
-    const matrixSet = pickWmtsMatrixSet(layer);
+    const matrixSet = pickWmtsMatrixSet(layer, capabilities);
     const wmtsOptions = optionsFromCapabilities(capabilities, {
         layer: layerId,
         matrixSet: matrixSet || undefined,
     });
 
     if (wmtsOptions) {
+        const normalizedOptions = normalizeWmtsOptionsProtocol(wmtsOptions, parsed.protocol);
         return {
             source: prioritizeTileSourceRequest(
-                new WMTS({ ...wmtsOptions, zDirection: -1 }),
+                new WMTS({ ...normalizedOptions, zDirection: -1 }),
             ),
             kind: 'wmts',
             detail: `WMTS 图层: ${layerId}`,
@@ -147,7 +184,9 @@ export async function createWmtsSourceStrict(
         throw new Error('WMTS Capabilities 解析失败：缺少可用的 ResourceURL 模板');
     }
 
-    const normalizedTemplate = normalizeWmtsResourceTemplate(tileTemplate);
+    const normalizedTemplate = normalizeWmtsResourceTemplate(
+        normalizeWmtsUrlProtocol(tileTemplate, parsed.protocol),
+    );
     const templateWithMatrixSet =
         matrixSet && normalizedTemplate.includes('{tilematrixset}')
             ? normalizedTemplate.replace(/\{tilematrixset\}/gi, matrixSet)

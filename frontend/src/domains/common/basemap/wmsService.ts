@@ -27,6 +27,36 @@ import type { WmsServiceInfo } from './wms/types';
 
 const WMS_INFO_CACHE = new Map<string, WmsServiceInfo>();
 
+// WMS 控制参数由 OL/Cesium 另行生成；其余 token / key / auth 等查询参数必须原样保留
+const WMS_CONTROL_PARAMS = new Set([
+    'SERVICE', 'REQUEST', 'VERSION', 'LAYERS', 'LAYERNAMES', 'STYLES', 'FORMAT',
+    'TRANSPARENT', 'SRS', 'CRS', 'BBOX', 'WIDTH', 'HEIGHT',
+]);
+
+function serviceEndpointPreservingAuth(urlObj: URL): string {
+    const query = new URLSearchParams();
+    for (const [key, value] of urlObj.searchParams.entries()) {
+        if (!WMS_CONTROL_PARAMS.has(key.toUpperCase())) query.append(key, value);
+    }
+    const suffix = query.toString();
+    return `${urlObj.origin}${urlObj.pathname}${suffix ? `?${suffix}` : ''}`;
+}
+
+function normalizeDiscoveredEndpoint(endpoint: string, sourceEndpoint: string): string {
+    try {
+        const target = new URL(endpoint, sourceEndpoint);
+        const source = new URL(sourceEndpoint);
+        for (const [key, value] of source.searchParams.entries()) {
+            if (WMS_CONTROL_PARAMS.has(key.toUpperCase()) || target.searchParams.has(key)) continue;
+            target.searchParams.append(key, value);
+        }
+        if (source.protocol === 'https:' && target.protocol === 'http:') target.protocol = 'https:';
+        return target.toString();
+    } catch {
+        return endpoint || sourceEndpoint;
+    }
+}
+
 // ── 公共 API（对外路径 @common/basemap/wmsService 保持不变） ──
 export {
     buildArcgisExportTemplate,
@@ -50,15 +80,17 @@ function buildInfoFromQuery(urlObj: URL): WmsServiceInfo | null {
         queryValueIgnoreCase(urlObj, 'SRS') || queryValueIgnoreCase(urlObj, 'CRS') || '';
 
     const strategy = resolveCrsStrategy([], explicitSrs);
+    const layerOptions = layers.split(',').map((name) => name.trim()).filter(Boolean)
+        .map((name) => ({ name, title: name, path: '', label: name }));
     return {
         layers,
         title: '',
-        layerOptions: [],
+        layerOptions,
         version: explicitVersion,
         format: explicitFormat,
         crsList: strategy.srs ? [strategy.srs] : [],
         ...strategy,
-        endpoint: `${urlObj.origin}${urlObj.pathname}`,
+        endpoint: serviceEndpointPreservingAuth(urlObj),
         source: 'query',
     };
 }
@@ -85,11 +117,17 @@ export async function ensureWmsServiceInfo(rawUrl: string): Promise<WmsServiceIn
 
         // 场景1：URL 已带 LAYERS 参数，直接采用
         if (!info && isWmsServiceUrl(source)) {
-            const capabilitiesUrl = new URL(`${urlObj.origin}${urlObj.pathname}`);
+            const serviceEndpoint = serviceEndpointPreservingAuth(urlObj);
+            const capabilitiesUrl = new URL(serviceEndpoint);
             setParamIgnoreCase(capabilitiesUrl.searchParams, 'SERVICE', 'WMS');
             setParamIgnoreCase(capabilitiesUrl.searchParams, 'REQUEST', 'GetCapabilities');
+            const requestedVersion = queryValueIgnoreCase(urlObj, 'VERSION');
+            if (requestedVersion) {
+                setParamIgnoreCase(capabilitiesUrl.searchParams, 'VERSION', requestedVersion);
+            }
             const xmlText = await fetchCapabilitiesText(capabilitiesUrl.toString());
-            info = parseCapabilitiesXml(xmlText, `${urlObj.origin}${urlObj.pathname}`);
+            info = parseCapabilitiesXml(xmlText, serviceEndpoint);
+            info.endpoint = normalizeDiscoveredEndpoint(info.endpoint, serviceEndpoint);
         }
 
         // 场景2：ArcGIS REST 端点（…/MapServer）

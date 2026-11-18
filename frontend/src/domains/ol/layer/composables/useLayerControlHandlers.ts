@@ -414,7 +414,7 @@ export function createLayerControlHandlers({
                 // 常驻绑定点击监听：候选集合动态收集（注册表中任何可见+可查询服务都参与命中）
                 bindArcgisIdentify(svcInfo || null);
                 // 注册到「在线服务」注册表（TOC 统一管理；同 url+同图层去重更新）
-                if (svcInfo?.arcgis || svcInfo?.source === 'capabilities') {
+                if (svcInfo?.arcgis || svcInfo?.source === 'capabilities' || svcInfo?.source === 'query') {
                     const matchedOption = svcInfo.layerOptions?.find(
                         (option) => option.name === preferredWmsLayers,
                     );
@@ -453,25 +453,25 @@ export function createLayerControlHandlers({
                 disableArcgisIdentify();
                 const svcInfo = await ensureWmtsServiceInfo(normalizedUrl);
                 if (svcInfo && svcInfo.layerOptions.length) {
-                    const firstLayer = preferredWmsLayers || svcInfo.layerOptions[0].name;
                     const matchedOption = svcInfo.layerOptions.find(
-                        (option: any) => option.name === firstLayer,
-                    );
+                        (option: any) => option.name === preferredWmsLayers,
+                    ) || svcInfo.layerOptions[0];
+                    const selectedLayer = matchedOption.name;
                     registerRemoteService({
                         kind: 'wmts',
                         url: normalizedUrl,
                         endpoint: svcInfo.endpoint,
                         title: svcInfo.title,
-                        selectedLayerId: firstLayer,
+                        selectedLayerId: selectedLayer,
                         layerLabel: matchedOption?.title || '',
                         sublayers: svcInfo.layerOptions,
-                        selectedIds: [firstLayer],
-                        layersParam: firstLayer,
-                        matrixSet: svcInfo.matrixSet,
-                        style: svcInfo.style,
-                        format: svcInfo.format,
+                        selectedIds: [selectedLayer],
+                        layersParam: selectedLayer,
+                        matrixSet: matchedOption?.matrixSet || svcInfo.matrixSet,
+                        style: matchedOption?.style || svcInfo.style || 'default',
+                        format: matchedOption?.format || svcInfo.format,
                         version: svcInfo.version,
-                        srs: svcInfo.srs,
+                        srs: matchedOption?.srs || svcInfo.srs,
                         queryable: false,
                     });
                     message?.info?.('已同步至图层面板「在线服务」分组', { duration: 2500 });

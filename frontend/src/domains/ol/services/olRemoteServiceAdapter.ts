@@ -27,6 +27,8 @@ import {
     useRemoteServices,
     computeLayersParam,
     effectiveSelectedIds,
+    hasRenderableRemoteServiceContent,
+    remoteServiceRecordForSublayer,
     renderSignature,
     usesPerSublayerRequests,
     visualOrderedSublayerIds,
@@ -38,14 +40,14 @@ import { buildArcgisExportTemplate, renderArcgisTileUrl } from '@common/basemap/
 import {
     createTileWmsSource,
     createVectorTileSourceFromUrl,
+    normalizeWmtsOptionsProtocol,
     resolveVectorTileUrl,
     toOlProjection,
+    abortTileSourceRequests,
 } from '@ol/tile-source/index';
 import { Z_BAND } from '@ol/layer/zIndexBands';
 
 const REMOTE_CAPACITY = 50; // 在线服务子带容量上限（100~149），见 zIndexBands 注释
-// 拆分渲染时单条记录最多占用的子带槽数（子图层各自独立请求 + zIndex 排序）
-const SPLIT_SLOTS = 20;
 
 // WMTS Capabilities 进程内缓存：capsUrl → Promise<解析后文档>（渲染期拉取，不入持久化）
 const wmtsCapsCache = new Map();
@@ -159,8 +161,10 @@ async function buildWmtsSourceAsync(record: any, map: any) {
                 matrixSet,
             });
             if (!options) continue;
+            const protocol = /^https:\/\//i.test(record.endpoint || record.url || '') ? 'https:' : '';
+            const normalizedOptions = normalizeWmtsOptionsProtocol(options, protocol);
             // ProjectionLike = Projection | string：字符串本身就是编码，直接取用
-            const rawProjection = options.projection;
+            const rawProjection = normalizedOptions.projection;
             const srcProjCode =
                 typeof rawProjection === 'string'
                     ? rawProjection
@@ -171,9 +175,9 @@ async function buildWmtsSourceAsync(record: any, map: any) {
                 lastError = new Error(`矩阵集 ${matrixSet} 投影 ${srcProjCode} 与视图 ${viewCode} 不匹配`);
                 continue;
             }
-            options.transition = 0;
-            options.crossOrigin = 'anonymous';
-            return new WMTS(options);
+            normalizedOptions.transition = 0;
+            normalizedOptions.crossOrigin = 'anonymous';
+            return new WMTS(normalizedOptions);
         } catch (error) {
             lastError = error;
         }
@@ -186,16 +190,20 @@ export function createOlRemoteServiceAdapter({ mapInstanceRef }: { mapInstanceRe
     const layerMap = new Map(); // recordId → ol Layer
     const signatureMap = new Map(); // recordId → renderSignature
 
-    /** WMTS 异步建源调度：同签名去重，源就绪且记录仍存活时才落 setSource */
-    function scheduleWmtsSource(record: any, signature: string, layer: any) {
-        const key = `${record.id}:${signature}`;
+    /** WMTS 异步建源调度：按服务签名 + Identifier 去重，迟到结果不得挂到已卸载图层 */
+    function scheduleWmtsSource(record: any, sourceKey: string, layer: any, ownerSignature = sourceKey) {
+        const key = `${record.id}:${sourceKey}`;
         if (wmtsPending.has(key)) return;
         wmtsPending.add(key);
         const map = mapInstanceRef?.value;
         buildWmtsSourceAsync(record, map)
             .then((source) => {
-                if (layerMap.get(record.id) === layer && signatureMap.get(record.id) === signature) {
+                const entry = layerMap.get(record.id);
+                const layerIsAlive = entry === layer || (Array.isArray(entry) && entry.includes(layer));
+                if (layerIsAlive && signatureMap.get(record.id) === ownerSignature) {
                     layer.setSource(source);
+                } else {
+                    abortTileSourceRequests(source);
                 }
             })
             .catch((error) => console.warn('[RemoteServices] WMTS 源构建失败:', error))
@@ -217,7 +225,7 @@ export function createOlRemoteServiceAdapter({ mapInstanceRef }: { mapInstanceRe
 
     /**
      * 构建 MVT 矢量瓦片图层（kind==='vector-tile'）。
-     * - 瓦片 URL 走 resolveVectorTileUrl（OpenFreeMap planet 无版本戳 → TileJSON 真实 URL）
+     * - 瓦片 URL 走 resolveVectorTileUrl（OpenFreeMap planet 无版本戳 → /latest/ 稳定别名）
      * - 样式走 ol-mapbox-style.applyStyle(updateSource:false)，与 custom 底图同源
      * - 子层显隐：applyStyle 后包裹 style function，过滤掉未勾选 source-layer 的要素
      * 异步步骤（URL resolve / style fetch）用 signature 校验，防止过期结果覆盖。
@@ -283,16 +291,32 @@ export function createOlRemoteServiceAdapter({ mapInstanceRef }: { mapInstanceRe
         return Z_BAND.REMOTE_SERVICES + Math.min(recordsCount - 1 - index, REMOTE_CAPACITY - 1);
     }
 
-    /** 拆分渲染子图层带内 zIndex：视觉序 0（最上）→ 最高值；+0.5 避免与其它服务整带值碰撞 */
-    function splitZIndex(bandValue: number, visualIndex: number) {
-        return bandValue + (SPLIT_SLOTS - 1 - Math.min(visualIndex, SPLIT_SLOTS - 1)) + 0.5;
+    /** 拆分子图层层序：按实际数量在服务子带内分配唯一小数值，头部 = 视觉上层 */
+    function splitZIndex(bandValue: number, visualIndex: number, total: number) {
+        const safeTotal = Math.max(1, total);
+        return bandValue + 0.5 + ((safeTotal - 1 - visualIndex) / safeTotal) * 0.5;
+    }
+
+    /** 卸载图层并中止其 source 请求；异步建源通过 layerMap 身份检查自动失效 */
+    function disposeEntry(recordId: string, entry: any) {
+        const map = mapInstanceRef?.value;
+        const layers = Array.isArray(entry) ? entry : [entry];
+        layers.filter(Boolean).forEach((layer) => {
+            try {
+                abortTileSourceRequests(layer.getSource?.());
+            } catch {
+                /* best-effort：卸载仍须继续 */
+            }
+            map?.removeLayer(layer);
+        });
+        layerMap.delete(recordId);
+        signatureMap.delete(recordId);
     }
 
     /**
      * 同步单条记录的图层集合。
-     * layerMap 值：常规 kind = 单条 Layer；arcgis 动态 = Layer[]（每勾选子图层一条）。
-     * ArcGIS 动态 LAYERS=show:x 只做过滤、服务端忽略列表顺序，叠放次序必须由客户端
-     * zIndex 表达 → 拆分渲染；签名变化时整组移除重建。
+     * layerMap 值：常规 kind = 单条 Layer；ArcGIS 动态 / WMTS = Layer[]（每勾选子图层一条）。
+     * 两类拆分服务均需由客户端 zIndex 表达 TOC 叠放次序；签名变化时整组移除重建。
      */
     function syncRecord(record: any, index: number, recordsCount: number) {
         const map = mapInstanceRef?.value;
@@ -300,28 +324,45 @@ export function createOlRemoteServiceAdapter({ mapInstanceRef }: { mapInstanceRe
         const signature = renderSignature(record);
         let entry = layerMap.get(record.id);
 
-        // 渲染要素变化（如子图层勾选组合改变）→ 整组重建
+        // 服务隐藏或子层无有效选择：不保留空 WMS/MVT source，统一卸载并中止请求
+        if (!hasRenderableRemoteServiceContent(record)) {
+            if (entry) disposeEntry(record.id, entry);
+            return;
+        }
+
+        // 渲染要素变化（如子图层勾选组合改变）→ 整组重建并清理旧请求
         if (entry && signatureMap.get(record.id) !== signature) {
-            (Array.isArray(entry) ? entry : [entry]).forEach((item) => map.removeLayer(item));
-            layerMap.delete(record.id);
+            disposeEntry(record.id, entry);
             entry = undefined;
         }
 
         if (!entry) {
-            // arcgis 动态：拆分渲染，每个勾选子图层独立 export 请求 + 独立 zIndex
+            // ArcGIS 动态 / WMTS：每个勾选子图层独立请求 + 独立 zIndex
             if (usesPerSublayerRequests(record)) {
                 const orderedIds = visualOrderedSublayerIds(record);
                 if (!orderedIds.length) return;
+                const sublayerRecords = orderedIds.map((subId) => remoteServiceRecordForSublayer(record, subId));
                 const layers = orderedIds.map((subId, visualIndex) => new TileLayer({
-                    source: buildArcgisSublayerSource(record, subId),
+                    // WMTS 先落无源占位层，Capabilities 就绪后按 Identifier 分别 setSource
+                    source: record.kind === 'wmts' ? undefined : buildArcgisSublayerSource(record, subId),
                     visible: record.visible !== false,
                     opacity: Number.isFinite(record.opacity) ? record.opacity : 1,
-                    zIndex: splitZIndex(bandZIndex(index, recordsCount), visualIndex),
+                    zIndex: splitZIndex(bandZIndex(index, recordsCount), visualIndex, orderedIds.length),
                     properties: { remoteServiceId: record.id, rsvcSublayerId: subId },
                 }));
                 layers.forEach((layer) => map.addLayer(layer));
                 layerMap.set(record.id, layers);
                 signatureMap.set(record.id, signature);
+                if (record.kind === 'wmts') {
+                    layers.forEach((layer, visualIndex) => {
+                        scheduleWmtsSource(
+                            sublayerRecords[visualIndex],
+                            `${signature}:${orderedIds[visualIndex]}`,
+                            layer,
+                            signature,
+                        );
+                    });
+                }
                 return;
             }
             // WMTS 建源是异步的：先落无源占位图层，Capabilities 就绪后 setSource
@@ -374,7 +415,7 @@ export function createOlRemoteServiceAdapter({ mapInstanceRef }: { mapInstanceRe
                 layer.setOpacity(Number.isFinite(record.opacity) ? record.opacity : 1);
             }
             const targetZIndex = Array.isArray(entry)
-                ? splitZIndex(bandZIndex(index, recordsCount), splitIndex)
+                ? splitZIndex(bandZIndex(index, recordsCount), splitIndex, entry.length)
                 : bandZIndex(index, recordsCount);
             if (layer.getZIndex() !== targetZIndex) layer.setZIndex(targetZIndex);
         });
@@ -386,10 +427,7 @@ export function createOlRemoteServiceAdapter({ mapInstanceRef }: { mapInstanceRe
 
         const aliveIds = new Set(records.map((item: any) => item.id));
         for (const [id, entry] of layerMap) {
-            if (!aliveIds.has(id)) {
-                (Array.isArray(entry) ? entry : [entry]).forEach((layer) => map.removeLayer(layer));
-                layerMap.delete(id);
-            }
+            if (!aliveIds.has(id)) disposeEntry(id, entry);
         }
         records.forEach((record: any, index: number) => syncRecord(record, index, records.length));
     }
@@ -435,9 +473,7 @@ export function createOlRemoteServiceAdapter({ mapInstanceRef }: { mapInstanceRe
             unregisterRsvcEngineApi('ol');
             const map = mapInstanceRef?.value;
             if (!map) return;
-            for (const [, entry] of layerMap) {
-                (Array.isArray(entry) ? entry : [entry]).forEach((layer) => map.removeLayer(layer));
-            }
+            for (const [id, entry] of layerMap) disposeEntry(id, entry);
             layerMap.clear();
             signatureMap.clear();
         },

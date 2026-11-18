@@ -3,7 +3,7 @@
  * 在线服务注册表 → Cesium ImageryLayer 渲染适配器（与 OL 适配器同构）。
  *
  * 职责：watch 注册表 records，双向同步：
- * - 新增 → 按类型构建 Provider（WMS / ArcGIS 切片 / ArcGIS 动态 export）
+ * - 新增 → 按类型构建 Provider（WMS / WMTS 多子层 / ArcGIS 切片 / ArcGIS 动态 export）
  * - 更新 → 同步 show / alpha；渲染签名变化时重建 Provider
  * - 删除 → viewer.imageryLayers.remove
  * 叠放顺序：records 数组顺序即服务间叠放次序，整体位于当前底图之上。
@@ -13,6 +13,8 @@ import { watch } from 'vue';
 import {
     useRemoteServices,
     computeLayersParam,
+    hasRenderableRemoteServiceContent,
+    remoteServiceRecordForSublayer,
     renderSignature,
     usesPerSublayerRequests,
     visualOrderedSublayerIds,
@@ -48,8 +50,10 @@ function buildProvider(Cesium: any, record: RemoteServiceRecord) {
     if (record.kind === 'xyz') {
         // UrlTemplateImageryProvider 按 {x}/{y} 具名 token 替换、与出现顺序无关，
         // zyx 模板 {z}/{y}/{x} 原样传入即可正确出图，禁止做占位符换位
-        const url = String(record.url || endpoint || '');
+        const rawUrl = String(record.url || endpoint || '');
         const scheme = record.yScheme || 'zxy';
+        // Cesium 原生 token 是 {y}；把标准 TMS 的 {-y} 归一后由 customTags 做南起 Y 反算
+        const url = scheme === 'tms' ? rawUrl.replace(/\{-y\}/gi, '{y}') : rawUrl;
         // tms：南起 y 反算经 customTags 覆盖 {y} token
         const tmsOptions = scheme === 'tms'
             ? { customTags: { y: (_tile: any, _x: number, y: number, level: number) => 2 ** level - 1 - Number(y) } }
@@ -90,11 +94,15 @@ function buildProvider(Cesium: any, record: RemoteServiceRecord) {
             transparent: true,
             [version.startsWith('1.3') ? 'crs' : 'srs']: record.srs || 'EPSG:3857',
         };
+        const geographic = /^(EPSG:)?(4326|4269|4258)$|^CRS:?84$/i.test(String(record.srs || ''));
+        const tilingScheme = geographic && typeof Cesium.GeographicTilingScheme === 'function'
+            ? new Cesium.GeographicTilingScheme()
+            : new Cesium.WebMercatorTilingScheme();
         return new Cesium.WebMapServiceImageryProvider({
             url: endpoint,
             layers: layersParam,
             parameters,
-            tilingScheme: new Cesium.WebMercatorTilingScheme(),
+            tilingScheme,
             enablePickFeatures: false,
         });
     }
@@ -180,7 +188,9 @@ export function createCesiumRemoteServiceAdapter({ getViewer, getCesium }: Cesiu
         for (const subId of orderedBottomFirst) {
             let provider;
             try {
-                provider = buildSublayerProvider(Cesium, record, subId);
+                provider = record.kind === 'wmts'
+                    ? buildProvider(Cesium, remoteServiceRecordForSublayer(record, subId))
+                    : buildSublayerProvider(Cesium, record, subId);
             } catch (error) {
                 console.warn('[RemoteServices][Cesium] 子图层 Provider 构建失败:', error);
                 continue;
@@ -205,6 +215,15 @@ export function createCesiumRemoteServiceAdapter({ getViewer, getCesium }: Cesiu
         let entry = layerHandles.get(record.id);
         const signature = renderSignature(record);
         const isSplit = usesPerSublayerRequests(record);
+
+        // 隐藏或空子层选择时移除 Provider，避免只改 show 而继续保留下载与缓存
+        if (!hasRenderableRemoteServiceContent(record)) {
+            if (entry) {
+                for (const layer of entry.layers) viewer.imageryLayers.remove(layer, true);
+                layerHandles.delete(record.id);
+            }
+            return;
+        }
 
         if (entry && (entry.signature !== signature || entry.split !== isSplit)) {
             for (const layer of entry.layers) viewer.imageryLayers.remove(layer, true);

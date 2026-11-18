@@ -15,10 +15,15 @@ import { computed, ref } from 'vue';
 
 /** 子图层描述 */
 export interface RemoteServiceSublayer {
-    /** 图层名（即 WMS LAYERS 单值 / ArcGIS 数字 id 字符串） */
+    /** 图层名（WMS/WMTS Identifier、ArcGIS 数字 id 或 MVT source-layer） */
     name: string;
     title: string;
     label: string;
+    /** WMTS 子图层独立协议参数；其它协议不使用 */
+    matrixSet?: string;
+    style?: string;
+    format?: string;
+    srs?: string;
 }
 
 /** 在线服务元数据记录（禁止出现任何引擎对象字段） */
@@ -93,7 +98,7 @@ function makeId(): string {
  * - arcgis export：show:id1,id2；全不勾 = 空；tiles 模式不适用（返回空串，tiles 渲染不消费该参数）
  * - wms：勾选项按 layerOrder 叠放顺序拼接（WMS 规范列表首层画最底，故渲染反转：头部 = 视觉上层）；
  *   全不勾 = 空（用户明确取消全部叠加，不复活初始组合）
- * - xyz/wmts 带 sublayers：无 LAYERS 组合语义，恒兜底 layersParam
+ * - wmts：返回视觉有序的 Identifier 集合供签名与拆分渲染使用；禁止作为单个 GetTile 的 LAYER 值
  */
 export function computeLayersParam(record: RemoteServiceRecord): string {
     const fallback = String(record.layersParam ?? '');
@@ -106,6 +111,11 @@ export function computeLayersParam(record: RemoteServiceRecord): string {
         // WMS 规范：LAYERS 列表首层画最底 → 反转视觉顺序（头部=上层）
         const ordered = renderOrderedIds(record);
         return ordered.length ? [...ordered].reverse().join(',') : '';
+    }
+    if (record.kind === 'wmts') {
+        // WMTS GetTile 每次仅接受一个 Identifier；此处只表达已选集合与渲染签名，
+        // adapter 必须按 visualOrderedSublayerIds 拆成每子图层一个请求，禁止直接拼接发送。
+        return renderOrderedIds(record).join(',');
     }
     if (record.kind === 'vector-tile') {
         // 矢量瓦片：勾选的 source-layer 集合（作为签名因子与 adapter 过滤依据），非 WMS LAYERS
@@ -153,22 +163,66 @@ export function effectiveSelectedIds(record: RemoteServiceRecord): string[] {
 }
 
 /**
+ * 记录当前是否应有实际渲染与瓦片请求。
+ * 服务隐藏、WMS/MVT 子层全取消、WMTS 未选图层时均为 false；
+ * adapter 必须卸载句柄，而不是继续发空 LAYERS 或后台下载瓦片。
+ */
+export function hasRenderableRemoteServiceContent(record: RemoteServiceRecord): boolean {
+    if (record.visible === false) return false;
+    if (usesPerSublayerRequests(record)) return visualOrderedSublayerIds(record).length > 0;
+    if (
+        (record.kind === 'wms' || record.kind === 'wmts' || record.kind === 'vector-tile')
+        && record.sublayers?.length
+    ) {
+        return effectiveSelectedIds(record).length > 0;
+    }
+    return true;
+}
+
+/**
  * 该记录是否按「每子图层独立请求」渲染。
- * ArcGIS 动态服务的 LAYERS=show:a,b 只做过滤、忽略列表顺序（服务端恒按服务内部固定顺序绘制），
- * 客户端无法用单请求的 LAYERS 顺序控制叠放 → 必须拆成每子图层一个请求，由客户端 zIndex 排序。
+ * - ArcGIS 动态服务：LAYERS=show:a,b 忽略客户端列表顺序，必须拆分后才能由 TOC 控制叠放。
+ * - WMTS：GetTile 单次只接受一个 Identifier，多选时必须拆成独立 Source / Provider。
  */
 export function usesPerSublayerRequests(record: RemoteServiceRecord): boolean {
-    return record.kind === 'arcgis' && record.tileMode !== 'tiles';
+    return (record.kind === 'arcgis' && record.tileMode !== 'tiles')
+        || (record.kind === 'wmts' && !!record.sublayers?.length);
 }
 
 /**
  * 勾选子图层 → 视觉顺序 id 列表（头部 = 视觉上层），供拆分渲染的 adapter 逐个建源并按序排 zIndex。
- * 非 ArcGIS 动态服务返回空数组（不适用）。
+ * 非拆分渲染服务返回空数组（不适用）。
  */
 export function visualOrderedSublayerIds(record: RemoteServiceRecord): string[] {
     if (!usesPerSublayerRequests(record)) return [];
     return renderOrderedIds(record);
 }
+
+/**
+ * 生成单个 WMTS 子图层的渲染记录。
+ * 保留服务端点等公共字段，同时用该 Identifier 自己的矩阵集、样式、格式和 SRS 覆盖服务级兜底值；
+ * OL / Cesium 每个子图层均经此函数建立独立请求，避免多选时误用最后一个图层的参数。
+ */
+export function remoteServiceRecordForSublayer(
+    record: RemoteServiceRecord,
+    sublayerId: string,
+): RemoteServiceRecord {
+    if (record.kind !== 'wmts') return record;
+    const option = record.sublayers.find((item) => item.name === sublayerId);
+    return {
+        ...record,
+        selectedLayerId: sublayerId,
+        layerLabel: option?.title || option?.label || sublayerId,
+        layersParam: sublayerId,
+        selectedIds: [sublayerId],
+        layerOrder: [sublayerId],
+        matrixSet: option?.matrixSet || record.matrixSet,
+        style: option?.style || record.style || 'default',
+        format: option?.format || record.format,
+        srs: option?.srs || record.srs,
+    };
+}
+
 export function parseRsvcNodeId(rawId: string): { serviceId: string; subLayerName: string } {
     const withoutPrefix = String(rawId || '').slice(RSVC_NODE_PREFIX.length);
     const sepIndex = withoutPrefix.indexOf(RSVC_SUB_LAYER_SEP);
@@ -184,6 +238,12 @@ export function parseRsvcNodeId(rawId: string): { serviceId: string; subLayerNam
  * 双引擎共用同一实现，保证重建时机跨引擎一致。
  */
 export function renderSignature(record: RemoteServiceRecord): string {
+    const wmtsSublayers = record.kind === 'wmts'
+        ? visualOrderedSublayerIds(record).map((id) => {
+            const subRecord = remoteServiceRecordForSublayer(record, id);
+            return [id, subRecord.matrixSet, subRecord.style, subRecord.format, subRecord.srs];
+        })
+        : [];
     return [
         record.kind,
         record.endpoint,
@@ -197,6 +257,7 @@ export function renderSignature(record: RemoteServiceRecord): string {
         record.matrixSet,
         record.style,
         record.styleUrl,
+        JSON.stringify(wmtsSublayers),
     ].join('|');
 }
 
@@ -269,13 +330,13 @@ export function registerRemoteService(payload: {
         // 显式选择（含下拉默认全卷串）即视为已触碰；仅空选注册保持未触碰，
         // 使消费端按 WMS 默认全选拉平
         selectionTouched: selectedIds.length > 0,
-        // layerOrder 约定：头部 = 视觉最上层。两种来源的目录语义相反，需分别对齐：
-        // - ArcGIS REST f=json 的 layers 数组 = 地图文档自上而下（首层=视觉最上）→ 原序即约定
+        // layerOrder 约定：头部 = 视觉最上层。仅 WMS 需要反转：
+        // - ArcGIS / MVT / WMTS 的客户端拆分图层直接按数组头部置顶 → 原序即约定
         // - WMS Capabilities 文档序 = 首层画最底（自底向上）→ 反转成头部=视觉上层
         layerOrder: selectedIds.length
-            ? payload.kind === 'arcgis' || payload.kind === 'vector-tile'
-                ? [...selectedIds]
-                : [...selectedIds].reverse()
+            ? payload.kind === 'wms'
+                ? [...selectedIds].reverse()
+                : [...selectedIds]
             : [],
         id: makeId(),
         visible: true,
@@ -303,10 +364,25 @@ export function setRemoteServiceOpacity(id: string, opacity: number): void {
     target.opacity = Math.min(1, Math.max(0, value));
 }
 
-/** 勾选/取消单个子图层（影响 LAYERS 组合，不影响服务整体显隐）；新勾选者置视觉最上层 */
+/** 同步 WMTS 服务节点的摘要标签；实际渲染参数由各子图层自己的 option 决定。 */
+function syncWmtsSelectionMetadata(target: RemoteServiceRecord): void {
+    if (target.kind !== 'wmts') return;
+    const orderedIds = renderOrderedIds(target);
+    const primaryId = orderedIds[0] || '';
+    const primary = target.sublayers.find((item) => item.name === primaryId);
+    target.selectedLayerId = primaryId;
+    target.layersParam = primaryId;
+    target.layerLabel = primary
+        ? `${primary.title || primary.label || primaryId}${orderedIds.length > 1 ? ` 等 ${orderedIds.length} 个图层` : ''}`
+        : '';
+}
+
+/** 勾选/取消单个子图层（不影响服务整体显隐）；新勾选者置视觉最上层 */
 export function setRemoteServiceSublayer(id: string, layerName: string, checked: boolean): void {
     const target = records.value.find((item) => item.id === id);
     if (!target || !layerName) return;
+    if (checked && !target.sublayers.some((item) => item.name === layerName)) return;
+
     // 用户显式操作勾选集：此后空集 = 明确全关，不再享受 WMS 默认全选
     target.selectionTouched = true;
     const set = new Set(effectiveSelectedIds(target));
@@ -320,6 +396,7 @@ export function setRemoteServiceSublayer(id: string, layerName: string, checked:
         set.delete(layerName);
     }
     target.selectedIds = [...set];
+    syncWmtsSelectionMetadata(target);
 }
 
 /**
@@ -340,6 +417,7 @@ export function removeRemoteServiceSublayer(id: string, layerName: string): void
     target.selectedIds = drop(effectiveSelectedIds(target));
     target.layerOrder = drop(target.layerOrder);
     target.selectionTouched = true;
+    syncWmtsSelectionMetadata(target);
     if (!target.sublayers.length) {
         unregisterRemoteService(id);
     }
@@ -366,6 +444,7 @@ export function reorderRemoteServiceSublayers(id: string, activeId: string, targ
     order.splice(fromIndex, 1);
     order.splice(order.indexOf(targetId), 0, activeId);
     target.layerOrder = order;
+    syncWmtsSelectionMetadata(target);
 }
 
 /** 拖拽排序服务节点（在线服务分组内整体叠放次序；数组头部 = 视觉上层） */

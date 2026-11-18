@@ -224,12 +224,12 @@
             已识别: {{ detectedServiceInfo.name }}
         </div>
 
-        <!-- WMS 图层选择器：输入 WMS 地址后自动枚举可选图层 -->
+        <!-- WMS / WMTS 图层选择器：输入服务地址后自动枚举可选图层 -->
         <div
             v-if="selectedLayer === 'custom' && (wmsLayersLoading || wmsLayerOptions.length)"
             class="wms-layer-picker"
         >
-            <label class="wms-layer-label">WMS 图层<span
+            <label class="wms-layer-label">{{ detectedServiceInfo?.kind === 'wmts' ? 'WMTS 图层' : 'WMS 图层' }}<span
                 v-if="wmsLayersLoading"
                 class="wms-layer-loading"
             >（枚举中…）</span></label>

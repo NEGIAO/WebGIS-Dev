@@ -58,7 +58,10 @@ function toRemoteServiceNode(record: RemoteServiceRecord, expandedState: Record<
 
     // 子图层叶子：无声明（v1 记录/tiles 模式）时保持纯 folder 无 children；
     // 有声明时按视觉叠放顺序排列，勾选叶子可拖拽调整 LAYERS 叠放次序
-    const hasSublayerOrdering = record.kind === 'wms' || (record.kind === 'arcgis' && record.tileMode !== 'tiles');
+    // WMS 用 LAYERS 顺序、ArcGIS 动态与 WMTS 用客户端拆分图层表达用户指定叠放顺序
+    const hasSublayerOrdering = record.kind === 'wms'
+        || record.kind === 'wmts'
+        || (record.kind === 'arcgis' && record.tileMode !== 'tiles');
     const children = orderedSublayers(record).map((sub) => {
         // 勾选判定走 effectiveSelectedIds：WMS 默认模式（从未触碰选择集）视为全选，
         // 存量空选记录无需重注册即在 TOC 全亮
@@ -84,7 +87,7 @@ function toRemoteServiceNode(record: RemoteServiceRecord, expandedState: Record<
             supportsOpacity: false,
             selected: false,
             parentId: nodeId,
-            // LAYERS 组合语义的子图层可拖拽调整叠放次序（xyz/wmts/tiles 无组合概念，禁拖）
+            // WMS / ArcGIS 动态 / WMTS 子图层可拖拽调整叠放次序（XYZ、MVT、ArcGIS 缓存不适用）
             draggable: hasSublayerOrdering,
             droppable: hasSublayerOrdering,
             actions: {

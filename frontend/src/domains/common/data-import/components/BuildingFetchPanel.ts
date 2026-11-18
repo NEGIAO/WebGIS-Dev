@@ -37,11 +37,11 @@ const propDefine = {
 	activeEngine: { type: String, default: 'ol' },
 } as const;
 
-export type TencentBuildingPanelProps = ExtractPropTypes<typeof propDefine>;
+export type BuildingFetchPanelProps = ExtractPropTypes<typeof propDefine>;
 
 // 三、组件注册入口
 export default defineComponent({
-	name: 'TencentBuildingPanel',
+	name: 'BuildingFetchPanel',
 	components: { ExtentPicker, CesiumExtentPicker, Building2, Download, MapPin, TriangleAlert, X },
 	props: propDefine,
 	emits: ['upload-data', 'close'],
@@ -78,7 +78,7 @@ export class Instance {
 	private message: ReturnType<typeof useMessage>;
 
 	constructor(
-		private props: TencentBuildingPanelProps,
+		private props: BuildingFetchPanelProps,
 		private ctx: SetupContext<EmitsType>
 	) {
 		const { t } = useLocale();
@@ -362,7 +362,10 @@ export class Instance {
 			this.message.warning(this.t('shell.buildings.empty'));
 			return;
 		}
-		const file = this.txb.buildImportFile();
+		// 必须用当前源的 buildImportFile（经 this.buildImportFile 桥接 cur）：
+		// 抓取结果按源分别存在 txb/amb/tdb 各自的 featureCollection 中，
+		// 若硬编码 txb，高德抓取成功后 txb 为空 → 返回 null → 实际未入库。
+		const file = this.buildImportFile();
 		if (file) {
 			this.emit('upload-data', { resources: [file] });
 			this.message.success(this.t('shell.buildings.imported', { name: this.fileName.value }));

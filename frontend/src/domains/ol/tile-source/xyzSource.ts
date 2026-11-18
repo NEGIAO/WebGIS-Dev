@@ -117,31 +117,23 @@ export function createVectorTileSourceFromUrl(rawUrl: string): VectorTileSource 
 }
 
 /**
- * 解析矢量瓦片 URL 到「真正能取到数据」的模板。
+ * 规范化矢量瓦片 URL 到「真正能取到数据」的模板。
  *
- * OpenFreeMap 的 `.../planet/{z}/{x}/{y}.pbf`（无版本段）虽然返回 200，
- * 但瓦片体为空（size=0）；真实瓦片 URL 带版本戳（如 `.../planet/20261101_080013_pt/{z}/{x}/{y}.pbf`），
- * 且版本会随数据更新变化，不能写死。这里对这类 URL 拉一次 TileJSON 取 `tiles[0]`。
+ * OpenFreeMap 的 `.../planet/{z}/{x}/{y}.pbf`（无版本段）虽然返回 200 但瓦片体为空；
+ * 官方提供稳定别名 `.../planet/latest/{z}/{x}/{y}.pbf`，自动指向最新版本（实测多级别均返回真实数据）。
+ * 因此这里把无版本戳的 planet 模板直接改写为 `/latest/` 别名——纯字符串替换，无需拉取 TileJSON，
+ * 也避免写死版本戳（`.../planet/<version>/{z}/...`）随数据更新过期。
  *
- * 其它矢量源原样返回，不影响既有行为。
+ * 已是 `/latest/`、带版本戳、或其它矢量源原样返回，不影响既有行为。
+ * 保留 async 签名以兼容调用方的 await/.then（无 IO，实际同步返回）。
  */
 export async function resolveVectorTileUrl(rawUrl: string): Promise<string> {
     const url = normalizeTemplateTokens(normalizeCustomServiceUrl(rawUrl));
-    // 匹配 .../planet/{z}/{x}/{y}.pbf，且 planet 后没有版本段（版本段形如 /planet/<version>/{z}/...）
-    const ofmPlanet = /^(https?:\/\/[^\s]+\/planet)\/\{z\}\/\{x\}\/\{y\}\.pbf(\?.*)?$/i.exec(url);
+    // 仅官方 OpenFreeMap 主机支持 /planet/latest/；其它自托管 planet 服务保持原 URL
+    const ofmPlanet = /^(https?:\/\/tiles\.openfreemap\.org\/planet)\/\{z\}\/\{x\}\/\{y\}\.pbf(\?.*)?$/i.exec(url);
     if (!ofmPlanet) return url;
-    try {
-        const response = await fetch(ofmPlanet[1], { signal: AbortSignal.timeout(8000) });
-        if (!response.ok) return url;
-        const tileJson: any = await response.json();
-        const tiles = tileJson?.tiles;
-        if (Array.isArray(tiles) && tiles.length && typeof tiles[0] === 'string') {
-            return normalizeTemplateTokens(tiles[0]);
-        }
-    } catch {
-        // 拉取失败则保持原 URL，交由瓦片加载流程报错/回退
-    }
-    return url;
+    const query = ofmPlanet[2] || '';
+    return `${ofmPlanet[1]}/latest/{z}/{x}/{y}.pbf${query}`;
 }
 
 // ==================== 配置化服务源创建 ====================
@@ -323,7 +315,11 @@ export async function createAutoTileSourceFromUrl(
     }
 
     try {
-        const wmtsResult = await createWmtsSourceStrict(normalizedUrl, adapters);
+        const wmtsResult = await createWmtsSourceStrict(
+            normalizedUrl,
+            adapters,
+            options.preferredLayers,
+        );
         // WMTS GetTile/模板路径可能未套生命周期；prioritize 幂等，安全兜底
         return { ...wmtsResult, source: prioritizeTileSourceRequest(wmtsResult.source) };
     } catch (error) {

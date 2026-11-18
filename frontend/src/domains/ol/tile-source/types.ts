@@ -67,7 +67,7 @@ export type TileSourceFactoryOptions = {
 
 export type AutoDetectOptions = {
     adapters?: Record<string, NonStandardXYZAdapter>;
-    /** WMS 指定图层名（LAYERS）；不传时自动取 Capabilities 第一个命名图层 */
+    /** WMS LAYERS / WMTS 指定图层 Identifier；不传时自动取 Capabilities 首个可用图层 */
     preferredLayers?: string;
     /** 强制按矢量瓦片(MVT/PBF)处理；如用户提供了服务端样式 URL（栅格 XYZ 不需要样式） */
     forceVectorTile?: boolean;

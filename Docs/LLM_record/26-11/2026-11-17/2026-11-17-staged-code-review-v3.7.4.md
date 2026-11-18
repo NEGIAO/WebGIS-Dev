@@ -36,7 +36,7 @@
 | 5 | 发布阻塞 | README×3 + CHANGELOG + min-enhanced.js 注释 | 版本号 V3.7.3 与 index.html 的 3.7.4 不一致；CHANGELOG 缺 MVT/FOUC 记录 | 修：统一 V3.7.4，补 MVT/FOUC 两条，版本演进表保持 3 行 |
 
 ### 交叉核查（可接受，未改）
-- `resolveVectorTileUrl` 正则仅匹配 `.../planet/{z}/{x}/{y}.pbf`，天地图 `.../tdt-mvt/mvt/{z}/{x}/{y}` 不匹配 → 原样返回，`looksLikeVectorTileUrl` 的 `/mvt/` 路径特征正确识别，无副作用（已实测）。
+- `resolveVectorTileUrl` 仅把无版本戳的 `.../planet/{z}/{x}/{y}.pbf` 改写为官方 `/planet/latest/` 稳定别名（实测多级别均返回真实瓦片、自动跟随最新版本、零网络请求）；天地图 `.../tdt-mvt/mvt/{z}/{x}/{y}` 不匹配 → 原样返回，`looksLikeVectorTileUrl` 的 `/mvt/` 路径特征正确识别，无副作用（已实测）。
 - `createVectorTileSourceStrict` 改 async 后唯一调用点已 `await`，`resolveVectorTileUrl` 两处调用均 await/.then，无遗漏。
 - `remoteServices.ts` 的 kind / styleUrl / 默认全选 / layerOrder 顺序 / 签名对 vector-tile 的处理自洽；BUG#1 出在 adapter 端用裸 `selectedIds` 而非 `effectiveSelectedIds`。
 - Vue 3.5 `mount` 前清空 `#app.textContent`，FOUC 加载屏无残留；`<head>` 内 `<noscript><style>` 合法有效（已实测首屏样式）。
@@ -67,7 +67,7 @@ flowchart TB
     REG --> STORE[("remoteServices records")]
     STORE -->|"deep watch"| AD["olRemoteServiceAdapter.syncRecord"]
     AD --> BL["buildVectorTileLayer"]
-    BL -->|"resolveVectorTileUrl(TileJSON)"| SRC["VectorTileSource"]
+    BL -->|"resolveVectorTileUrl(/latest/ 别名)"| SRC["VectorTileSource"]
     BL -->|"applyStyle(updateSource:false)"| ST["style function + 背景色"]
     ST --> F["★修复1: effectiveSelectedIds + hasDeclaredSublayers 过滤"]
     F --> L["VectorTileLayer → map.addLayer"]
@@ -89,6 +89,7 @@ flowchart TB
 - `python Scripts/CheckStructureTree.py`：文档项目 736 / 实际文件 736 / 遗漏 0 / 多余 0。
 - `python Scripts/CheckConfigRegistry.py`：全绿（catalog 134 key / 前端 VITE_ 11 个）。
 - 修复后 `npx tsc --noEmit` 复验（见交接块）。
+- OpenFreeMap `/planet/latest/` 别名实测：14/10/9/13 四级瓦片均 HTTP 200、`application/vnd.mapbox-vector-tile`、非空（537906/164453/259510/132075 字节）；对比 TileJSON 版本戳已由 `20261101_080013_pt` 更新到 `20261115_080022_pt`，证明写死版本戳会过期、latest 自动跟随。据此把 `resolveVectorTileUrl` 从「运行时拉 TileJSON」简化为「字符串改写为 /latest/」（零网络请求）。
 - 全程仅只读 git 命令（`status` / `diff --cached`），**未执行任何 git 写操作**。
 
 **待用户实机验证**：
@@ -101,7 +102,9 @@ flowchart TB
 
 | 文件 | 说明 |
 |---|---|
-| `frontend/src/domains/ol/services/olRemoteServiceAdapter.ts` | 修 BUG#1（effectiveSelectedIds + 全取消全隐藏）+ BUG#2（背景色） |
+| `frontend/src/domains/ol/services/olRemoteServiceAdapter.ts` | 修 BUG#1（effectiveSelectedIds + 全取消全隐藏）+ BUG#2（背景色）+ 注释同步 latest 别名 |
+| `frontend/src/domains/ol/tile-source/xyzSource.ts` | `resolveVectorTileUrl` 改为字符串改写为 `/latest/`（去除 TileJSON fetch） |
+| `frontend/src/domains/ol/basemap/constants/definitions/group-3.ts` | OpenFreeMap 预设 URL 改 `/latest/`，去掉运行时 TileJSON 解析与无用 MVT import |
 | `frontend/src/domains/ol/layer/composables/useLayerControlHandlers.ts` | 修 BUG#3（force 依据 URL 特征 + 栅格分支清空 styleUrl） |
 | `README.md` | 版本号 V3.7.3→V3.7.4 三处 + 版本演进表补 MVT/FOUC、删最旧行 |
 | `Docs/Guide/CHANGELOG.md` | 顶部条目升 V3.7.4 + 补 MVT/FOUC 两条 + 版本说明修正 |

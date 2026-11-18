@@ -359,7 +359,7 @@
     </div>
 </template>
 
-<script lang="ts" src="./TencentBuildingPanel.ts"></script>
+<script lang="ts" src="./BuildingFetchPanel.ts"></script>
 
 <style scoped>
 /* 主题语言：白卡片 + 浅绿边框 + 品牌渐变头（与 DrawPanel/TopBar 一致） */

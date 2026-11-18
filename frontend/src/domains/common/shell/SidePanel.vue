@@ -165,12 +165,12 @@
                 />
             </div>
 
-            <!-- 模式 6: 腾讯建筑白模抓取 -->
+            <!-- 建筑白模抓取（腾讯 / 高德 / 天地图三源） -->
             <div
                 v-show="activeTab === 'buildings'"
                 class="toolbox-content"
             >
-                <TencentBuildingPanel
+                <BuildingFetchPanel
                     v-if="loadedTabs.has('buildings')"
                     :get-cesium-viewer="getCesiumViewer"
                     :get-cesium="getCesiumNamespace"

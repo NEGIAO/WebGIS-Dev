@@ -95,7 +95,7 @@ export async function createWmsSourceStrict(
 
     // 其余统一走通用解析器（内部处理标准 WMS 与 ArcGIS REST 端点，含缓存）
     const info = await ensureWmsServiceInfo(rawUrl);
-    if (!info || !info.layerOptions?.length) {
+    if (!info || (!info.layers && !info.layerOptions?.length)) {
         throw new Error('服务元数据解析失败或未找到可用图层');
     }
 

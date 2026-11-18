@@ -17,9 +17,9 @@
 > 注：V3.7.2 号段已于同日重新启用，对应《修复 OpenLayers 加载 OSM 标准瓦片 403》条目，与本条无冲突。
 > 分主题的原始过程记录保留在 `Docs/LLM_record/26-11/2026-11-14/`，不迁移、不改写。
 
-### V3.7.4 (2026-11-17) — 暂存区整合：OL 矢量瓦片(MVT)接入 TOC + FOUC 首屏加载屏 + 51.la 监控与报表
+### V3.7.5 (2026-11-18) — 暂存区整合：MVT + FOUC + 51.la + WMS/WMTS 协议与 TOC 多子层控制
 
-> **一句话**：将多次未整合的暂存改动归一为单一版本，新增 OpenLayers 端 MVT 矢量瓦片（TOC 单节点+子层、样式URL、无扩展名识别）、修复首屏无样式闪烁（FOUC）、接入 51.la 应用监控与报表外链，并完成 Code Review 缺陷修复与文档/版本号同步。详见 [维护日志](../LLM_record/26-11/2026-11-17/2026-11-17-staged-code-review-v3.7.4.md)。
+> **一句话**：将多次未整合的暂存改动归一为单一版本，新增 OpenLayers MVT 矢量瓦片、FOUC 加载屏、51.la 监控/报表，同时完成自定义 WMTS Capabilities 图层枚举、WMS/WMTS/MVT/XYZ 协议兼容修正与 WMTS 子图层多选/独立显隐/拖拽排序。详见 [暂存区审查日志](../LLM_record/26-11/2026-11-17/2026-11-17-staged-code-review-v3.7.4.md)、[版本号归一日志](../LLM_record/26-11/2026-11-18/2026-11-18-staged-version-v3.7.5.md)、[WMTS 图层下拉过程记录](../LLM_record/26-11/2026-11-18/2026-11-18-wmts-capabilities-layer-picker-v3.7.6.md)、[本次多子层日志](../LLM_record/26-11/2026-11-18/2026-11-18-wmts-protocol-and-toc-v3.7.5.md)。
 
 1. **Code Review 修复 4 处**：
    - `scripts/subset-fontawesome.py` 的 `--check` 默认模式把「字体走 CDN、size=0」误判为 MISSING（实测退出码 1）→ 按模式分支校验；
@@ -33,11 +33,17 @@
 6. **文档与门禁**：README 三处版本 + CHANGELOG + 结构树同步；`tsc` / `eslint` / `build` / 结构树 736/736 / 配置登记全绿。
 7. **51.la 应用性能监控接入**：`public/min-enhanced.js` 新增 `LingQue.Monitor` 初始化（应用 ID `3RqgbbZKGnrTOJ2i`，`sendSuspicious: true` 可疑脚本上报；因站点为 hash 路由 SPA 显式开启 `sendSpaPv: true` 保证切页 PV 上报）；动态 script 异步加载保持非阻塞，与既有流量统计（不同 ID）并存。实测两 SDK 均 HTTP 200、`LingQue.Monitor` 初始化成功。
 8. **51.la 完整报表外链**：README 徽章区、landing footer 第 4 枚快捷入口（Lucide `ChartArea`）、用户中心「全站实时」第三方数据行三处均加入只读分享页 `https://v6.51.la/s/mgk5Bj40SftrO77`；双语文案同步，外链统一 `target="_blank" rel="noopener noreferrer"`；用户中心新增 Font Awesome `fa-arrow-up-right-from-square` 图标（子集 CSS 已重生）。
-9. **OpenLayers 矢量瓦片(MVT)支持（仅 2D）**：自定义底图面板新增「MapLibre 样式 URL」输入框，MVT 注册进「在线服务」TOC（单服务节点 + 子层 = style 的 `source-layer`，可单独勾选显隐）；`olRemoteServiceAdapter` 用 `VectorTileLayer` + `applyStyle` 渲染并按勾选过滤 source-layer；`remoteServices` 新增 `vector-tile` kind / `styleUrl` 字段 / 默认全选与签名；`resolveVectorTileUrl` 修复 OpenFreeMap planet 无版本戳返回空瓦片问题（运行时解析 TileJSON），`looksLikeVectorTileUrl` 增 `/mvt/ /vector/ /pbf/` 路径特征以兼容无扩展名的二次封装 MVT（天地图）；Cesium 端不渲染 MVT 并显式跳过，避免误拼 ArcGIS export URL。
+9. **OpenLayers 矢量瓦片(MVT)支持（仅 2D）**：自定义底图面板新增「MapLibre 样式 URL」输入框，MVT 注册进「在线服务」TOC（单服务节点 + 子层 = style 的 `source-layer`，可单独勾选显隐）；`olRemoteServiceAdapter` 用 `VectorTileLayer` + `applyStyle` 渲染并按勾选过滤 source-layer；`remoteServices` 新增 `vector-tile` kind / `styleUrl` 字段 / 默认全选与签名；`resolveVectorTileUrl` 修复 OpenFreeMap planet 无版本戳返回空瓦片问题（改写为官方 `/planet/latest/` 稳定别名，自动跟随最新版本、零网络请求），`looksLikeVectorTileUrl` 增 `/mvt/ /vector/ /pbf/` 路径特征以兼容无扩展名的二次封装 MVT（天地图）；Cesium 端不渲染 MVT 并显式跳过，避免误拼 ArcGIS export URL。
 10. **FOUC 首屏加载屏**：`index.html` 内联 Critical CSS，把 `#app` 的 SEO 静态兜底内容渲染为品牌化居中加载屏（logo/标题/spinner），Vue mount 时由 `<RouterView/>` 整体替换；SEO 文本视觉隐藏但保留 DOM，`<noscript>` 恢复普通文档流；logo 白色圆形衬底 + `object-fit: contain` 保证 512×409 原图等比完整显示不被裁剪。
+11. **WMTS Capabilities 图层下拉**：自定义底图输入框可直接接收 `WMTSCapabilities.xml`，自动枚举 4326-only 以外可加载图层并以下拉切换；命名空间 XML、逐层 TileMatrixSet/Format/Style 和 GetTile KVP 端点均按图层解析，EOX 过程记录曾实测 `s2cloudless-2024_3857` GetTile HTTP 200、`image/jpeg`。
+12. **四类协议兼容补齐**：WMS/WMTS Capabilities 保留 token/key 等鉴权参数并读取独立 GetMap/GetTile 端点；WMS XML 兼容命名空间与 1.3.0 CRS；WMS query 直链在具备 `info.layers` 时注册 TOC；XYZ/TMS 识别 `{-y}`；OpenFreeMap `/planet/latest/` 改写仅限 `tiles.openfreemap.org`。
+13. **WMTS 多子层控制**：移除注册表 WMTS 单选特判，TOC 开放子层拖拽；`selectedIds + layerOrder` 直接表达用户选择与视觉顺序。GetTile 不拼接多层，每个 Identifier 在 OL / Cesium 中独立建源并分别使用自己的 Style、Format、TileMatrixSet、SRS；服务隐藏、全部取消或删除时卸载旧图层并停止后续新请求。
+14. **验证**：WMTS 注册表探针验证多选、逐层参数隔离、单个子层取消、拖拽与空选择；相关 ESLint、`vue-tsc --noEmit`、`vite build` 通过；结构树 736/736、配置登记、Vue 范式与领域依赖门禁全绿。按用户要求多子层修复未执行浏览器模拟，实机出图与请求行为由用户按维护日志步骤复验。
 
 ### 版本说明
-> V3.7.3 号段曾在 2026-11-14 作为同一批未提交工作的中间号使用并归并至 V3.7.1（见下方归并注记）；本次按用户明确指令将本批暂存整合版本定为 V3.7.4（不复用已归并号段），仅代表本次整合成果，不回滚历史归并结论。
+> V3.7.3 号段曾在 2026-11-14 作为同一批未提交工作的中间号使用并归并至 V3.7.1（见下方归并注记）；本批暂存整合版本曾标记为 V3.7.4，2026-11-18 按用户明确指令统一调整为 **V3.7.5**（不复用已归并号段），仅代表本次整合成果，不回滚历史归并结论。
+>
+> **版本号归并（2026-11-18）**：自定义 WMTS Capabilities 与多子层 TOC 修复在同一批未提交工作中曾临时使用 V3.7.6 / V3.7.7。按用户「本次版本 3.7.5」指令，统一归并至 **V3.7.5**，不再占用更高号段；过程日志保留原始记录名，仅作追溯。
 
 ### V3.7.2 (2026-11-14) — 修复 OpenLayers 加载 OSM 标准瓦片 403（双引擎 Referrer 策略归一）
 

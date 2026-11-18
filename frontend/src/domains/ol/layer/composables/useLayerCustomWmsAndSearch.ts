@@ -1,7 +1,7 @@
 /**
- * 功能名称：图层控制面板自定义 URL / WMS 图层枚举与地名检索转发 Composable
+ * 功能名称：图层控制面板自定义 URL / WMS/WMTS 图层枚举与地名检索转发 Composable
  * 日    期：2026/11/14
- * 说    明：从 LayerControlPanel.ts 拆分出自定义底图 URL 识别、WMS GetCapabilities 图层枚举
+ * 说    明：从 LayerControlPanel.ts 拆分出自定义底图 URL 识别、WMS/WMTS GetCapabilities 图层枚举
  *          与 LocationSearch 范围裁剪 / 定位跳转载荷转换，将面板主实例控制在 ~650 行内。
  */
 import { ref, watch } from 'vue';
@@ -9,6 +9,7 @@ import { toLonLat } from 'ol/proj';
 import { apiSearchLocations } from '@/api';
 import { detectCustomTileServiceKind } from '@ol/tile-source/index';
 import { ensureWmsServiceInfo, looksLikeWmsSourceUrl } from '@common/basemap/wmsService';
+import { ensureWmtsServiceInfo, looksLikeWmtsUrl } from '@common/basemap/xyzWmtsCapabilities';
 import { useRequestToken } from '@common/composables/useRequestToken';
 
 export interface LayerCustomWmsAndSearchDeps {
@@ -66,6 +67,22 @@ export function useLayerCustomWmsAndSearch(deps: LayerCustomWmsAndSearchDeps) {
 		}
 	};
 
+	const fetchWmtsLayerOptions = async (url: string) => {
+		const token = wmsLayersToken.next();
+		wmsLayersLoading.value = true;
+		wmsLayerOptions.value = [];
+		selectedWmsLayer.value = '';
+
+		const info: any = await ensureWmtsServiceInfo(url);
+		if (!wmsLayersToken.isCurrent(token) || !looksLikeWmtsUrl(customUrlInput.value)) return;
+
+		wmsLayersLoading.value = false;
+		if (info?.layerOptions?.length) {
+			wmsLayerOptions.value = info.layerOptions;
+			selectedWmsLayer.value = info.layerOptions[0]?.name || '';
+		}
+	};
+
 	const submitCustomUrl = () => {
 		deps.emitChangeLayer({
 			layerId: 'custom',
@@ -78,7 +95,8 @@ export function useLayerCustomWmsAndSearch(deps: LayerCustomWmsAndSearchDeps) {
 
 	const onWmsLayerChange = () => {
 		if (wmsLayersLoading.value || !wmsLayerOptions.value.length) return;
-		if (!looksLikeWmsSourceUrl(customUrlInput.value)) return;
+		const kind = detectedServiceInfo.value?.kind;
+		if (kind !== 'wms' && kind !== 'wmts') return;
 		submitCustomUrl();
 	};
 
@@ -149,6 +167,8 @@ export function useLayerCustomWmsAndSearch(deps: LayerCustomWmsAndSearchDeps) {
 		detectedServiceInfo.value = detected.kind === 'unknown' ? null : detected;
 		if (detected.kind === 'wms') {
 			void fetchWmsLayerOptions(newUrl.trim());
+		} else if (detected.kind === 'wmts') {
+			void fetchWmtsLayerOptions(newUrl.trim());
 		} else {
 			resetWmsLayerSelection();
 		}

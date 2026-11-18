@@ -19,10 +19,11 @@ export function looksLikeWmtsUrl(rawUrl: any) {
 
 /**
  * 判定 XYZ 模板行序
- * @returns {'zyx'|'zxy'} zyx = {z}/{y}/{x}（ArcGIS REST 行序）；zxy = 标准 slippy {z}/{x}/{y}
+ * @returns {'zyx'|'zxy'|'tms'} zyx = {z}/{y}/{x}；zxy = 标准 slippy；tms = {-y} 南起 Y
  */
 export function detectTileYScheme(rawUrl: any) {
     const url = String(rawUrl || '');
+    if (/\{-y\}/i.test(url)) return 'tms';
     // 按 {z} 之后 y/x 的出现顺序判断；{z} 缺省时按 {y} 在 {x} 前 → zyx
     if (/\{z\}[\s\S]*?\{y\}[\s\S]*?\{x\}/.test(url)) return 'zyx';
     return 'zxy';
@@ -56,22 +57,79 @@ async function fetchCapsText(url: any) {
     }
 }
 
+function elementsByLocalName(parent: any, tag: string) {
+    if (!parent) return [];
+    const namespaced = parent.getElementsByTagNameNS?.('*', tag);
+    if (namespaced?.length) return Array.from(namespaced);
+    return Array.from(parent.getElementsByTagName?.(tag) || []);
+}
+
 function textOf(parent: any, tag: string) {
-    const node = parent?.getElementsByTagName?.(tag)?.[0];
+    const node = elementsByLocalName(parent, tag)[0] as any;
     return node?.textContent?.trim() || '';
 }
 
-function pickPreferredMatrixSet(capsRoot: any) {
-    const sets = [];
-    const nodes = capsRoot.getElementsByTagName('TileMatrixSet');
-    for (const node of nodes) {
-        const id = textOf(node, 'Identifier');
-        const crs = textOf(node, 'SupportedCRS');
-        sets.push({ id, crs });
+function isWebMercatorMatrixSet(set: any) {
+    return /3857|900913|googlemapscompatible/i.test(`${set?.id || ''} ${set?.crs || ''}`);
+}
+
+function readMatrixSets(capsRoot: any) {
+    return elementsByLocalName(capsRoot, 'TileMatrixSet')
+        .map((node: any) => ({
+            id: textOf(node, 'Identifier'),
+            crs: textOf(node, 'SupportedCRS'),
+        }))
+        .filter((set: any) => set.id && set.crs);
+}
+
+function pickLayerMatrixSet(matrixSets: any[], layer: any) {
+    const linkedIds = elementsByLocalName(layer, 'TileMatrixSetLink')
+        .map((link: any) => textOf(link, 'TileMatrixSet'))
+        .filter(Boolean);
+    const compatible = linkedIds
+        .map((id: string) => matrixSets.find((set) => set.id === id))
+        .filter((set: any) => isWebMercatorMatrixSet(set));
+    // 双引擎渲染端均使用 WebMercatorTilingScheme；优先标准 GoogleMapsCompatible，
+    // 再接受 EPSG:3857 / 900913 等价矩阵集，4326-only 图层不进入可加载选项。
+    return compatible.find((set: any) => /googlemapscompatible/i.test(set.id))
+        || compatible.find((set: any) => /3857/i.test(set.crs))
+        || compatible[0]
+        || null;
+}
+
+function operationEndpoint(capsRoot: any, operationName: string, fallback: string) {
+    const operation = elementsByLocalName(capsRoot, 'Operation')
+        .find((node: any) => node?.getAttribute?.('name') === operationName);
+    const getNode = elementsByLocalName(operation, 'Get')[0] as any;
+    const href = getNode?.getAttributeNS?.('http://www.w3.org/1999/xlink', 'href')
+        || getNode?.getAttribute?.('xlink:href')
+        || getNode?.getAttribute?.('href')
+        || '';
+    return String(href || fallback).replace(/[?&]+$/, '');
+}
+
+function matchInputProtocol(endpoint: string, rawUrl: string) {
+    // EOX Capabilities 内仍声明 http:// 端点；HTTPS 页面必须升级，避免 mixed content。
+    if (/^https:\/\//i.test(rawUrl) && /^http:\/\//i.test(endpoint)) {
+        return endpoint.replace(/^http:\/\//i, 'https://');
     }
-    // 优选 3857 系标准四叉树矩阵集
-    const preferred = sets.find((s) => /3857|900913|googlemapscompatible/i.test(s.crs || ''));
-    return preferred || null;
+    return endpoint;
+}
+
+const WMTS_CONTROL_PARAMS = new Set([
+    'SERVICE', 'REQUEST', 'VERSION', 'LAYER', 'STYLE', 'FORMAT', 'TILEMATRIXSET',
+    'TILEMATRIX', 'TILEROW', 'TILECOL',
+]);
+
+/** 保留 token/key 等服务商鉴权参数，剔除会与新请求冲突的 WMTS 控制参数 */
+function withPreservedServiceQuery(endpoint: string, rawUrl: string) {
+    const target = new URL(endpoint, rawUrl);
+    const source = new URL(rawUrl);
+    for (const [key, value] of source.searchParams.entries()) {
+        if (WMTS_CONTROL_PARAMS.has(key.toUpperCase()) || target.searchParams.has(key)) continue;
+        target.searchParams.append(key, value);
+    }
+    return target.toString();
 }
 
 /**
@@ -82,10 +140,15 @@ function pickPreferredMatrixSet(capsRoot: any) {
 export async function ensureWmtsServiceInfo(rawUrl: any) {
     const url = String(rawUrl || '').trim();
     if (!url) return null;
-    const base = url.split('?')[0].replace(/\/+$/, '');
+    const inputUrl = new URL(url);
+    const base = `${inputUrl.origin}${inputUrl.pathname}`.replace(/\/+$/, '');
     const versionMatch = url.match(/version=([\d.]+)/i);
     const version = versionMatch ? versionMatch[1] : '1.0.0';
-    const capsUrl = `${base}?SERVICE=WMTS&VERSION=${version}&REQUEST=GetCapabilities`;
+    const capabilitiesUrl = new URL(withPreservedServiceQuery(base, url));
+    capabilitiesUrl.searchParams.set('SERVICE', 'WMTS');
+    capabilitiesUrl.searchParams.set('VERSION', version);
+    capabilitiesUrl.searchParams.set('REQUEST', 'GetCapabilities');
+    const capsUrl = capabilitiesUrl.toString();
 
     if (!capsCache.has(capsUrl)) {
         capsCache.set(
@@ -93,39 +156,49 @@ export async function ensureWmtsServiceInfo(rawUrl: any) {
             (async () => {
                 const text = await fetchCapsText(capsUrl);
                 const doc = new DOMParser().parseFromString(text, 'text/xml');
-                if (doc.getElementsByTagName('Exception')[0]) {
+                if (elementsByLocalName(doc, 'Exception')[0]) {
                     throw new Error(textOf(doc, 'ExceptionText') || 'WMTS 服务返回异常');
                 }
-                const serviceTitle = doc.getElementsByTagName('Title')[0]?.textContent?.trim()
-                    || base.replace(/^https?:\/\//, '');
-                const matrixSet = pickPreferredMatrixSet(doc);
+                const serviceTitle = textOf(doc, 'Title') || base.replace(/^https?:\/\//, '');
+                const matrixSets = readMatrixSets(doc);
                 const layerOptions = [];
-                const layerNodes = doc.getElementsByTagName('Layer');
-                for (const layer of layerNodes) {
-                    // 仅取直接子级 Identifier（避免嵌套 Layer 干扰）
-                    const identifier = layer.getElementsByTagName('Identifier')[0]?.textContent?.trim();
+                for (const layer of elementsByLocalName(doc, 'Layer')) {
+                    const identifier = textOf(layer, 'Identifier');
                     if (!identifier) continue;
-                    const layerTitle = layer.getElementsByTagName('Title')[0]?.textContent?.trim() || identifier;
+                    const matrixSet = pickLayerMatrixSet(matrixSets, layer);
+                    if (!matrixSet) continue; // 跳过 4326-only 等当前渲染端不支持的图层
+                    const layerTitle = textOf(layer, 'Title') || identifier;
+                    const format = textOf(layer, 'Format') || 'image/png';
+                    const styles = elementsByLocalName(layer, 'Style');
+                    const defaultStyle = styles.find((node: any) => node?.getAttribute?.('isDefault') === 'true')
+                        || styles[0];
                     layerOptions.push({
                         name: identifier,
                         title: layerTitle,
                         label: layerTitle,
+                        matrixSet: matrixSet.id,
+                        srs: matrixSet.crs,
+                        format,
+                        style: defaultStyle ? textOf(defaultStyle, 'Identifier') : 'default',
                     });
                 }
-                if (!matrixSet) {
-                    throw new Error('未找到 WebMercator(3857) 系标准 TileMatrixSet，暂不支持该 WMTS 服务');
-                }
-                let format = 'image/png';
-                const formatNode = doc.getElementsByTagName('Format')[0]?.textContent?.trim();
-                if (/jpeg/i.test(formatNode || '')) format = 'image/jpeg';
+                const endpoint = withPreservedServiceQuery(
+                    matchInputProtocol(
+                        operationEndpoint(doc, 'GetTile', withPreservedServiceQuery(base, url)),
+                        url,
+                    ),
+                    url,
+                );
+                const firstLayer = layerOptions[0];
                 return {
-                    endpoint: base,
+                    endpoint,
                     title: serviceTitle,
                     layerOptions,
-                    matrixSet: matrixSet.id,
-                    srs: matrixSet.crs,
-                    format,
-                    style: '',
+                    // 顶层字段保留给旧调用方；实际选择图层后以 matchedOption 为准
+                    matrixSet: firstLayer?.matrixSet || '',
+                    srs: firstLayer?.srs || '',
+                    format: firstLayer?.format || 'image/png',
+                    style: firstLayer?.style || 'default',
                     version,
                 };
             })(),
