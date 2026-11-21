@@ -343,6 +343,24 @@ CONFIG_CATALOG: Dict[str, ConfigMeta] = {
         "secret": False,
         "description": "注册用户每日 API 配额（管理员面板可调，写入 system_config）",
     },
+    "GUEST_TOKEN_TTL_HOURS": {
+        "layer": "L2",
+        "default": 24,
+        "secret": False,
+        "description": "游客身份签名 token 有效期小时数（游客身份治理 V3.7.6）",
+    },
+    "GUEST_ISSUE_RATE_PER_HOUR": {
+        "layer": "L2",
+        "default": 6,
+        "secret": False,
+        "description": "每 (XFF末跳IP, UA) 每小时允许新签发游客身份次数（签发限频，不约束持 token 续期）",
+    },
+    "GUEST_IDENTITY_RETENTION_DAYS": {
+        "layer": "L2",
+        "default": 7,
+        "secret": False,
+        "description": "guest_identity_records 保留天数，超期 last_seen_at 行由启动/每日任务清理",
+    },
     "SHIPS66_TILE_URL_TEMPLATE": {
         "layer": "L1",
         "default": "http://g3.ships66.com/maps/one/{z}/{x}/{y}.png",
@@ -674,6 +692,12 @@ CONFIG_CATALOG: Dict[str, ConfigMeta] = {
         "default": "",
         "secret": True,
         "description": "OAuth state HMAC 密钥",
+    },
+    "GUEST_TOKEN_SECRET": {
+        "layer": "L3",
+        "default": "",
+        "secret": True,
+        "description": "游客身份 token HMAC 密钥（空=签发通道关闭，验签回落确定性派生桶）",
     },
     "HF_WEBHOOK_SECRET": {
         "layer": "L3",

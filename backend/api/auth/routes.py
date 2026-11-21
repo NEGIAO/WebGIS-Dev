@@ -6,8 +6,9 @@ import asyncio
 import hmac
 from typing import Any, Dict, Optional
 
+from config import get_int
 from fastapi import APIRouter, Depends, HTTPException, Request, status
-from fastapi.responses import RedirectResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 
 from .constants import (
     ADMIN_USERNAME,
@@ -20,7 +21,9 @@ from .constants import (
     ROLE_REGISTERED,
     USERNAME_PATTERN,
     _build_guest_uid,
+    _derive_uid_from_ip_ua,
     _extract_client_ip,
+    _extract_identity_ip,
     _get_admin_password,
     _normalize_avatar_index,
     _normalize_display_name,
@@ -31,7 +34,22 @@ from .constants import (
     normalize_role,
     resolve_quota_subject,
 )
-from .dependencies import _auth_error_detail, require_login, require_login_for_logout, require_admin
+from .dependencies import (
+    _auth_error_detail,
+    _extract_guest_token,
+    require_api_access_or_guest_noconsume,
+    require_admin,
+    require_login,
+    require_login_for_logout,
+)
+from .guest_token import (
+    GUEST_ISSUE_LIMITER,
+    GUEST_TOKEN_COOKIE_NAME,
+    guest_token_issuance_enabled,
+    issue_limit_key,
+    sign_guest_token,
+    verify_guest_token,
+)
 from .models import (
     BindEmailRequest,
     ChangeAvatarRequest,
@@ -104,6 +122,11 @@ class OAuthTicketRequest(BaseModel):
 class GoogleOneTapRequest(BaseModel):
     """Google One Tap / Sign In With Google 的 ID Token 请求。"""
     credential: str = Field(..., min_length=1, description="Google One Tap 返回的 ID Token (JWT)")
+
+
+class GuestSessionRequest(BaseModel):
+    """游客身份签发/续期请求（V3.7.6 游客身份治理）。"""
+    device_id: str = Field(default="", max_length=128, description="浏览器稳定设备 ID（可选）")
 
 
 def _oauth_public_profile(profile: Dict[str, Any]) -> Dict[str, Any]:
@@ -238,9 +261,10 @@ async def _build_login_response(
 
 
 @router.get("/oauth/accounts")
-async def list_oauth_accounts(session: Dict[str, Any] = Depends(require_login)) -> Dict[str, Any]:
+async def list_oauth_accounts(session: Dict[str, Any] = Depends(require_api_access_or_guest_noconsume)) -> Dict[str, Any]:
     """
     功能：列出当前注册用户已绑定的第三方账号。
+    （V3.7.6：游客可达——账户面板安全页签挂载即调，游客返回空列表，不扣配额。）
 
     返回：
     - accounts: Google/GitHub 绑定列表，不包含任何 access token。
@@ -694,6 +718,101 @@ async def check_username_availability(username: str = "") -> Dict[str, Any]:
     }
 
 
+@router.post("/guest/session")
+async def create_guest_session(request: Request, payload: Optional[GuestSessionRequest] = None) -> JSONResponse:
+    """
+    功能：签发 / 续期游客身份（V3.7.6 游客身份治理，方案 §3.2）。
+
+    核心逻辑：
+    - 携带有效 guest token（X-Guest-Token 头 / webgis_guest Cookie）→ 原身份续期，不计限频；
+    - 否则按 (XFF末跳IP, UA哈希) 限频后新签发：有 device_id → H(guest|device_id)
+      （与历史游客 uid 同构，统计口径连续）；无 device_id → H(末跳IP|UA) 确定性桶；
+    - 响应体镜像登录响应结构（token + user），便于前端统一解析；
+      同时尽力写入 SameSite=None Cookie（同源部署后自动成为服务端信任锚）。
+    - GUEST_TOKEN_SECRET 未配置 → 503（签发通道关闭，依赖解析回落确定性派生桶）。
+    """
+    if not guest_token_issuance_enabled():
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=_auth_error_detail(
+                "GUEST_ISSUANCE_DISABLED",
+                "游客身份签发未启用（服务端未配置 GUEST_TOKEN_SECRET）",
+            ),
+        )
+
+    request_user_agent = str(request.headers.get("User-Agent", "unknown"))
+    identity_ip = _extract_identity_ip(request)
+    raw_device_id = str(
+        (payload.device_id if payload else "")
+        or request.headers.get("X-Guest-Device-Id")
+        or request.query_params.get("guest_device_id")
+        or ""
+    )
+    device_id = _normalize_guest_device_id(raw_device_id)
+
+    presented_token = _extract_guest_token(request)
+    existing_uid = verify_guest_token(presented_token) if presented_token else None
+
+    if existing_uid:
+        # 续期：同一身份原样重签，不消耗签发限频额度
+        guest_uid = existing_uid
+    else:
+        rate_limit = get_int("GUEST_ISSUE_RATE_PER_HOUR", 6, minimum=1, maximum=1000)
+        if not GUEST_ISSUE_LIMITER.allow(issue_limit_key(identity_ip, request_user_agent), rate_limit):
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail=_auth_error_detail(
+                    "GUEST_ISSUE_LIMITED",
+                    "游客身份签发过于频繁，请稍后重试或登录后使用完整功能",
+                ),
+            )
+        # 有稳定设备 ID → 沿用历史 device 派生命名空间（uid 与旧数据连续）；
+        # 无 → IP+UA 确定性桶。两条路都不使用随机回退（废除每请求新身份）。
+        guest_uid = (
+            _build_guest_uid("", "", device_id)
+            if device_id
+            else _derive_uid_from_ip_ua(identity_ip, request_user_agent)
+        )
+
+    ttl_hours = get_int("GUEST_TOKEN_TTL_HOURS", 24, minimum=1, maximum=24 * 90)
+    guest_token = sign_guest_token(guest_uid, ttl_hours)
+    if not guest_token:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=_auth_error_detail("GUEST_ISSUANCE_DISABLED", "游客身份签发未启用"),
+        )
+
+    guest_record = await asyncio.to_thread(_get_or_create_guest_username_sync, guest_uid)
+    username = str(guest_record.get("username") or "") if isinstance(guest_record, dict) else ""
+    guest_no = int(guest_record.get("no") or 0) if isinstance(guest_record, dict) else 0
+
+    response = JSONResponse(content={
+        "status": "success",
+        "message": "游客身份已就绪",
+        "token": guest_token,
+        "expires_in_hours": ttl_hours,
+        "user": {
+            "username": username or guest_uid,
+            "role": ROLE_GUEST,
+            "guest_uid": guest_uid,
+            "guest_no": max(0, guest_no),
+            "avatar_index": 1,
+        },
+    })
+    # Cookie 为尽力而为信任锚：生产跨站（Pages → HF）下 SameSite=None 需要 Secure，
+    # 部分浏览器会丢弃；主通道始终是响应体 token + X-Guest-Token 头。
+    response.set_cookie(
+        GUEST_TOKEN_COOKIE_NAME,
+        guest_token,
+        max_age=max(1, ttl_hours) * 3600,
+        samesite="none",
+        secure=True,
+        httponly=True,
+        path="/",
+    )
+    return response
+
+
 @router.post("/login")
 async def login_user(payload: LoginRequest, request: Request) -> Dict[str, Any]:
     """
@@ -744,7 +863,13 @@ async def login_user(payload: LoginRequest, request: Request) -> Dict[str, Any]:
     ):
         request_user_agent = str(request.headers.get("User-Agent", "unknown"))
         guest_device_id = _normalize_guest_device_id(payload.guest_device_id)
-        guest_uid = _build_guest_uid(request_ip, request_user_agent, guest_device_id)
+        # V3.7.6 游客身份治理：游客登录的配额桶同样收敛为「验签 token 优先，
+        # 否则确定性 H(末跳IP|UA)」——轮换 device_id 不再铸造新桶；
+        # device_id 仅随会话保留用于在线去重。
+        presented_token = _extract_guest_token(request)
+        guest_uid = verify_guest_token(presented_token) if presented_token else None
+        if not guest_uid:
+            guest_uid = _derive_uid_from_ip_ua(_extract_identity_ip(request), request_user_agent)
 
         # 获取或创建游客记录，获得实际的用户名（如 "user_1", "user_2" 等）
         guest_record = await asyncio.to_thread(_get_or_create_guest_username_sync, guest_uid)
@@ -838,9 +963,10 @@ async def login_user(payload: LoginRequest, request: Request) -> Dict[str, Any]:
 
 
 @router.get("/me")
-async def get_current_user(session: Dict[str, Any] = Depends(require_login)) -> Dict[str, Any]:
+async def get_current_user(session: Dict[str, Any] = Depends(require_api_access_or_guest_noconsume)) -> Dict[str, Any]:
     """
     功能：获取当前登录用户信息与配额快照。
+    （V3.7.6：游客可达——未登录访客面板挂载即调，返回游客身份，不扣配额。）
 
     参数：
     - session: 当前会话（由 `require_login` 注入）。
@@ -1269,9 +1395,9 @@ async def reset_password(payload: ResetPasswordRequest) -> Dict[str, Any]:
 
 @router.get("/preferences")
 async def get_user_preferences(
-    session: Dict[str, Any] = Depends(require_login),
+    session: Dict[str, Any] = Depends(require_api_access_or_guest_noconsume),
 ) -> Dict[str, Any]:
-    """功能：读取当前用户偏好设置。"""
+    """功能：读取当前用户偏好设置。（V3.7.6：游客可达，返回默认偏好，不扣配额。）"""
     username = str(session.get("username") or "").strip()
     _reject_binding_required(session)
     if not username:
@@ -1331,7 +1457,7 @@ async def update_user_preferences(
 @router.get("/download-quota/estimate")
 async def estimate_download_quota_cost(
     tile_count: int,
-    session: Dict[str, Any] = Depends(require_login),
+    session: Dict[str, Any] = Depends(require_api_access_or_guest_noconsume),
 ) -> Dict[str, Any]:
     """估算给定瓦片数所需的 API 配额消耗（基于统一配额池，不消耗）。
 

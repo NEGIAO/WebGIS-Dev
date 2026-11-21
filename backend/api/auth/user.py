@@ -2,10 +2,15 @@
 用户 CRUD、访客身份管理、用户指标记录。
 """
 
+import asyncio
+import logging
 import re
 import secrets
 import sqlite3
+from datetime import timedelta
 from typing import Any, Dict, Optional
+
+from config import get_int
 
 from .constants import (
     _normalize_avatar_index,
@@ -14,6 +19,8 @@ from .constants import (
 )
 from .db import _db_connection, _iso, _utc_now
 from .password import _hash_password
+
+logger = logging.getLogger(__name__)
 
 
 def _get_user_sync(username: str) -> Optional[Dict[str, Any]]:
@@ -248,3 +255,45 @@ def _record_login_sync(username: str) -> None:
             (now_iso, now_iso, username),
         )
         conn.commit()
+
+
+# ─── 游客身份记录保留期清理（V3.7.6 游客身份治理 §3.4）───
+
+def _purge_stale_guest_identities_sync(retention_days: int = 90) -> int:
+    """删除 last_seen_at 超过保留期的游客记录，返回删除行数。
+
+    last_seen_at 由 _get_or_create_guest_username_sync 的 UPSERT 随每次游客
+    请求刷新，保留期内活跃的身份不受影响；`_iso` 输出带固定 +08:00 时区后缀，
+    ISO 字符串字典序与时间序一致，可直接比较。
+    """
+    days = int(retention_days or 0)
+    if days <= 0:
+        return 0
+    cutoff_iso = _iso(_utc_now() - timedelta(days=days))
+    with _db_connection() as conn:
+        cursor = conn.execute(
+            "DELETE FROM guest_identity_records WHERE last_seen_at < ?",
+            (cutoff_iso,),
+        )
+        conn.commit()
+        return int(cursor.rowcount or 0)
+
+
+async def guest_identity_retention_task() -> None:
+    """游客身份记录保留期清理后台任务：启动即清一次，此后每 24 小时一轮。
+
+    取消安全（CancelledError 原样上抛供 lifespan 收尾）；单轮失败仅告警，
+    不终止循环——下个周期自然重试。
+    """
+    retention_days = get_int("GUEST_IDENTITY_RETENTION_DAYS", 90, minimum=1, maximum=3650)
+    try:
+        while True:
+            try:
+                deleted = await asyncio.to_thread(_purge_stale_guest_identities_sync, retention_days)
+                if deleted:
+                    logger.info("游客身份保留期清理完成：删除 %d 条超期记录（保留 %d 天）", deleted, retention_days)
+            except Exception:
+                logger.warning("游客身份保留期清理失败，等待下个周期重试", exc_info=True)
+            await asyncio.sleep(24 * 3600)
+    except asyncio.CancelledError:
+        raise

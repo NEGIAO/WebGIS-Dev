@@ -48,7 +48,7 @@ from api.auth.constants import (
     _normalize_guest_device_id,
     normalize_role,
 )
-from api.auth.dependencies import require_admin, require_login
+from api.auth.dependencies import require_admin, require_api_access_or_guest_noconsume
 
 logger = logging.getLogger(__name__)
 
@@ -1164,7 +1164,7 @@ router = APIRouter(prefix="/api", tags=["realtime-stats"])
 @router.get("/statistics/ticket")
 async def statistics_ticket(
     request: Request,
-    session: Dict[str, Any] = Depends(require_login),
+    session: Dict[str, Any] = Depends(require_api_access_or_guest_noconsume),
 ):
     """
     换取 SSE 实时统计流的一次性 ticket（60s 有效，仅 /statistics/stream 消费）。
@@ -1293,7 +1293,7 @@ async def statistics_stream(
 @router.post("/statistics/heartbeat")
 async def statistics_heartbeat(
     request: Request,
-    session: Dict[str, Any] = Depends(require_login),
+    session: Dict[str, Any] = Depends(require_api_access_or_guest_noconsume),
 ):
     """
     兜底活跃心跳端点（V3.5.25 起前端不再调用，向后兼容保留）。

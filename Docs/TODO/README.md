@@ -33,6 +33,7 @@
 | 文件 | 状态 | 一句话 | 已完成 / 待做 |
 |---|:---:|---|---|
 | `bugfix-optimization-plan.md` | 🟢 活跃 | **滚动修复主规划**（P0–P3 分级），所有「顺带发现」的登记处 | 136 项待办，持续勾选 |
+| `guest-identity-governance-plan.md` | 🔵 实施中 | 游客身份治理：require_login fail-closed + 服务端签发游客 token（限频）+ 废随机 uid + 记录 90 天清理（P1-4 三项打包，V3.7.6 已落地） | 实机八步验证待用户（含 HF Secrets 配置 `GUEST_TOKEN_SECRET`） |
 | `2026-11-08-per-model-terrain-clamp-plan.md` | 🟡 待批准 | 3D Tiles 与多模型 GLB 逐体按真实地形高程贴地引擎（L3 架构） | 待用户批准后施工 |
 | `account-panel-ui-optimization.md` | 🔵 实施中 | 账号面板 UI 优化 | 2 项已做 / 8 项待做 |
 | `loading-performance-optimization-plan.md` | 🔵 实施中 | 登录页 / 首屏加载性能 | 1 项已做 / 4 项待做 |

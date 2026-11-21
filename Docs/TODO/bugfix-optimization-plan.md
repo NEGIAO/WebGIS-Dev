@@ -88,21 +88,16 @@
   落地：`_validate_override_base_url` 单点护栏（成对校验 fail-closed + 仅 https + 私网/回环拒绝，`_coerce_ip_literal`
   按 inet_aton 归一堵死 `2130706433`/`0x7f000001`/`127.1`/`0177.0.0.1` 绕过 + 可选 host 白名单默认关）、前端成对透传、
   新增两个默认即安全的 L1 key。单测 23/23 + 双门禁全绿；**实机回归待用户**。
-- **[P1] Agent 配额 check-then-consume 竞态 + 可伪造 quota_subject**：precheck 与 consume 非原子、
-  guest quota_subject 基于可伪造的 XFF / `X-Guest-Device-Id`。方案：单条 `INSERT ... ON CONFLICT ... WHERE calls < limit` 原子扣减 + 服务端签发游客 cookie。
-- **[P1] `require_login` 的 `?s=1`/`X-Share-Mode` 分享模式旁路**：无 token 时凭客户端头即得游客 session。
-  方案：拆 `require_login_or_share`，`require_login` fail-closed，仅确需端点显式放行。
-- **[P1] 游客 uid 无 device-id 时随机化**：`_build_guest_uid` 无 device-id 回退 `secrets.token_urlsafe` →
-  每请求新 quota 桶（配额形同虚设）+ `guest_identity_records` 无界增长。方案：无 device-id 时仅按 ip+UA 派生。
+- ✅ **[P1] Agent 配额 check-then-consume 竞态 + 可伪造 quota_subject** 【已完成 V3.7.6 · 日志 [2026-11-21-guest-identity-governance.md](../LLM_record/26-11/2026-11-21/2026-11-21-guest-identity-governance.md)】consume 侧原子扣减+封顶已在早期版本落地；伪造面 V3.7.6 收敛：服务端 HMAC 签发游客 token（/auth/guest/session，按 XFF末跳IP+UA 限频）+ 无 token 桶改 `H(末跳IP|UA)` 确定性派生，轮换 device_id 不再产生新桶。实机验证待用户。
+- ✅ **[P1] `require_login` 的 `?s=1`/`X-Share-Mode` 分享模式旁路** 【已完成 V3.7.6 · 同上日志】`require_login` 删游客兜底恢复 fail-closed（401 `LOGIN_REQUIRED`）；11 个游客可达端点显式转 `require_api_access_or_guest_noconsume`（含方案外发现的 preferences/oauth-accounts 两个未登录挂载即调的 GET）；分享模式身份改走真实签发端点。
+- ✅ **[P1] 游客 uid 无 device-id 时随机化** 【已完成 V3.7.6 · 同上日志】随机回退废除（`_build_guest_uid` 仅保留给在线 presence 去重并加限用警告）；无 token 桶 = `H(XFF末跳IP|UA)` 确定性派生；`guest_identity_records` 90 天保留期清理任务落地。
 - **[P1] SMTP 明文（无 STARTTLS）**：`email_service` 走明文端口 `login`，凭据与验证码可被链路监听。
   方案：改 `SMTP_SSL(465)` 或 `starttls()`；需按阿里云 DirectMail 实际端口/TLS 实机验证。
-- **[P1] 损坏恢复锁外竞态**：`auth/db.py` 的 `_db_file_is_corrupted` 检查在 `_recovery_lock` 外，
-  二线程可对刚重建库重跑销毁式恢复致数据丢失；`.dump` 行式导入丢含换行的 TEXT 行。方案：检查/建表/导入全移入锁内并重验。
+- ✅ **[P1] 损坏恢复锁外竞态** 【已闭环 V3.7.6 核验销项 · 证据见 [2026-11-21-admin-secret-masking.md](../LLM_record/26-11/2026-11-21/2026-11-21-admin-secret-masking.md) 遗留节】当前代码（2026-11-21 读码）：损坏检查已在 `_recovery_lock` 内（`db.py` `_db_connection` 拿锁后检查，`_attempt_db_recovery` 拿锁后再验一次，RLock 双保险）；`.dump`「行式导入丢换行」为过时描述——现行恢复管线把整个 dump 文件经 `sqlite3` CLI stdin 导入（`sqlite_recovery.py:_import_sql`），CLI 自身正确解析多行 TEXT 字面量，不存在 Python 行切分路径。
 - **[P2 性能] SQLite 每请求新建连接 + 重复 DDL**：`get_auth_db_connection` 每调重跑 WAL/foreign_keys PRAGMA、
   多处 `CREATE TABLE IF NOT EXISTS` 每调执行（`/me`、map-tokens、每条 chat 各 ~5–10 连接）。
   方案：线程本地连接复用 + 模块级 `_tables_ready` 幂等（须与损坏恢复配合，勿在库被重建后误跳 DDL）。
-- **[P2] 管理员 GET 回显 L3 明文 / 表浏览器裸 dump 密钥**：`GET /api/admin/api-keys/{name}` 回显 `key_value`、
-  `/api/admin/db/table/{sessions|api_keys|users}/rows` 回显 token/密钥/密码哈希。方案：列脱敏白名单 + 仅回显掩码前缀。
+- ✅ **[P2] 管理员 GET 回显 L3 明文 / 表浏览器裸 dump 密钥** 【已完成 V3.7.6 · 日志 [2026-11-21-admin-secret-masking.md](../LLM_record/26-11/2026-11-21/2026-11-21-admin-secret-masking.md)】`core/secret_masking.py` 统一掩码器；`/status`、`GET /{name}`、表浏览器 rows 全部掩码下发；明文改经新增 `GET /{name}/reveal` 逐 key 显式拉取（保留面板查看/复制 UX）；update/insert 增掩码占位值回写拦截（防 UI 误存掩码值静默污染密钥）；备份列表原已脱敏。实机验证待用户。
 - **[P2] 管理员今日用量按 username 查而配额按 quota_subject 记**：`_get_user_today_usage_sync` 对游客恒返回 0
   用量、角色误判。方案：经 `guest_identity_records` 映射 username→guest_uid 后再查（或存 role 于用量表）。
 - 验收口径：每项独立方案文档（SSRF / override / 表脱敏属 L3 需批准）→ 实施 → 实机回归 → 日志。
@@ -425,5 +420,11 @@ Sprint 3（穿插）：P3-1 容器二轮（O1/O2 交替）→ P2-1 bundle 分析
   - [ ] (建议) 批量改名时应把 `Docs/Guide/frontend-structure.md` 同步纳入同一次改动，否则后续每个任务的收尾都要替它补录；可在改名脚本里按门禁输出的清单自动替换扩展名。
   - [ ] (风险) 并行会话编辑期间 `npx tsc --noEmit` 全量会短暂报大量无关错误（V3.6.50 见 `useLayerControlHandlers.ts`、V3.6.52 见 `useCesiumDataImport.ts`），复跑即消失。判断「是否本次引入」时，宜用 TypeScript 编译器 API 只取目标文件的 semantic diagnostics，避免把并发瞬时状态误判为回归。
   - [ ] (延续观察 · V3.6.53) 移动靶未停止：V3.6.53 任务补录 `main.js→main.ts` 后门禁立刻又报 `useStyleEditor.js→.ts`，再补录才转绿（657/657）。同一任务内若持续出现新漂移，按 Force_command §0 应停止追逐并如实报告，而非无限补录。另：并行会话可在同一分钟内改写**目标源码本身**（`useBasemapSelectionWatcher.ts` L203 从无参数注解变为有注解），核对必须以最后一次读取为准（日志 [2026-11-13-fix-basemap-watcher-reset-param-type.md](../LLM_record/26-11/2026-11-13/2026-11-13-fix-basemap-watcher-reset-param-type.md)）。
+
+- [ ] **登录成功点不回填 `authStore.user`（V3.7.6 已面板侧愈合，根修待立项）**（2026-11-21 · V3.7.6 修 admin UI 首进缺失时按 Force_command §2.5 只记不改，日志 [2026-11-21-fix-admin-panel-first-entry.md](../LLM_record/26-11/2026-11-21/2026-11-21-fix-admin-panel-first-entry.md)）：
+  - [ ] (现象) 5 处 SPA 登录成功点（`RegisterView.ts` handleLogin/quickGuestLogin、`OAuthCallbackView.ts`、`useGoogleOneTapAuth.ts`、`useAuthVerificationFlows.ts`）只调 `setAuthSession()` 写 sessionStorage，不写 `authStore.user`；而 `authStore.user` 唯一写入口 `ensureValidSession()` 只被路由守卫/预取调用，守卫在 `isInitialGisLoadComplete && isHomeRoute` 或纯 query/hash 变化时短路放行 → SPA 登录后 store 停留旧身份直至整页刷新。
+  - [ ] (现状) V3.7.6 已在 `FloatingAccountPanel.mergeUserPatch` 回填 store 愈合（面板挂载期 `/auth/me` 与打开轮询都会触发），但「登录完成 → 面板首载 `/auth/me`」间仍存秒级窗口，且不打开用户中心的会话里 store 全程过期。
+  - [ ] (建议) 根修二选一：a) 5 处登录成功点各补一行 store 回填（改面 5 文件，后续新增登录入口易漏，宜先收拢登录出口为单一 service）；b) 收敛为「登录成功统一走一个 `commitLoginSession()`」聚合 `setAuthSession` + store 回填 + URL 角色同步，消除散点。注意 `services/auth.ts` 不能静态 import `useAuthStore`（`useAuthStore.ts` 反向依赖它，成环）。
+  - [ ] (顺带) `forceBackToLogin`/`clearAuthSession` 同样不清 `authStore.user`（登出后 store 残留旧身份），与上属同一治理面，宜一并处理。
 
 

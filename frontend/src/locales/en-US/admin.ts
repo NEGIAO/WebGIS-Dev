@@ -154,6 +154,7 @@ export default {
     },
     apiKeys: {
         reveal: 'Show',
+        revealFailed: 'Failed to reveal plaintext, please retry later',
         hide: 'Hide',
         copy: 'Copy',
         copied: 'Copied',

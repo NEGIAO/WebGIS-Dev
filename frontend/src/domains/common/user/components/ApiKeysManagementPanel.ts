@@ -14,6 +14,7 @@ import {
 	apiAdminDeleteApiKey,
 	apiAdminDeleteApiKeyBackup,
 	apiAdminGetApiKeysStatus,
+	apiAdminRevealApiKey,
 	apiAdminGetDefaultAIConfig,
 	apiAdminSetApiKey,
 	apiAdminUpdateDefaultAIConfig,
@@ -60,6 +61,8 @@ export class Instance {
 	public loading = ref(false);
 	public copiedKey = ref('');
 	public revealedKeys = ref<Record<string, boolean>>({});
+	/** 已显式拉取的密钥明文缓存（V3.7.6：后端默认只发掩码，reveal 按需拉明文） */
+	public plainKeys = ref<Record<string, string>>({});
 	public keysStatus = ref<Record<string, any>>({
 		amap_key: { is_set: false, updated_at: null },
 		agent_api_key: { is_set: false, updated_at: null },
@@ -124,30 +127,63 @@ export class Instance {
 
 	//#region 密钥展示
 
-	/** 密钥明文（后端仅对管理员下发） */
+	/** 密钥展示值（V3.7.6：后端默认只下发掩码值，明文走 reveal 按需拉取） */
 	private keyValue(name: string) {
 		return String(this.keysStatus.value[name]?.key_value || '');
 	}
 
 	public isRevealed = (name: string) => Boolean(this.revealedKeys.value[name]);
 
-	public toggleReveal = (name: string) => {
-		this.revealedKeys.value = { ...this.revealedKeys.value, [name]: !this.revealedKeys.value[name] };
+	/** 按需拉取明文并缓存；失败返回空串（由调用方提示） */
+	private ensurePlain = async (name: string): Promise<string> => {
+		const cached = this.plainKeys.value[name];
+		if (cached) return cached;
+		const result: any = await apiAdminRevealApiKey(name);
+		const value = String(result?.data?.key_value || '');
+		if (value) {
+			this.plainKeys.value = { ...this.plainKeys.value, [name]: value };
+		}
+		return value;
 	};
 
-	/** 展示值：未配置提示 / 掩码(前4+****+后4) / 明文 */
+	public toggleReveal = async (name: string) => {
+		// 未配置的密钥无明文可拉：直接 no-op，避免向 /reveal 打出注定 404 的请求
+		if (!this.keysStatus.value[name]?.is_set) return;
+		const next = !this.isRevealed(name);
+		if (next) {
+			try {
+				const plain = await this.ensurePlain(name);
+				if (!plain) throw new Error('empty');
+			} catch {
+				this.message.error(this.t('apiKeys.revealFailed'));
+				return;
+			}
+		}
+		this.revealedKeys.value = { ...this.revealedKeys.value, [name]: next };
+	};
+
+	/** 展示值：未配置提示 / 后端掩码值 / reveal 明文（兼容历史缓存的客户端兜底掩码） */
 	public displayKeyValue = (name: string) => {
 		const raw = this.keyValue(name);
 		if (!raw) return this.t('apiKeys.notConfigured');
 		if (!this.isRevealed(name)) {
-			return raw.length > 8 ? raw.slice(0, 4) + '****' + raw.slice(-4) : '****';
+			// 服务端已掩码；兜底处理历史会话中残留的明文形态
+			return raw.includes('****') ? raw : (raw.length > 8 ? raw.slice(0, 4) + '****' + raw.slice(-4) : '****');
 		}
-		return raw;
+		return this.plainKeys.value[name] || raw;
 	};
 
-	/** 复制到剪贴板，1.5s 后恢复按钮文案 */
+	/** 复制到剪贴板（按需拉取明文），1.5s 后恢复按钮文案 */
 	public copyKey = async (name: string) => {
-		const value = this.keyValue(name);
+		// 未配置的密钥：与旧版行为一致静默返回（否则 /reveal 404 成为未捕获 rejection）
+		if (!this.keysStatus.value[name]?.is_set) return;
+		let value: string;
+		try {
+			value = await this.ensurePlain(name);
+		} catch {
+			this.message.error(this.t('apiKeys.revealFailed'));
+			return;
+		}
 		if (!value) return;
 		try {
 			await navigator.clipboard.writeText(value);
@@ -193,6 +229,7 @@ export class Instance {
 	public loadKeysStatus = async () => {
 		this.loading.value = true;
 		try {
+			this.plainKeys.value = {}; // 明文缓存随状态重载失效，防跨轮陈旧明文
 			const result: any = await apiAdminGetApiKeysStatus();
 			const data = result?.data || {};
 			this.keysStatus.value = {

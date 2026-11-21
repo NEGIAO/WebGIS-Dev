@@ -139,12 +139,47 @@ def _build_guest_uid(ip: str, user_agent: str, guest_device_id: str) -> str:
     # 身份种子只含 device_id：IP/UA 不参与哈希，避免同一访客因网络切换
     # （WiFi↔蜂窝）或代理出口变化被拆成多个在线身份（V3.5.25 在线统计修正）。
     # device_id 缺失时退化为随机一次性身份（仅当前请求有效，不合并他人也不持久）。
+    #
+    # ⚠️ V3.7.6 起本函数仅保留给**在线 presence 去重**（realtime_stats.device_presence_id）
+    # 与历史兼容路径。配额桶派生请勿使用本函数（device_id 客户端可轮换 → 配额可绕）：
+    # 无 token 请求统一走 `_derive_uid_from_ip_ua`（确定性桶），有 token 走验签 uid；
+    # 游客身份签发走 `/auth/guest/session`（受签发限频约束）。
     seed_device_id = _normalize_guest_device_id(guest_device_id)
     if not seed_device_id:
         seed_device_id = secrets.token_urlsafe(10)
 
     digest = hashlib.sha256(f"guest|{seed_device_id}".encode("utf-8")).hexdigest()
     return f"guest_{digest[:16]}"
+
+
+def _derive_uid_from_ip_ua(ip: str, user_agent: str) -> str:
+    """无 token 请求的确定性配额桶：H(末跳IP | UA)。
+
+    V3.7.6 游客身份治理核心派生：device_id **不参与**桶派生——轮换
+    X-Guest-Device-Id 不再产生新桶；伪造成本抬升为「需同时轮换出口 IP 与 UA」。
+    IP 须传 `_extract_identity_ip` 的结果（XFF 末跳），不要传展示用首跳。
+    """
+    digest = hashlib.sha256(
+        f"guestip|{str(ip or '').strip()}|{str(user_agent or '').strip()}".encode("utf-8")
+    ).hexdigest()
+    return f"guest_{digest[:16]}"
+
+
+def _extract_identity_ip(request: Request) -> str:
+    """身份派生用客户端 IP：取 X-Forwarded-For **末跳**（可信反代 HF 追加）。
+
+    与展示用 `_extract_client_ip` 的区别：不读客户端可写的 `X-Client-IP`，
+    不取 XFF 首跳（可被请求方任意塞值）。仅用于游客桶派生 / 签发限频键等
+    反滥用场景；展示、审计仍走 `_extract_client_ip`。
+    """
+    forwarded = str(request.headers.get("X-Forwarded-For") or "")
+    if forwarded:
+        hops = [hop.strip() for hop in forwarded.split(",") if hop.strip()]
+        for hop in reversed(hops):
+            valid_ip = _first_valid_ip(hop)
+            if valid_ip:
+                return valid_ip
+    return str(getattr(request.client, "host", "") or "")
 
 
 # ─── 角色标准化 ───
@@ -412,25 +447,9 @@ def _normalize_binary_flag(raw_value: Any, fallback: str = "0") -> str:
     return "1" if fallback == "1" else "0"
 
 
-def _is_guest_allow_request(request: Request) -> bool:
-    """是否为允许访客放行的请求。
-
-    放行条件（任一）：
-    1. 分享模式标记：URL 参数 s=1 / X-Share-Mode: 1 / X-Guest-Allow: 1
-    2. 携带访客设备身份头 X-Guest-Device-Id（所有未登录访客
-       默认以稳定设备身份访问，纳入在线统计与访客配额体系）
-
-    注意：访客身份仅获得 guest 角色权限（低配额），不影响 admin/注册用户权限。
-    """
-    query_share_flag = request.query_params.get("s")
-    header_share_flag = request.headers.get("X-Share-Mode") or request.headers.get("X-Guest-Allow")
-    normalized = _normalize_binary_flag(query_share_flag or header_share_flag, "0")
-    if normalized == "1":
-        return True
-
-    # 带稳定访客设备身份即视为访客请求（前端未登录时恒发送）
-    guest_device_id = _normalize_guest_device_id(request.headers.get("X-Guest-Device-Id"))
-    return bool(guest_device_id)
+# V3.7.6 备注：原 `_is_guest_allow_request`（s=1 / 设备头访客放行判定）已随
+# require_login fail-closed 改造删除——游客可达性现由端点显式声明的
+# require_api_access_or_guest(_noconsume) 依赖表达，不再有全局旁路开关。
 
 
 # ─── 管理员密码常量 ───

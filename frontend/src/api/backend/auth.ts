@@ -191,3 +191,16 @@ export async function apiAuthGoogleOneTap(credential: any) {
         credential: String(credential || '').trim(),
     });
 }
+
+/**
+ * 签发 / 续期游客身份（V3.7.6 游客身份治理）。
+ * 携带有效 guest token 时为同身份续期（不计签发限频）；否则受 (IP,UA) 限频新签发。
+ * GUEST_TOKEN_SECRET 未配置时后端返回 503（前端静默降级为派生桶身份）。
+ * @param {object} [payload] - { device_id?: string }
+ * @returns {Promise<{status: string, token: string, expires_in_hours: number, user: object}>}
+ */
+export async function apiAuthGuestSession(payload?: { device_id?: string }) {
+    // silent: 签发属「尽力而为」增强（503 未配置 secret / 429 限频 / 网络失败均静默降级，
+    // 游客浏览回落确定性派生桶），不得触发全局错误 toast。
+    return backendAPI.post('/api/auth/guest/session', payload || {}, { silent: true });
+}

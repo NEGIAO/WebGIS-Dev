@@ -13,15 +13,16 @@ from fastapi import HTTPException, Request, status
 from .constants import (
     ROLE_ADMIN,
     ROLE_GUEST,
-    _build_guest_uid,
+    _derive_uid_from_ip_ua,
     _extract_client_ip,
+    _extract_identity_ip,
     _extract_token,
-    _is_guest_allow_request,
     _normalize_guest_device_id,
     normalize_role,
     resolve_quota_subject,
 )
 from .db import _iso, _utc_now
+from .guest_token import GUEST_TOKEN_COOKIE_NAME, verify_guest_token
 from .quota import _consume_api_quota_sync
 from .session import _create_session_sync, _get_session_sync
 from .user import _get_or_create_guest_username_sync
@@ -79,6 +80,22 @@ def _auth_error_detail(code: str, message: str) -> Dict[str, Any]:
     return {"code": code, "message": message}
 
 
+def _extract_guest_token(request: Request) -> str:
+    """提取游客身份签名 token：优先 X-Guest-Token 头，其次 webgis_guest Cookie。
+
+    V3.7.6 游客身份治理：token 由 POST /auth/guest/session 签发（HMAC），
+    是无登录会话下唯一受信任的稳定身份来源；无效/过期由 verify_guest_token
+    统一返回 None，调用方回落确定性派生桶。
+    """
+    header_token = str(request.headers.get("X-Guest-Token") or "").strip()
+    if header_token:
+        return header_token
+    try:
+        return str(request.cookies.get(GUEST_TOKEN_COOKIE_NAME) or "").strip()
+    except Exception:
+        return ""
+
+
 async def _build_temporary_guest_session_async(request: Request) -> Dict[str, Any]:
     request_ip = _extract_client_ip(request)
     request_user_agent = str(request.headers.get("User-Agent", "unknown"))
@@ -86,7 +103,13 @@ async def _build_temporary_guest_session_async(request: Request) -> Dict[str, An
         request.headers.get("X-Guest-Device-Id")
         or request.query_params.get("guest_device_id")
     )
-    guest_uid = _build_guest_uid(request_ip, request_user_agent, guest_device_id)
+    # V3.7.6 游客身份治理：身份优先取已验签 guest token（签发通道下发）；
+    # 无 token 时按确定性桶 H(XFF末跳IP|UA) 派生。device_id 不再参与无 token
+    # 场景的桶派生——轮换设备头无法绕过配额（展示/在线去重仍用 device_id）。
+    presented_token = _extract_guest_token(request)
+    guest_uid = verify_guest_token(presented_token) if presented_token else None
+    if not guest_uid:
+        guest_uid = _derive_uid_from_ip_ua(_extract_identity_ip(request), request_user_agent)
     guest_record = await asyncio.to_thread(_get_or_create_guest_username_sync, guest_uid)
     # _get_or_create_guest_username_sync 返回 {username, no}：no 为游客展示序号
     # （guest_identity_records.id 自增）。随会话对象内存传递，
@@ -115,13 +138,6 @@ async def _build_temporary_guest_session_async(request: Request) -> Dict[str, An
     }
 
 
-def _has_auth_credential_header(request: Request) -> bool:
-    """请求是否显式携带了登录凭据头（Authorization / X-Auth-Token）。"""
-    if str(request.headers.get("Authorization") or "").strip():
-        return True
-    return bool(str(request.headers.get("X-Auth-Token") or "").strip())
-
-
 async def _resolve_session_with_options(
     request: Request,
     *,
@@ -130,15 +146,12 @@ async def _resolve_session_with_options(
 ) -> Dict[str, Any]:
     token = _extract_token(request)
     if not token:
-        if _is_guest_allow_request(request):
-            session = await _build_temporary_guest_session_async(request)
-            if touch_presence:
-                _mark_active_safe(session, request)
-            return session
-
+        # V3.7.6 游客身份治理：require_login 恢复 fail-closed。游客可达端点已显式
+        # 声明 or_guest 系依赖；本依赖不再凭 ?s=1 / X-Share-Mode / 设备头铸造临时
+        # 游客会话（原 GUEST_NO_TOKEN 通道曾被任意匿名请求借用为身份铸造口）。
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=_auth_error_detail("GUEST_NO_TOKEN", "游客身份权限不足，请登录或注册后使用完整功能"),
+            detail=_auth_error_detail("LOGIN_REQUIRED", "该功能需要登录后使用，请登录或注册"),
         )
 
     try:
@@ -151,15 +164,8 @@ async def _resolve_session_with_options(
         )
 
     if session is None:
-        # V3.6.6：前端现对登录态也恒发 X-Guest-Device-Id。若仅凭 device-id
-        # 放行，过期 token 会被静默降级为临时游客，而非 401 提示重新登录。
-        # 仅当「未携带任何登录凭据」时才允许游客兜底。
-        if not _has_auth_credential_header(request) and _is_guest_allow_request(request):
-            session = await _build_temporary_guest_session_async(request)
-            if touch_presence:
-                _mark_active_safe(session, request)
-            return session
-
+        # V3.7.6：过期/无效 token 一律 401 提示重新登录，不再静默降级游客
+        # （游客兜底已收敛到 or_guest 系依赖 + /auth/guest/session 签发通道）。
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail=_auth_error_detail("SESSION_EXPIRED", "登录状态已失效，请重新登录"),

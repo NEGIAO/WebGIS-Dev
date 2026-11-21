@@ -16,6 +16,11 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
 
 from api.auth import get_auth_db_connection, require_admin
+from core.secret_masking import (
+    MASKED_WRITEBACK_DETAIL,
+    assert_no_masked_writeback,
+    mask_sensitive_row,
+)
 from api.auth.system_config import (
     _get_default_basemap_index_sync,
     _set_default_basemap_index_sync,
@@ -176,9 +181,11 @@ def _list_table_rows_sync(
             (*params, safe_limit, safe_offset),
         ).fetchall()
 
+    # V3.7.6：敏感列（token / password_hash / key_value 等）逐行掩码后下发，
+    # 表浏览器不再裸 dump 会话令牌与密钥明文
     return {
         "total": total,
-        "rows": [dict(row) for row in rows],
+        "rows": [mask_sensitive_row(dict(row)) for row in rows],
     }
 
 
@@ -215,6 +222,15 @@ def _insert_row_sync(table_name: str, row: Dict[str, Any]) -> int:
             detail="插入数据不能为空",
         )
 
+    # V3.7.6：掩码占位值不得写回（防 UI 把掩码读值误当明文保存造成静默污染）
+    try:
+        assert_no_masked_writeback(row)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        )
+
     keys = [_validate_identifier(k) for k in row.keys()]
     cols = ", ".join(_quote_identifier(k) for k in keys)
     holders = ", ".join(["?"] * len(keys))
@@ -238,6 +254,15 @@ def _update_rows_sync(table_name: str, where: Dict[str, Any], values_payload: Di
 
     safe_table = _quote_identifier(table_name)
     where_sql = _build_where_clause(where)
+
+    # V3.7.6：掩码占位值不得写回（同 insert 守卫）
+    try:
+        assert_no_masked_writeback(values_payload)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        )
 
     set_parts: List[str] = []
     set_values: List[Any] = []

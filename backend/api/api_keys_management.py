@@ -23,6 +23,7 @@ from pydantic import BaseModel, Field
 
 from api.auth import get_auth_db_connection, require_admin, require_api_access_or_guest
 from config import get_str
+from core.secret_masking import mask_secret
 
 logger = logging.getLogger(__name__)
 
@@ -352,7 +353,7 @@ def _list_api_keys_sync() -> Dict[str, Any]:
         public_backups = [_backup_public_item(item) for item in backups]
         result[key_name] = {
             "is_set": bool(data.get("is_set", False)),
-            "key_value": str(data.get("key_value") or ""),
+            "key_value": mask_secret(data.get("key_value")),
             "updated_at": str(data.get("updated_at") or ""),
             "backup_count": len(public_backups),
             "backups": public_backups,
@@ -420,13 +421,13 @@ def _assert_runtime_config_origin_allowed(request: Request) -> None:
 async def get_api_keys_status(
     _session: Dict[str, Any] = Depends(require_admin),
 ) -> Dict[str, Any]:
-    """获取所有 API 密钥配置状态与明文值（仅管理员）"""
+    """获取所有 API 密钥配置状态（V3.7.6 起返回掩码值，仅管理员）"""
     keys_info = await asyncio.to_thread(_list_api_keys_sync)
-    
+
     return {
         "status": "success",
         "data": keys_info,
-        "note": "仅管理员可访问，返回密钥明文供管理面板查看/复制"
+        "note": "仅管理员可访问；key_value 为掩码值，明文经 GET /api/admin/api-keys/{name}/reveal 显式拉取",
     }
 
 
@@ -657,6 +658,49 @@ async def get_api_key(
             detail=f"密钥不存在: {safe_key_name}"
         )
     
+    return {
+        "status": "success",
+        "data": {
+            "key_name": safe_key_name,
+            "key_value": mask_secret(key_value),
+            "is_set": len(key_value) > 0
+        }
+    }
+
+
+@router.get("/{key_name}/reveal")
+async def reveal_api_key(
+    key_name: str,
+    _session: Dict[str, Any] = Depends(require_admin),
+) -> Dict[str, Any]:
+    """显式拉取密钥明文（仅管理员，V3.7.6）。
+
+    /status 与 GET /{key_name} 默认只回掩码值，缩小常态暴露面（代理日志、
+    DevTools、截屏）；明文改为逐 key 显式请求，本次请求本身即审计信号。
+    管理面板的「查看/复制」按钮据此按需拉取。
+    """
+    safe_key_name = str(key_name or "").strip().lower()
+
+    if not safe_key_name:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="密钥名称不能为空"
+        )
+
+    if safe_key_name not in ALLOWED_API_KEYS:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"不支持的密钥类型: {safe_key_name}"
+        )
+
+    key_value = await asyncio.to_thread(_get_api_key_sync, safe_key_name)
+
+    if key_value is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"密钥不存在: {safe_key_name}"
+        )
+
     return {
         "status": "success",
         "data": {

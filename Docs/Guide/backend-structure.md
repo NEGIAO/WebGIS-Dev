@@ -41,10 +41,11 @@ backend/
 │   │   ├── email_service.py                       # 阿里云邮件推送 SMTP 代理转发服务
 │   │   ├── models.py                              # Pydantic 请求模型（邮箱账号/绑定/昵称）
 │   │   ├── oauth.py                               # Google/GitHub/Hugging Face OAuth 登录、自动注册与账号绑定服务（授权码 + Google OneTap 双通道）
+│   │   ├── guest_token.py                         # 游客身份签名 token（HMAC 签发/验签/限频器，V3.7.6）
 │   │   ├── password.py                            # 密码哈希/验证
 │   │   ├── preferences.py                         # 用户偏好
 │   │   ├── quota.py                               # 配额追踪
-│   │   ├── routes.py                              # 认证路由（邮箱注册/登录/绑定/重置/OAuth）
+│   │   ├── routes.py                              # 认证路由（邮箱注册/登录/绑定/重置/OAuth/游客身份签发）
 │   │   ├── schema.py                              # DDL、邮箱账号迁移与数据库维护事件同步
 │   │   ├── session.py                             # 会话管理、邮箱与受限绑定 session
 │   │   ├── system_config.py                       # 系统配置
@@ -90,13 +91,16 @@ backend/
 ├── tests/                                         # 单元测试（按域分组；子目录无 __init__，各文件自插 backend 到 sys.path）
 │   ├── test_agent_map_context.py                  # AgentMapContextV1 Schema 与 prompt 格式测试
 │   ├── test_config_env_loading.py                 # 配置与环境变量加载测试
+│   ├── test_guest_identity.py                     # 游客身份治理（token 签发/验签/限频/派生桶/保留期清理，V3.7.6）
 │   ├── test_historical_imagery.py                 # 历史影像 _normalize_entries 排序/去重/XYZ URL 生成测试
+│   ├── test_secret_masking.py                     # 管理面敏感值掩码（列判定/行掩码/掩码回写拦截，V3.7.6）
 │   ├── test_webhook_helpers.py                    # HF Webhook 密钥头 / Space id 信任边界 / stage 提取单元测试
 │   ├── test_realtime_stats.py                     # 实时在线追踪回归（多标签隔离/同浏览器去重/注销清理/TTL/beacon/is_disconnected await 21 例）
 │   └── test_sqlite_recovery.py                    # SQL 清理、维护事件、恢复成功/失败与激活回滚测试
 │
 └── core/                                          # 横切基础能力
     ├── __init__.py                                # 包初始化
+    ├── secret_masking.py                          # 敏感值掩码（列名判定/掩码器/掩码回写拦截，V3.7.6）
     ├── coord_transform.py                         # GCJ/BD 坐标纯数学（无 IO；供 location 展示）
     ├── net_guard.py                               # SSRF 主机判定（agent override_base_url；非公开代理）
     ├── sqlite_maintenance.py                      # database_maintenance_events 表与恢复 JSON manifest 同步

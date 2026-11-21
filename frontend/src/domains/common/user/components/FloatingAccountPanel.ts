@@ -248,7 +248,18 @@ export class Instance {
 
 	public hasControlledOpen = computed(() => this.props.open !== undefined);
 
-	public isAdmin = computed(() => !this.adminDenied.value && String(this.authStore.user?.role || '') === 'admin');
+	/**
+	 * 管理入口可见性：本地 user 优先（挂载期 /auth/me 与面板打开后的 center 轮询持续合并，
+	 * 是 SPA 会话内最新来源），authStore.user 兜底。authStore.user 仅由整页加载时的路由守卫
+	 * ensureValidSession 填充，SPA 内登录不会更新它（守卫在 GIS 已加载时短路放行），只读它会
+	 * 漏判管理员身份，导致登录后首次进入用户中心缺管理 UI。后端权威裁决不变：进入管理页签
+	 * 仍需 selectMenu 的 apiAdminOverview 探活，403 即 adminDenied 收回。
+	 */
+	public isAdmin = computed(() => {
+		if (this.adminDenied.value) return false;
+		const role = String(this.user.value?.role || this.authStore.user?.role || '');
+		return role === 'admin';
+	});
 
 	public userAvatarIndex = computed(() => {
 		const raw = Number(this.user.value?.avatar_index);
@@ -423,6 +434,9 @@ export class Instance {
 		if (!hasAvatarIndex) merged.avatar_index = current.avatar_index ?? this.selectedAvatarIndex.value;
 
 		this.user.value = merged;
+		// 回填全局 authStore：SPA 内登录不会触发 ensureValidSession（守卫在 GIS 已加载时短路），
+		// authStore.user 若不在此同步将一直停留在登录前旧身份，依赖它的判定会读到过期数据
+		this.authStore.user = merged;
 		if (hasAvatarIndex) this.selectedAvatarIndex.value = Number(merged.avatar_index ?? this.selectedAvatarIndex.value);
 		syncUserRoleToUrl(merged);
 		const token = getAuthToken();

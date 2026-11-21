@@ -33,6 +33,7 @@ from api.statistics import router as statistics_router
 from api.location import router as location_router
 from api.external_proxy import router as external_proxy_router
 from api.auth import init_auth_storage, router as auth_router, check_smtp_configured
+from api.auth.user import guest_identity_retention_task
 from api.admin import router as admin_router
 from api.api_management import router as api_management_router
 from api.api_keys_management import router as api_keys_router, runtime_config_router
@@ -144,6 +145,10 @@ async def lifespan(app: FastAPI):
         logger.error("认证存储初始化失败: %s", str(e), exc_info=True)
         app.state.startup_error = f"数据库初始化失败: {str(e)}"
 
+    # 游客身份保留期清理（V3.7.6）：启动即清一次超期记录，此后每 24h 一轮
+    app.state.guest_retention_task = asyncio.create_task(guest_identity_retention_task())
+    logger.info("游客身份保留期清理任务已创建")
+
     # SMTP 邮件服务配置检查
     if check_smtp_configured():
         logger.info("邮件服务已配置（SMTP: %s）", _mask_smtp_user())
@@ -197,6 +202,16 @@ async def lifespan(app: FastAPI):
         except asyncio.CancelledError:
             pass
         logger.info("整点报时后台任务已停止")
+
+    # 取消游客身份保留期清理任务
+    retention_task = getattr(app.state, "guest_retention_task", None)
+    if retention_task is not None:
+        retention_task.cancel()
+        try:
+            await retention_task
+        except asyncio.CancelledError:
+            pass
+        logger.info("游客身份保留期清理任务已停止")
 
     historical_scheduler = getattr(app.state, "historical_imagery_scheduler", None)
     if historical_scheduler is not None:

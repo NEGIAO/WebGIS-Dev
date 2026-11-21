@@ -744,7 +744,9 @@ frontend/src/
 │   │   │   │   ├── useAuthIdentity.ts
 │   │   │   │   └── useRealtimeStats.ts  # SSE 在线统计（ticket + 指数退避 + auth 变化重连 + offline beacon + 断线 presence ping）
 │   │   │   ├── services/
-│   │   │   │   └── auth.ts  # 鉴权工具
+│   │   │   │   ├── auth.ts  # 鉴权工具
+│   │   │   │   ├── guestIdentity.ts  # 游客身份签发/续期（ensureGuestSession）与分享模式注入（V3.7.6）
+│   │   │   │   └── guestTokenStore.ts  # 游客身份签名 token 本地存储（叶子模块，X-Guest-Token 头来源）
 │   │   │   └── stores/
 │   │   │       ├── useAuthStore.ts  # 鉴权状态
 │   │   │       └── useUserPreferencesStore.ts  # 用户偏好（语言 SSOT：setLanguagePreference + 本机 key 优先远端）

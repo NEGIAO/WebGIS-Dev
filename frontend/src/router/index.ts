@@ -25,10 +25,10 @@ import {
     persistPositionCode,
     persistPositionCodeFromUrl,
     readPositionCodeFromUrl,
-    injectGuestTokenForShareMode,
     getAuthToken,
     getAuthUser,
 } from '@common/user/services/auth';
+import { injectGuestTokenForShareMode } from '@common/user/services/guestIdentity';
 import { EMERGENCY_GUEST_MODE } from '@/config/publicRuntime';
 
 const HomeView = () => import('./lazyHomeViewLoader').then((mod) => mod.loadHomeView());
@@ -163,7 +163,7 @@ router.beforeEach(async (to: RouteLocationNormalized, from: RouteLocationNormali
     // ========== CRITICAL: Share Mode Bypass (Highest Priority) ==========
     // [优先级 1] 如果 s=1（分享模式），直接注入访客令牌，绕过登录
     if (shareModeEnabled && !getAuthToken()) {
-        const guestInjected = injectGuestTokenForShareMode();
+        const guestInjected = await injectGuestTokenForShareMode();
         if (guestInjected) {
             console.warn('[Router] Share mode detected: Guest token injected');
             // 继续到下一步（参数提取）
@@ -198,7 +198,7 @@ router.beforeEach(async (to: RouteLocationNormalized, from: RouteLocationNormali
         if (requiresAuth && !isLoggedIn && !shareModeEnabled) {
             cacheRoutePositionCode(to);
             if (EMERGENCY_GUEST_MODE) {
-                injectGuestTokenForShareMode();
+                await injectGuestTokenForShareMode();
                 // 不返回重定向；游客令牌已注入，继续走下方 home 逻辑放行
             } else {
                 return {

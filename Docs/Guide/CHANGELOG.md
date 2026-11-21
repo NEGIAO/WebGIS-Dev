@@ -11,11 +11,46 @@
 > 零散升号、整合后即废弃，号段均高于当前版本）统一归并为 **V3.6.42**。
 > 条目所述功能与修复内容、发布日期、整合结论均不变，仅版本号表述归一，便于全文检索不再出现倒挂号。
 
-> **版本号归并（2026-11-14）**：V3.7.1 ~ V3.7.7 七条记录所记为**同一批未提交工作**的逐次增量。
+> **版本号归并（2026-11-14）**：V3.7.1 ~ V3.7.6 七条记录所记为**同一批未提交工作**的逐次增量。
 > 按用户「整合为一个统一的版本 V3.7.1」的指令，七条合并为单条 **V3.7.1**，曾用中间版本号
-> （V3.7.3 ~ V3.7.7）自本条起废弃；功能与修复内容、发布日期、结论均不变，仅版本号表述归一。
+> （V3.7.3 ~ V3.7.6）自本条起废弃；功能与修复内容、发布日期、结论均不变，仅版本号表述归一。
 > 注：V3.7.2 号段已于同日重新启用，对应《修复 OpenLayers 加载 OSM 标准瓦片 403》条目，与本条无冲突。
 > 分主题的原始过程记录保留在 `Docs/LLM_record/26-11/2026-11-14/`，不迁移、不改写。
+
+### V3.7.6 (2026-11-21) — 游客身份治理（L3） · 管理面敏感值掩码 · 管理员首进 UI 修复
+
+> **版本号归并（2026-11-21）**：首进修复（曾用号 V3.7.6）/ 游客身份治理（曾用号 V3.7.7）/ 管理面掩码（曾用号 V3.7.8）三条记录为**同一批未提交工作**的三次增量，按用户「本次版本为 3.7.6」的指令归并为单条 **V3.7.6**；曾用中间号 V3.7.7 / V3.7.8 自本条起废弃，本批代码注释与文档中的版本字样已统一改写（历史提交中的旧 V3.7.7 字样属 V3.7.1 归并语义，不涉本条）。分主题过程记录保留在 `Docs/LLM_record/26-11/2026-11-21/` 三份日志，不迁移、不改写。
+
+> **一句话**：三批安全与体验治理打包落地——① `require_login` 恢复 fail-closed 并建立服务端签发的游客身份体系（配额不可再伪造）；② 管理面（密钥状态/表浏览器）不再下发密钥与令牌明文，改按需 reveal 拉取；③ 修复管理员 SPA 登录后首次进用户中心缺失管理 UI。
+
+**A. 游客身份治理（L3，曾用号 V3.7.7）** —— 方案 [TODO/guest-identity-governance-plan.md](../TODO/guest-identity-governance-plan.md)，日志 [guest-identity-governance](../LLM_record/26-11/2026-11-21/2026-11-21-guest-identity-governance.md)：
+
+1. **fix（安全）**：`require_login` 删除 `?s=1` / `X-Share-Mode` / `X-Guest-Device-Id` 游客兜底分支（fail-open → fail-closed），无 token 一律 401 `LOGIN_REQUIRED`；游客可达端点显式声明 `require_api_access_or_guest_noconsume`（读端点不扣配额，避免 15s 轮询刷爆游客额度）。
+2. **feat**：`guest_token.py` —— `gt1_` 前缀 HMAC-SHA256 token（TTL `GUEST_TOKEN_TTL_HOURS`=24h）+ 进程内滑动窗口签发限频（`GUEST_ISSUE_RATE_PER_HOUR`=6/h，键刻意不含 device_id，持 token 续期不计）。
+3. **feat**：`POST /api/auth/guest/session` —— 携有效 token 续期同身份，否则限频后新签发（有 device_id 沿用历史命名空间保统计连续、无则 IP+UA 桶）；响应镜像登录结构 + 尽力而为 `SameSite=None` Cookie（生产跨站不可靠，主通道为响应体 token + `X-Guest-Token` 头）；`GUEST_TOKEN_SECRET` 未配置 → 503 降级派生桶（可用性优先）。
+4. **fix**：`_derive_uid_from_ip_ua`（`H(末跳IP|UA)`）+ `_extract_identity_ip`（取 XFF 末跳，不读客户端可写的 `X-Client-IP`/首跳）；`_build_guest_uid` 保留给在线 presence 去重并加限用警告；游客快速登录（user/user）配额桶同步收敛。
+5. **feat**：`guest_identity_records` 90 天保留期清理（`GUEST_IDENTITY_RETENTION_DAYS`，启动 + 每 24h 后台任务，取消安全）。
+6. **feat（前端）**：`guestTokenStore.ts`（token 本地存储叶子模块）+ `guestIdentity.ts`（`ensureGuestSession` 预签发 / 分享模式真实签发，废除本地伪 token `guest_<ts>_<dev>` 铸造）；`client.ts` 无登录态附加 `X-Guest-Token`、401 分支兼容 `LOGIN_REQUIRED`；`main.ts` 非阻塞预签发。
+7. **chore**：4 个配置 key 登记（L3 `GUEST_TOKEN_SECRET` / L2 TTL·限频·保留期）；结构树补录 4 个新文件。
+8. **验证**：新增 15 单测（签发/验签/篡改/过期/降级/限频隔离/派生确定性/purge）+ 相关域 40 测试全绿；`vue-tsc` 0 错误；双门禁 738/738、catalog 138 key 全绿；§11.2 红线仅命中已知假阳性 `maxRayDistance`。实机八步清单待用户执行（见日志）。
+
+**B. 管理面敏感值掩码（曾用号 V3.7.8）** —— 日志 [admin-secret-masking](../LLM_record/26-11/2026-11-21/2026-11-21-admin-secret-masking.md)：
+
+1. **feat**：`core/secret_masking.py` —— `mask_secret`（前4后4、≤8 位整体打码、空值返空保「未配置」语义）、`is_sensitive_column`（精确集 + token/password/secret/credential/key_value 子串，大小写不敏感）、`mask_sensitive_row`、`assert_no_masked_writeback`。
+2. **fix（安全）**：`GET /api/admin/api-keys/status`、`GET /{key_name}`、`GET /api/admin/db/table/{t}/rows` 的 `key_value` / `token` / `password_hash` 等敏感列改掩码下发，常态暴露面（反代日志/DevTools/截屏）收敛。
+3. **feat**：`GET /api/admin/api-keys/{key_name}/reveal`（仅管理员）—— 明文逐 key 显式拉取，请求本身即审计信号；Code Review 修补：面板对未配置密钥不再打 `/reveal`（旧守卫在异步化时丢失致 404 未捕获）。
+4. **fix**：表浏览器 `_insert_row_sync` / `_update_rows_sync` 增掩码占位值回写拦截（400）——防 UI 把掩码读值误当明文保存、把真实密钥覆盖为 `sk-ab****xy`。
+5. **feat（前端）**：`apiAdminRevealApiKey`；`ApiKeysManagementPanel` 明文按需缓存（随状态重载失效）、`toggleReveal`/`copyKey` 走 reveal、`displayKeyValue` 兼容历史明文形态兜底掩码；中英 `apiKeys.revealFailed` 文案。
+6. **docs**：核验销项 [P1] 损坏恢复锁外竞态——当前代码损坏检查已在 `_recovery_lock` 内（RLock 双保险）；`.dump`「行式导入丢换行」为过时描述（现行 `_import_sql` 将整个 dump 经 sqlite3 CLI stdin 导入，无 Python 行切分路径）。
+7. **验证**：新增 10 单测（掩码形态/列判定/行掩码不就地改/回写拦截四态）+ 相关域 30 测试全绿；vue-tsc / eslint 0 问题；双门禁全绿；红线扫描除已知假阳性外零命中。实机五步清单待用户执行（见日志）。
+
+**C. 管理员登录后首次进用户中心缺管理 UI（本号原生批次）** —— 日志 [fix-admin-panel-first-entry](../LLM_record/26-11/2026-11-21/2026-11-21-fix-admin-panel-first-entry.md)：
+
+1. **修复**：`FloatingAccountPanel.ts` `isAdmin` 判定源改为「面板本地 user（挂载期 `/auth/me` 与 center 轮询持续合并，SPA 会话内最新）优先、`authStore.user` 兜底」，管理员 SPA 登录后首次进入用户中心管理 UI 立即出现，无需整页刷新。
+2. **修复**：`mergeUserPatch` 回填 `authStore.user`，全局身份 store 在面板挂载/轮询时自动愈合；「身份变化重置 adminDenied」watch 在 store 从未被守卫填充的场景下也能正常触发。
+3. **后端权威裁决不变**：进入管理页签仍需 `apiAdminOverview` 403 探活，`adminDenied` 收回机制保留；前端可见性判定仅为 UI 引导，不构成权限放大。
+4. **遗留**：5 处登录成功点（RegisterView×2 / OAuthCallbackView / OneTap / 验证流程）回填 `authStore.user`（消除「登录完成 → 面板首载 `/auth/me`」间的秒级窗口）记入 `Docs/TODO/bugfix-optimization-plan.md` 后续跟进。
+5. **验证**：`vue-tsc --noEmit` 修复前后各一次、对比零新增报错；`CheckStructureTree.py` / `CheckConfigRegistry.py` 全绿；实机五步清单（游客浏览→登录→不刷新进用户中心 / 普通用户无页签 / 换号不残留 / OAuth 与 OneTap 复验）待用户执行。
 
 ### V3.7.5 (2026-11-18) — 暂存区整合：MVT + FOUC + 51.la + WMS/WMTS 协议与 TOC 多子层控制
 
@@ -43,7 +78,7 @@
 ### 版本说明
 > V3.7.3 号段曾在 2026-11-14 作为同一批未提交工作的中间号使用并归并至 V3.7.1（见下方归并注记）；本批暂存整合版本曾标记为 V3.7.4，2026-11-18 按用户明确指令统一调整为 **V3.7.5**（不复用已归并号段），仅代表本次整合成果，不回滚历史归并结论。
 >
-> **版本号归并（2026-11-18）**：自定义 WMTS Capabilities 与多子层 TOC 修复在同一批未提交工作中曾临时使用 V3.7.6 / V3.7.7。按用户「本次版本 3.7.5」指令，统一归并至 **V3.7.5**，不再占用更高号段；过程日志保留原始记录名，仅作追溯。
+> **版本号归并（2026-11-18）**：自定义 WMTS Capabilities 与多子层 TOC 修复在同一批未提交工作中曾临时使用 V3.7.6 / V3.7.6。按用户「本次版本 3.7.5」指令，统一归并至 **V3.7.5**，不再占用更高号段；过程日志保留原始记录名，仅作追溯。
 
 ### V3.7.2 (2026-11-14) — 修复 OpenLayers 加载 OSM 标准瓦片 403（双引擎 Referrer 策略归一）
 

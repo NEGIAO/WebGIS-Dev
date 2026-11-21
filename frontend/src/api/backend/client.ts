@@ -14,6 +14,7 @@ import {
     readShareModeFromUrl,
 } from '@common/user/services/auth';
 import { getHttpStatusMessage, buildHttpErrorMessage } from '../httpStatusMap';
+import { getGuestToken } from '@common/user/services/guestTokenStore';
 import { readErrorPayload } from '../blobError';
 import { BACKEND_BASE_URL as PUBLIC_BACKEND_BASE_URL, BACKEND_REQUEST_TIMEOUT_MS } from '../../config/publicRuntime';
 import { useMessage } from '@common/shell/useMessage';
@@ -100,6 +101,15 @@ backendAPI.interceptors.request.use(
         const guestDeviceId = getOrCreateGuestDeviceId();
         if (guestDeviceId) {
             config.headers['X-Guest-Device-Id'] = guestDeviceId;
+        }
+        // 游客身份签名 token（V3.7.6 游客身份治理）：无登录态时经 X-Guest-Token 头
+        // 携带后端签发的 HMAC 身份（稳定配额桶）；无 token 时后端按确定性派生桶兜底。
+        // guest token 与登录 token 完全隔离，永不进入 Authorization 头。
+        if (!token) {
+            const guestToken = getGuestToken();
+            if (guestToken) {
+                config.headers['X-Guest-Token'] = guestToken;
+            }
         }
         const clientId = getPresenceClientId();
         if (clientId && !config.headers['X-Presence-Client-Id']) {
@@ -199,10 +209,11 @@ backendAPI.interceptors.response.use(
             message = detailMsg || buildHttpErrorMessage(status, '', { endpoint: config?.url });
 
             if (status === 401) {
-                // 区分会话过期 vs 游客权限不足
+                // 区分会话过期 vs 游客/未登录权限不足
                 // SESSION_EXPIRED / SESSION_ERROR → 清除会话，跳转登录
-                // GUEST_NO_TOKEN → 仅提示，不清除会话，用 warning 而非 error
-                const isGuestInsufficient = detailCode === 'GUEST_NO_TOKEN';
+                // GUEST_NO_TOKEN（历史码） / LOGIN_REQUIRED（V3.7.6 require_login
+                // fail-closed 后的新码） → 仅提示，不清除会话，用 warning 而非 error
+                const isGuestInsufficient = detailCode === 'GUEST_NO_TOKEN' || detailCode === 'LOGIN_REQUIRED';
                 if (!isGuestInsufficient) {
                     clearAuthSession();
                 } else {
@@ -298,7 +309,8 @@ async function parseBlobError(response: any) {
     (apiError as any).status = response.status;
     (apiError as any).statusText = getHttpStatusMessage(response.status);
     (apiError as any).detailCode = detailCode;
-    (apiError as any).isGuestInsufficient = detailCode === 'GUEST_NO_TOKEN';
+    (apiError as any).isGuestInsufficient =
+        detailCode === 'GUEST_NO_TOKEN' || detailCode === 'LOGIN_REQUIRED';
     (apiError as any).isQuotaInsufficient = detailCode === 'DOWNLOAD_QUOTA_INSUFFICIENT';
     (apiError as any).originalError = { response };
     return apiError;

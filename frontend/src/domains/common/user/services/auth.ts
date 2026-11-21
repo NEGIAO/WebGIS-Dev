@@ -8,7 +8,6 @@ let _memoryGuestDeviceId = '';
 let _presenceClientId = '';
 
 import { normalizeBinaryFlag } from '@common/utils/normalize';
-import { useMessage } from '@common/shell/useMessage';
 
 function readUrlParams() {
     if (typeof window === 'undefined') {
@@ -90,13 +89,32 @@ export function clearAuthSession() {
     emitAuthChanged();
 }
 
+/**
+ * 写入游客身份用户快照（仅 user，不写 token）。
+ * V3.7.6 游客身份治理：guest token 存 localStorage（guestTokenStore），
+ * 永不进入 webgis_auth_token（否则会被误当登录态发送 Authorization 头）；
+ * 本函数只把后端返回的游客 user 对象落到 sessionStorage 供 UI 读取
+ * （getAuthUser / roleText / guest_no 展示）。
+ */
+export function setGuestUserSnapshot(user: any): void {
+    const storage = getStorage();
+    if (!storage || !user || typeof user !== 'object') return;
+    try {
+        storage.setItem(AUTH_USER_KEY, JSON.stringify(user));
+        emitAuthChanged();
+    } catch {
+        /* sessionStorage 不可用时静默：UI 回退到无身份展示 */
+    }
+}
+
 export function getBackendBearerToken() {
     const token = getAuthToken();
     if (!token) return '';
     const user = getAuthUser();
-    // injectGuestTokenForShareMode 注入的本地占位 token 形如 guest_<ts>_<deviceId>，
-    // 并非后端 DB 会话令牌；发送 Authorization 头会触发 require_login 返回 401 SESSION_EXPIRED。
-    if (user?.role === 'visitor' && /^guest_\d+_/.test(token)) {
+    // V3.6.6 兼容残留：旧分享模式写入的本地占位 token（guest_<ts>_<deviceId>）
+    // 并非后端 DB 会话令牌；发送 Authorization 头会触发 require_login 返回 401。
+    // V3.7.6 起新代码不再产生该形态 token，本守卫仅为清理旧 sessionStorage 存量。
+    if ((user?.role === 'visitor' || user?.role === 'guest') && /^guest_\d+_/.test(token)) {
         return '';
     }
     return token;
@@ -288,56 +306,12 @@ export function injectPositionCodeToPath(path = '/home', code = '') {
     return query ? `${pathname}?${query}` : pathname;
 }
 
-// ============ Share Mode 访客令牌注入 ============
-
-/**
- * 为分享模式注入访客令牌（临时）
- * 仅在 s=1 时调用，会生成临时访客凭证并存储
- *
- * @returns {boolean} 是否成功注入（true 表示已注入访客令牌）
- */
-export function injectGuestTokenForShareMode() {
-    const message = useMessage();
-    try {
-        // 1. 生成或获取访客设备 ID
-        const guestDeviceId = getOrCreateGuestDeviceId();
-        if (!guestDeviceId) {
-            console.warn('[Auth] Failed to create guest device ID');
-            return false;
-        }
-
-        // 2. 构造临时访客令牌（格式：guest_<timestamp>_<deviceId>）
-        const timestamp = Date.now();
-        const guestToken = `guest_${timestamp}_${guestDeviceId}`;
-
-        // 3. 构造访客用户对象
-        const guestUser = {
-            username: 'Guest',
-            role: 'visitor',
-            guest_uid: guestDeviceId,
-            guest_token: guestToken,
-            created_at: new Date().toISOString(),
-        };
-
-        // 4. 注入到认证存储中
-        setAuthSession({
-            token: guestToken,
-            user: guestUser,
-        });
-
-        console.warn('[Auth] Guest token injected for share mode', {
-            guestDeviceId,
-            timestamp,
-            user: guestUser.username,
-        });
-
-        return true;
-    } catch (_error) {
-        // 访客令牌注入失败会导致分享模式无法访问,以 message.error 提示用户
-        message.error('访客模式登录失败，请刷新页面重试');
-        return false;
-    }
-}
+// ============ Share Mode 访客身份注入 ============
+//
+// V3.7.6 游客身份治理：本地伪 token（guest_<ts>_<deviceId>）铸造已废除。
+// 分享模式的游客身份改由 `guestIdentity.ts` 的 injectGuestTokenForShareMode
+// 调用后端 /api/auth/guest/session 真实签发（HMAC token，受签发限频约束），
+// 本文件不再承担该职责（router/index.ts 已改从 guestIdentity 导入）。
 
 /**
  * 检查当前会话是否是访客身份

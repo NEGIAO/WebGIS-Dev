@@ -194,6 +194,7 @@ export default {
     },
     apiKeys: {
         reveal: '显示',
+        revealFailed: '明文拉取失败，请稍后重试',
         hide: '隐藏',
         copy: '复制',
         copied: '已复制',

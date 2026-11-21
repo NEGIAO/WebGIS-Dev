@@ -169,6 +169,14 @@ export async function apiAdminGetApiKey(keyName: any) {
     return backendAPI.get(`/api/admin/api-keys/${encodeURIComponent(keyName)}`);
 }
 
+/**
+ * 显式拉取密钥明文（V3.7.6：/status 与 GET 默认仅掩码，明文逐 key 按需拉取）。
+ * 供管理面板「查看/复制」按钮调用；每次请求本身即审计信号。
+ */
+export async function apiAdminRevealApiKey(keyName: any) {
+    return backendAPI.get(`/api/admin/api-keys/${encodeURIComponent(keyName)}/reveal`);
+}
+
 // ==================== Agent 配置管理 ====================
 
 export async function apiAdminGetAgentConfig() {

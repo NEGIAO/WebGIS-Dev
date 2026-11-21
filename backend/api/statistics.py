@@ -27,7 +27,7 @@ from api.auth import (
     normalize_role,
     require_admin,
     require_api_access_or_guest,
-    require_login,
+    require_api_access_or_guest_noconsume,
     resolve_quota_subject,
 )
 from api.realtime_stats import get_online_tracker
@@ -1221,7 +1221,7 @@ async def log_visit(
 
 @router.get("/statistics/center")
 async def get_center_statistics(
-    session: Dict[str, Any] = Depends(require_login),
+    session: Dict[str, Any] = Depends(require_api_access_or_guest_noconsume),
 ) -> Dict[str, Any]:
     """
     功能：获取用户中心聚合数据。
@@ -1258,7 +1258,7 @@ async def get_center_statistics(
 
 @router.get("/statistics/realtime")
 async def get_realtime_statistics(
-    _session: Dict[str, Any] = Depends(require_login),
+    _session: Dict[str, Any] = Depends(require_api_access_or_guest_noconsume),
 ) -> Dict[str, Any]:
     """功能：获取全站实时统计快照。"""
     realtime = await asyncio.to_thread(_get_realtime_global_stats_sync)
@@ -1312,7 +1312,7 @@ async def create_user_message(
 
 @router.get("/statistics/messages")
 async def list_user_messages(
-    _session: Dict[str, Any] = Depends(require_login),
+    _session: Dict[str, Any] = Depends(require_api_access_or_guest_noconsume),
 ) -> Dict[str, Any]:
     """功能：查询最近留言列表。"""
     messages = await asyncio.to_thread(_list_recent_messages_sync, 50)
@@ -1324,7 +1324,7 @@ async def list_user_messages(
 
 @router.get("/announcement/current")
 async def get_current_announcement(
-    session: Dict[str, Any] = Depends(require_login),
+    session: Dict[str, Any] = Depends(require_api_access_or_guest_noconsume),
 ) -> Dict[str, Any]:
     """功能：读取当前用户可见的有效公告。"""
     username = str(session.get("username") or "")
@@ -1338,7 +1338,7 @@ async def get_current_announcement(
 @router.post("/announcement/dismiss")
 async def dismiss_announcement(
     payload: DismissAnnouncementRequest,
-    session: Dict[str, Any] = Depends(require_login),
+    session: Dict[str, Any] = Depends(require_api_access_or_guest_noconsume),
 ) -> Dict[str, Any]:
     """功能：将指定公告标记为“当前用户已忽略”。"""
     username = str(session.get("username") or "")
