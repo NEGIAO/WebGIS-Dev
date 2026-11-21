@@ -9,7 +9,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from fastapi import HTTPException, status
 
-from api.auth import get_auth_db_connection
+from api.auth import auth_db_generation, get_auth_db_connection
 from config import get_settings
 
 from .constants import (
@@ -100,7 +100,14 @@ def _ensure_api_keys_table_sync(conn: sqlite3.Connection) -> None:
         raise
 
 
+_ensure_agent_chat_tables_ready_gen = -1
+
+
 def _ensure_agent_chat_tables_sync() -> None:
+    """确保 Agent 对话域各表存在（V3.7.7 批次 A：代际守卫，库重建后自动重跑 DDL）"""
+    global _ensure_agent_chat_tables_ready_gen
+    if _ensure_agent_chat_tables_ready_gen == auth_db_generation():
+        return
     try:
         with _db_connection() as conn:
             _ensure_system_config_table_sync(conn)
@@ -152,6 +159,7 @@ def _ensure_agent_chat_tables_sync() -> None:
                 "CREATE INDEX IF NOT EXISTS idx_agent_user_config_updated_at ON agent_user_config(updated_at)"
             )
             conn.commit()
+            _ensure_agent_chat_tables_ready_gen = auth_db_generation()
             logger.debug("Agent chat tables synced successfully")
     except Exception as e:
         logger.error(f"Failed to ensure agent chat tables: {e}")

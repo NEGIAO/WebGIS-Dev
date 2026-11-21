@@ -24,9 +24,8 @@ import {
     clearAuthSession,
     consumePersistedPositionCode,
     getAuthUser,
-    setAuthSession,
-    syncUserRoleToUrl,
 } from '@common/user/services/auth';
+import { commitLoginSession } from '@common/user/services/sessionCommit';
 
 const COUNTDOWN_SECONDS = 30;
 
@@ -297,8 +296,7 @@ export function useAuthVerificationFlows(options: UseAuthVerificationFlowsOption
             const user = result?.user || null;
             if (!token || !user) throw new Error(options.t('auth.emailBindResponseError'));
 
-            setAuthSession({ token, user });
-            syncUserRoleToUrl(user);
+            commitLoginSession(token, user);
             requiresEmailBinding.value = false;
             options.message.success(options.t('auth.emailBindSuccess'));
             await options.router.replace(options.resolveRedirectTarget());

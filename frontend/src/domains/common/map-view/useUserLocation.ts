@@ -13,7 +13,6 @@ import type VectorSource from 'ol/source/Vector';
 import { fromLonLat } from 'ol/proj';
 import type { Ref } from 'vue';
 import { apiAddressGeocode, apiIpCountry, apiLocationIpLocate, apiLocationReverse } from '@/api';
-import { getPublicIp } from '@/api/backend/client';
 import { useMessage } from '@common/shell/useMessage';
 import { saveUserPositionToCache } from '@common/map-view/services/userPositionCache';
 import { setGlobalUserLocationContext } from '@common/map-view/services/userLocationContext';
@@ -71,8 +70,8 @@ export function useUserLocation({
         const { silent = false } = options || {};
 
         try {
-            // 等公网 IP 就绪，避免后端收到私有 IP 返回 400
-            await getPublicIp();
+            // V3.7.6：不再前端预取公网 IP——生产环境后端经 XFF 反代头取真实公网 IP，
+            // 本地直连开发时 IP 国别判定退化为 unknown 属预期。
 
             const response = await apiIpCountry('');
             const data: any = response?.data || {};
@@ -374,10 +373,7 @@ export function useUserLocation({
         const { signal } = activeLocateController;
 
         try {
-            // 确保公网 IP 就绪后再发起定位，避免后端收到 Docker 网关 IP 导致定位失败
-            if (!disableAmapIpLocation) {
-                await getPublicIp();
-            }
+            // V3.7.6：不再前端预取公网 IP，高德 IP 定位由后端经 XFF 取真实公网 IP
 
             // [Fix] GPS 定位：带超时和错误分类
             const gpsTask = getCurrentLocation(true)

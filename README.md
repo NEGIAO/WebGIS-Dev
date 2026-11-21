@@ -131,7 +131,7 @@
 
 ## 🎯 项目简介
 
-**NEGIAO's WebGIS** 是一个功能完整、架构清晰的前后端分离 WebGIS 平台（当前版本 V3.7.6），前端托管于 GitHub Pages（正式域名 webgis.negiao.cn），后端以 Docker 部署在 Hugging Face Spaces，通过 RESTful API 通信，支持独立扩展。
+**NEGIAO's WebGIS** 是一个功能完整、架构清晰的前后端分离 WebGIS 平台（当前版本 V3.7.7），前端托管于 GitHub Pages（正式域名 webgis.negiao.cn），后端以 Docker 部署在 Hugging Face Spaces，通过 RESTful API 通信，支持独立扩展。
 
 > 📚 本 README 仅保留核心概览与导航。完整文档已模块化至 [`Docs/Guide/`](Docs/Guide/)，详见下方「文档导航」。
 >
@@ -618,9 +618,9 @@ tiles.negiao.cc.cd"]
 
 | 版本 | 日期 | 概要 |
 |------|------|------|
+| **V3.7.7** | 2026-11-21 | **SQLite 连接复用 · 登录会话统一出口 · 异步组件批量加固**。① 线程本地连接 + 代际失效 + 四处热路径 DDL 守卫（高频端点每请求省 4–36 次 PRAGMA 磁盘往返）；② `sessionCommit.ts` 登录会话唯一出口：5 处散点登录收拢 + authStore 回填全链路生效 + 登出清残留；③ 14 处裸 `defineAsyncComponent` → `defineResilientAsync`（占位 + 可点重试，消灭面板永久空白）。详见[完整更新日志](Docs/Guide/CHANGELOG.md) |
 | **V3.7.6** | 2026-11-21 | **游客身份治理（L3）+ 管理面敏感值掩码 + 管理员首进 UI 修复**。① require_login 恢复 fail-closed（18 端点重分类，11 个游客可达端点显式转 `or_guest_noconsume`），新增 `POST /auth/guest/session` HMAC 签发游客身份（按 XFF末跳IP+UA 限频 6 次/小时），无 token 配额桶收敛 `H(末跳IP|UA)` 确定性派生（轮换 device_id 不再绕限额），游客记录 90 天清理；② 新增 `core/secret_masking.py` 统一掩码器：`/status`、`GET /{name}`、表浏览器 rows 不再下发密钥/token/密码哈希明文，明文改 `GET /{name}/reveal` 逐 key 显式拉取，insert/update 拦截掩码占位值回写；③ `isAdmin` 判定源改为面板本地用户优先 + `mergeUserPatch` 回填 authStore，修复管理员登录后首次进用户中心缺管理 UI。详见[完整更新日志](Docs/Guide/CHANGELOG.md) |
 | **V3.7.5** | 2026-11-18 | **暂存区整合：MVT + FOUC + 51.la + WMS/WMTS 协议与 TOC 多子层控制**。① OpenLayers MVT 矢量瓦片（TOC 子层、样式 URL、无扩展名识别）；② FOUC 首屏加载屏与 SEO 静态兜底；③ 51.la 性能监控及完整报表外链；④ 自定义 WMTS Capabilities 图层枚举与逐层矩阵/格式/样式；⑤ WMTS 子图层多选、独立显隐、拖拽排序，OL/Cesium 每 Identifier 独立建源；⑥ WMS/WMTS 鉴权与 GetMap/GetTile 端点、XYZ/TMS `{-y}`、OpenFreeMap 主机范围修正。详见[完整更新日志](Docs/Guide/CHANGELOG.md) |
-| **V3.7.2** | 2026-11-14 | **修复 OpenLayers 引擎加载 OSM 标准瓦片 403（双引擎 Referrer 策略归一）**。站点响应头下发 `Referrer-Policy: same-origin`，`fetch()` 未显式声明策略时会继承该文档策略，导致 OL 瓦片请求跨源时不带 Referer，被 OSM 判定未授权抓取并返回「Access blocked」；Cesium 侧此前已显式注入 `referrerPolicy` 故不受影响，形成「修好 3D 就坏 2D」的跷跷板。现将 OSM 官方模板、德国镜像与拦截占位图字节特征收敛至 `@common/basemap/osmTileFallback.ts` 单一真源，OL 侧显式声明 `referrerPolicy: 'origin-when-cross-origin'` 并识别 6987 字节拦截假图，降级顺序改为「直连 → 德国镜像 → 自建代理」，两引擎恢复共存。详见[完整更新日志](Docs/Guide/CHANGELOG.md) |
 更早版本（V3.7.0 及以前）请查阅 [完整更新日志 →](Docs/Guide/CHANGELOG.md)。
 
 ---
@@ -643,6 +643,6 @@ tiles.negiao.cc.cd"]
 |:------:|:--------:|:--------:|
 | [GitHub](https://github.com/NEGIAO/WebGIS-Dev) | [webgis.negiao.cn](https://webgis.negiao.cn)（正式域名，GitHub Pages 托管） | [Hugging Face](https://NEGIAO-WebGIS.hf.space) |
 
-<sub>V3.7.6 · 开发中 · 最后更新 2026-11-21</sub>
+<sub>V3.7.7 · 开发中 · 最后更新 2026-11-21</sub>
 
 </div>

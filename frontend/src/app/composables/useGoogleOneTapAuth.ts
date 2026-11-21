@@ -12,9 +12,8 @@ import { GOOGLE_OAUTH_CLIENT_ID } from '@/config/publicRuntime';
 import { useTimerRegistry } from '@common/composables/useTimerRegistry';
 import {
     consumePersistedPositionCode,
-    setAuthSession,
-    syncUserRoleToUrl,
 } from '@common/user/services/auth';
+import { commitLoginSession } from '@common/user/services/sessionCommit';
 
 const GSI_SCRIPT_SRC = 'https://accounts.google.com/gsi/client';
 
@@ -125,8 +124,7 @@ export function useGoogleOneTapAuth(options: UseGoogleOneTapAuthOptions) {
             const user = result?.user || null;
             if (!token || !user) throw new Error(options.t('auth.googleLoginResponseError'));
 
-            setAuthSession({ token, user });
-            syncUserRoleToUrl(user);
+            commitLoginSession(token, user);
             options.message.success(options.t('auth.googleLoginSuccess'));
             await options.router.replace(options.resolveRedirectTarget());
             consumePersistedPositionCode();

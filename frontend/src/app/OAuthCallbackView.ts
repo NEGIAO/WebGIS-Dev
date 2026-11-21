@@ -18,9 +18,8 @@ import {
 	consumePersistedPositionCode,
 	injectPositionCodeToPath,
 	peekPersistedPositionCode,
-	setAuthSession,
-	syncUserRoleToUrl,
 } from '@common/user/services/auth';
+import { commitLoginSession } from '@common/user/services/sessionCommit';
 import { apiAuthCompleteOAuthBind, apiAuthExchangeOAuthLoginTicket } from '../api/backend';
 
 type EmitsType = [];
@@ -102,8 +101,7 @@ export class Instance {
 					const user = result?.user || null;
 					if (!token || !user) throw new Error('OAuth 登录兑换响应异常');
 
-					setAuthSession({ token, user });
-					syncUserRoleToUrl(user);
+					commitLoginSession(token, user);
 					this.currentState.value = 'success';
 					const loginSuccess = this.t('oauth.loginSuccess', {
 						provider: provider || this.t('oauth.thirdParty'),

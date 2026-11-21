@@ -94,9 +94,7 @@
 - **[P1] SMTP 明文（无 STARTTLS）**：`email_service` 走明文端口 `login`，凭据与验证码可被链路监听。
   方案：改 `SMTP_SSL(465)` 或 `starttls()`；需按阿里云 DirectMail 实际端口/TLS 实机验证。
 - ✅ **[P1] 损坏恢复锁外竞态** 【已闭环 V3.7.6 核验销项 · 证据见 [2026-11-21-admin-secret-masking.md](../LLM_record/26-11/2026-11-21/2026-11-21-admin-secret-masking.md) 遗留节】当前代码（2026-11-21 读码）：损坏检查已在 `_recovery_lock` 内（`db.py` `_db_connection` 拿锁后检查，`_attempt_db_recovery` 拿锁后再验一次，RLock 双保险）；`.dump`「行式导入丢换行」为过时描述——现行恢复管线把整个 dump 文件经 `sqlite3` CLI stdin 导入（`sqlite_recovery.py:_import_sql`），CLI 自身正确解析多行 TEXT 字面量，不存在 Python 行切分路径。
-- **[P2 性能] SQLite 每请求新建连接 + 重复 DDL**：`get_auth_db_connection` 每调重跑 WAL/foreign_keys PRAGMA、
-  多处 `CREATE TABLE IF NOT EXISTS` 每调执行（`/me`、map-tokens、每条 chat 各 ~5–10 连接）。
-  方案：线程本地连接复用 + 模块级 `_tables_ready` 幂等（须与损坏恢复配合，勿在库被重建后误跳 DDL）。
+- ✅ **[P2 性能] SQLite 每请求新建连接 + 重复 DDL** 【已完成 V3.7.7 · 日志 [2026-11-21-sqlite-conn-reuse.md](../LLM_record/26-11/2026-11-21/2026-11-21-sqlite-conn-reuse.md)】线程本地连接 + 代际计数器（恢复/重建推进，所有线程丢弃旧连接）+ 四处热路径 DDL（api_keys/agent_chat/api_log/location）代际守卫；实施前审计 98 个开启函数零嵌套、`.close()` 3 处已处理（location close→rollback）。方案基于单 worker 前提（与 LOGIN_THROTTLE 同），多 worker 形态变化需重估。实机验证待用户。
 - ✅ **[P2] 管理员 GET 回显 L3 明文 / 表浏览器裸 dump 密钥** 【已完成 V3.7.6 · 日志 [2026-11-21-admin-secret-masking.md](../LLM_record/26-11/2026-11-21/2026-11-21-admin-secret-masking.md)】`core/secret_masking.py` 统一掩码器；`/status`、`GET /{name}`、表浏览器 rows 全部掩码下发；明文改经新增 `GET /{name}/reveal` 逐 key 显式拉取（保留面板查看/复制 UX）；update/insert 增掩码占位值回写拦截（防 UI 误存掩码值静默污染密钥）；备份列表原已脱敏。实机验证待用户。
 - **[P2] 管理员今日用量按 username 查而配额按 quota_subject 记**：`_get_user_today_usage_sync` 对游客恒返回 0
   用量、角色误判。方案：经 `guest_identity_records` 映射 username→guest_uid 后再查（或存 role 于用量表）。
@@ -199,7 +197,7 @@ Sprint 3（穿插）：P3-1 容器二轮（O1/O2 交替）→ P2-1 bundle 分析
 ## 顺带发现登记(2026-07-26 · V3.4.54 前端加载性能会话,按 Force_command §2.5 只记不改)
 
 - [ ] **V3.6 跨引擎 UI 统一（SidePanel 面板 Cesium 适配）**：`domains/common/shell/SidePanel.vue` 包含图层管理、绘制、路径规划、底图下载、罗盘等诸多面板，当前全部绑定 OL API，Cesium 模式下全部失灵。目标：各面板通过 MapCommandBus + 引擎 adapter 解耦，全局标识当前引擎（OL/Cesium），各面板自动切换行为。CesiumToolPanel 的已有功能也需纳入统一。属架构级专项，规划到 V3.6 实现。
-- [ ] **后端 HF Space 国内不可达**(影响面最大):前端首屏已提速 79%,但国内用户登录/API/瓦片代理仍会失败。建议单独 L3 立项:后端可达性探测 + 降级策略(分享模式/游客只读)或多活方案;涉及部署面与预算,需用户决策
+- [ ] **后端 HF Space 国内不可达**(影响面最大):前端首屏已提速 79%,但国内用户登录/API/瓦片代理仍会失败。建议单独 L3 立项:后端可达性探测 + 降级策略(分享模式/游客只读)或多活方案;涉及部署面与预算,需用户决策。**V3.7.6 补记**：前端曾自加的第三方依赖（api.ipify.org 取 IP 挂在请求拦截器临界路径，被广告拦截/国内慢路径放大卡顿）已移除（日志 [2026-11-21-remove-ipify-critical-path.md](../LLM_record/26-11/2026-11-21/2026-11-21-remove-ipify-critical-path.md)），公网 IP 改由后端 XFF 承担——但 HF 可达性主因仍在，本项保持待决策。
 - [x] **CHANGELOG 缺 V3.4.52 完整条目** ✅ 07-27 对账会话已补录（连带修复五会话连环撞号：48 空号注记、53′→55、54′→56、55′→57、56′→58 顺延补录，README 推进 V3.4.58，各日志头同步注记）
 - [x] **P0-2 状态与代码疑似脱节** ✅ 07-27 复核销项:`edit?: boolean` 已在 `layerHelpers.ts:22`,全量 `tsc --noEmit` 实测 12 项错误全部为 cesium 模块解析环境噪音、业务代码零错误——修复已随后续提交落地,疑虑解除
 - [x] ~~**`next-sprint-bugfix-and-optimization.md` 残留**~~（V3.6.37 已解：该文件迁入 `Docs/TODO/archive/`，未删除，符合 Force_command §2.4「只迁移不删除」；本文文首自述已同步改为「已迁 archive」）
@@ -424,7 +422,7 @@ Sprint 3（穿插）：P3-1 容器二轮（O1/O2 交替）→ P2-1 bundle 分析
 - [ ] **登录成功点不回填 `authStore.user`（V3.7.6 已面板侧愈合，根修待立项）**（2026-11-21 · V3.7.6 修 admin UI 首进缺失时按 Force_command §2.5 只记不改，日志 [2026-11-21-fix-admin-panel-first-entry.md](../LLM_record/26-11/2026-11-21/2026-11-21-fix-admin-panel-first-entry.md)）：
   - [ ] (现象) 5 处 SPA 登录成功点（`RegisterView.ts` handleLogin/quickGuestLogin、`OAuthCallbackView.ts`、`useGoogleOneTapAuth.ts`、`useAuthVerificationFlows.ts`）只调 `setAuthSession()` 写 sessionStorage，不写 `authStore.user`；而 `authStore.user` 唯一写入口 `ensureValidSession()` 只被路由守卫/预取调用，守卫在 `isInitialGisLoadComplete && isHomeRoute` 或纯 query/hash 变化时短路放行 → SPA 登录后 store 停留旧身份直至整页刷新。
   - [ ] (现状) V3.7.6 已在 `FloatingAccountPanel.mergeUserPatch` 回填 store 愈合（面板挂载期 `/auth/me` 与打开轮询都会触发），但「登录完成 → 面板首载 `/auth/me`」间仍存秒级窗口，且不打开用户中心的会话里 store 全程过期。
-  - [ ] (建议) 根修二选一：a) 5 处登录成功点各补一行 store 回填（改面 5 文件，后续新增登录入口易漏，宜先收拢登录出口为单一 service）；b) 收敛为「登录成功统一走一个 `commitLoginSession()`」聚合 `setAuthSession` + store 回填 + URL 角色同步，消除散点。注意 `services/auth.ts` 不能静态 import `useAuthStore`（`useAuthStore.ts` 反向依赖它，成环）。
-  - [ ] (顺带) `forceBackToLogin`/`clearAuthSession` 同样不清 `authStore.user`（登出后 store 残留旧身份），与上属同一治理面，宜一并处理。
+  - [x] (已闭环·V3.7.7 选方案 b) 收拢为 `services/sessionCommit.ts` 的 `commitLoginSession()`：5 处登录出口 + FloatingAccountPanel.mergeUserPatch 全部收拢，authStore 回填全链路生效；日志 [2026-11-21-login-session-commit.md](../LLM_record/26-11/2026-11-21/2026-11-21-login-session-commit.md)。成环规避方式：sessionCommit 为独立模块（不被 auth.ts 反向依赖），可安全 import useAuthStore。
+  - [x] (已闭环·V3.7.7 同批) `forceBackToLogin` 改走 `resetAuthSessionState()`（clearAuthSession + authStore.resetValidation()），登出残留清理完成。
 
 

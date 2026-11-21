@@ -36,42 +36,13 @@ if (typeof window !== 'undefined' && window.location.protocol === 'http:' && !/^
     console.warn('[Backend] 安全警告：当前通过 HTTP 连接后端，凭证将以明文传输。生产环境请启用 HTTPS。');
 }
 
-// ─── 用户公网 IP 获取 & 缓存 ───
-// Docker 环境 request.client.host 是容器网关 IP（如 172.18.0.1），不是用户真实公网 IP。
-// 前端通过 ipify 获取用户公网 IP 并缓存，每次请求通过 X-Client-IP header 传给后端。
-// V3.5.19：失败后 30s 负缓存，避免 ipify 不可用时每个请求都空等 3s 超时。
-let _cachedPublicIp: any = null;
-let _ipFetchPromise: any = null;
-let _ipFetchFailedAt = 0;
-const IP_FETCH_TIMEOUT_MS = 3000;
-const IP_FETCH_FAIL_COOLDOWN_MS = 30000;
-
-async function getPublicIp() {
-    if (_cachedPublicIp) return _cachedPublicIp;
-    if (_ipFetchPromise) return _ipFetchPromise;
-    if (Date.now() - _ipFetchFailedAt < IP_FETCH_FAIL_COOLDOWN_MS) return null;
-
-    _ipFetchPromise = (async () => {
-        try {
-            const resp = await axios.get('https://api.ipify.org?format=json', { timeout: IP_FETCH_TIMEOUT_MS });
-            const ip = resp?.data?.ip;
-            if (ip && /^\d{1,3}(\.\d{1,3}){3}$/.test(ip)) {
-                _cachedPublicIp = ip;
-                return ip;
-            }
-        } catch {
-            _ipFetchFailedAt = Date.now(); // 失败进入负缓存，短时间内不再重试
-        }
-        return null;
-    })();
-
-    return _ipFetchPromise;
-}
-
-// 启动时预热（不阻塞）
-void getPublicIp();
-
-export { getPublicIp };
+// ─── 用户公网 IP（V3.7.6 起：不再前端自取）───
+// 原实现经第三方服务 api.ipify.org 取公网 IP 后以 X-Client-IP 自报给后端，存在三类问题：
+// ① 广告拦截插件（uBlock/AdGuard）普遍封禁 ipify，请求以 ERR_BLOCKED_BY_CLIENT 失败，
+//    DevTools 常驻红色报错；② 国内访问 ipify 慢/不稳，负缓存过期后每 30s 首请求空等 3s；
+// ③ 自报 IP 本就可伪造（后端 _extract_client_ip 文档已声明「不是信任边界」）。
+// 现后端经 X-Forwarded-For（HF 反代追加的真实末跳）取公网 IP，展示/审计/IP 国别/IP 定位
+// 均更准且零第三方依赖；本地直连开发时 request.client.host 为回环地址属预期退化。
 
 /**
  * 后端 API 客户端实例
@@ -120,14 +91,8 @@ backendAPI.interceptors.request.use(
             config.headers['X-Guest-Allow'] = '1';
         }
 
-        // 传递用户公网 IP：后端在 Docker 环境拿到的 request.client.host 是容器网关 IP
-        if (!config.headers['X-Client-IP']) {
-            const publicIp = await getPublicIp();
-            if (publicIp) {
-                config.headers['X-Client-IP'] = publicIp;
-            }
-        }
-
+        // V3.7.6：不再发送 X-Client-IP（自报值可伪造且依赖第三方 ipify 服务）；
+        // 后端 _extract_client_ip 回落 XFF 末跳取真实公网 IP。
         return config;
     },
     (error: any) => {

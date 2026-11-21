@@ -72,6 +72,19 @@ def _resolve_auth_db_path() -> Path:
 AUTH_DB_PATH = _resolve_auth_db_path()
 _auth_storage_ready = False
 _recovery_lock = threading.RLock()
+
+# ─── 线程本地连接复用（V3.7.7 批次 A）───
+# 此前每次调用 _db_connection 都新建连接并重跑 4 条 PRAGMA（synchronous=FULL 下
+# 在 HF 网络盘上有真实磁盘往返），高频端点（/me、map-tokens、每条 chat）一次
+# 请求串 5–10 个连接。现改为线程本地缓存 + 代际计数器：
+#   - 代际在恢复/重建完成时 +1，所有线程下次取连接时自动丢弃指向旧库文件的连接
+#     （修复「库重建后误跳 DDL / 复用旧文件句柄」隐患）；
+#   - 快路径做 SELECT 1 存活探测（µs 级），损坏在获取时即可检出并走恢复分支；
+#   - 审计结论（2026-11-21 维护日志）：98 个开启函数全部零嵌套、.close() 仅 3 处
+#     （location.py 的 close 已改 rollback），共享连接的提交纪律成立。
+_local = threading.local()
+_conn_generation = 0
+_generation_lock = threading.Lock()
 _migration_backup_done = False
 
 
@@ -285,27 +298,70 @@ def _ensure_schema() -> None:
     logger.info("数据库 schema 重建完成: %s", str(AUTH_DB_PATH))
 
 
+def _bump_conn_generation() -> int:
+    """库文件被恢复/重建替换后推进代际，通知所有线程丢弃旧连接。"""
+    global _conn_generation
+    with _generation_lock:
+        _conn_generation += 1
+        return _conn_generation
+
+
+def auth_db_generation() -> int:
+    """当前连接代际——供各模块 DDL 就绪标志做失效依据（防库重建后误跳 DDL）。"""
+    return _conn_generation
+
+
+def _drop_thread_conn() -> None:
+    """关闭并清除本线程缓存连接（异常路径静默：连接可能已失效）。"""
+    conn = getattr(_local, "conn", None)
+    if conn is not None:
+        try:
+            conn.close()
+        except Exception:
+            pass
+        _local.conn = None
+
+
+def _get_thread_conn() -> sqlite3.Connection:
+    """取本线程缓存连接；代际不匹配（库被重建）或尚无连接时新建并缓存。"""
+    conn = getattr(_local, "conn", None)
+    if conn is not None and getattr(_local, "gen", -1) == _conn_generation:
+        return conn
+    _drop_thread_conn()
+    conn = _try_connect(AUTH_DB_PATH)
+    _local.conn = conn
+    _local.gen = _conn_generation
+    return conn
+
+
 def _db_connection() -> sqlite3.Connection:
     """
-    Create an auth DB connection. Initialization and recovery are serialized.
-    Recovery first preserves the corrupt bundle; unrecoverable data degrades to
-    a verified empty schema instead of taking the whole auth subsystem offline.
+    取认证库连接（V3.7.7 起线程本地复用，初始化与恢复仍串行于 _recovery_lock）。
+    恢复流程先保全损坏文件束；不可恢复数据降级为「验证过的空库」而非整体下线。
     """
     global _auth_storage_ready
 
-    if _auth_storage_ready:
+    # 快路径：代际匹配 + 存活探测（SELECT 1，µs 级；损坏在获取时即可检出）
+    conn = getattr(_local, "conn", None)
+    if conn is not None and _auth_storage_ready and getattr(_local, "gen", -1) == _conn_generation:
         try:
-            return _try_connect(AUTH_DB_PATH)
+            conn.execute("SELECT 1").fetchone()
+            return conn
         except sqlite3.DatabaseError as exc:
             message = str(exc).lower()
             if "malformed" not in message and "corrupt" not in message:
                 raise
-            logger.error("Database connection detected corruption: %s", exc)
+            logger.error("Thread-local connection detected corruption: %s", exc)
             _auth_storage_ready = False
+            _drop_thread_conn()
 
     with _recovery_lock:
+        conn = getattr(_local, "conn", None)
         if _auth_storage_ready:
-            return _try_connect(AUTH_DB_PATH)
+            # 其他线程可能刚完成恢复并推进代际：代际一致且连接仍在则直接复用
+            if conn is not None and getattr(_local, "gen", -1) == _conn_generation:
+                return conn
+            return _get_thread_conn()
 
         if _db_file_is_corrupted(AUTH_DB_PATH):
             _attempt_db_recovery(AUTH_DB_PATH)
@@ -330,6 +386,10 @@ def _db_connection() -> sqlite3.Connection:
             )
 
         _auth_storage_ready = True
+        # 库文件可能已被恢复流程替换：推进代际让所有线程丢弃旧连接，
+        # 本线程也换新连接（旧连接指向已被重命名归档的库文件）
+        _bump_conn_generation()
+        _drop_thread_conn()
         logger.info(
             "Auth DB ready: path=%s journal_mode=%s tables=%d rows=%d",
             AUTH_DB_PATH,
@@ -337,7 +397,7 @@ def _db_connection() -> sqlite3.Connection:
             len(validation.tables),
             validation.total_rows,
         )
-        return _try_connect(AUTH_DB_PATH)
+        return _get_thread_conn()
 
 
 def get_auth_db_connection() -> sqlite3.Connection:

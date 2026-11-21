@@ -22,6 +22,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
 
 from api.auth import (
+    auth_db_generation,
     get_auth_db_connection,
     get_role_daily_quota,
     normalize_role,
@@ -70,8 +71,14 @@ def _utc_date_str() -> str:
     return datetime.now(_BEIJING_TZ).strftime("%Y-%m-%d")
 
 
+_ensure_api_log_table_ready_gen = -1
+
+
 def _ensure_api_log_table_sync() -> None:
-    """确保 API 调用日志表存在"""
+    """确保 API 调用日志表存在（V3.7.7 批次 A：代际守卫，库重建后自动重跑 DDL）"""
+    global _ensure_api_log_table_ready_gen
+    if _ensure_api_log_table_ready_gen == auth_db_generation():
+        return
     with _db_connection() as conn:
         conn.execute(
             """
@@ -121,6 +128,7 @@ def _ensure_api_log_table_sync() -> None:
             """
         )
         conn.commit()
+        _ensure_api_log_table_ready_gen = auth_db_generation()
 
 
 def _record_api_call_sync(

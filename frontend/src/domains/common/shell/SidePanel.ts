@@ -11,7 +11,6 @@
  */
 import {
 	computed,
-	defineAsyncComponent,
 	defineComponent,
 	onMounted,
 	onUnmounted,
@@ -22,13 +21,17 @@ import {
 	type PropType,
 	type SetupContext,
 } from 'vue';
+import { defineResilientAsync } from '@common/utils/defineResilientAsync';
 import { getRuntimeMapTokensSync, loadRuntimeMapTokens } from '@common/services/runtimeMapTokens';
 import { useLocale } from '@common/app/useLocale';
 import { tileProxyUrl } from '@/config/publicRuntime';
 
 // Load non-default tabs on first use; keep them mounted afterward to preserve state.
-const ChatPanelContent = defineAsyncComponent(() => import('@common/chat/components/ChatPanelContent.vue'));
-// ToolboxPanel 预加载：与 defineAsyncComponent 共享同一个模块 Promise。
+const ChatPanelContent = defineResilientAsync(() => import('@common/chat/components/ChatPanelContent.vue'), {
+	label: 'AI 对话加载失败，请检查网络后重试',
+	minHeight: 300,
+});
+// ToolboxPanel 预加载：与 defineResilientAsync 共享同一个模块 Promise。
 // 首屏就绪后延迟预取资源（不打开面板），用户点击工具箱时无需再等待动态分块加载。
 let toolboxModulePromise: Promise<any> | null = null;
 function preloadToolboxPanel() {
@@ -37,11 +40,11 @@ function preloadToolboxPanel() {
 	}
 	return toolboxModulePromise;
 }
-const ToolboxPanel = defineAsyncComponent(() => preloadToolboxPanel());
-const RoutePlannerPanel = defineAsyncComponent(() => import('@ol/routing/components/RoutePlannerPanel.vue'));
-const CompassControlPanel = defineAsyncComponent(() => import('@common/compass/components/CompassControlPanel.vue'));
-const BuildingFetchPanel = defineAsyncComponent(() => import('@common/data-import/components/BuildingFetchPanel.vue'));
-const WeatherChartPanel = defineAsyncComponent(() => import('@common/weather/components/WeatherChartPanel.vue'));
+const ToolboxPanel = defineResilientAsync(() => preloadToolboxPanel(), { label: '工具箱加载失败，请检查网络后重试', minHeight: 300 });
+const RoutePlannerPanel = defineResilientAsync(() => import('@ol/routing/components/RoutePlannerPanel.vue'), { label: '路线规划加载失败，请检查网络后重试', minHeight: 240 });
+const CompassControlPanel = defineResilientAsync(() => import('@common/compass/components/CompassControlPanel.vue'), { label: '罗盘面板加载失败，请检查网络后重试', minHeight: 200 });
+const BuildingFetchPanel = defineResilientAsync(() => import('@common/data-import/components/BuildingFetchPanel.vue'), { label: '建筑抓取面板加载失败，请检查网络后重试', minHeight: 240 });
+const WeatherChartPanel = defineResilientAsync(() => import('@common/weather/components/WeatherChartPanel.vue'), { label: '天气看板加载失败，请检查网络后重试', minHeight: 240 });
 
 // ========== 1. 热点新闻平台配置（label 随语言切换）==========
 const NEWS_PLATFORM_KEYS = [
@@ -364,7 +367,7 @@ export class Instance {
 		this.toolboxPreloadTimer = window.setTimeout(() => {
 			this.toolboxPreloadTimer = null;
 			preloadToolboxPanel().catch((error) => {
-				// 预加载失败不影响用户后续点击（defineAsyncComponent 会按需重试）
+				// 预加载失败不影响用户后续点击（defineResilientAsync 会按需重试）
 				console.warn('ToolboxPanel 预加载失败，用户点击时自动重试', error);
 				toolboxModulePromise = null;
 			});
