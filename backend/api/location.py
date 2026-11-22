@@ -354,37 +354,37 @@ async def track_visit(
     # 尝试保存到数据库
     global _visit_tracking_table_ready, _visit_tracking_table_ready_gen
     username = str(current_user.get("username") or "") if current_user else ""
-    conn = None
     try:
-        conn = get_auth_db_connection()
-        cursor = conn.cursor()
+        # V3.7.11：标准 with 块用法（退出即提交/异常即回滚）——纳入连接访问串行化，
+        # 消除手动 commit 在网络盘上的撕裂写窗口；连接为线程本地共享资源，不关闭
+        with get_auth_db_connection() as conn:
+            cursor = conn.cursor()
 
-        # 创建表（如果不存在），使用模块级标志避免每次请求执行 DDL
-        # V3.7.7 批次 A：就绪标志带连接代际——库被恢复/重建后自动重跑 DDL
-        if not _visit_tracking_table_ready or _visit_tracking_table_ready_gen != auth_db_generation():
+            # 创建表（如果不存在），使用模块级标志避免每次请求执行 DDL
+            # V3.7.7 批次 A：就绪标志带连接代际——库被恢复/重建后自动重跑 DDL
+            if not _visit_tracking_table_ready or _visit_tracking_table_ready_gen != auth_db_generation():
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS visit_tracking (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        ip VARCHAR(50) NOT NULL,
+                        city VARCHAR(100),
+                        province VARCHAR(100),
+                        country VARCHAR(100),
+                        user_agent TEXT,
+                        referrer TEXT,
+                        username TEXT,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    )
+                """)
+                _visit_tracking_table_ready = True
+                _visit_tracking_table_ready_gen = auth_db_generation()
+
+            # 插入记录
             cursor.execute("""
-                CREATE TABLE IF NOT EXISTS visit_tracking (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    ip VARCHAR(50) NOT NULL,
-                    city VARCHAR(100),
-                    province VARCHAR(100),
-                    country VARCHAR(100),
-                    user_agent TEXT,
-                    referrer TEXT,
-                    username TEXT,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                )
-            """)
-            _visit_tracking_table_ready = True
-            _visit_tracking_table_ready_gen = auth_db_generation()
-
-        # 插入记录
-        cursor.execute("""
-            INSERT INTO visit_tracking (ip, city, province, country, user_agent, referrer, username)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-        """, (ip, city, province, country, request_data.user_agent[:500], request_data.referrer[:500], username or None))
-
-        conn.commit()
+                INSERT INTO visit_tracking (ip, city, province, country, user_agent, referrer, username)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            """, (ip, city, province, country, request_data.user_agent[:500], request_data.referrer[:500], username or None))
+        # with 退出即提交
 
         return {
             "code": 200,
@@ -413,11 +413,3 @@ async def track_visit(
             },
             "message": "location detected but not persisted"
         }
-    finally:
-        # V3.7.7 批次 A：连接为线程本地共享资源，不再由调用方关闭；
-        # 异常路径改为显式回滚（成功路径已在 try 内手动 commit）
-        if conn is not None:
-            try:
-                conn.rollback()
-            except Exception:
-                pass

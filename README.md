@@ -131,7 +131,7 @@
 
 ## 🎯 项目简介
 
-**NEGIAO's WebGIS** 是一个功能完整、架构清晰的前后端分离 WebGIS 平台（当前版本 V3.7.8），前端托管于 GitHub Pages（正式域名 webgis.negiao.cn），后端以 Docker 部署在 Hugging Face Spaces，通过 RESTful API 通信，支持独立扩展。
+**NEGIAO's WebGIS** 是一个功能完整、架构清晰的前后端分离 WebGIS 平台（当前版本 V3.7.11），前端托管于 GitHub Pages（正式域名 webgis.negiao.cn），后端以 Docker 部署在 Hugging Face Spaces，通过 RESTful API 通信，支持独立扩展。
 
 > 📚 本 README 仅保留核心概览与导航。完整文档已模块化至 [`Docs/Guide/`](Docs/Guide/)，详见下方「文档导航」。
 >
@@ -618,9 +618,10 @@ tiles.negiao.cc.cd"]
 
 | 版本 | 日期 | 概要 |
 |------|------|------|
-| **V3.7.8** | 2026-11-22 | **修复：AI 工具调用 JSON 载荷与 \`\`\`tool_call 块直出给用户**。① 工具调用后第二轮 LLM 回复为空或失败时，回退文案误用「回传 LLM 专用」的结构化摘要，`{"code":"OK",...}` 以气泡原文展示——新增用户可见版摘要（仅人读 message），空回复与失败回退均改用之，并复用流式占位气泡消除空气泡；② 模型回复仅由 \`\`\`tool_call 块组成时，流式落定后块原文永久残留（渐进渲染写入原文 + 清洗为空跳过覆盖）——落定改为无条件覆盖清洗结果（空则回收气泡），第二轮回复同样先清洗再展示。详见[完整更新日志](Docs/Guide/CHANGELOG.md) |
-| **V3.7.7** | 2026-11-22 | **SQLite 连接复用 · 登录会话统一出口 · 异步组件批量加固 · P0 连接关闭自愈**。① 线程本地连接 + `SELECT 1` 存活探测 + 代际失效计数器 + 四处热路径 DDL 守卫（高频端点每请求省 4–36 次 PRAGMA 磁盘往返）；② `sessionCommit.ts` 登录会话唯一出口：5 处散点登录收拢 + authStore 回填全链路生效 + 登出清残留；③ 14 处裸 `defineAsyncComponent` → `defineResilientAsync`（占位 + 可点重试，消灭面板永久空白）；④ P0：历史影像 4 处 `closing()` 关闭共享连接致全站登录 500，根修 + 快路径 closed/not-a-database 自愈重建，启动库损坏被恢复机制重建 16816 行零丢失；⑤ AI 对话流式（`/chat/default-proxy/stream` SSE + 前端渐进渲染 + 停止断流），首字秒回，IP 定位 TTL 缓存消除每条消息的定位等待；⑥ 三通道全量流式（个人 Key / 后端代理补齐，配额语义一致），三种模式首字秒回。详见[完整更新日志](Docs/Guide/CHANGELOG.md) |
-| **V3.7.6** | 2026-11-21 | **游客身份治理（L3）+ 管理面敏感值掩码 + 管理员首进 UI 修复**。① require_login 恢复 fail-closed（18 端点重分类，11 个游客可达端点显式转 `or_guest_noconsume`），新增 `POST /auth/guest/session` HMAC 签发游客身份（按 XFF末跳IP+UA 限频 6 次/小时），无 token 配额桶收敛 `H(末跳IP|UA)` 确定性派生（轮换 device_id 不再绕限额），游客记录 90 天清理；② 新增 `core/secret_masking.py` 统一掩码器：`/status`、`GET /{name}`、表浏览器 rows 不再下发密钥/token/密码哈希明文，明文改 `GET /{name}/reveal` 逐 key 显式拉取，insert/update 拦截掩码占位值回写；③ `isAdmin` 判定源改为面板本地用户优先 + `mergeUserPatch` 回填 authStore，修复管理员登录后首次进用户中心缺管理 UI。详见[完整更新日志](Docs/Guide/CHANGELOG.md) |
+| **V3.7.11** | 2026-11-22 | **修复：认证库进程内访问串行化（撕裂读根治层）**。V3.7.9 部署后生产实证撕裂窗口可持续 ~10s（重试防线赌不过持续写入：sessions 心跳每 ~5s、visit_tracking 每访问写）。连接 with 块全程持进程级互斥锁（提交发生在锁内），读与写提交物理互斥，单 worker 下确定性消灭撕裂读；19 处调用点 18 处本为 `with conn:`，location.py 唯一手动 commit 路径同步改 with；V3.7.9 重试保留为纵深防御。详见[完整更新日志](Docs/Guide/CHANGELOG.md) |
+| **V3.7.10** | 2026-11-22 | **体验：AI 对话状态信息栏简洁/详情折叠控件**。默认简洁模式仅「就绪 + 模式」徽章一行（移动端不再臃肿），点击尾部圆形按钮展开模型/消耗/额度/说明详情，偏好 localStorage 持久化；额度耗尽警告不受折叠影响恒显示；切换按钮触屏档 40×40px 目标（`pointer: coarse`）+ aria 全套，桌面/移动行为一致。详见[完整更新日志](Docs/Guide/CHANGELOG.md) |
+| **V3.7.9** | 2026-11-22 | **修复：瞬态数据库损坏窗口内请求 500——执行期自愈重试**。HF /data 网络盘上并发写提交窗口的撕裂读被并发请求看到（malformed / not a database，5 秒 4 连 500 后无 rebuild 自愈 200）；借出时 SELECT 1 探测只触页头覆盖不到。连接工厂改用自愈子类：只读语句遇损坏类错误退避重试（3 次 / 0.15s 递增，重试日志顺带补齐可观测性），写语句与非损坏错误不重试，持久损坏仍走既有恢复分支；全部 `get_auth_db_connection` 调用方零改动受益。详见[完整更新日志](Docs/Guide/CHANGELOG.md) |
+
 
 ---
 
@@ -642,6 +643,6 @@ tiles.negiao.cc.cd"]
 |:------:|:--------:|:--------:|
 | [GitHub](https://github.com/NEGIAO/WebGIS-Dev) | [webgis.negiao.cn](https://webgis.negiao.cn)（正式域名，GitHub Pages 托管） | [Hugging Face](https://NEGIAO-WebGIS.hf.space) |
 
-<sub>V3.7.8 · 开发中 · 最后更新 2026-11-22</sub>
+<sub>V3.7.11 · 开发中 · 最后更新 2026-11-22</sub>
 
 </div>

@@ -1,7 +1,8 @@
 <template>
     <div :class="['service-status', { 'is-exhausted': config.quotaExhausted }]">
-        <!-- 状态条：固定两行分组（第一行 就绪/模式/模型，第二行 消耗/额度），
-             不依赖 flex-wrap 的偶然换行位置 -->
+        <!-- 状态条（V3.7.9 简洁模式）：第一行恒放 就绪/模式 + 尾部详情切换按钮；
+             模型、消耗/额度、说明文案归入详情区，默认收起，点击切换按钮展开。
+             移动端信息栏不再默认渲染全部信息。 -->
         <div class="status-strip">
             <div class="status-row">
                 <!-- 就绪指示：色点 + 短标签；完整文案（含未就绪原因）挂在 title 上 -->
@@ -29,8 +30,9 @@
                     />
                 </button>
 
-                <!-- 当前模型 + 来源标记 -->
+                <!-- 当前模型 + 来源标记（详情区：简洁模式下隐藏） -->
                 <span
+                    v-show="detailExpanded"
                     class="status-pill model-pill"
                     :title="modelTitle"
                 >
@@ -44,9 +46,32 @@
                         :class="['src-tag', modeTone]"
                     >{{ sourceLabel }}</span>
                 </span>
+
+                <!-- 详情切换（V3.7.9）：简洁/详情两态，偏好持久化 -->
+                <button
+                    :class="['detail-toggle', { 'is-expanded': detailExpanded }]"
+                    type="button"
+                    :aria-expanded="detailExpanded ? 'true' : 'false'"
+                    :aria-label="detailToggleLabel"
+                    :title="detailToggleLabel"
+                    @click="toggleDetail()"
+                >
+                    <ChevronUp
+                        v-if="detailExpanded"
+                        :size="14"
+                    />
+                    <ChevronDown
+                        v-else
+                        :size="14"
+                    />
+                </button>
             </div>
 
-            <div class="status-row">
+            <!-- 消耗 / 额度：详情区 -->
+            <div
+                v-show="detailExpanded"
+                class="status-row"
+            >
                 <!-- 本次消耗：仅后端代理计费模式出现 -->
                 <span
                     v-if="isProxyMode"
@@ -74,8 +99,11 @@
             </div>
         </div>
 
-        <!-- 说明文案：默认最多两行，额度耗尽时解除折叠并高亮 -->
-        <p :class="['status-note', { 'is-exhausted': config.quotaExhausted }]">
+        <!-- 说明文案（详情区）：额度耗尽时无论折叠与否强制显示——警告不可被折叠吞掉 -->
+        <p
+            v-show="detailExpanded || config.quotaExhausted"
+            :class="['status-note', { 'is-exhausted': config.quotaExhausted }]"
+        >
             {{ config.statusHint }}
         </p>
     </div>
@@ -85,7 +113,7 @@
 
 <style scoped>
 .service-status {
-    border-bottom: 1px solid #eef2ef;
+    /* 底部边界交给 .scroll-top-section 的渐隐分区线（V3.7.10 零散修补：避免双线叠影） */
     background: #ffffff;
     padding: 8px 12px 7px;
     flex: 0 0 auto;
@@ -292,6 +320,58 @@
     display: block;
     color: #c62828;
     font-weight: 600;
+}
+
+/* ========== 详情切换按钮（V3.7.9） ========== */
+.detail-toggle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    margin-left: auto;
+    padding: 0;
+    border: 1px solid #e4ece7;
+    border-radius: 999px;
+    background: #f7faf8;
+    color: #44554b;
+    cursor: pointer;
+    font-family: inherit;
+    opacity: 0.75;
+    transition: opacity 0.15s, border-color 0.15s, background 0.15s;
+}
+
+.detail-toggle:hover {
+    opacity: 1;
+    border-color: var(--brand-primary-light);
+    background: var(--bg-brand-light);
+}
+
+.detail-toggle:focus-visible {
+    outline: 2px solid var(--brand-primary);
+    outline-offset: 1px;
+}
+
+.detail-toggle svg {
+    display: block;
+}
+
+/* 触屏基线（判据 pointer: coarse，不用宽度断点）：可点击目标 ≥40px，
+   负 margin 抵消避免撑高状态行；图标 glyph 同步放大；按钮恒常显（非悬停浮现） */
+@media (pointer: coarse) {
+    .detail-toggle {
+        width: 40px;
+        height: 40px;
+        margin-top: -9px;
+        margin-bottom: -9px;
+        border: none;
+        background: transparent;
+    }
+
+    .detail-toggle svg {
+        width: 20px;
+        height: 20px;
+    }
 }
 
 /* 移动端：放宽 pill 触控高度 */

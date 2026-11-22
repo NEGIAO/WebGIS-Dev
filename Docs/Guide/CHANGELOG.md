@@ -17,6 +17,37 @@
 > 注：V3.7.2 号段已于同日重新启用，对应《修复 OpenLayers 加载 OSM 标准瓦片 403》条目，与本条无冲突。
 > 分主题的原始过程记录保留在 `Docs/LLM_record/26-11/2026-11-14/`，不迁移、不改写。
 
+### V3.7.11 (2026-11-22) — 修复：认证库进程内访问串行化（撕裂读根治层）
+
+> **一句话**：V3.7.9 重试防线部署后的首个生产撕裂窗口（13:46:44）实证：6 条 WARNING、4 条第 1 次重试即自愈，但 2 个热点查询 3 次重试全部落空仍 500，窗口持续 ~10s——HF /data 文件锁失效 + 写入持续（sessions 心跳每 ~5s），读随时撞写提交中间态，重试只是赌瞬时窗口。根治：连接 with 块全程持进程级互斥锁（`_db_access_lock` RLock），提交发生在锁内，读与写提交物理互斥。日志：[访问串行化](../LLM_record/26-11/2026-11-22/2026-11-22-fix-db-access-serialization.md)。
+
+1. **fix（可靠性）**：`db.py` 新增 `_db_access_lock` + `_SelfHealingConnection.__enter__/__exit__`（取锁 → 提交/回滚 → 放锁，RLock 容忍嵌套）——零调用点改动覆盖全部 `with conn:` 用法；V3.7.9 瞬态重试保留为纵深防御（借出探测、恢复流程等不经 with 的执行由其兜底）。
+2. **fix（一致性）**：`location.py` visit_tracking 保存路径由手动 commit + finally rollback 改为标准 with 块（19 处调用点中唯一例外），纳入串行化。
+3. **验证**：新增 3 单测（并发峰值恒为 1 / 异常路径放锁 / 同线程可重入）+ 相关域 pytest **67/67** 全绿；py_compile 通过。实机验证待用户执行（再遇写入高峰：不应再出现 malformed/not-a-database 500；WARNING 应趋近于零——仅剩探测/恢复路径的兜底重试）。
+4. **说明**：串行化代价 = DB 访问不再并发（本应用操作 µs–ms 级、流量轻，可忽略）；若未来多 worker 部署需重新评估（进程内锁不跨进程）。
+
+### V3.7.10 (2026-11-22) — 体验：AI 对话状态信息栏简洁/详情折叠控件
+
+> **一句话**：移动端反馈 AI 对话面板顶部状态信息栏臃肿（模型/额度/说明等低频信息常驻）。按用户选定方案实现折叠控件——默认简洁模式仅「就绪 + 模式」徽章一行，点击尾部按钮展开完整信息，偏好持久化。日志：[状态栏折叠控件](../LLM_record/26-11/2026-11-22/2026-11-22-fix-chat-status-compact-toggle.md)。
+
+1. **feat（UI）**：`ChatServiceStatus` 模型 pill、消耗/额度行、说明文案归入详情区（`v-show`）；第一行尾部新增 `.detail-toggle` 圆形按钮（ChevronDown↔ChevronUp，`aria-expanded` / `aria-label` 随态 i18n）。
+2. **feat（交互）**：`detailExpanded` 状态 + `toggleDetail()`，偏好持久化 `localStorage` 键 `webgis.chat.statusDetailExpanded`（默认收起；存储不可用静默降级）。
+3. **例外**：额度耗尽（`quotaExhausted`）时说明文案在简洁模式下仍强制显示——警告不可被折叠吞掉；额度 toast 逻辑不变。
+4. **移动端基线（§3）**：切换按钮新增 `@media (pointer: coarse)` 档——可点击目标 40×40px（负 margin 抵消不撑高状态行）、图标 glyph 14→20px、按钮恒常显；判据用触屏能力不用宽度断点。
+5. **验证**：vue-tsc / eslint 0 问题；结构树/配置登记门禁通过。实机六步（默认一行/展开收起/偏好保持/额度耗尽警告/既有交互回归/桌面一致）待用户执行。
+
+### V3.7.9 (2026-11-22) — 修复：瞬态数据库损坏窗口内请求 500（执行期自愈重试）
+
+> **号段说明（2026-11-22）**：V3.7.9 号段重新启用（先例同 V3.7.2；与 V3.7.7 / V3.7.8 归并条目中已废弃的同号曾用字样无涉）。
+> 日志：[瞬态损坏执行期自愈](../LLM_record/26-11/2026-11-22/2026-11-22-fix-transient-corruption-execute-retry.md)。
+
+> **一句话**：HF /data 网络盘上并发写提交窗口的撕裂读被并发请求看到（12:29:56 四连 500：malformed / not a database，5 秒后无 rebuild 自愈 200）——借出时 `SELECT 1` 探测只触页头、执行期异常无任何防线。连接工厂改用 `_SelfHealingConnection`：只读语句遇损坏类错误退避重试（3 次 / 0.15s 递增，总上限 <1s），写语句与非损坏错误不重试（幂等安全），持久损坏重试耗尽后仍走既有恢复分支。
+
+1. **fix（可靠性）**：`db.py` 新增 `_is_corruption_message` 分类器（与借出探测共用全集，探测分支同步去重）+ `_execute_with_corruption_retry` + `_SelfHealingConnection`（`_try_connect` factory 启用）——auth / statistics / agent_chat / historical_imagery 等全部 `get_auth_db_connection()` 调用方**零改动受益**。
+2. **observability**：每次重试打 WARNING（含错误与 SQL 摘要）——瞬态撕裂事件自此在生产日志可见，此前该类事件完全静默。
+3. **附带闭环**：`backend-structure.md` tests/ 小节补登记 `test_agent_stream.py`（前会话遗漏）与新增 `test_db_transient_corruption.py`；TODO 对应条目部分闭环（后端树门禁缺口仍开放）。
+4. **验证**：新增 9 单测（分类器全集/只读重试/WITH 重试/耗尽抛出/写透传/非损坏透传/工厂冒烟）+ 相关域 pytest 38/38 全绿。实机验证待用户执行（观察 HF 日志：瞬态窗口应不再出现 500，仅见 WARNING 重试行）。
+
 ### V3.7.8 (2026-11-22) — 修复：AI 工具调用 JSON 载荷与 ```tool_call 块直出给用户
 
 > **版本号归并（2026-11-22）**：两例同族展示修复（曾用号 V3.7.8 / V3.7.9）为**同一批未提交工作**的增量序列，

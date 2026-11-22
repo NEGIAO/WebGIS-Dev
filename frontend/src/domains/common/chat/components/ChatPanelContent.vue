@@ -161,9 +161,32 @@
 .scroll-top-section {
     flex: 0 1 auto;
     min-height: 0;
-    max-height: 55%;
+    max-height: 60%;
     overflow-y: auto;
     overscroll-behavior: contain;
+    /* 底部界限标识：两端渐隐的中性细线（参考 Linear/Vercel 渐变分隔线风格，
+       可辨识但不生硬；随触屏档微调深浅） */
+    border-bottom: 1px solid;
+    border-image: linear-gradient(
+        to right,
+        rgba(15, 42, 29, 0.02),
+        rgba(15, 42, 29, 0.16) 18%,
+        rgba(15, 42, 29, 0.16) 82%,
+        rgba(15, 42, 29, 0.02)
+    ) 1;
+}
+
+/* 触屏/移动端（判据 pointer: coarse，不用宽度断点——§3 基线）：
+   线体中心略加深一档，小竖屏上仍能读出分区 */
+@media (pointer: coarse) {
+    .scroll-top-section {
+        border-image: linear-gradient(
+            to right,
+            rgba(15, 42, 29, 0.02),
+            rgba(15, 42, 29, 0.22) 18%,
+            rgba(15, 42, 29, 0.22) 82%,
+            rgba(15, 42, 29, 0.02)
+        ) 1;
+    }
 }
 </style>
-

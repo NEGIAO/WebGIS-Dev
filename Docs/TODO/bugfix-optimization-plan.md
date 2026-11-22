@@ -427,7 +427,7 @@ Sprint 3（穿插）：P3-1 容器二轮（O1/O2 交替）→ P2-1 bundle 分析
 
 - [ ] **后端结构树缺 `test_agent_stream.py` 条目，且后端树无自动化门禁**（2026-11-22 · 暂存区复审时发现，按 Force_command §2.5 只记不改）：
   - [ ] (现象) 暂存区批次 E 新增 `backend/tests/test_agent_stream.py`，但 `Docs/Guide/backend-structure.md` 的 `tests/` 小节未登记（其余 9 个测试文件均逐文件登记）。`Scripts/CheckStructureTree.py` 只扫前端（`DOC=frontend-structure.md` / `SRC=frontend/src`），后端树纯手工维护、无漂移检测，故该批次日志所记「结构树 739/739 ✅」实为前端门禁结果，未能兜住后端缺项。
-  - [ ] (建议) ① 一行补登记（照 tests/ 小节既有格式加注释）；② 可考虑为 CheckStructureTree.py 增设后端树扫描段（或新增独立脚本），使后端文件增删同样有门禁兜底；③ 同时核对暂存区其他新文件（`2026-11-22-agent-streaming*.md` 日志属 Docs 不入树，无此问题）是否均有登记。
+  - [x] (已闭环·V3.7.9) `test_agent_stream.py` 已补登记进 `backend-structure.md` tests/ 小节；同日新增 `test_db_transient_corruption.py` 一并登记（后端树门禁缺口仍开放，见下一条建议②）。
 
 - [ ] **流式生成器候选轮换成功后不终止外层循环（P1）**（2026-11-22 · V3.7.8 暂存区 code review 发现，按 Force_command §2.5 只记不改）：
   - [ ] (现象) `backend/api/agent_chat/upstream.py` `_stream_upstream_chat_events`：内层端点循环命中 `if committed or tool_acc or stream_done: break`（≈:1336）只退出**端点**循环，外层 `for api_key in candidates`（:1291）继续下一候选——已成功锁定后仍对下一 key×endpoint 重复发起同一请求并再次 yield delta。

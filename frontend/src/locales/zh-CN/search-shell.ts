@@ -226,6 +226,8 @@ export default {
         serviceNotReady: '未就绪（请配置 API Key 或联系管理员）',
         readyShort: '已就绪',
         notReadyShort: '未就绪',
+        statusDetailShow: '展开状态详情（模型/额度）',
+        statusDetailHide: '收起状态详情',
         currentModel: '当前模型:',
         notConfigured: '未配置',
         adminConfigured: '管理员配置',

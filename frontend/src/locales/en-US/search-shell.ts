@@ -167,6 +167,8 @@ export default {
         personalAPIReady: 'Personal API configured (via backend proxy)',
         serviceNotReady: 'Not ready (please configure API Key or contact admin)',
         readyShort: 'Ready', notReadyShort: 'Not ready',
+        statusDetailShow: 'Show status details (model/quota)',
+        statusDetailHide: 'Hide status details',
         currentModel: 'Current Model:', notConfigured: 'Not configured',
         adminConfigured: 'Admin Configured', personalKey: 'Personal Key', proxy: 'Proxy',
         todayQuota: "Today's Quota:",
