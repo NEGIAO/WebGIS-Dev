@@ -180,6 +180,8 @@ export default {
         copied: '已复制',
         regenerate: '重新生成',
         thinking: '思考过程',
+        extraBodyPlaceholder: '{ "enable_thinking": true }',
+        extraBodyHint: '高级：注入上游 API 的额外参数（JSON 对象），例如思考开关、深度思考参数等，随请求原样透传给你的端点。',
         suggestions: {
             locate: '定位到南京师范大学',
             switchBase: '切换到谷歌代理卫星底图',
@@ -226,6 +228,8 @@ export default {
         serviceNotReady: '未就绪（请配置 API Key 或联系管理员）',
         readyShort: '已就绪',
         notReadyShort: '未就绪',
+        statusDetailShow: '展开状态详情（模型/额度）',
+        statusDetailHide: '收起状态详情',
         currentModel: '当前模型:',
         notConfigured: '未配置',
         adminConfigured: '管理员配置',

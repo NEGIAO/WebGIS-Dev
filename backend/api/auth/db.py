@@ -8,6 +8,7 @@ import os
 import shutil
 import sqlite3
 import threading
+import time
 from datetime import datetime, timedelta, timezone
 
 # 北京时间时区（UTC+8）
@@ -251,9 +252,110 @@ def _configured_journal_mode() -> str:
     return mode
 
 
+# ─── 执行期瞬态损坏自愈（V3.7.8）───
+# 借出时的 SELECT 1 探测只触页头，页级损坏 / 并发写提交窗口的撕裂读探测不到：
+# 异常在执行期（conn.execute 于 statistics 等调用方）才暴露并直接 500。
+# HF 生产日志 2026-11-22 12:29:56 四连 500（malformed / not a database）后 5 秒
+# 无 rebuild 自然恢复 200——瞬态撕裂实证。为只读语句加退避重试即可零 500 自愈；
+# 持久损坏重试耗尽后仍抛出，由下一次借出探测路由到既有恢复分支。
+_CORRUPTION_MARKERS = ("malformed", "corrupt", "not a database")
+_TRANSIENT_CORRUPTION_MAX_RETRIES = 3
+_TRANSIENT_CORRUPTION_BACKOFF_SECONDS = 0.15
+
+# ─── 进程内访问串行化（V3.7.8，撕裂读根治层）───
+# V3.7.8 部署后生产日志（13:46:44）实证：撕裂窗口可持续 ~10s——HF /data 网络盘
+# POSIX 文件锁不可靠，且写入持续发生（sessions 心跳每 ~5s、visit_tracking 每访问），
+# 读随时撞上写提交的页落盘中间态；重试只能赌瞬时窗口，赌不过持续写入。
+# 单 worker 进程内以访问级互斥根治：连接 with 块全程持锁（__enter__ 取锁 →
+# __exit__ 提交/回滚后放锁——提交必须发生在锁内），读与写提交在物理上不再重叠。
+# 前提：全部调用方均为 `with conn:` 用法（V3.7.7 审计 98 函数零嵌套；唯一例外
+# location.py 的 visit_tracking 已同步改为 with 块）；RLock 容忍同线程嵌套。
+# 不经 with 的执行（借出探测 SELECT 1、恢复流程内部）不受锁保护——由瞬态重试 /
+# 恢复分支兜底；恢复流程自身串行于 _recovery_lock。
+_db_access_lock = threading.RLock()
+
+
+def _is_corruption_message(message: str) -> bool:
+    """损坏类错误消息判定（与借出时探测共用同一全集）。"""
+    lowered = str(message or "").lower()
+    return any(marker in lowered for marker in _CORRUPTION_MARKERS)
+
+
+def _execute_with_corruption_retry(exec_fn, sql: str):
+    """执行一条语句并对「只读语句 + 损坏类错误」做退避重试（V3.7.8）。
+
+    - 仅重试 SELECT / WITH 开头的只读语句（幂等安全；写语句失败直接透传，
+      避免重试导致重复写入）；
+    - 非损坏类错误（如 no such table）不重试；
+    - 重试耗尽仍损坏则抛出最后一异常，由下一次借出探测路由到恢复分支；
+    - 每次重试打 WARNING：瞬态撕裂事件自此在生产日志可见。
+    """
+    sql_head = str(sql or "").lstrip().lower()
+    if not sql_head.startswith(("select", "with")):
+        return exec_fn()
+
+    for attempt in range(1, _TRANSIENT_CORRUPTION_MAX_RETRIES + 2):
+        try:
+            return exec_fn()
+        except sqlite3.DatabaseError as exc:
+            if not _is_corruption_message(str(exc)):
+                raise
+            if attempt > _TRANSIENT_CORRUPTION_MAX_RETRIES:
+                raise
+            logger.warning(
+                "Transient corruption on read statement (attempt %d/%d), retrying: "
+                "%s | SQL: %s",
+                attempt,
+                _TRANSIENT_CORRUPTION_MAX_RETRIES,
+                str(exc)[:160],
+                str(sql)[:80],
+            )
+            time.sleep(_TRANSIENT_CORRUPTION_BACKOFF_SECONDS * attempt)
+
+
+class _SelfHealingConnection(sqlite3.Connection):
+    """V3.7.8：借出后执行期瞬态损坏自愈连接；V3.7.8：with 块访问级串行化。
+
+    - execute 层：只读语句遇损坏类错误退避重试（见 V3.7.8 注）；
+      仅覆盖 execute 阶段（生产 traceback 实证异常均抛自 conn.execute）；
+      cursor 惰性取数阶段的页读取错误不在本防线内（见日志遗留项）。
+      PRAGMA / DDL / 写语句不重试，语义与原生连接一致。
+    - with 块层：全程持有 _db_access_lock（RLock）——提交发生在锁内，
+      读与写提交在进程内互斥，根治网络盘撕裂读（V3.7.8）。
+    """
+
+    def execute(self, sql, parameters=()):
+        def _exec():
+            return sqlite3.Connection.execute(self, sql, parameters)
+
+        try:
+            return _execute_with_corruption_retry(_exec, sql)
+        except sqlite3.DatabaseError as exc:
+            if _is_corruption_message(str(exc)):
+                # V3.7.8：执行期损坏重试耗尽 → 复位就绪标志，下一次借出强制走恢复分支。
+                # 页级损坏时借出探测（SELECT 1 只触页头）仍会通过，若不复位标志，
+                # 恢复分支永远不会被触发（生产 16:41:37 实证：重试耗尽 → 1×500 →
+                # 14s 后 FS 缓存自愈，全程无 rebuild）。复位后下一次借出以新鲜句柄
+                # quick_check：文件真损坏 → 重建；瞬态 → 仅换新句柄即恢复。
+                global _auth_storage_ready
+                _auth_storage_ready = False
+            raise
+
+    def __enter__(self):
+        _db_access_lock.acquire()
+        return super().__enter__()
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        try:
+            # 先按原语义提交/回滚，再放锁——提交必须发生在锁内
+            return super().__exit__(exc_type, exc_val, exc_tb)
+        finally:
+            _db_access_lock.release()
+
+
 def _try_connect(db_path: Path) -> sqlite3.Connection:
     """Create a connection with conservative settings for mounted storage."""
-    conn = sqlite3.connect(str(db_path), timeout=15, check_same_thread=False)
+    conn = sqlite3.connect(str(db_path), timeout=15, check_same_thread=False, factory=_SelfHealingConnection)
     try:
         conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA busy_timeout=15000;")
@@ -348,15 +450,13 @@ def _db_connection() -> sqlite3.Connection:
             conn.execute("SELECT 1").fetchone()
             return conn
         except sqlite3.DatabaseError as exc:
-            message = str(exc).lower()
             # V3.7.7：损坏类消息全集——「file is not a database」与 malformed/corrupt
             # 同属文件级失效（HF 日志 2026-11-22 10:04:51 瞬态实证），一并转恢复分支
-            if ("malformed" in message or "corrupt" in message
-                    or "not a database" in message):
+            if _is_corruption_message(str(exc)):
                 logger.error("Thread-local connection detected corruption: %s", exc)
                 _auth_storage_ready = False
                 _drop_thread_conn()
-            elif isinstance(exc, sqlite3.ProgrammingError) and "closed" in message:
+            elif isinstance(exc, sqlite3.ProgrammingError) and "closed" in str(exc).lower():
                 # V3.7.7 hotfix：共享连接被调用方关闭（如历史影像的 closing 包装）时
                 # 自愈重建，而非抛 500——连接生命周期由本工厂全权管理
                 logger.warning("Thread-local connection was closed externally; recreating")

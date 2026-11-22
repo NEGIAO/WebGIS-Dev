@@ -4,6 +4,8 @@
 
 import backendAPI from './client';
 import { AGENT_REQUEST_TIMEOUT_MS } from '../../config/publicRuntime';
+import { getBackendBearerToken, getOrCreateGuestDeviceId, getPresenceClientId } from '@common/user/services/auth';
+import { getGuestToken } from '@common/user/services/guestTokenStore';
 
 /**
  * 管理员：获取默认 AI 专属配置（含 api_key 完整值）
@@ -41,7 +43,7 @@ export async function apiGetDefaultAIConfig() {
  * @param {string} [payload.tool_choice] - 工具选择策略，如 'auto'、'none'、'required'
  * @returns {Promise}
  */
-export async function apiAgentChatDefaultProxy(payload: any = {}) {
+function buildDefaultProxyBody(payload: any = {}): Record<string, any> {
     const body: Record<string, any> = {
         message: String(payload.message || '').trim(),
         history: normalizeChatHistory(payload.history),
@@ -73,9 +75,163 @@ export async function apiAgentChatDefaultProxy(payload: any = {}) {
         body.tool_choice = String(payload.tool_choice).trim();
     }
 
+    return body;
+}
+
+/**
+ * 使用管理员配置的默认 AI 专属 Key 代理聊天（api_key 存储在后端数据库，前端无需传 key）
+ * @param {Object} payload - { message, history, location_context?, map_context?, override_model?, tools?, tool_choice? }
+ * @returns {Promise}
+ */
+export async function apiAgentChatDefaultProxy(payload: any = {}) {
+    const body = buildDefaultProxyBody(payload);
     return backendAPI.post('/api/agent/chat/default-proxy', body, {
         timeout: AGENT_REQUEST_TIMEOUT_MS,
     });
+}
+
+/**
+ * 使用管理员配置的默认 AI 专属 Key 流式代理聊天（V3.7.7 批次 E）。
+ * SSE 事件协议：meta / delta / final / error，终止帧 data: [DONE]。
+ * @param {Object} payload - 与 apiAgentChatDefaultProxy 相同
+ * @param {Object} handlers - { onDelta?: (accumulated: string) => void, signal?: AbortSignal }
+ * @returns {Promise<{reply: string, usedModel: string, rawData: Object|null, quota: null, cost: 0, streamed: true}>}
+ */
+async function agentChatStream(
+    path: string,
+    body: Record<string, any>,
+    handlers: {
+        onDelta?: (accumulated: string) => void;
+        onReasoning?: (accumulated: string) => void;
+        signal?: AbortSignal;
+    } = {},
+) {
+    const base = String((backendAPI as any).defaults?.baseURL || '').replace(/\/$/, '');
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    const token = getBackendBearerToken();
+    if (token) headers.Authorization = `Bearer ${token}`;
+    const deviceId = getOrCreateGuestDeviceId();
+    if (deviceId) headers['X-Guest-Device-Id'] = deviceId;
+    // V3.7.7 批次 F 修正：游客签名身份随流式请求携带（X-Guest-Token），与 axios
+    // 请求同身份——缺失时流式请求回落派生桶，同一游客在在线统计/配额桶中裂成两人
+    const guestToken = getGuestToken();
+    if (guestToken) headers['X-Guest-Token'] = guestToken;
+    const clientId = getPresenceClientId();
+    if (clientId) headers['X-Presence-Client-Id'] = clientId;
+
+    const resp = await fetch(`${base}${path}`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(body),
+        signal: handlers.signal,
+    });
+    if (!resp.ok || !resp.body) {
+        let detail = `HTTP ${resp.status}`;
+        try {
+            const j = await resp.json();
+            detail = String(j?.detail?.message || j?.detail || detail);
+        } catch {
+            /* 保留状态码文案 */
+        }
+        const err: any = new Error(detail);
+        err.status = resp.status;
+        throw err;
+    }
+
+    const reader = resp.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    let reply = '';
+    let reasoning = '';
+    let usedModel = '';
+    let rawData: any = null;
+    let quota: any = null;
+    let cost = 0;
+    let streamError = '';
+    let done = false;
+
+    while (!done) {
+        const { value, done: rdDone } = await reader.read();
+        if (rdDone) break;
+        buffer += decoder.decode(value, { stream: true });
+        let frameEnd: number;
+        while ((frameEnd = buffer.indexOf('\n\n')) !== -1) {
+            const frame = buffer.slice(0, frameEnd);
+            buffer = buffer.slice(frameEnd + 2);
+            for (const line of frame.split('\n')) {
+                if (!line.startsWith('data:')) continue;
+                const dataStr = line.slice(5).trim();
+                if (dataStr === '[DONE]') {
+                    done = true;
+                    break;
+                }
+                try {
+                    const evt = JSON.parse(dataStr);
+                    if (evt.type === 'reasoning') {
+                        // V3.7.8：思考型模型的思考增量（reasoning_content），供前端实时展示思考过程
+                        reasoning += String(evt.delta || '');
+                        handlers.onReasoning?.(reasoning);
+                    } else if (evt.type === 'delta') {
+                        reply += String(evt.delta || '');
+                        handlers.onDelta?.(reply);
+                    } else if (evt.type === 'meta') {
+                        usedModel = String(evt.model || usedModel);
+                    } else if (evt.type === 'final') {
+                        reply = String(evt.reply ?? reply);
+                        rawData = evt.rawData || null;
+                        usedModel = String(evt.model || usedModel);
+                        // V3.7.8：final 携带权威完整思考文本（覆盖增量累积，防丢包不一致）
+                        if (typeof evt.reasoning === 'string' && evt.reasoning) reasoning = evt.reasoning;
+                        quota = evt.quota ?? null;
+                        cost = Number(evt.cost) || 0;
+                    } else if (evt.type === 'error') {
+                        streamError = String(evt.message || 'upstream error');
+                    }
+                } catch {
+                    /* 无法解析的行静默跳过 */
+                }
+            }
+            if (done) break;
+        }
+    }
+
+    if (streamError) {
+        const err: any = new Error(streamError);
+        err.isStreamError = true;
+        throw err;
+    }
+    return { reply: reply.trim(), reasoning, usedModel, rawData, quota, cost, streamed: true as const };
+}
+
+/** 默认 AI 通道流式（V3.7.7 批次 E） */
+export async function defaultProxyChatStream(payload: any = {}, handlers: {
+    onDelta?: (accumulated: string) => void;
+    onReasoning?: (accumulated: string) => void;
+    signal?: AbortSignal;
+} = {}) {
+    return agentChatStream('/api/agent/chat/default-proxy/stream', buildDefaultProxyBody(payload), handlers);
+}
+
+/**
+ * 个人 Key 通道流式（V3.7.7 批次 F）：使用自备 Key，不消耗平台配额。
+ */
+export async function apiAgentChatProxyStream(payload: any = {}, handlers: {
+    onDelta?: (accumulated: string) => void;
+    onReasoning?: (accumulated: string) => void;
+    signal?: AbortSignal;
+} = {}) {
+    return agentChatStream('/api/agent/chat/proxy/stream', buildAgentProxyBody(payload), handlers);
+}
+
+/**
+ * 后端代理通道流式（V3.7.7 批次 F）：配额语义与非流式一致（预检 429 + 按 usage 折算扣费）。
+ */
+export async function apiAgentChatCompletionsStream(payload: any = {}, handlers: {
+    onDelta?: (accumulated: string) => void;
+    onReasoning?: (accumulated: string) => void;
+    signal?: AbortSignal;
+} = {}) {
+    return agentChatStream('/api/agent/chat/completions/stream', buildAgentCompletionsBody(payload), handlers);
 }
 
 /**
@@ -150,7 +306,7 @@ export async function apiAgentUpdateUserConfig(payload: any = {}) {
  * @param {string} [payload.tool_choice] - 工具选择策略
  * @returns {Promise}
  */
-export async function apiAgentChatCompletions(payload: any = {}) {
+function buildAgentCompletionsBody(payload: any = {}): Record<string, any> {
     const history = normalizeChatHistory(payload.history);
 
     const body: Record<string, any> = {
@@ -198,6 +354,14 @@ export async function apiAgentChatCompletions(payload: any = {}) {
         body.tool_choice = String(payload.tool_choice).trim();
     }
 
+    return body;
+}
+
+/**
+ * 后端代理模式聊天（非流式）
+ */
+export async function apiAgentChatCompletions(payload: any = {}) {
+    const body = buildAgentCompletionsBody(payload);
     return backendAPI.post('/api/agent/chat/completions', body, {
         timeout: AGENT_REQUEST_TIMEOUT_MS, // LLM 推理可能需要较长时间
     });
@@ -235,7 +399,7 @@ export async function apiAgentSaveModelPreference(preferredModel: any) {
  * @param {string} [payload.tool_choice] - 工具选择策略
  * @returns {Promise}
  */
-export async function apiAgentChatProxy(payload: any = {}) {
+function buildAgentProxyBody(payload: any = {}): Record<string, any> {
     const body: Record<string, any> = {
         message: String(payload.message || '').trim(),
         history: normalizeChatHistory(payload.history),
@@ -270,6 +434,14 @@ export async function apiAgentChatProxy(payload: any = {}) {
         body.tool_choice = String(payload.tool_choice).trim();
     }
 
+    return body;
+}
+
+/**
+ * 个人 Key 聊天（后端转发，非流式）
+ */
+export async function apiAgentChatProxy(payload: any = {}) {
+    const body = buildAgentProxyBody(payload);
     return backendAPI.post('/api/agent/chat/proxy', body, {
         timeout: AGENT_REQUEST_TIMEOUT_MS, // LLM 推理可能需要较长时间
     });

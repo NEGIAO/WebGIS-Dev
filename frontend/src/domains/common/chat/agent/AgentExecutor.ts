@@ -12,7 +12,7 @@
  * @module AgentExecutor
  */
 
-import { parseToolCallsFromText, formatToolResultForLLM } from '@common/chat/constants/agentToolsSchema';
+import { parseToolCallsFromText, formatToolResultForLLM, formatToolResultForUser } from '@common/chat/constants/agentToolsSchema';
 
 // ============================================================
 //  类型定义
@@ -245,6 +245,15 @@ export class AgentExecutor {
 
         return results
             .map((r) => formatToolResultForLLM(r.name, r.result))
+            .join('\n');
+    }
+
+    /** 构建工具执行结果的用户可见摘要（仅人读 message，不含 LLM 专用 JSON 载荷） */
+    static buildUserResultSummary(results: ToolExecutionResult[]): string {
+        if (!Array.isArray(results) || results.length === 0) return '';
+
+        return results
+            .map((r) => formatToolResultForUser(r.name, r.result))
             .join('\n');
     }
 }

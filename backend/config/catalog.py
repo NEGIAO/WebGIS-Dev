@@ -127,7 +127,7 @@ CONFIG_CATALOG: Dict[str, ConfigMeta] = {
     },
     "AGENT_MAX_TOKENS": {
         "layer": "L1",
-        "default": 32768,
+        "default": 65536,
         "secret": False,
         "description": "Agent max_tokens",
     },

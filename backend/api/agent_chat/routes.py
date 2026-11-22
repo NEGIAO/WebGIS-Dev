@@ -57,9 +57,12 @@ from .schemas import (
     AgentUserConfigUpdateRequest,
     DefaultAIConfigUpdateRequest,
 )
+from fastapi.responses import StreamingResponse
 from .upstream import (
     _call_upstream_chat,
     _call_upstream_chat_with_key_candidates,
+    _sse_event,
+    _stream_upstream_chat_events,
     _call_upstream_models_with_key_candidates,
     _build_agent_system_prompt,
     _extract_assistant_reply,
@@ -550,6 +553,375 @@ async def agent_chat_default_proxy(
             elapsed_ms=elapsed_ms,
             request_params=request_params,
         )
+
+
+@router.post("/chat/default-proxy/stream")
+async def agent_chat_default_proxy_stream(
+    payload: AgentChatRequest,
+    request: Request,
+    session: Dict[str, Any] = Depends(require_api_access_or_guest_noconsume),
+) -> StreamingResponse:
+    """流式版 default-proxy（V3.7.7 批次 E）：SSE 转发上游增量，首字秒回。
+
+    鉴权/配置/模型解析/位置上下文与 /chat/default-proxy 完全一致；
+    事件协议见 upstream._stream_upstream_chat_events docstring；
+    默认 AI 模式不扣额度；事件终止帧 data: [DONE]。
+    """
+    username = str(session.get("username") or "anonymous")
+    role = normalize_role(session.get("role"), username)
+
+    default_config = await asyncio.to_thread(_get_default_ai_config_sync)
+    if not default_config.get("is_configured"):
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="默认 AI 专属配置未完成，请联系管理员配置 api_key / base_url / model。",
+        )
+
+    api_key = str(default_config.get("api_key") or "").strip()
+    if not api_key:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="默认 AI 专属 api_key 未配置。",
+        )
+    base_url = str(default_config.get("base_url") or "").strip()
+    model = str(default_config.get("model") or "").strip()
+
+    override_model = str(payload.override_model or "").strip()
+    if override_model:
+        model = override_model
+
+    override_timeout = int(payload.override_timeout_seconds) if payload.override_timeout_seconds is not None else DEFAULT_AGENT_TIMEOUT_SECONDS
+    override_max_tokens = int(payload.override_max_tokens) if payload.override_max_tokens is not None else DEFAULT_AGENT_MAX_TOKENS
+    override_temp = float(payload.override_temperature) if payload.override_temperature is not None else DEFAULT_AGENT_TEMPERATURE
+    override_top_p = float(payload.override_top_p) if payload.override_top_p is not None else float(DEFAULT_AGENT_TOP_P)
+    override_extra_body = payload.override_extra_body if payload.override_extra_body is not None else DEFAULT_AGENT_EXTRA_BODY
+
+    history_items = _sanitize_history(payload.history)
+
+    location_context = str(payload.location_context or "").strip()
+    if not location_context:
+        client_ip = _extract_client_ip(request)
+        ip_location = await _try_get_location_from_ip_async(client_ip)
+        if ip_location:
+            location_context = ip_location
+
+    system_prompt = _build_agent_system_prompt(
+        DEFAULT_AGENT_SYSTEM_PROMPT,
+        location_context,
+        payload.map_context,
+    )
+
+    request_messages: List[Dict[str, str]] = [{"role": "system", "content": system_prompt}]
+    request_messages.extend(history_items)
+    request_messages.append({"role": "user", "content": str(payload.message or "").strip()})
+
+    request_params = json.dumps(
+        {
+            "endpoint": "/api/agent/chat/default-proxy/stream",
+            "model": model,
+            "base_url": base_url,
+            "history_len": len(history_items),
+            "has_location_context": bool(location_context),
+            "has_map_context": payload.map_context is not None,
+            "stream": True,
+            "has_model_override": bool(override_model),
+        },
+        ensure_ascii=False,
+    )
+    started_at = time.perf_counter()
+
+    async def _event_generator():
+        upstream_status = 200
+        try:
+            async for evt in _stream_upstream_chat_events(
+                request,
+                base_url=base_url,
+                api_keys=[api_key],
+                model=model,
+                messages=request_messages,
+                timeout_seconds=override_timeout,
+                max_tokens=override_max_tokens,
+                temperature=override_temp,
+                top_p=override_top_p,
+                extra_body=override_extra_body,
+                tools=payload.tools,
+                tool_choice=payload.tool_choice or "auto",
+            ):
+                try:
+                    if evt.startswith("data:") and evt[5:].strip() not in ("[DONE]", ""):
+                        evt_data = json.loads(evt[5:].strip())
+                        if evt_data.get("type") == "error":
+                            upstream_status = 502
+                except Exception:
+                    pass
+                yield evt
+        finally:
+            elapsed_ms = (time.perf_counter() - started_at) * 1000.0
+            await _record_agent_call_safe(
+                username=username,
+                role=role,
+                status_code=upstream_status,
+                elapsed_ms=elapsed_ms,
+                request_params=request_params,
+            )
+
+    return StreamingResponse(
+        _event_generator(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
+@router.post("/chat/proxy/stream")
+async def agent_chat_proxy_stream(
+    payload: AgentChatProxyRequest,
+    request: Request,
+    session: Dict[str, Any] = Depends(require_api_access_or_guest_noconsume),
+) -> StreamingResponse:
+    """流式版个人 Key 聊天（V3.7.7 批次 F）：SSE 转发上游增量；使用自备 Key，不消耗平台配额。"""
+    username = str(session.get("username") or "anonymous")
+    role = normalize_role(session.get("role"), username)
+
+    api_key = str(payload.api_key or "").strip()
+    base_url = str(payload.base_url or "").strip().rstrip("/")
+    model = str(payload.model or "").strip()
+
+    if not api_key or not base_url or not model:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="api_key, base_url, model are required.",
+        )
+
+    history_items = _sanitize_history(payload.history)
+
+    location_context = str(payload.location_context or "").strip()
+    if not location_context:
+        client_ip = _extract_client_ip(request)
+        ip_location = await _try_get_location_from_ip_async(client_ip)
+        if ip_location:
+            location_context = ip_location
+
+    user_system_prompt = str(payload.system_prompt or "").strip()
+    if not user_system_prompt:
+        user_system_prompt = "You are a helpful AI assistant. Reply in concise Chinese unless the user asks for another language."
+
+    system_prompt = _build_agent_system_prompt(user_system_prompt, location_context, payload.map_context)
+
+    request_messages: List[Dict[str, str]] = [{"role": "system", "content": system_prompt}]
+    request_messages.extend(history_items)
+    request_messages.append({"role": "user", "content": str(payload.message or "").strip()})
+
+    request_params = json.dumps(
+        {
+            "endpoint": "/api/agent/chat/proxy/stream",
+            "model": model,
+            "base_url": base_url,
+            "history_len": len(history_items),
+            "has_location_context": bool(location_context),
+            "has_map_context": payload.map_context is not None,
+            "stream": True,
+        },
+        ensure_ascii=False,
+    )
+    started_at = time.perf_counter()
+
+    async def _event_generator():
+        upstream_status = 200
+        try:
+            async for evt in _stream_upstream_chat_events(
+                request,
+                base_url=base_url,
+                api_keys=[api_key],
+                model=model,
+                messages=request_messages,
+                timeout_seconds=int(payload.timeout_seconds),
+                max_tokens=int(payload.max_tokens),
+                temperature=float(payload.temperature),
+                top_p=float(payload.top_p),
+                extra_body=payload.extra_body,
+                tools=payload.tools,
+                tool_choice=payload.tool_choice,
+            ):
+                try:
+                    if evt.startswith("data:") and evt[5:].strip() not in ("[DONE]", ""):
+                        evt_data = json.loads(evt[5:].strip())
+                        if evt_data.get("type") == "error":
+                            upstream_status = 502
+                except Exception:
+                    pass
+                yield evt
+        finally:
+            elapsed_ms = (time.perf_counter() - started_at) * 1000.0
+            await _record_agent_call_safe(
+                username=username,
+                role=role,
+                status_code=upstream_status,
+                elapsed_ms=elapsed_ms,
+                request_params=request_params,
+            )
+
+    return StreamingResponse(
+        _event_generator(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
+@router.post("/chat/completions/stream")
+async def agent_chat_completions_stream(
+    payload: AgentChatRequest,
+    request: Request,
+    session: Dict[str, Any] = Depends(require_api_access_or_guest_noconsume),
+) -> StreamingResponse:
+    """流式版后端代理通道（V3.7.7 批次 F）：配额语义与非流式一致——
+    预检 429 在建连前；扣费在流正常结束后按实际 usage 折算（缺失按最低 1 额度）。"""
+    username = str(session.get("username") or "")
+    role = normalize_role(session.get("role"), username)
+    quota_subject = resolve_quota_subject(username, role, session.get("guest_uid"))
+
+    quota_snapshot = await asyncio.to_thread(get_user_quota_snapshot_sync, username, role, quota_subject)
+    if quota_snapshot["remaining"] is not None and quota_snapshot["remaining"] <= 0:
+        limit = quota_snapshot["limit"]
+        used = quota_snapshot["used"]
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=f"今日 API 额度已达上限（{used}/{limit}），请明日再试。",
+        )
+
+    runtime = await asyncio.to_thread(_resolve_effective_agent_runtime_sync, username)
+
+    override_api_key = str(payload.override_api_key or "").strip()
+    override_base_url = str(payload.override_base_url or "").strip()
+    override_model = str(payload.override_model or "").strip()
+
+    api_key = override_api_key if override_api_key else str(runtime.get("api_key") or "").strip()
+    api_key_candidates = (
+        [override_api_key]
+        if override_api_key
+        else list(runtime.get("api_key_candidates") or [api_key])
+    )
+    runtime_model = override_model if override_model else str(runtime.get("model") or "").strip()
+    base_url = (
+        _validate_override_base_url(override_base_url, has_override_key=bool(override_api_key))
+        if override_base_url
+        else str(runtime.get("base_url") or DEFAULT_AGENT_BASE_URL).strip()
+    )
+    override_timeout = int(payload.override_timeout_seconds) if payload.override_timeout_seconds is not None else int(runtime.get("timeout_seconds") or DEFAULT_AGENT_TIMEOUT_SECONDS)
+    override_max_tokens = int(payload.override_max_tokens) if payload.override_max_tokens is not None else int(runtime.get("max_tokens") or DEFAULT_AGENT_MAX_TOKENS)
+    _rt_temp = runtime.get("temperature")
+    _rt_top_p = runtime.get("top_p")
+    override_temp = float(payload.override_temperature) if payload.override_temperature is not None else (float(_rt_temp) if _rt_temp is not None else DEFAULT_AGENT_TEMPERATURE)
+    override_top_p = float(payload.override_top_p) if payload.override_top_p is not None else (float(_rt_top_p) if _rt_top_p is not None else DEFAULT_AGENT_TOP_P)
+    override_extra_body = payload.override_extra_body if payload.override_extra_body is not None else runtime.get("extra_body") or DEFAULT_AGENT_EXTRA_BODY
+
+    if not api_key:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Agent key is not configured on backend. Please contact admin.",
+        )
+
+    if not runtime_model:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Agent model is not configured. Please set model or available_models in backend config.",
+        )
+
+    history_items = _sanitize_history(payload.history)
+
+    location_context = str(payload.location_context or "").strip()
+    if not location_context:
+        client_ip = _extract_client_ip(request)
+        ip_location = await _try_get_location_from_ip_async(client_ip)
+        if ip_location:
+            location_context = ip_location
+
+    system_prompt = _build_agent_system_prompt(
+        str(runtime.get("system_prompt") or DEFAULT_AGENT_SYSTEM_PROMPT),
+        location_context,
+        payload.map_context,
+    )
+
+    request_messages: List[Dict[str, str]] = [{"role": "system", "content": system_prompt}]
+    request_messages.extend(history_items)
+    request_messages.append({"role": "user", "content": str(payload.message or "").strip()})
+
+    request_params = json.dumps(
+        {
+            "model": runtime_model,
+            "base_url": base_url,
+            "history_len": len(history_items),
+            "quota_subject": quota_subject,
+            "api_key_source": runtime.get("api_key_source"),
+            "model_source": runtime.get("model_source"),
+            "has_location_context": bool(location_context),
+            "has_map_context": payload.map_context is not None,
+            "stream": True,
+            "has_overrides": bool(override_api_key or override_base_url or override_model),
+        },
+        ensure_ascii=False,
+    )
+    started_at = time.perf_counter()
+
+    async def _event_generator():
+        upstream_status = 200
+        try:
+            async for evt in _stream_upstream_chat_events(
+                request,
+                base_url=base_url,
+                api_keys=api_key_candidates,
+                model=runtime_model,
+                messages=request_messages,
+                timeout_seconds=override_timeout,
+                max_tokens=override_max_tokens,
+                temperature=override_temp,
+                top_p=override_top_p,
+                extra_body=override_extra_body,
+                tools=payload.tools,
+                tool_choice=payload.tool_choice,
+            ):
+                try:
+                    if evt.startswith("data:"):
+                        evt_text = evt[5:].strip()
+                        if evt_text == "[DONE]":
+                            yield evt
+                            continue
+                        evt_data = json.loads(evt_text)
+                        if evt_data.get("type") == "final":
+                            # 配额：按流式累计 usage 折算（缺失按最低 1 额度），语义与非流式一致
+                            usage = evt_data.get("usage") or {}
+                            total_tokens = int(usage.get("total_tokens") or 0) if isinstance(usage, dict) else 0
+                            tokens_per_unit = await asyncio.to_thread(_get_agent_tokens_per_unit)
+                            agent_cost = max(1, (total_tokens + tokens_per_unit - 1) // tokens_per_unit)
+                            quota_after = await asyncio.to_thread(
+                                _consume_api_quota_sync, username, role, quota_subject, cost=agent_cost, action="agent",
+                            )
+                            evt_data["quota"] = quota_after
+                            evt_data["cost"] = agent_cost
+                            evt_data["usage"] = usage
+                            evt_data["model_source"] = str(runtime.get("model_source") or "unknown")
+                            evt_data["api_key_source"] = str(runtime.get("api_key_source") or "unknown")
+                            yield _sse_event(evt_data)
+                            continue
+                        if evt_data.get("type") == "error":
+                            upstream_status = 502
+                except Exception:
+                    pass
+                yield evt
+        finally:
+            elapsed_ms = (time.perf_counter() - started_at) * 1000.0
+            await _record_agent_call_safe(
+                username=username,
+                role=role,
+                status_code=upstream_status,
+                elapsed_ms=elapsed_ms,
+                request_params=request_params,
+            )
+
+    return StreamingResponse(
+        _event_generator(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 
 @router.get("/user-config")

@@ -1,10 +1,24 @@
 /**
  * ChatServiceStatus.vue 实例逻辑（路由模式/服务状态/额度状态条）
+ * V3.7.8：移动端信息栏瘦身——默认简洁模式（仅就绪/模式徽章一行），
+ * 点击展开按钮查看模型/消耗/额度/说明详情；偏好持久化到 localStorage。
  */
-import { computed, defineComponent, watch, type ComputedRef } from 'vue';
-import { ArrowLeftRight, Coins, Cpu, Gauge } from '@lucide/vue';
+import { computed, defineComponent, ref, watch, type ComputedRef, type Ref } from 'vue';
+import { ArrowLeftRight, ChevronDown, ChevronUp, Coins, Cpu, Gauge } from '@lucide/vue';
 import { useMessage } from '@common/shell/useMessage';
 import { useLocale } from '@common/app/useLocale';
+
+/** 状态详情展开偏好的 localStorage 键（默认收起 = 简洁模式） */
+const STATUS_DETAIL_PREF_KEY = 'webgis.chat.statusDetailExpanded';
+
+/** 读取持久化的展开偏好；缺省/解析失败一律回退「收起」。 */
+function readDetailExpandedPref(): boolean {
+    try {
+        return window.localStorage.getItem(STATUS_DETAIL_PREF_KEY) === 'true';
+    } catch {
+        return false;
+    }
+}
 
 export class Instance {
     public message: any;
@@ -18,6 +32,10 @@ export class Instance {
     public readyFullText: ComputedRef<string>;
     public quotaLabel: ComputedRef<string>;
     public costText: ComputedRef<string>;
+    /** 状态详情展开态（简洁模式 = false，默认） */
+    public detailExpanded: Ref<boolean>;
+    /** 展开按钮的可访问文案 */
+    public detailToggleLabel: ComputedRef<string>;
 
     constructor(props: any) {
         this.message = useMessage();
@@ -67,6 +85,12 @@ export class Instance {
             props.config.lastCallCost > 0 ? `-${props.config.lastCallCost}` : this.t('chat.noCostYet')
         ));
 
+        // V3.7.8：状态详情折叠态（默认简洁模式），偏好持久化到 localStorage
+        this.detailExpanded = ref(readDetailExpandedPref());
+        this.detailToggleLabel = computed(() => (
+            this.detailExpanded.value ? this.t('chat.statusDetailHide') : this.t('chat.statusDetailShow')
+        ));
+
         watch(
             () => props.config.quotaExhausted,
             (exhausted) => {
@@ -74,12 +98,24 @@ export class Instance {
             },
         );
     }
+
+    /** 切换详情展开态并持久化偏好（存储不可用时静默，仅影响下次默认态） */
+    public toggleDetail = () => {
+        this.detailExpanded.value = !this.detailExpanded.value;
+        try {
+            window.localStorage.setItem(STATUS_DETAIL_PREF_KEY, String(this.detailExpanded.value));
+        } catch {
+            /* 隐私模式等存储不可用时静默 */
+        }
+    };
 }
 
 export default defineComponent({
     name: 'ChatServiceStatus',
     components: {
         ArrowLeftRight,
+        ChevronDown,
+        ChevronUp,
         Coins,
         Cpu,
         Gauge,

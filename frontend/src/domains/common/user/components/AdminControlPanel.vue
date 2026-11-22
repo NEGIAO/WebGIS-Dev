@@ -353,7 +353,7 @@
                                         class="form-input"
                                         type="number"
                                         min="1"
-                                        max="32768"
+                                        max="131072"
                                     />
                                 </div>
                                 <div class="form-group">

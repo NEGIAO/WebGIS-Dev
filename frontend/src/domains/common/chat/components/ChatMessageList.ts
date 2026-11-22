@@ -46,6 +46,8 @@ const propDefine = {
 export type ChatMessageListProps = ExtractPropTypes<typeof propDefine>;
 
 const NEAR_BOTTOM_PX = 80;
+/** 思考块内层跟随阈值：距底超过此值视为用户主动上翻，本次增量不跟随 */
+const THINK_FOLLOW_PX = 24;
 
 export default defineComponent({
 	name: 'ChatMessageList',
@@ -84,6 +86,10 @@ export class Instance {
 	public unseenCount = ref(0);
 	private copiedTimer: ReturnType<typeof setTimeout> | null = null;
 	private htmlCache = new Map<string, string>();
+	/** 思考块内层滚动容器登记表（key = 消息下标，由模板函数式 ref 维护） */
+	private thinkBodies = new Map<number, HTMLElement>();
+	/** 已完成首次贴底的容器：首次出现时无条件跟随，避免首个超长增量被误判为用户上翻 */
+	private thinkPrimed = new Set<number>();
 
 	public formatTime = formatTimeShort;
 
@@ -145,6 +151,8 @@ export class Instance {
 				clearTimeout(this.copiedTimer);
 				this.copiedTimer = null;
 			}
+			this.thinkBodies.clear();
+			this.thinkPrimed.clear();
 		});
 	}
 
@@ -170,16 +178,75 @@ export class Instance {
 		return el.scrollHeight - el.scrollTop - el.clientHeight < NEAR_BOTTOM_PX;
 	}
 
-	public scrollToBottom = (force = false) => {
+	/**
+	 * 登记 / 注销思考块内层滚动容器（模板函数式 ref 回调）。
+	 * @param index 消息下标（v-for index），作为容器唯一键
+	 * @param el    DOM 元素；元素卸载时 Vue 传入 null，此时从登记表移除
+	 */
+	public bindThinkBody = (index: number, el: unknown) => {
+		if (el instanceof HTMLElement) {
+			this.thinkBodies.set(index, el);
+			return;
+		}
+		this.thinkBodies.delete(index);
+		this.thinkPrimed.delete(index);
+	};
+
+	/**
+	 * 采样各思考容器「当前是否已贴底」。
+	 * 必须在 DOM 更新前调用——此时 scrollHeight 仍是本轮增量写入前的旧值，
+	 * 才能把「内容一次变长很多」与「用户主动上翻」区分开。
+	 * @param force 为 true 时无条件判定跟随（「回到底部」按钮语义）
+	 * @returns 消息下标 → 下一次 DOM 更新后是否继续跟随
+	 */
+	private captureThinkFollowFlags(force = false) {
+		const flags = new Map<number, boolean>();
+		this.thinkBodies.forEach((node, index) => {
+			if (!node.isConnected) return;
+			const distance = node.scrollHeight - node.scrollTop - node.clientHeight;
+			// 首次出现的容器尚未被驱动过，无条件贴底；折叠态（scrollHeight=0）距离为负，
+			// 亦天然判为跟随，写入无副作用
+			flags.set(index, force || !this.thinkPrimed.has(index) || distance < THINK_FOLLOW_PX);
+		});
+		return flags;
+	}
+
+	/**
+	 * DOM 更新完成后，把仍处于跟随状态的思考容器滚到最底部。
+	 * @param flags captureThinkFollowFlags 的采样结果
+	 */
+	private applyThinkFollow(flags: Map<number, boolean>) {
+		flags.forEach((follow, index) => {
+			if (!follow) return;
+			const node = this.thinkBodies.get(index);
+			if (!node?.isConnected) return;
+			node.scrollTop = node.scrollHeight;
+			this.thinkPrimed.add(index);
+		});
+	}
+
+	/**
+	 * 滚动消息列表到底部，并同步思考块内层滚动位置。
+	 * @param force      无视「近底」判断强制外层到底（流式增量调用）
+	 * @param forceThink 同时强制思考块内层到底（用户点「回到底部」时调用）
+	 */
+	public scrollToBottom = (force = false, forceThink = false) => {
+		// 同步阶段 DOM 尚未更新：先按旧内容采样内层跟随状态
+		const thinkFlags = this.captureThinkFollowFlags(forceThink);
 		nextTick(() => {
 			const el = this.chatBody.value;
-			if (!el) return;
-			if (force || this.isNearBottom()) {
-				el.scrollTop = el.scrollHeight;
-				this.unseenCount.value = 0;
+			if (el) {
+				if (force || this.isNearBottom()) {
+					el.scrollTop = el.scrollHeight;
+					this.unseenCount.value = 0;
+				}
 			}
+			this.applyThinkFollow(thinkFlags);
 		});
 	};
+
+	/** 「回到底部」悬浮钮入口：外层消息流与思考块内层一并强制到底 */
+	public scrollToLatest = () => this.scrollToBottom(true, true);
 
 	public onScroll = () => {
 		const near = this.isNearBottom();

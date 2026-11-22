@@ -235,7 +235,7 @@ def _upsert_agent_user_config_sync(username: str, updates: Dict[str, Any], updat
     if "timeout_seconds" in updates:
         merged["timeout_seconds"] = _safe_parse_int(updates.get("timeout_seconds"), DEFAULT_AGENT_TIMEOUT_SECONDS, 5, 180)
     if "max_tokens" in updates:
-        merged["max_tokens"] = _safe_parse_int(updates.get("max_tokens"), DEFAULT_AGENT_MAX_TOKENS, 1, 32768)
+        merged["max_tokens"] = _safe_parse_int(updates.get("max_tokens"), DEFAULT_AGENT_MAX_TOKENS, 1, 131072)
     if "temperature" in updates:
         merged["temperature"] = _safe_parse_float(updates.get("temperature"), DEFAULT_AGENT_TEMPERATURE, 0.0, 2.0)
     if "top_p" in updates:
@@ -401,7 +401,7 @@ def _get_agent_provider_config_sync() -> Dict[str, Any]:
         config_values.get(CONFIG_KEY_MAX_TOKENS),
         DEFAULT_AGENT_MAX_TOKENS,
         1,
-        32768,
+        131072,
     )
     temperature = _safe_parse_float(
         config_values.get(CONFIG_KEY_TEMPERATURE),
@@ -484,7 +484,7 @@ def _set_agent_provider_config_sync(updates: Dict[str, Any]) -> Dict[str, Any]:
         rows_to_upsert.append(
             (
                 CONFIG_KEY_MAX_TOKENS,
-                str(_safe_parse_int(updates["max_tokens"], DEFAULT_AGENT_MAX_TOKENS, 1, 32768)),
+                str(_safe_parse_int(updates["max_tokens"], DEFAULT_AGENT_MAX_TOKENS, 1, 131072)),
                 now_iso,
             )
         )
@@ -646,7 +646,9 @@ def _resolve_effective_agent_runtime_sync(username: str) -> Dict[str, Any]:
         "available_models": available_models,
         "system_prompt": _normalize_system_prompt(str(user_cfg.get("system_prompt") or provider.get("system_prompt") or DEFAULT_AGENT_SYSTEM_PROMPT)),
         "timeout_seconds": _safe_parse_int(user_cfg.get("timeout_seconds"), int(provider.get("timeout_seconds") or DEFAULT_AGENT_TIMEOUT_SECONDS), 5, 180),
-        "max_tokens": _safe_parse_int(user_cfg.get("max_tokens"), int(provider.get("max_tokens") or DEFAULT_AGENT_MAX_TOKENS), 1, DEFAULT_AGENT_MAX_TOKENS),
+        # V3.7.15：运行时 clamp 上限对齐 schema（131072）——原跟随 DEFAULT（65536），
+        # 管理面保存 131072 会被此处静默压回（分层不一致陷阱）
+        "max_tokens": _safe_parse_int(user_cfg.get("max_tokens"), int(provider.get("max_tokens") or DEFAULT_AGENT_MAX_TOKENS), 1, 131072),
         "temperature": _safe_parse_float(user_cfg.get("temperature"), float(provider.get("temperature") or DEFAULT_AGENT_TEMPERATURE), 0.0, 2.0),
         "top_p": _safe_parse_float(user_cfg.get("top_p"), float(provider.get("top_p") or DEFAULT_AGENT_TOP_P), 0.0, 1.0),
         "extra_body": _safe_parse_extra_body(user_cfg.get("extra_body"), provider.get("extra_body") or DEFAULT_AGENT_EXTRA_BODY),

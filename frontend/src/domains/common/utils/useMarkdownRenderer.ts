@@ -417,6 +417,27 @@ const PURIFY_CONFIG = {
 };
 
 /**
+ * HTML 出口统一消毒（fail-closed）
+ * 所有最终写入 v-html 的字符串都必须经过本函数：
+ * - DOMPurify 就绪 → 按 PURIFY_CONFIG 白名单净化；
+ * - 未就绪或净化抛错 → 降级为纯文本转义，**绝不放行原始 HTML**。
+ * 原实现中「DOMPurify 未加载」分支直接返回未消毒 HTML，构成首屏窗口期 XSS 缺口。
+ * @param {string} html - 待消毒的 HTML 片段
+ * @returns {string} 可安全交给 v-html 的字符串
+ */
+function sanitizeHtml(html: string) {
+    const lib = dompurifyLib.value;
+    if (lib && typeof lib.sanitize === 'function') {
+        try {
+            return lib.sanitize(html, PURIFY_CONFIG);
+        } catch (_e) {
+            /* 净化异常 → 落到下方转义兜底 */
+        }
+    }
+    return escapeHtml(html).replace(/\n/g, '<br/>');
+}
+
+/**
  * 渲染 Agent 回答内容为 HTML
  * @param {string} rawContent - 原始 LLM 回复文本
  * @returns {string} 安全的 HTML 字符串
@@ -430,8 +451,10 @@ function renderAnswerHtml(rawContent: any) {
     let html;
 
     if (looksLikeHtml(trimmed)) {
-        // 原始 HTML 直接透传
-        html = trimmed;
+        // 原始 HTML 分支：内容可能来自 LLM 输出（可被 prompt 注入操纵）或工具结果回显
+        // （图层名、搜索关键字等用户可控字符串），因此与 markdown 路径同等对待，
+        // 必须过白名单净化——原「直接透传」等于绕过 DOMPurify。
+        html = sanitizeHtml(trimmed);
     } else if (markedLib.value && typeof markedLib.value.parse === 'function') {
         try {
             // 数学公式提取 → marked 解析 → DOMPurify 消毒 → KaTeX 渲染回代
@@ -440,32 +463,20 @@ function renderAnswerHtml(rawContent: any) {
             const preprocessed = extractMathExpressions(trimmed, ctx);
             const parsed = markedLib.value.parse(preprocessed);
             // 先消毒（占位符是纯文本，安全通过）
-            if (dompurifyLib.value && typeof dompurifyLib.value.sanitize === 'function') {
-                html = dompurifyLib.value.sanitize(parsed, PURIFY_CONFIG);
-            } else {
-                html = parsed;
-            }
+            html = sanitizeHtml(parsed);
             // 再用 KaTeX 渲染数学公式（在 sanitize 之后，避免 KaTeX HTML 被杀）
             if (katexLib.value) {
                 html = renderMathInHtml(html, katexLib.value, ctx.store);
             }
         } catch (_e) {
-            html = `<div>${escapeHtml(trimmed).replace(/\n/g, '<br/>')}</div>`;
+            html = escapeHtml(trimmed).replace(/\n/g, '<br/>');
         }
     } else {
         // marked 未加载的 fallback
-        html = `<div>${escapeHtml(trimmed).replace(/\n/g, '<br/>')}</div>`;
+        html = escapeHtml(trimmed).replace(/\n/g, '<br/>');
     }
 
-    // 非 marked 路径的 XSS 防护
-    if (!html && dompurifyLib.value && typeof dompurifyLib.value.sanitize === 'function') {
-        try {
-            return dompurifyLib.value.sanitize(html, PURIFY_CONFIG);
-        } catch (_e) {
-            return escapeHtml(trimmed).replace(/\n/g, '<br/>');
-        }
-    }
-
+    // 兜底：净化后为空（内容全被白名单过滤）时降级为纯文本，避免空气泡
     return html || escapeHtml(trimmed).replace(/\n/g, '<br/>');
 }
 
@@ -485,13 +496,8 @@ function renderThinkHtml(rawContent: any) {
             const ctx = createMathContext();
             const preprocessed = extractMathExpressions(think, ctx);
             const parsed = markedLib.value.parse(preprocessed);
-            let html;
             // 先消毒（占位符是纯文本，安全通过）
-            if (dompurifyLib.value && typeof dompurifyLib.value.sanitize === 'function') {
-                html = dompurifyLib.value.sanitize(parsed, PURIFY_CONFIG);
-            } else {
-                html = parsed;
-            }
+            let html = sanitizeHtml(parsed);
             // 再用 KaTeX 渲染数学公式（在 sanitize 之后）
             if (katexLib.value) {
                 html = renderMathInHtml(html, katexLib.value, ctx.store);

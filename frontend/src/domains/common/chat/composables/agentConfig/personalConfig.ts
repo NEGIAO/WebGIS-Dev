@@ -49,7 +49,7 @@ export function createPersonalConfigMethods(
                         model: String(personal?.model || effective?.model || ''),
                         system_prompt: String(personal?.system_prompt || ''),
                         timeout_seconds: Number(personal?.timeout_seconds ?? effective?.timeout_seconds ?? 45),
-                        max_tokens: Number(personal?.max_tokens ?? effective?.max_tokens ?? 32768),
+                        max_tokens: Number(personal?.max_tokens ?? effective?.max_tokens ?? 65536),
                         temperature: Number(personal?.temperature ?? effective?.temperature ?? 1),
                         top_p: Number(personal?.top_p ?? effective?.top_p ?? 0.95),
                         extra_body:
@@ -212,11 +212,32 @@ export function createPersonalConfigMethods(
                     return;
                 }
 
+                // V3.7.8：Extra Body 文本 → JSON 对象（非法 JSON 阻止保存并提示）
+                let extraBodyValue = config.userConfigDraft.extra_body ?? {};
+                if (typeof extraBodyValue === 'string') {
+                    const raw = (extraBodyValue as string).trim();
+                    if (!raw) {
+                        extraBodyValue = {};
+                    } else {
+                        try {
+                            const parsed = JSON.parse(raw);
+                            if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+                                throw new Error('not an object');
+                            }
+                            extraBodyValue = parsed;
+                        } catch {
+                            message.error('Extra Body 必须是合法的 JSON 对象');
+                            return;
+                        }
+                    }
+                    config.userConfigDraft.extra_body = extraBodyValue;
+                }
+
                 const backendPayload: any = {
                     model: String(config.userConfigDraft.model || '').trim(),
                     system_prompt: String(config.userConfigDraft.system_prompt || '').trim(),
                     timeout_seconds: Number(config.userConfigDraft.timeout_seconds || 45),
-                    max_tokens: Number(config.userConfigDraft.max_tokens || 32768),
+                    max_tokens: Number(config.userConfigDraft.max_tokens || 65536),
                     temperature: Number(config.userConfigDraft.temperature ?? 1),
                     top_p: Number(config.userConfigDraft.top_p ?? 0.95),
                     extra_body: config.userConfigDraft.extra_body,

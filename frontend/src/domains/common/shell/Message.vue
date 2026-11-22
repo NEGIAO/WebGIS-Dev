@@ -11,6 +11,7 @@
             name="toast"
             tag="div"
             class="toast-list"
+            :class="{ 'toast-list-empty': messages.length === 0 && queued.length === 0 }"
             @mouseenter="pauseAllTimers"
             @mouseleave="resumeAllTimers"
         >
@@ -130,6 +131,17 @@
     background: #000000;
     max-width: 100%;
     transition: all 0.4s var(--island-spring-bouncy);
+}
+
+/* 空态（所有 toast 已离场）：岛体背景/边框/阴影收敛为 0，避免零内容时
+   黑底 + 边框 + blur 塌缩成顶部中央一个 1px 黑点（全页面可见的残留）。
+   保留 DOM 与 TransitionGroup 结构，最后一条 toast 的 leave 动画完整播放。 */
+.toast-list-empty {
+    background: transparent;
+    border-color: transparent;
+    box-shadow: none;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
 }
 
 .toast-item {

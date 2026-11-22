@@ -21,7 +21,9 @@ DEFAULT_AGENT_SYSTEM_PROMPT = get_str(
     "You are the WebGIS assistant. Reply in concise Chinese unless the user asks for another language.",
 ).strip()
 DEFAULT_AGENT_TIMEOUT_SECONDS = get_int("AGENT_TIMEOUT_SECONDS", 45, minimum=5, maximum=180)
-DEFAULT_AGENT_MAX_TOKENS = get_int("AGENT_MAX_TOKENS", 32768, minimum=1, maximum=32768)
+# V3.7.8：思考型模型（qwen4-max / deepseek-v4.1 等）思考+正文共享 max_tokens 预算，
+# 32768 对重度推理偏紧——默认与上限同步上调（配额折算按实际 usage，无资费风险）
+DEFAULT_AGENT_MAX_TOKENS = get_int("AGENT_MAX_TOKENS", 65536, minimum=1, maximum=131072)
 DEFAULT_AGENT_TEMPERATURE = get_float("AGENT_TEMPERATURE", 1.0, minimum=0.0, maximum=2.0)
 DEFAULT_AGENT_TOP_P = get_float("AGENT_TOP_P", 0.95, minimum=0.0, maximum=1.0)
 DEFAULT_AGENT_EXTRA_BODY = {}

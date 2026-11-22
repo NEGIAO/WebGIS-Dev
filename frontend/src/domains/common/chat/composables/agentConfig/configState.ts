@@ -31,7 +31,7 @@ export function defaultDraft() {
         model: '',
         system_prompt: '',
         timeout_seconds: 45,
-        max_tokens: 32768,
+        max_tokens: 65536,
         temperature: 1,
         top_p: 0.95,
         extra_body: {},
@@ -46,7 +46,7 @@ export function emptyDirectConfig(preservedModel = '') {
         model: preservedModel,
         system_prompt: '',
         timeout_seconds: 45,
-        max_tokens: 32768,
+        max_tokens: 65536,
         temperature: 1,
     };
 }

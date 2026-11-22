@@ -205,7 +205,7 @@
                             v-model.number="config.userConfigDraft.max_tokens"
                             type="number"
                             min="1"
-                            max="128000"
+                            max="131072"
                             class="cfg-input"
                         />
                     </label>
@@ -220,6 +220,19 @@
                         />
                     </label>
                 </div>
+
+                <!-- V3.7.8：Extra Body（高级）——自备端点的思考开关等上游特定参数注入通道 -->
+                <label class="cfg-field">
+                    <span class="cfg-label">Extra Body（高级，JSON）</span>
+                    <textarea
+                        class="cfg-input cfg-extra-body"
+                        rows="3"
+                        :value="extraBodyText"
+                        :placeholder="t('chat.extraBodyPlaceholder')"
+                        @input="onExtraBodyInput($event)"
+                    ></textarea>
+                    <span class="cfg-hint">{{ t('chat.extraBodyHint') }}</span>
+                </label>
             </div>
         </section>
 

@@ -17,7 +17,67 @@
 > 注：V3.7.2 号段已于同日重新启用，对应《修复 OpenLayers 加载 OSM 标准瓦片 403》条目，与本条无冲突。
 > 分主题的原始过程记录保留在 `Docs/LLM_record/26-11/2026-11-14/`，不迁移、不改写。
 
-### V3.7.7 (2026-11-22) — SQLite 连接复用 · 登录会话统一出口 · 异步组件批量加固 · P0 连接关闭自愈
+### V3.7.8 (2026-11-22) — AI 对话三通道全量流式 · 思考过程展示 · 数据库撕裂防线四层 · 展示与配置修缮
+
+> **版本号归并（2026-11-22）**：本条整合同一批未提交工作的全部增量——曾用号 V3.7.8（展示修复两例）～ V3.7.15（思考过程展示）
+> 共八个子批次，按用户「整合为一个统一的版本：V3.7.8」的指令归并为单条 **V3.7.8**；曾用中间号自本条起废弃，
+> 代码注释版本字样已统一改写。分主题过程记录保留在 `Docs/LLM_record/26-11/2026-11-22/` 十一份日志，不迁移、不改写。
+> （批次 E/F 的文档曾并入 V3.7.7 (2026-11-22) 条目，随本次整合移入本条，该条目恢复其已提交形态。）
+
+> **一句话**：① AI 对话三通道（默认 AI / 个人 Key / 后端代理）全量 SSE 流式 + 思考过程实时展示（DeepSeek 式）；
+> ② HF /data 网络盘撕裂读防线四层（执行期重试 → 进程内串行化 → 耗尽触发恢复 → 持久损坏保全不变）；
+> ③ 思考型模型零正文与 temperature 兼容修复；④ 状态栏折叠控件、展示修缮、灵动岛黑点修复、max_tokens 上调。
+
+**A. AI 对话三通道全量流式 + IP 定位缓存（体验）** —— 日志 [agent-streaming](../LLM_record/26-11/2026-11-21/2026-11-22-agent-streaming.md)、[agent-streaming-all-channels](../LLM_record/26-11/2026-11-21/2026-11-22-agent-streaming-all-channels.md)：
+1. 新增三个 SSE 流式端点（`/chat/default-proxy/stream`、`/chat/proxy/stream`、`/chat/completions/stream`）——key×端点候选轮换（首个 delta 前静默切换）、final 事件携带与非流式结构一致的 rawData（前端工具链路无感）、非流式端点全部保留（兼容层）。
+2. **perf**：IP 定位 TTL 缓存（成功 600s / 失败 60s）——消除每条消息最多 8s 的定位等待。
+3. 前端 `agentChatStream` fetch SSE 消费器 + `llmCall` onDelta/signal 接线 + 渐进渲染 + 停止生成 AbortController 真中断；游客签名身份随流式请求携带（X-Guest-Token 修正）。
+
+**B. 思考过程流式展示（体验，参考 DeepSeek/ChatGPT）** —— 日志 [feat-reasoning-streaming-display](../LLM_record/26-11/2026-11-22/2026-11-22-feat-reasoning-streaming-display.md)：
+1. `_stream_extract_reasoning`（兼容 reasoning_content/reasoning 双字段名）；思考增量以新 SSE 事件 `{"type":"reasoning"}` 透传；final 事件携带权威完整 `reasoning` 文本；`emitted_any` 门控——思考或正文一旦流出即锁定候选，杜绝轮换/重试导致的思考重复。
+2. 前端 think-panel 复用渲染：思考中自动展开实时增长（呼吸动画）→ 正文到达自动折叠 → 点开回看；三通道 onReasoning 接线。
+3. **max_tokens 默认 32768→65536、上限→131072**（思考+正文共享预算）；**预算链共修复 8 处限制**：schemas.py 4 处校验上限（422 实报）、db.py 写入/读取侧 3 处 `_safe_parse_int(..., 32768)`（保存 65536 被静默压回 32768 的真凶——成功 toast + 数值回跳）、运行时 clamp、config catalog 登记默认、AdminControlPanel/ChatConfigPanel 输入框全链路对齐。
+
+**C. 展示修复两例** —— 日志 [fix-tool-result-raw-display](../LLM_record/26-11/2026-11-22/2026-11-22-fix-tool-result-raw-display.md)、[fix-toolcall-block-streaming-remnant](../LLM_record/26-11/2026-11-22/2026-11-22-fix-toolcall-block-streaming-remnant.md)：
+1. JSON 载荷直出：空回复/失败回退误用 LLM 专用摘要（`{"code":"OK",...}` 直出）→ 新增 `formatToolResultForUser` 用户版摘要 + 复用流式占位气泡。
+2. ```tool_call 块残留：纯块回复清洗为空跳过覆盖 → 落定无条件覆盖清洗结果；第二轮展示前同样清洗。
+
+**D. 数据库撕裂防线四层（可靠性，HF /data 网络盘）** —— 日志 [fix-transient-corruption-execute-retry](../LLM_record/26-11/2026-11-22/2026-11-22-fix-transient-corruption-execute-retry.md)、[fix-db-access-serialization](../LLM_record/26-11/2026-11-22/2026-11-22-fix-db-access-serialization.md)、[fix-exhaustion-triggers-recovery](../LLM_record/26-11/2026-11-22/2026-11-22-fix-exhaustion-triggers-recovery.md)：
+1. 第一层（执行期重试）：`_SelfHealingConnection` 只读语句遇损坏类错误退避重试（3 次/0.15s 递增）+ 重试 WARNING 可观测——全部 `get_auth_db_connection()` 调用方零改动受益。
+2. 第二层（进程内串行化）：连接 with 块全程持 `_db_access_lock`（提交在锁内），读与写提交物理互斥；`location.py` 唯一非 with 写路径同步改标准块。
+3. 第三层（耗尽触发恢复）：损坏重试耗尽复位 `_auth_storage_ready` → 下一次借出以新鲜句柄 quick_check——真损坏重建、瞬态换新句柄立即恢复（页级损坏时 SELECT 1 探测仍通过、恢复分支原本永不触发的缺口补齐）。
+4. 第四层（既有持久损坏 archive+rebuild 保全）不变；生产验证：0×500 窗口、撕裂爆发被吸收、三次重建数据零丢失。
+
+**E. 流式候选轮换 P1 修复 + 零输出诊断 + 传输重试（可靠性）** —— 日志 [fix-stream-rotation-and-transport-retry](../LLM_record/26-11/2026-11-22/2026-11-22-fix-stream-rotation-and-transport-retry.md)：
+1. `stream_locked` 根治多候选重复请求/重复计费/内容成倍重复（P1，3 个 mock httpx 回归测试）。
+2. 候选零输出诊断（行数/解析数/finish/reasoning/max_tokens/首行预览）——「empty content」四种子因可在日志定位。
+3. 全部候选传输层异常失败 → 整轮重试一次（HTTP/空流不重试）；撤销冗余 secret `SMTP_Reply`。
+
+**F. 思考型模型零正文根治 + temperature 兼容（可用性）** —— 日志 [fix-reasoning-model-empty-content](../LLM_record/26-11/2026-11-22/2026-11-22-fix-reasoning-model-empty-content.md)：
+1. 零正文 + finish=length + reasoning>0 → error 消息精确化（模型名/max_tokens 值/思考块数/调大建议），替代含糊的「empty content」。
+2. `_sanitize_temperature` clamp [0, 1.99]——阿里云上开区间拒绝 2.0（生产 400×3 实证），NVIDIA 下行为差异可忽略。
+
+**G. 状态栏简洁/详情折叠控件（体验）** —— 日志 [fix-chat-status-compact-toggle](../LLM_record/26-11/2026-11-22/2026-11-22-fix-chat-status-compact-toggle.md)：
+1. 默认简洁模式仅「就绪+模式」徽章一行；详情展开/收起偏好持久化（localStorage）；额度耗尽警告不受折叠影响。
+2. 触屏档 40×40px 目标（pointer: coarse）+ aria 全套；配置面板补 Extra Body（高级，JSON）字段——自备端点的思考开关等上游参数注入通道（保存时校验）。
+
+**H. 灵动岛空态黑点修复（UI）** —— 日志 [fix-toast-empty-island-pixel](../LLM_record/26-11/2026-11-22/2026-11-22-fix-toast-empty-island-pixel.md)：Toast 全部离场后岛体背景/边框/阴影收敛为 0，消除顶部中央 1px 黑点残留（并行会话修复，并入本版本）。
+
+**I. 思考块长文本自动跟随滚动（体验）** —— 日志 [fix-think-content-autoscroll](../LLM_record/26-11/2026-11-22/2026-11-22-fix-think-content-autoscroll.md)：
+1. 症状：思考型模型推理中，思考块内文本持续增长但内层可滚动区始终停在顶部，最新思考溢出 360px 可视区不可见。
+2. 根因：`.think-content` 自身即滚动容器（`max-height: 360px; overflow-y: auto`），而 `ChatMessageList.scrollToBottom()` 只写外层 `.chat-body` 的 `scrollTop`；内层高度固定使外层高度不变（外层早已贴底），内层 `scrollTop` 全程为 0——滚动目标选错了一层。
+3. 修复：`.think-content` 以函数式 ref 登记进 `Instance.thinkBodies`；`scrollToBottom` 改两阶段——**同步阶段**（DOM 未更新）采样各容器「是否已贴底」→ `nextTick` 后按采样结果写 `scrollTop`，判据基于增量前旧高度，「一次灌入 400px」不会被误判为用户上翻。
+4. 智能跟随：距底 > `THINK_FOLLOW_PX`(24px) 判定用户主动回看即不跟随，滚回底部后下次增量自动恢复；首次出现的容器无条件贴底（`thinkPrimed`）。「回到底部」悬浮钮改走新增 `scrollToLatest()`，外层与内层一并强制到底。
+
+**J. Markdown 渲染 XSS 缺口收敛（安全）** —— 日志 [fix-markdown-xss-sanitize-gap](../LLM_record/26-11/2026-11-22/2026-11-22-fix-markdown-xss-sanitize-gap.md)：
+1. 缺口一：`renderAnswerHtml` 的 `looksLikeHtml()` 分支原为「原始 HTML 直接透传」，完全绕过 DOMPurify——LLM 输出（可被 prompt 注入操纵）或工具结果回显中的 `<img onerror>` / `<svg onload>` 可直通 `v-html`。
+2. 缺口二：三处 `else { html = parsed }` 在 DOMPurify 尚未加载完成的首屏窗口期放行未消毒 HTML；`renderThinkHtml` 同样存在。
+3. 修复：新增统一出口 `sanitizeHtml()`（**fail-closed**）——净化库就绪则按 `PURIFY_CONFIG` 白名单消毒，未就绪或抛错则降级为纯文本转义，绝不放行原始 HTML；`looksLikeHtml` 分支与 `renderThinkHtml` 全部改为走该出口。
+4. 复核结论：另两处 `v-html` 数据源本就安全——灵动岛 Toast 逐字符 `escapeHtml`、后台表格单元格 `highlightText` 全片段 `escapeHtmlText`；`vue/no-v-html` 静态告警在已净化位置以块级注释精确豁免并注明依据。
+
+**验证汇总**：后端全量 pytest 129 passed（流式域 22 + db 域 13 + 回归套件；1 个 pytest-asyncio 既有环境项）；vue-tsc/eslint 0 问题；结构树/配置登记门禁通过；红线扫描仅已知假阳性。安全面：Markdown 渲染三入口（answer / think / 原始 HTML）统一过 DOMPurify，`<img onerror>` 等载荷经白名单过滤。实机验证：思考模型对话全链路（思考实时可见→正文折叠→工具调用→二轮总结）、思考块长文本滚动跟随、多 key 无重复、撕裂窗口收敛 1×500、管理面保存 65536。
+
+### V3.7.7 (2026-11-22) — SQLite 连接复用 · 登录会话统一出口 · 异步组件批量加固 · P0 连接关闭自愈 · AI 对话三通道全量流式
 
 > **版本号归并（2026-11-22）**：三批性能稳定治理与 P0 热修（曾用号 V3.7.7 / V3.7.8 / V3.7.9）为**同一批未提交工作**的增量序列，
 > 按用户「这个版本才是 3.7.7」的指令归并为单条 **V3.7.7**；曾用中间号自本条起废弃，本批代码注释与文档版本字样已统一改写
@@ -50,10 +110,11 @@
 3. **fix（防御纵深）**：db.py 快路径 `ProgrammingError` + "closed" 分支 → 丢弃旧连接自愈重建，未来任何外部关闭点从 500 降级为一次重建；连接契约「调用方禁止关闭」写入 db.py 注释（dev-conventions 增补为待办）。
 4. **增补（V3.7.9 语义，同事故序列）**：部署恢复后 1 秒瞬态 500——`file is not a database` 不含 malformed/corrupt 字样被分类器放过；已将「not a database」纳入损坏类消息全集转恢复分支。启动时库损坏（事故遗留损伤）被恢复机制完整重建 **16816 行数据零丢失**。
 5. **验证**：新增 2 回归单测（外部 close 自愈 / not-a-database 转恢复）+ 相关域 95/96（唯一失败为本机缺 pytest-asyncio 既有环境项）；全仓 `closing(` 清零；HF 日志实证事故与恢复全程。
+6. **P0 追加（实机反馈）**：流式 final 事件 rawData 曾误用原始上游 choices 形状且携带空 `tool_calls: []`，前端工具调用双模式解析被空数组短路、文本协议降级永不触发（工具调用以气泡展示而永不执行）；已改用与非流式同一提取器 `_extract_reply_and_tools` 归一化，`tool_calls` 仅在有值时存在 + 回归单测，实机回归通过。
 
 ### V3.7.7 (2026-11-21) — SQLite 连接复用 · 登录会话统一出口 · 异步组件批量加固
 
-> **一句话**：三批性能与稳定治理——① SQLite 线程本地连接复用 + 代际失效计数器 + 四处热路径 DDL 守卫（高频端点每请求省 4–36 次 PRAGMA 磁盘往返）；② 新增 `sessionCommit.ts` 登录会话唯一出口（5 处散点 + mergeUserPatch 收拢，authStore 回填全链路生效；登出走 resetAuthSessionState 清残留）；③ 14 处裸 `defineAsyncComponent` 批量加固为 `defineResilientAsync`（分片失败占位 + 可点重试，消灭「面板永久空白」）。日志：[SQLite 连接复用](../LLM_record/26-11/2026-11-21/2026-11-21-sqlite-conn-reuse.md)、[登录收拢](../LLM_record/26-11/2026-11-21/2026-11-21-login-session-commit.md)、[异步组件加固](../LLM_record/26-11/2026-11-21/2026-11-21-resilient-async-batch.md)。
+> **一句话**：性能与稳定治理 + AI 对话三通道全量流式体验——① SQLite 线程本地连接复用 + 代际失效计数器 + 四处热路径 DDL 守卫（高频端点每请求省 4–36 次 PRAGMA 磁盘往返）；② 新增 `sessionCommit.ts` 登录会话唯一出口（5 处散点 + mergeUserPatch 收拢，authStore 回填全链路生效；登出走 resetAuthSessionState 清残留）；③ 14 处裸 `defineAsyncComponent` 批量加固为 `defineResilientAsync`（分片失败占位 + 可点重试，消灭「面板永久空白」）。日志：[SQLite 连接复用](../LLM_record/26-11/2026-11-21/2026-11-21-sqlite-conn-reuse.md)、[登录收拢](../LLM_record/26-11/2026-11-21/2026-11-21-login-session-commit.md)、[异步组件加固](../LLM_record/26-11/2026-11-21/2026-11-21-resilient-async-batch.md)。
 
 **A. SQLite 线程本地连接复用（性能）**：
 1. `db.py`：线程本地缓存 + `SELECT 1` 存活探测 + 代际计数器（恢复/重建推进，所有线程丢弃旧库文件连接）；`auth_db_generation()` 导出。
@@ -69,6 +130,17 @@
 **C. 异步组件批量加固（可用性）**：
 1. 14 处裸 `defineAsyncComponent` → `defineResilientAsync`（占位 + 可点重试 + 超时反馈），覆盖 LogMonitor/属性表/水面特效/绘制测量四面板/侧栏六面板/MapDownloader；1 处有意保留（HomeView SidePanel 对象形态自带 onError 自愈）。
 2. **验证**：vue-tsc/eslint 0 问题；实机两步（断网面板占位可重试 / 3D 水面特效正常）待用户执行。
+
+**E. AI 对话流式改造 + IP 定位缓存（体验）** —— 日志 [2026-11-22-agent-streaming](../LLM_record/26-11/2026-11-21/2026-11-22-agent-streaming.md)：
+1. **feat（体验）**：新增 `POST /api/agent/chat/default-proxy/stream`（SSE）——key×端点候选轮换（首个 delta 前静默切换）、delta 转发、tool_calls 流式拼装、终态 `final` 事件携带与非流式结构一致的 rawData（前端工具链路无感）。
+2. **perf**：IP 定位 TTL 缓存（成功 600s / 失败 60s）——同一 IP 10 分钟内不重复外呼高德，消除每条消息最多 8s 的定位等待。
+3. **feat（前端）**：`defaultProxyChatStream` fetch SSE 消费器；`callLLM` 增加 onDelta/signal；第一轮对话渐进渲染（delta 直写消息列表）；「停止生成」AbortController 真正断开上游。
+4. **验证**：新增 9 单测（delta 提取/工具调用多块拼装/空增量跳过/SSE 帧/IP 缓存 TTL）+ 相关域 99/99 全绿；vue-tsc/eslint 0 问题；红线零命中。实机五步（首字秒回/工具对话/停止断流/定位缓存/流式 TTFB）待用户执行。
+
+**F. 三通道全量流式（体验补全）** —— 日志 [2026-11-22-agent-streaming-all-channels](../LLM_record/26-11/2026-11-21/2026-11-22-agent-streaming-all-channels.md)：
+1. **feat**：`/chat/proxy/stream`（个人 Key，不消耗平台配额）与 `/chat/completions/stream`（后端代理，配额语义与非流式一致：预检 429 建连前 + 流后按实际 usage 折算扣费，缺失按最低 1 额度封底）。
+2. **feat**：`_stream_upstream_chat_events` final 事件携带上游 usage；前端 `agentChatStream` 泛化（final 捕获 quota/cost）+ 三通道薄委托 + 第二轮（工具后续回复）渐进渲染。
+3. **验证**：相关域 105/106（唯一失败为本机缺 pytest-asyncio 既有环境项）；vue-tsc/eslint 0 问题。实机五步（三模式首字秒回 / 配额折算 / 停止断流 / 工具对话 / 停止后重发无串扰）待用户执行。
 
 ### V3.7.6 (2026-11-21) — 游客身份治理（L3） · 管理面敏感值掩码 · 管理员首进 UI 修复
 

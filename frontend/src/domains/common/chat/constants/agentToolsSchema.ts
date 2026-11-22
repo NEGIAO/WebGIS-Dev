@@ -246,6 +246,16 @@ export function formatToolResultForLLM(toolName: string, result: Record<string, 
 }
 
 /**
+ * 用户可见版工具结果摘要：只取人读的 message 一行，不含 LLM 专用的
+ * 结构化 JSON 载荷（extras 由 formatToolResultForLLM 单独供给模型）。
+ * 用于聊天面板的空回复/失败回退展示——V3.7.8 修复 JSON 载荷原文直出。
+ */
+export function formatToolResultForUser(toolName: string, result: Record<string, any>) {
+    const status = result?.success ? '成功' : '失败';
+    return `${toolName} 执行${status}：${String(result?.message || '')}`;
+}
+
+/**
  * Parse tool calls from text fallback output.
  */
 export function parseToolCallsFromText(text: any) {

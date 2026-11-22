@@ -138,6 +138,8 @@ export default {
         tryTheseCommands: 'Try these commands', backToBottom: 'Back to bottom',
         copyReply: 'Copy reply', copyMessage: 'Copy', copied: 'Copied',
         regenerate: 'Regenerate', thinking: 'Thinking',
+        extraBodyPlaceholder: '{ "enable_thinking": true }',
+        extraBodyHint: 'Advanced: extra params passed as-is to your endpoint (JSON object), e.g. thinking toggles like { "enable_thinking": true }.',
         suggestions: {
             locate: 'Locate Nanjing Normal University',
             switchBase: 'Switch to Google satellite basemap (proxied)',
@@ -167,6 +169,8 @@ export default {
         personalAPIReady: 'Personal API configured (via backend proxy)',
         serviceNotReady: 'Not ready (please configure API Key or contact admin)',
         readyShort: 'Ready', notReadyShort: 'Not ready',
+        statusDetailShow: 'Show status details (model/quota)',
+        statusDetailHide: 'Hide status details',
         currentModel: 'Current Model:', notConfigured: 'Not configured',
         adminConfigured: 'Admin Configured', personalKey: 'Personal Key', proxy: 'Proxy',
         todayQuota: "Today's Quota:",

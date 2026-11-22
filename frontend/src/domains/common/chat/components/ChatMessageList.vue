@@ -78,10 +78,16 @@
                             >{{ formatTime(msg.time) }}</span>
                         </div>
 
-                        <!-- 思考过程（折叠药丸，位于回答上方，贴近网页版思维链呈现） -->
+                        <!-- 思考过程（折叠药丸，位于回答上方，贴近网页版思维链呈现）。
+                             V3.7.8：思考型模型的 reasoning 增量写入 msg.reasoning（独立字段），
+                             优先渲染；正文到达前 :open 强制展开（实时思考可见），正文到达后
+                             移除 open 绑定（自动折叠，用户可手动点开）。旧 <think> 文本协议
+                             消息走 hasThinkContent(msg.content) 兼容分支。 -->
                         <details
-                            v-if="hasThinkContent(msg.content)"
+                            v-if="msg.reasoning || hasThinkContent(msg.content)"
                             class="think-panel"
+                            :class="{ 'thinking-now': msg.reasoning && !msg.content }"
+                            :open="(!msg.content || undefined)"
                         >
                             <summary>
                                 <Brain
@@ -94,8 +100,18 @@
                                     class="think-chevron"
                                 />
                             </summary>
-                            <!-- eslint-disable-next-line vue/no-v-html -->
-                            <div class="think-content markdown-body" v-html="renderThink(msg.content)"></div>
+                            <!-- 内层滚动容器（max-height: 360px）：登记到 Instance.thinkBodies，
+                                 流式增量时由 scrollToBottom 单独驱动 scrollTop——外层 .chat-body
+                                 因内层高度固定而不再变化，仅滚外层无法让思考文本跟上。
+                                 v-html 内容来自 useMarkdownRenderer，出口统一过 DOMPurify
+                                 白名单（sanitizeHtml，fail-closed），故此处豁免静态告警。 -->
+                            <!-- eslint-disable vue/no-v-html -->
+                            <div
+                                :ref="(el) => bindThinkBody(index, el)"
+                                class="think-content markdown-body"
+                                v-html="msg.reasoning ? renderAnswer(msg.reasoning) : renderThink(msg.content)"
+                            ></div>
+                            <!-- eslint-enable vue/no-v-html -->
                         </details>
 
                         <!-- eslint-disable vue/no-v-html -->
@@ -224,7 +240,7 @@
                 v-if="showScrollFab"
                 class="scroll-fab"
                 :title="t('chat.backToBottom')"
-                @click="scrollToBottom(true)"
+                @click="scrollToLatest()"
             >
                 <ChevronDown :size="16" />
                 <span
@@ -716,6 +732,15 @@
 }
 
 /* ========== 思考过程（折叠药丸） ========== */
+/* V3.7.8：思考型模型流式思考中——「思考中」态呼吸动画提示 */
+.think-panel.thinking-now summary {
+    color: var(--brand-primary-dark);
+}
+
+.think-panel.thinking-now .think-icon {
+    animation: breathe 1.6s ease-in-out infinite;
+}
+
 .think-panel {
     margin-bottom: 6px;
     border: 1px solid rgba(0, 0, 0, 0.06);
