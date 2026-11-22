@@ -17,7 +17,25 @@
 > 注：V3.7.2 号段已于同日重新启用，对应《修复 OpenLayers 加载 OSM 标准瓦片 403》条目，与本条无冲突。
 > 分主题的原始过程记录保留在 `Docs/LLM_record/26-11/2026-11-14/`，不迁移、不改写。
 
-### V3.7.7 (2026-11-22) — SQLite 连接复用 · 登录会话统一出口 · 异步组件批量加固 · P0 连接关闭自愈
+### V3.7.8 (2026-11-22) — 修复：AI 工具调用 JSON 载荷与 ```tool_call 块直出给用户
+
+> **版本号归并（2026-11-22）**：两例同族展示修复（曾用号 V3.7.8 / V3.7.9）为**同一批未提交工作**的增量序列，
+> 按用户「本次版本为3.7.8」的指令归并为单条 **V3.7.8**；曾用中间号 V3.7.9 自本条起废弃（与 V3.7.7 归并条目中同号曾用字样无涉），
+> 本批代码注释版本字样已统一改写。分主题过程记录保留在 `Docs/LLM_record/26-11/2026-11-22/` 两份日志，不迁移、不改写。
+
+> **一句话**：AI 对话工具链路两处「LLM 专用格式直出给用户」的展示缺陷——① 空回复/失败回退误用回传 LLM 的结构化 JSON 摘要（`{"code":"OK",...}` 直出）；② 纯 ```tool_call 块回复在流式落定后块原文永久残留。
+
+**A. 工具结果 JSON 载荷直出（回退文案误用 LLM 摘要）** —— 日志 [fix-tool-result-raw-display](../LLM_record/26-11/2026-11-22/2026-11-22-fix-tool-result-raw-display.md)：
+1. `agentToolsSchema.ts` 新增 `formatToolResultForUser`（仅 `${toolName} 执行成功/失败：${message}`，无 JSON）；`AgentExecutor.buildUserResultSummary` 与 `buildResultSummary` 对称；回传 LLM 的摘要路径**不动**（追问上下文不受影响）。
+2. `ChatPanelContent` 空回复/失败两处回退改用用户摘要，并写入既有流式占位气泡（不再另推新消息）；`catch` 中已有部分流式内容保留原样，配额错误移除空占位（提示走既有 `statusHint`）。
+
+**B. ```tool_call 块流式残留（纯块回复清洗为空跳过覆盖）** —— 日志 [fix-toolcall-block-streaming-remnant](../LLM_record/26-11/2026-11-22/2026-11-22-fix-toolcall-block-streaming-remnant.md)：
+1. 第一轮工具分支落定时无条件以 `stripToolCallBlocks` 清洗结果覆盖气泡（含空串，空则由既有空内容回收逻辑移除；附带修复 1–5 字符真实短回复被阈值整条丢弃的问题）。
+2. 第二轮回复展示前同样清洗，纯块回复走既有 `✅ 操作完成：用户摘要` 回退。
+
+**顺带与验证**：修正批次 E/F 遗留的 `ChatPanelContent.ts` 两处纯缩进错位（仅空白符）；README 版本演进表 V3.7.7 行重复编号「⑤⑤」修正为「⑤⑥」。vue-tsc / eslint 0 问题；结构树与配置登记门禁通过。实机复测（空回复/断网回退无 JSON 原文；纯工具块回复无块残留；正常对话不受影响）待用户执行。
+
+### V3.7.7 (2026-11-22) — SQLite 连接复用 · 登录会话统一出口 · 异步组件批量加固 · P0 连接关闭自愈 · AI 对话三通道全量流式
 
 > **版本号归并（2026-11-22）**：三批性能稳定治理与 P0 热修（曾用号 V3.7.7 / V3.7.8 / V3.7.9）为**同一批未提交工作**的增量序列，
 > 按用户「这个版本才是 3.7.7」的指令归并为单条 **V3.7.7**；曾用中间号自本条起废弃，本批代码注释与文档版本字样已统一改写
@@ -50,10 +68,11 @@
 3. **fix（防御纵深）**：db.py 快路径 `ProgrammingError` + "closed" 分支 → 丢弃旧连接自愈重建，未来任何外部关闭点从 500 降级为一次重建；连接契约「调用方禁止关闭」写入 db.py 注释（dev-conventions 增补为待办）。
 4. **增补（V3.7.9 语义，同事故序列）**：部署恢复后 1 秒瞬态 500——`file is not a database` 不含 malformed/corrupt 字样被分类器放过；已将「not a database」纳入损坏类消息全集转恢复分支。启动时库损坏（事故遗留损伤）被恢复机制完整重建 **16816 行数据零丢失**。
 5. **验证**：新增 2 回归单测（外部 close 自愈 / not-a-database 转恢复）+ 相关域 95/96（唯一失败为本机缺 pytest-asyncio 既有环境项）；全仓 `closing(` 清零；HF 日志实证事故与恢复全程。
+6. **P0 追加（实机反馈）**：流式 final 事件 rawData 曾误用原始上游 choices 形状且携带空 `tool_calls: []`，前端工具调用双模式解析被空数组短路、文本协议降级永不触发（工具调用以气泡展示而永不执行）；已改用与非流式同一提取器 `_extract_reply_and_tools` 归一化，`tool_calls` 仅在有值时存在 + 回归单测，实机回归通过。
 
 ### V3.7.7 (2026-11-21) — SQLite 连接复用 · 登录会话统一出口 · 异步组件批量加固
 
-> **一句话**：三批性能与稳定治理——① SQLite 线程本地连接复用 + 代际失效计数器 + 四处热路径 DDL 守卫（高频端点每请求省 4–36 次 PRAGMA 磁盘往返）；② 新增 `sessionCommit.ts` 登录会话唯一出口（5 处散点 + mergeUserPatch 收拢，authStore 回填全链路生效；登出走 resetAuthSessionState 清残留）；③ 14 处裸 `defineAsyncComponent` 批量加固为 `defineResilientAsync`（分片失败占位 + 可点重试，消灭「面板永久空白」）。日志：[SQLite 连接复用](../LLM_record/26-11/2026-11-21/2026-11-21-sqlite-conn-reuse.md)、[登录收拢](../LLM_record/26-11/2026-11-21/2026-11-21-login-session-commit.md)、[异步组件加固](../LLM_record/26-11/2026-11-21/2026-11-21-resilient-async-batch.md)。
+> **一句话**：性能与稳定治理 + AI 对话三通道全量流式体验——① SQLite 线程本地连接复用 + 代际失效计数器 + 四处热路径 DDL 守卫（高频端点每请求省 4–36 次 PRAGMA 磁盘往返）；② 新增 `sessionCommit.ts` 登录会话唯一出口（5 处散点 + mergeUserPatch 收拢，authStore 回填全链路生效；登出走 resetAuthSessionState 清残留）；③ 14 处裸 `defineAsyncComponent` 批量加固为 `defineResilientAsync`（分片失败占位 + 可点重试，消灭「面板永久空白」）。日志：[SQLite 连接复用](../LLM_record/26-11/2026-11-21/2026-11-21-sqlite-conn-reuse.md)、[登录收拢](../LLM_record/26-11/2026-11-21/2026-11-21-login-session-commit.md)、[异步组件加固](../LLM_record/26-11/2026-11-21/2026-11-21-resilient-async-batch.md)。
 
 **A. SQLite 线程本地连接复用（性能）**：
 1. `db.py`：线程本地缓存 + `SELECT 1` 存活探测 + 代际计数器（恢复/重建推进，所有线程丢弃旧库文件连接）；`auth_db_generation()` 导出。
@@ -69,6 +88,17 @@
 **C. 异步组件批量加固（可用性）**：
 1. 14 处裸 `defineAsyncComponent` → `defineResilientAsync`（占位 + 可点重试 + 超时反馈），覆盖 LogMonitor/属性表/水面特效/绘制测量四面板/侧栏六面板/MapDownloader；1 处有意保留（HomeView SidePanel 对象形态自带 onError 自愈）。
 2. **验证**：vue-tsc/eslint 0 问题；实机两步（断网面板占位可重试 / 3D 水面特效正常）待用户执行。
+
+**E. AI 对话流式改造 + IP 定位缓存（体验）** —— 日志 [2026-11-22-agent-streaming](../LLM_record/26-11/2026-11-21/2026-11-22-agent-streaming.md)：
+1. **feat（体验）**：新增 `POST /api/agent/chat/default-proxy/stream`（SSE）——key×端点候选轮换（首个 delta 前静默切换）、delta 转发、tool_calls 流式拼装、终态 `final` 事件携带与非流式结构一致的 rawData（前端工具链路无感）。
+2. **perf**：IP 定位 TTL 缓存（成功 600s / 失败 60s）——同一 IP 10 分钟内不重复外呼高德，消除每条消息最多 8s 的定位等待。
+3. **feat（前端）**：`defaultProxyChatStream` fetch SSE 消费器；`callLLM` 增加 onDelta/signal；第一轮对话渐进渲染（delta 直写消息列表）；「停止生成」AbortController 真正断开上游。
+4. **验证**：新增 9 单测（delta 提取/工具调用多块拼装/空增量跳过/SSE 帧/IP 缓存 TTL）+ 相关域 99/99 全绿；vue-tsc/eslint 0 问题；红线零命中。实机五步（首字秒回/工具对话/停止断流/定位缓存/流式 TTFB）待用户执行。
+
+**F. 三通道全量流式（体验补全）** —— 日志 [2026-11-22-agent-streaming-all-channels](../LLM_record/26-11/2026-11-21/2026-11-22-agent-streaming-all-channels.md)：
+1. **feat**：`/chat/proxy/stream`（个人 Key，不消耗平台配额）与 `/chat/completions/stream`（后端代理，配额语义与非流式一致：预检 429 建连前 + 流后按实际 usage 折算扣费，缺失按最低 1 额度封底）。
+2. **feat**：`_stream_upstream_chat_events` final 事件携带上游 usage；前端 `agentChatStream` 泛化（final 捕获 quota/cost）+ 三通道薄委托 + 第二轮（工具后续回复）渐进渲染。
+3. **验证**：相关域 105/106（唯一失败为本机缺 pytest-asyncio 既有环境项）；vue-tsc/eslint 0 问题。实机五步（三模式首字秒回 / 配额折算 / 停止断流 / 工具对话 / 停止后重发无串扰）待用户执行。
 
 ### V3.7.6 (2026-11-21) — 游客身份治理（L3） · 管理面敏感值掩码 · 管理员首进 UI 修复
 

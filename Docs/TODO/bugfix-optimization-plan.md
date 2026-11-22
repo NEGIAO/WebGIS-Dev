@@ -425,4 +425,13 @@ Sprint 3（穿插）：P3-1 容器二轮（O1/O2 交替）→ P2-1 bundle 分析
   - [x] (已闭环·V3.7.7 选方案 b) 收拢为 `services/sessionCommit.ts` 的 `commitLoginSession()`：5 处登录出口 + FloatingAccountPanel.mergeUserPatch 全部收拢，authStore 回填全链路生效；日志 [2026-11-21-login-session-commit.md](../LLM_record/26-11/2026-11-21/2026-11-21-login-session-commit.md)。成环规避方式：sessionCommit 为独立模块（不被 auth.ts 反向依赖），可安全 import useAuthStore。
   - [x] (已闭环·V3.7.7 同批) `forceBackToLogin` 改走 `resetAuthSessionState()`（clearAuthSession + authStore.resetValidation()），登出残留清理完成。
 
+- [ ] **后端结构树缺 `test_agent_stream.py` 条目，且后端树无自动化门禁**（2026-11-22 · 暂存区复审时发现，按 Force_command §2.5 只记不改）：
+  - [ ] (现象) 暂存区批次 E 新增 `backend/tests/test_agent_stream.py`，但 `Docs/Guide/backend-structure.md` 的 `tests/` 小节未登记（其余 9 个测试文件均逐文件登记）。`Scripts/CheckStructureTree.py` 只扫前端（`DOC=frontend-structure.md` / `SRC=frontend/src`），后端树纯手工维护、无漂移检测，故该批次日志所记「结构树 739/739 ✅」实为前端门禁结果，未能兜住后端缺项。
+  - [ ] (建议) ① 一行补登记（照 tests/ 小节既有格式加注释）；② 可考虑为 CheckStructureTree.py 增设后端树扫描段（或新增独立脚本），使后端文件增删同样有门禁兜底；③ 同时核对暂存区其他新文件（`2026-11-22-agent-streaming*.md` 日志属 Docs 不入树，无此问题）是否均有登记。
+
+- [ ] **流式生成器候选轮换成功后不终止外层循环（P1）**（2026-11-22 · V3.7.8 暂存区 code review 发现，按 Force_command §2.5 只记不改）：
+  - [ ] (现象) `backend/api/agent_chat/upstream.py` `_stream_upstream_chat_events`：内层端点循环命中 `if committed or tool_acc or stream_done: break`（≈:1336）只退出**端点**循环，外层 `for api_key in candidates`（:1291）继续下一候选——已成功锁定后仍对下一 key×endpoint 重复发起同一请求并再次 yield delta。
+  - [ ] (影响) 仅多 key 候选配置触发（completions 通道 `api_key_candidates` ≥2；default-proxy / personal proxy 单候选不受影响）：回复文本按候选数重复拼接（前端气泡内容成倍重复）+ 上游重复计费；NVIDIA 空输出排障场景（单候选）不受影响。
+  - [ ] (建议) 内层 break 处置 `stream_locked = True`，内层循环结束后（外层 for 体内）`if stream_locked: break`；可与「零输出路径无日志」的诊断增强（本文件相邻条目 / 会话已提出待批）一并实施。
+
 

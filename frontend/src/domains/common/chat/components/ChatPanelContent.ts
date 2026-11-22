@@ -336,10 +336,15 @@ export class Instance {
 		});
 	}
 
+	/** 中止当前流式请求的控制器（批次 E：stop 时真正断开上游连接） */
+	public activeAbortController: AbortController | null = null;
+
 	/** 停止生成（软取消：请求序号守卫，晚到的响应被忽略） */
 	public stopGeneration = () => {
 		if (!this.isLoading.value) return;
 		this.requestSeq += 1;
+		this.activeAbortController?.abort();
+		this.activeAbortController = null;
 		this.isLoading.value = false;
 
 		const list = this.session.messages.value;
@@ -388,6 +393,8 @@ export class Instance {
 
 		this.messageListRef.value?.scrollToBottom(false);
 		const toolResultSummary = AgentExecutor.buildResultSummary(toolResults);
+		// V3.7.8：用户可见版摘要（无 JSON 载荷）——仅供空回复/失败回退展示；LLM 摘要仅供回传
+		const userResultSummary = AgentExecutor.buildUserResultSummary(toolResults);
 
 		// Record successful commands before building the settled snapshot so the
 		// follow-up LLM request sees this turn's recentActions. Command arguments
@@ -406,7 +413,7 @@ export class Instance {
 		});
 
 		const resultingMapContext = await this.mapContextApi.buildSettledMapContext();
-		return { toolResultSummary, resultingMapContext };
+		return { toolResultSummary, userResultSummary, resultingMapContext };
 	}
 
 	//#endregion
@@ -443,6 +450,8 @@ export class Instance {
 		this.messageListRef.value?.scrollToBottom(true);
 
 		const seq = ++this.requestSeq;
+		const abort = new AbortController();
+		this.activeAbortController = abort;
 		const assistantMsgIndex = this.session.pushAssistant('');
 		const list = this.session.messages.value;
 
@@ -461,6 +470,13 @@ export class Instance {
 				mapContext,
 				systemPrompt,
 				tools: AGENT_TOOLS,
+				// V3.7.7 批次 E：默认 AI 通道走流式——增量直接写入消息列表渐进渲染
+				onDelta: (accumulated: string) => {
+					if (seq !== this.requestSeq) return;
+					list[assistantMsgIndex].content = accumulated;
+					this.messageListRef.value?.scrollToBottom(true);
+				},
+				signal: abort.signal,
 			});
 			if (seq !== this.requestSeq) return; // 用户已停止，忽略晚到响应
 
@@ -488,11 +504,15 @@ export class Instance {
 			if (finalToolCalls && finalToolCalls.length > 0 && this.agentExecutor.value) {
 				const cleanReply = AgentExecutor.stripToolCallBlocks(reply);
 
-				if (!isIntentFallback && cleanReply && cleanReply.length > 5) {
+				// V3.7.8 修复：流式期间原文（含 ```tool_call 块）已渐进写入气泡，落定时必须
+				// 无条件以清洗结果覆盖（可为空）——回复仅由工具块组成时清洗结果为空串，
+				// 旧逻辑跳过覆盖导致块原文永久残留；空串由 executeToolsAndUpdateUI 的
+				// 空内容回收逻辑移除气泡。意图兜底时模型本就输出普通文本，保持原文。
+				if (!isIntentFallback) {
 					list[assistantMsgIndex].content = cleanReply;
 				}
 
-				const { toolResultSummary, resultingMapContext } = await this.executeToolsAndUpdateUI(
+				const { toolResultSummary, userResultSummary, resultingMapContext } = await this.executeToolsAndUpdateUI(
 					finalToolCalls,
 					assistantMsgIndex
 				);
@@ -514,7 +534,10 @@ export class Instance {
 					},
 				];
 
+				// 第二轮流式占位建在 try 外（V3.7.8）：空回复/失败回退复用占位气泡，避免残留空气泡
+				const finalIdx = this.session.pushAssistant('');
 				try {
+					// V3.7.7 批次 F：第二轮回复同样支持流式渐进渲染
 					const secondRound = await this.config.callLLM({
 						message: '请根据上述工具执行结果回复用户。',
 						history: toolRoundHistory.slice(-6),
@@ -522,6 +545,12 @@ export class Instance {
 						mapContext: resultingMapContext,
 						systemPrompt: '',
 						tools: AGENT_TOOLS,
+						onDelta: (accumulated: string) => {
+							if (seq !== this.requestSeq) return;
+							list[finalIdx].content = accumulated;
+							this.messageListRef.value?.scrollToBottom(true);
+						},
+						signal: abort.signal,
 					});
 					if (seq !== this.requestSeq) return;
 
@@ -530,23 +559,42 @@ export class Instance {
 					if (secondRound.usedModel) this.config.modelName = secondRound.usedModel;
 
 					if (secondRound.reply) {
-						const finalIdx = this.session.pushAssistant('');
-						await this.typewriterReveal(finalIdx, secondRound.reply, seq);
+						// V3.7.8 修复：第二轮回复若夹带 ```tool_call 块同样不得直出——先清洗再落定
+						const cleanSecondReply = AgentExecutor.stripToolCallBlocks(secondRound.reply);
+						if (cleanSecondReply) {
+							// 流式批次内容已渐进呈现，直接落定；非流式保留打字机观感
+							if (secondRound.streamed) {
+								list[finalIdx].content = cleanSecondReply;
+							} else {
+								await this.typewriterReveal(finalIdx, cleanSecondReply, seq);
+							}
+						} else {
+							// 清洗后为空（纯工具块）→ 工具已完成摘要回退
+							list[finalIdx].content = `✅ ${this.t('chat.opDone')}：\n${userResultSummary}`;
+						}
 					} else {
-						this.session.pushAssistant(`✅ ${this.t('chat.opDone')}：\n${toolResultSummary}`);
+						// V3.7.8：空回复回退写入占位——用户可见摘要（无 JSON 载荷），不再另推新气泡
+						list[finalIdx].content = `✅ ${this.t('chat.opDone')}：\n${userResultSummary}`;
 					}
 				} catch (secondErr: any) {
 					// 第二轮失败：区分额度耗尽（提示并刷新）与其他错误（静默降级为成功摘要）
 					if (secondErr?.isQuotaExceeded) {
 						this.config.statusHint = this.t('chat.quotaLimitHint');
 						await this.config.reloadAgentConfig(false);
-					} else {
-						this.session.pushAssistant(`✅ ${this.t('chat.opDone')}：\n${toolResultSummary}`);
+						// 配额提示走 statusHint，空占位直接移除
+						if (!list[finalIdx]?.content) list.splice(finalIdx, 1);
+					} else if (!list[finalIdx]?.content) {
+						// V3.7.8：占位无内容（未产出增量）→ 写入用户可见摘要；已有部分流式内容则保留原样
+						list[finalIdx].content = `✅ ${this.t('chat.opDone')}：\n${userResultSummary}`;
 					}
 				}
 			} else {
-				// 打字机逐字呈现（非流式后端下的网页版观感）
-				await this.typewriterReveal(assistantMsgIndex, reply || this.t('chat.emptyReply'), seq);
+				// V3.7.7 批次 E：流式批次的内容已渐进呈现，直接落定；非流式保留打字机观感
+				if (firstRound.streamed) {
+					list[assistantMsgIndex].content = reply || this.t('chat.emptyReply');
+				} else {
+					await this.typewriterReveal(assistantMsgIndex, reply || this.t('chat.emptyReply'), seq);
+				}
 			}
 
 			if (!this.config.isDefaultAIMode && !this.config.isPersonalMode && this.config.quotaExhausted) {

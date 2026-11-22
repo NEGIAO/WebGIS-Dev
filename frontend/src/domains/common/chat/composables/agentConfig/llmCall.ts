@@ -9,6 +9,9 @@ import {
     apiAgentChatCompletions,
     apiAgentChatDefaultProxy,
     apiAgentChatProxy,
+    apiAgentChatProxyStream,
+    apiAgentChatCompletionsStream,
+    defaultProxyChatStream,
 } from '@/api/backend';
 
 /**
@@ -29,6 +32,8 @@ export function createLlmCallMethod(config: any) {
             mapContext,
             systemPrompt,
             tools,
+            onDelta,
+            signal,
         }: {
             message: string;
             history: any[];
@@ -36,6 +41,10 @@ export function createLlmCallMethod(config: any) {
             mapContext?: Record<string, any>;
             systemPrompt?: string;
             tools?: any[];
+            /** 流式回调：每收到增量时以「累计文本」调用（仅默认 AI 通道支持） */
+            onDelta?: (accumulated: string) => void;
+            /** 中止信号：透传给流式请求 */
+            signal?: AbortSignal;
         }) {
             let reply: any;
             let usedModel: any;
@@ -58,7 +67,7 @@ export function createLlmCallMethod(config: any) {
                 // 实际请求模型 = 用户在该模式下的选择（defaultAIModel）优先于管理员默认值；
                 // 若只取 dc.model，面板里选的模型不保存（或保存后）都对请求无效——跨链路脱节回归。
                 const finalModel = config.defaultAIModel || dc.model;
-                const result = await apiAgentChatDefaultProxy({
+                const streamPayload = {
                     message: userMsg,
                     history: enhancedHistory,
                     location_context: locationContext,
@@ -68,7 +77,12 @@ export function createLlmCallMethod(config: any) {
                     override_extra_body: dc.extra_body,
                     tools,
                     tool_choice: 'auto',
-                });
+                };
+                // V3.7.7 批次 E：传入 onDelta 时走流式通道（SSE 渐进渲染，首字秒回）
+                if (onDelta) {
+                    return await defaultProxyChatStream(streamPayload, { onDelta, signal });
+                }
+                const result = await apiAgentChatDefaultProxy(streamPayload);
                 rawData = result?.data || result || {};
                 reply = String(rawData?.reply || '').trim();
                 usedModel = String(rawData?.model || finalModel || '');
@@ -82,7 +96,7 @@ export function createLlmCallMethod(config: any) {
                         : systemPrompt
                     : dc.system_prompt || undefined;
 
-                const result = await apiAgentChatProxy({
+                const streamPayload = {
                     message: userMsg,
                     history: enhancedHistory,
                     location_context: locationContext,
@@ -98,7 +112,12 @@ export function createLlmCallMethod(config: any) {
                     extra_body: dc.extra_body,
                     tools,
                     tool_choice: 'auto',
-                });
+                };
+                // V3.7.7 批次 F：传入 onDelta 时走流式通道
+                if (onDelta) {
+                    return await apiAgentChatProxyStream(streamPayload, { onDelta, signal });
+                }
+                const result = await apiAgentChatProxy(streamPayload);
                 rawData = result?.data || result || {};
                 reply = String(rawData?.reply || '').trim();
                 usedModel = String(rawData?.model || dc.model || '');
@@ -134,6 +153,10 @@ export function createLlmCallMethod(config: any) {
                 if (d.extra_body !== undefined && d.extra_body !== null)
                     chatPayload.override_extra_body = d.extra_body;
 
+                // V3.7.7 批次 F：传入 onDelta 时走流式通道（配额语义与非流式一致）
+                if (onDelta) {
+                    return await apiAgentChatCompletionsStream(chatPayload, { onDelta, signal });
+                }
                 const result = await apiAgentChatCompletions(chatPayload);
                 rawData = result?.data || result || {};
                 reply = String(rawData?.reply || '').trim();

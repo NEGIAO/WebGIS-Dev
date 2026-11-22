@@ -4,7 +4,7 @@
 
 import json
 import logging
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, AsyncGenerator, Dict, List, Optional, Tuple
 
 import httpx
 from fastapi import HTTPException, Request, status
@@ -106,12 +106,19 @@ def _resolve_amap_key() -> str:
 
 
 async def _try_get_location_from_ip_async(ip: str) -> Optional[str]:
-    """尝试通过 IP 获取用户地理位置信息。"""
+    """尝试通过 IP 获取用户地理位置信息。（V3.7.7 批次 E：TTL 缓存，避免每条消息重复外呼高德）"""
+    import time as _time
+
     if not ip or ip == "127.0.0.1" or ip == "::1":
         return None
 
+    cached = _ip_location_cache_get(ip, _time.monotonic())
+    if cached is not None:
+        return cached[1]
+
     amap_key = _resolve_amap_key()
     if not amap_key:
+        _ip_location_cache_put(ip, None, _time.monotonic())
         return None
 
     try:
@@ -137,10 +144,13 @@ async def _try_get_location_from_ip_async(ip: str) -> Optional[str]:
                 adcode = str(data.get("adcode") or "").strip()
 
                 if province:
-                    return f"来源=IP定位，省={province}，市={city}，国家={country}，编码={adcode}。"
+                    result_text = f"来源=IP定位，省={province}，市={city}，国家={country}，编码={adcode}。"
+                    _ip_location_cache_put(ip, result_text, _time.monotonic())
+                    return result_text
     except Exception as e:
         logger.debug(f"Failed to geolocate IP {ip}: {e}")
 
+    _ip_location_cache_put(ip, None, _time.monotonic())
     return None
 
 
@@ -1103,3 +1113,269 @@ async def _record_agent_call_safe(
         )
     except Exception as exc:
         logger.warning("Failed to record agent call log: %s", str(exc))
+
+
+# ─── IP 定位 TTL 缓存（V3.7.7 批次 E）───
+# _try_get_location_from_ip_async 原先每条聊天消息都直连高德（无缓存），
+# 高德慢时最多阻塞 connect 3s + read 5s。加进程内 TTL 缓存：同一 IP 的
+# 定位结果 10 分钟内直接复用，失败结果 60 秒内不重试。
+_IP_LOCATION_CACHE: Dict[str, Tuple[float, Optional[str]]] = {}
+_IP_LOCATION_CACHE_TTL_SECONDS = 600
+_IP_LOCATION_FAIL_TTL_SECONDS = 60
+
+
+def _ip_location_cache_get(ip: str, now: float) -> Optional[Tuple[bool, Optional[str]]]:
+    """命中返回 (成功与否, 定位结果)；过期/未命中返回 None。"""
+    entry = _IP_LOCATION_CACHE.get(str(ip or ""))
+    if entry is None:
+        return None
+    ts, result = entry
+    ttl = _IP_LOCATION_CACHE_TTL_SECONDS if result is not None else _IP_LOCATION_FAIL_TTL_SECONDS
+    if now - ts > ttl:
+        _IP_LOCATION_CACHE.pop(str(ip or ""), None)
+        return None
+    return (result is not None, result)
+
+
+def _ip_location_cache_put(ip: str, result: Optional[str], now: float) -> None:
+    """写入定位结果（成功/失败均缓存，TTL 不同）。超容时淘汰最旧一半。"""
+    key = str(ip or "")
+    if not key:
+        return
+    _IP_LOCATION_CACHE[key] = (now, result)
+    if len(_IP_LOCATION_CACHE) > 5000:
+        ordered = sorted(_IP_LOCATION_CACHE.items(), key=lambda kv: kv[1][0])
+        for stale_key, _ in ordered[: len(ordered) // 2]:
+            _IP_LOCATION_CACHE.pop(stale_key, None)
+
+
+def _stream_extract_delta(chunk: Dict[str, Any]) -> str:
+    """从 OpenAI 兼容流式 chunk 中提取内容增量；结构不合规时返回空串。"""
+    try:
+        choices = chunk.get("choices") or []
+        if not choices:
+            return ""
+        delta = choices[0].get("delta") or {}
+        return str(delta.get("content") or "")
+    except (AttributeError, TypeError):
+        return ""
+
+
+def _merge_stream_tool_calls(
+    acc: Dict[int, Dict[str, Any]], delta_tool_calls: Optional[List[Dict[str, Any]]]
+) -> None:
+    """把流式 chunk 里的 tool_calls 增量按 index 合并进累加器（arguments 为字符串拼接）。"""
+    for tc in delta_tool_calls or []:
+        if not isinstance(tc, dict):
+            continue
+        fn = tc.get("function") or {}
+        # 空增量（无 id / name / arguments 的 {}）不产生槽位，避免拼装出空 tool_call
+        if not tc.get("id") and not fn.get("name") and not fn.get("arguments"):
+            continue
+        try:
+            index = int(tc.get("index") or 0)
+        except (TypeError, ValueError):
+            index = 0
+        slot = acc.setdefault(index, {"id": "", "function": {"name": "", "arguments": ""}})
+        if tc.get("id"):
+            slot["id"] = str(tc["id"])
+        fn = tc.get("function") or {}
+        if fn.get("name"):
+            slot["function"]["name"] += str(fn["name"])
+        if fn.get("arguments"):
+            slot["function"]["arguments"] += str(fn["arguments"])
+
+
+def _assemble_stream_tool_calls(acc: Dict[int, Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """把流式累加的 tool_calls 拼装成与非流式响应一致的 message.tool_calls 结构。"""
+    assembled: List[Dict[str, Any]] = []
+    for index in sorted(acc):
+        slot = acc[index]
+        assembled.append(
+            {
+                "id": slot.get("id") or f"call_{index}",
+                "type": "function",
+                "function": {
+                    "name": slot.get("function", {}).get("name") or "",
+                    "arguments": slot.get("function", {}).get("arguments") or "",
+                },
+            }
+        )
+    return assembled
+
+
+def _sse_event(data: Dict[str, Any]) -> str:
+    """构造单条 SSE 事件帧（data: <json>\n\n），ensure_ascii=False 保留中文。"""
+    return f"data: {json.dumps(data, ensure_ascii=False)}\n\n"
+
+
+async def _stream_upstream_chat_events(
+    request: Request,
+    *,
+    base_url: str,
+    api_keys: List[str],
+    model: str,
+    messages: List[Dict[str, str]],
+    timeout_seconds: int,
+    max_tokens: int,
+    temperature: float,
+    top_p: Optional[float] = None,
+    extra_body: Optional[Dict[str, Any]] = None,
+    tools: Optional[List[Dict[str, Any]]] = None,
+    tool_choice: Optional[str] = None,
+) -> AsyncGenerator[str, None]:
+    """流式调用上游 /chat/completions 并以 SSE 事件帧转发（V3.7.7 批次 E）。
+
+    事件协议（data: <json>\n\n）：
+      {"type":"meta","model":...}                        建连成功后首发
+      {"type":"delta","delta":"..."}                     内容增量（可多次）
+      {"type":"final","reply":...,"rawData":...,"model":...}  终态：rawData 与非流式
+                                                          响应结构一致（含拼装后的
+                                                          tool_calls），前端工具链路无感
+      {"type":"error","message":...}                     全部候选失败或空输出
+      data: [DONE]                                       终止帧
+
+    候选轮换策略：首个 delta 产出前，任一候选失败（HTTP 非 200 / 连接错误 / 零输出）
+    即静默切换下一候选；产出首个 delta 后即「锁定」该候选，中途错误以 error 事件
+    上报（此时前端已收到部分内容，无法无损换道）。
+    """
+    candidates = _normalize_key_candidates(api_keys)
+    if not candidates:
+        yield _sse_event({"type": "error", "message": "Agent key is not configured on backend. Please contact admin."})
+        return
+
+    normalized_base = str(base_url or "").strip().rstrip("/")
+    endpoints = [f"{normalized_base}/chat/completions"]
+    if not normalized_base.endswith("/v1"):
+        endpoints.append(f"{normalized_base}/v1/chat/completions")
+
+    payload: Dict[str, Any] = {
+        "model": model,
+        "messages": messages,
+        "stream": True,
+        "max_tokens": int(max_tokens),
+        "temperature": float(temperature),
+    }
+    if top_p is not None:
+        payload["top_p"] = float(top_p)
+    sanitized_extra_body = _sanitize_extra_body(extra_body)
+    for k, v in (sanitized_extra_body or {}).items():
+        if not k or k in {"model", "messages", "max_tokens", "temperature", "api_key", "tools", "tool_choice", "stream", "stream_options"}:
+            continue
+        if isinstance(payload.get(k), dict) and isinstance(v, dict):
+            merged = dict(payload.get(k))
+            merged.update(v)
+            payload[k] = merged
+        else:
+            payload[k] = v
+    if tools:
+        payload["tools"] = tools
+    if tool_choice:
+        payload["tool_choice"] = tool_choice
+
+    # 流式读取超时按「块间隔」计：生成中的思考停顿可达数十秒，故 read 取
+    # timeout_seconds 与 120s 的较大者，避免长回复中途被 read 超时掐断。
+    timeout = httpx.Timeout(
+        connect=10.0,
+        read=float(max(int(timeout_seconds), 120)),
+        write=10.0,
+        pool=10.0,
+    )
+
+    content_parts: List[str] = []
+    tool_acc: Dict[int, Dict[str, Any]] = {}
+    usage_acc: Optional[Dict[str, Any]] = None  # 上游在 [DONE] 前最后一块通常携带 usage
+    committed = False
+    last_error = "upstream returned empty content"
+
+    for api_key in candidates:
+        headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+        for endpoint in endpoints:
+            stream_broke = False
+            try:
+                async with httpx.AsyncClient(timeout=timeout) as client:
+                    async with client.stream("POST", endpoint, json=payload, headers=headers) as resp:
+                        if resp.status_code != 200:
+                            body_text = (await resp.aread()).decode("utf-8", errors="ignore")[:300]
+                            last_error = f"HTTP {resp.status_code}: {body_text}"
+                            logger.warning("[agent-stream] candidate failed: %s %s", endpoint, last_error)
+                            continue  # 换端点/候选重试
+
+                        stream_done = False
+                        async for raw_line in resp.aiter_lines():
+                            line = raw_line.strip()
+                            if not line.startswith("data:"):
+                                continue
+                            data_str = line[5:].strip()
+                            if data_str == "[DONE]":
+                                stream_done = True
+                                break
+                            try:
+                                chunk = json.loads(data_str)
+                            except json.JSONDecodeError:
+                                continue
+                            if chunk.get("error"):
+                                last_error = str(chunk["error"].get("message") or chunk["error"])
+                                stream_broke = True
+                                break
+                            if isinstance(chunk.get("usage"), dict):
+                                usage_acc = chunk["usage"]
+                            delta = _stream_extract_delta(chunk)
+                            if delta:
+                                content_parts.append(delta)
+                                committed = True
+                                yield _sse_event({"type": "delta", "delta": delta})
+                            choices = chunk.get("choices") or []
+                            if choices:
+                                _merge_stream_tool_calls(
+                                    tool_acc, choices[0].get("delta", {}).get("tool_calls")
+                                )
+                        if stream_broke and not committed:
+                            continue  # 未产出任何内容：换候选重试
+                        if committed or tool_acc or stream_done:
+                            break  # 已锁定候选（或流正常结束），不再轮换
+                        # 零输出：换候选重试
+                        continue
+            except httpx.HTTPError as exc:
+                last_error = f"{type(exc).__name__}: {exc}"
+                logger.warning("[agent-stream] candidate error: %s %s", endpoint, last_error)
+                if committed:
+                    # 已向前端产出部分内容：换候选会导致内容重复，收束为 error 事件
+                    yield _sse_event({"type": "error", "message": f"流式中断：{last_error}"})
+                    return
+                continue
+
+    if committed or tool_acc:
+        content_text = "".join(content_parts)
+        tool_calls = _assemble_stream_tool_calls(tool_acc)
+        raw_data = {
+            "choices": [
+                {
+                    "message": {
+                        "role": "assistant",
+                        "content": content_text,
+                        **({"tool_calls": tool_calls} if tool_calls else {}),
+                    }
+                }
+            ],
+            "model": model,
+            "usage": usage_acc,
+        }
+        # V3.7.9 修正：final.rawData 必须与非流式 data 逐字段一致（归一化形状，
+        # tool_calls 仅在有值时存在）——曾误用原始上游 choices 形状且无中生有携带空
+        # tool_calls 数组，导致前端 extractToolCalls 走原生分支拿到空数组、文本协议
+        # （```tool_call 块）降级解析永不触发，工具调用以气泡展示而永不执行。
+        reply_text, normalized_tool_calls = _extract_reply_and_tools(raw_data)
+        final_data: Dict[str, Any] = {
+            "reply": reply_text,
+            "model": model,
+            "usage": usage_acc,
+        }
+        if normalized_tool_calls:
+            final_data["tool_calls"] = normalized_tool_calls
+        yield _sse_event(
+            {"type": "final", "reply": reply_text, "rawData": final_data, "model": model}
+        )
+        yield "data: [DONE]\n\n"
+    else:
+        yield _sse_event({"type": "error", "message": last_error})
