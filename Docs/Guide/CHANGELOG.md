@@ -17,6 +17,17 @@
 > 注：V3.7.2 号段已于同日重新启用，对应《修复 OpenLayers 加载 OSM 标准瓦片 403》条目，与本条无冲突。
 > 分主题的原始过程记录保留在 `Docs/LLM_record/26-11/2026-11-14/`，不迁移、不改写。
 
+### V3.7.12 (2026-11-22) — 修复：流式候选轮换外层 break（P1）+ 零输出诊断 + 传输异常整轮重试
+
+> **一句话**：前次暂存区评审发现的 P1（候选成功锁定后外层循环继续下一 key → 重复请求/重复计费/内容成倍重复）随上次提交进入了历史，本次补 `stream_locked` 根治；同时补候选零输出诊断（撕裂/空流四种子因可在日志区分）与「全部候选传输层异常失败 → 整轮重试一次」（生产 14:37 NVIDIA ReadTimeout 单候选无退路的对策）。日志：[轮换修复](../LLM_record/26-11/2026-11-22/2026-11-22-fix-stream-rotation-and-transport-retry.md)。
+
+1. **fix（P1）**：`upstream.py` `_stream_upstream_chat_events` 新增 `stream_locked` 标志——内层端点循环锁定候选时置位，外层候选循环同步 break；新增 3 个 mock `httpx.AsyncClient` 回归单测（首候选成功后第二候选不得被调用 / 内容不得成倍重复 / 传输异常整轮重试 / HTTP 确定性失败不重试）。
+2. **feat（观测）**：候选未产出任何内容时打 WARNING（行数/data 行数/解析数/done/broke/finish_reason/首行预览/last_error）——「upstream returned empty content」四种子因自此可在生产日志定位。
+3. **feat（可用性）**：全部候选因 `httpx.HTTPError` 失败且无内容 → 整轮候选重试一次（`_MAX_TRANSPORT_RETRY_PASSES=1`）；HTTP 4xx/空流等确定性失败不重试（避免翻倍打）。
+4. **运维**：撤销冗余 secret `SMTP_Reply`（代码只读 `SMTP_REPLY`）；`SUPABADE_KEY`→`SUPABASE_KEY` 已由用户改名（SUPABASE 功能将随下次重启生效）。
+5. **缩范围说明**：原计划的高德冷启动 504「修复」经实读 `external_proxy.py:179` 撤销——504 是设计的快速失败映射（`httpx.TimeoutException → 504`，connect 3s/read 8s），14:18 的 8 个 504 为高德上游真实变慢被正确拦截，非缺陷。
+6. **验证**：流式域 16/16（含 3 新回归）+ 全量 122 passed（1 个 pytest-asyncio 既有环境项）；py_compile 通过。实机验证待用户执行。
+
 ### V3.7.11 (2026-11-22) — 修复：认证库进程内访问串行化（撕裂读根治层）
 
 > **一句话**：V3.7.9 重试防线部署后的首个生产撕裂窗口（13:46:44）实证：6 条 WARNING、4 条第 1 次重试即自愈，但 2 个热点查询 3 次重试全部落空仍 500，窗口持续 ~10s——HF /data 文件锁失效 + 写入持续（sessions 心跳每 ~5s），读随时撞写提交中间态，重试只是赌瞬时窗口。根治：连接 with 块全程持进程级互斥锁（`_db_access_lock` RLock），提交发生在锁内，读与写提交物理互斥。日志：[访问串行化](../LLM_record/26-11/2026-11-22/2026-11-22-fix-db-access-serialization.md)。

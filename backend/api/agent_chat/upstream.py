@@ -1288,62 +1288,108 @@ async def _stream_upstream_chat_events(
     committed = False
     last_error = "upstream returned empty content"
 
-    for api_key in candidates:
-        headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
-        for endpoint in endpoints:
-            stream_broke = False
-            try:
-                async with httpx.AsyncClient(timeout=timeout) as client:
-                    async with client.stream("POST", endpoint, json=payload, headers=headers) as resp:
-                        if resp.status_code != 200:
-                            body_text = (await resp.aread()).decode("utf-8", errors="ignore")[:300]
-                            last_error = f"HTTP {resp.status_code}: {body_text}"
-                            logger.warning("[agent-stream] candidate failed: %s %s", endpoint, last_error)
-                            continue  # 换端点/候选重试
+    # V3.7.12：候选锁定标志 + 传输异常整轮重试
+    # - stream_locked：内层 break 处置 True，内层循环结束后同步 break 外层候选循环
+    #   （修复 P1：原实现成功锁定后外层继续下一候选 → 重复请求/重复计费/内容成倍重复）
+    # - pass 循环：全部候选因传输层异常（超时/连接失败）失败时整轮重试一次；
+    #   HTTP 失败 / 空流等确定性失败不重试，避免对 4xx/空响应翻倍打
+    _MAX_TRANSPORT_RETRY_PASSES = 1
+    had_transport_error = False
 
-                        stream_done = False
-                        async for raw_line in resp.aiter_lines():
-                            line = raw_line.strip()
-                            if not line.startswith("data:"):
-                                continue
-                            data_str = line[5:].strip()
-                            if data_str == "[DONE]":
-                                stream_done = True
-                                break
-                            try:
-                                chunk = json.loads(data_str)
-                            except json.JSONDecodeError:
-                                continue
-                            if chunk.get("error"):
-                                last_error = str(chunk["error"].get("message") or chunk["error"])
-                                stream_broke = True
-                                break
-                            if isinstance(chunk.get("usage"), dict):
-                                usage_acc = chunk["usage"]
-                            delta = _stream_extract_delta(chunk)
-                            if delta:
-                                content_parts.append(delta)
-                                committed = True
-                                yield _sse_event({"type": "delta", "delta": delta})
-                            choices = chunk.get("choices") or []
-                            if choices:
-                                _merge_stream_tool_calls(
-                                    tool_acc, choices[0].get("delta", {}).get("tool_calls")
+    for pass_index in range(_MAX_TRANSPORT_RETRY_PASSES + 1):
+        had_transport_error = False
+        stream_locked = False
+
+        for api_key in candidates:
+            headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+            for endpoint in endpoints:
+                stream_broke = False
+                try:
+                    async with httpx.AsyncClient(timeout=timeout) as client:
+                        async with client.stream("POST", endpoint, json=payload, headers=headers) as resp:
+                            if resp.status_code != 200:
+                                body_text = (await resp.aread()).decode("utf-8", errors="ignore")[:300]
+                                last_error = f"HTTP {resp.status_code}: {body_text}"
+                                logger.warning("[agent-stream] candidate failed: %s %s", endpoint, last_error)
+                                continue  # 换端点/候选重试
+
+                            # V3.7.12：零输出/异常诊断计数——撕裂/空流四种子因自此可在日志区分
+                            raw_line_count = data_line_count = parsed_count = 0
+                            first_data_preview = ""
+                            last_finish_reason = None
+                            stream_done = False
+                            async for raw_line in resp.aiter_lines():
+                                raw_line_count += 1
+                                line = raw_line.strip()
+                                if not line.startswith("data:"):
+                                    continue
+                                data_line_count += 1
+                                data_str = line[5:].strip()
+                                if data_str == "[DONE]":
+                                    stream_done = True
+                                    break
+                                if not first_data_preview:
+                                    first_data_preview = data_str
+                                try:
+                                    chunk = json.loads(data_str)
+                                except json.JSONDecodeError:
+                                    continue
+                                parsed_count += 1
+                                if chunk.get("error"):
+                                    last_error = str(chunk["error"].get("message") or chunk["error"])
+                                    stream_broke = True
+                                    break
+                                if isinstance(chunk.get("usage"), dict):
+                                    usage_acc = chunk["usage"]
+                                choices = chunk.get("choices") or []
+                                if choices and choices[0].get("finish_reason"):
+                                    last_finish_reason = choices[0].get("finish_reason")
+                                delta = _stream_extract_delta(chunk)
+                                if delta:
+                                    content_parts.append(delta)
+                                    committed = True
+                                    yield _sse_event({"type": "delta", "delta": delta})
+                                if choices:
+                                    _merge_stream_tool_calls(
+                                        tool_acc, choices[0].get("delta", {}).get("tool_calls")
+                                    )
+                            if not committed and not tool_acc:
+                                logger.warning(
+                                    "[agent-stream] candidate produced nothing: %s | lines=%d data=%d "
+                                    "parsed=%d done=%s broke=%s finish=%s first_data=%r | last_error=%s",
+                                    endpoint, raw_line_count, data_line_count, parsed_count,
+                                    stream_done, stream_broke, last_finish_reason,
+                                    first_data_preview[:120], last_error[:160],
                                 )
-                        if stream_broke and not committed:
-                            continue  # 未产出任何内容：换候选重试
-                        if committed or tool_acc or stream_done:
-                            break  # 已锁定候选（或流正常结束），不再轮换
-                        # 零输出：换候选重试
-                        continue
-            except httpx.HTTPError as exc:
-                last_error = f"{type(exc).__name__}: {exc}"
-                logger.warning("[agent-stream] candidate error: %s %s", endpoint, last_error)
-                if committed:
-                    # 已向前端产出部分内容：换候选会导致内容重复，收束为 error 事件
-                    yield _sse_event({"type": "error", "message": f"流式中断：{last_error}"})
-                    return
-                continue
+                            if stream_broke and not committed:
+                                continue  # 未产出任何内容：换端点/候选重试
+                            if committed or tool_acc or stream_done:
+                                stream_locked = True
+                                break  # 已锁定候选（或流正常结束），不再轮换
+                            # 零输出：换候选重试
+                            continue
+                except httpx.HTTPError as exc:
+                    last_error = f"{type(exc).__name__}: {exc}"
+                    logger.warning("[agent-stream] candidate error: %s %s", endpoint, last_error)
+                    if committed:
+                        # 已向前端产出部分内容：换候选会导致内容重复，收束为 error 事件
+                        yield _sse_event({"type": "error", "message": f"流式中断：{last_error}"})
+                        return
+                    had_transport_error = True
+                    continue
+
+            if stream_locked:
+                break  # V3.7.12：已锁定候选，终止外层候选轮换
+
+        if committed or tool_acc:
+            break
+        if not had_transport_error:
+            break  # HTTP 失败 / 空流等确定性失败：不重试
+        if pass_index < _MAX_TRANSPORT_RETRY_PASSES:
+            logger.warning(
+                "[agent-stream] all candidates failed with transport errors; retrying once (pass %d)",
+                pass_index + 1,
+            )
 
     if committed or tool_acc:
         content_text = "".join(content_parts)

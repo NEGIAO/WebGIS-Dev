@@ -1,7 +1,10 @@
 """
 Agent 流式改造单测（V3.7.7 批次 E）：delta 提取、tool_calls 流式拼装、SSE 事件帧、IP 定位缓存。
+V3.7.12 增补：候选锁定外层 break、传输异常整轮重试（mock httpx.AsyncClient）。
 """
 
+import asyncio
+import json
 import sys
 import unittest
 from pathlib import Path
@@ -153,6 +156,134 @@ class IpLocationCacheTests(unittest.TestCase):
         self.upstream._ip_location_cache_put("1.2.3.4", "ok", now=100.0)
         self.assertIsNotNone(self.upstream._ip_location_cache_get("1.2.3.4", now=100.0 + 599))
         self.assertIsNone(self.upstream._ip_location_cache_get("1.2.3.4", now=100.0 + 601))
+
+
+class _FakeResponse:
+    """mock 上游流式响应：status_code / aread / aiter_lines 三件套。"""
+
+    def __init__(self, status_code=200, lines=None):
+        self.status_code = status_code
+        self._lines = lines or []
+
+    async def aread(self):
+        return b'{"error":"upstream broken"}'
+
+    async def aiter_lines(self):
+        for ln in self._lines:
+            yield ln
+
+
+class _FakeStreamCtx:
+    def __init__(self, response):
+        self._response = response
+
+    async def __aenter__(self):
+        return self._response
+
+    async def __aexit__(self, exc_type, exc, tb):
+        return False
+
+
+class _FakeAsyncClient:
+    """按 plan 顺序返回响应或抛出异常；记录每次 stream() 的 URL。"""
+
+    calls = []
+    plan = []
+
+    def __init__(self, **kwargs):
+        pass
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb):
+        return False
+
+    def stream(self, method, url, **kwargs):
+        _FakeAsyncClient.calls.append(url)
+        entry = _FakeAsyncClient.plan.pop(0) if _FakeAsyncClient.plan else _FakeResponse()
+        if isinstance(entry, Exception):
+            raise entry
+        return _FakeStreamCtx(entry)
+
+
+SUCCESS_LINES = [
+    'data: {"choices":[{"delta":{"content":"hello"}}]}',
+    'data: {"choices":[{"delta":{"content":" world"}}]}',
+    "data: [DONE]",
+]
+
+
+class StreamRotationRegressionTests(unittest.TestCase):
+    """V3.7.12：候选锁定后终止外层轮换；传输异常整轮重试一次。"""
+
+    def _run(self, plan, candidates):
+        from api.agent_chat import upstream
+
+        _FakeAsyncClient.calls = []
+        _FakeAsyncClient.plan = list(plan)
+
+        async def _collect():
+            events = []
+            gen = upstream._stream_upstream_chat_events(
+                mock.Mock(),
+                base_url="https://upstream.test/v1",
+                api_keys=list(candidates),
+                model="m1",
+                messages=[{"role": "user", "content": "hi"}],
+                timeout_seconds=30,
+                max_tokens=64,
+                temperature=0.2,
+            )
+            async for evt in gen:
+                events.append(evt)
+            return events
+
+        with mock.patch.object(upstream.httpx, "AsyncClient", _FakeAsyncClient):
+            events = asyncio.run(_collect())
+        return events, list(_FakeAsyncClient.calls)
+
+    def _parsed(self, events):
+        out = []
+        for e in events:
+            if not e.startswith("data: "):
+                continue
+            body = e[6:].strip()
+            out.append("[DONE]" if body == "[DONE]" else json.loads(body))
+        return out
+
+    def test_lock_stops_rotation_after_first_success(self):
+        events, calls = self._run([_FakeResponse(lines=SUCCESS_LINES)], candidates=("k1", "k2"))
+        # P1 回归：首候选成功后不得再请求第二候选
+        self.assertEqual(len(calls), 1)
+        parsed = self._parsed(events)
+        deltas = [p["delta"] for p in parsed if isinstance(p, dict) and p.get("type") == "delta"]
+        self.assertEqual(deltas, ["hello", " world"])  # 内容不得成倍重复
+        types = [p if p == "[DONE]" else p.get("type") for p in parsed]
+        self.assertIn("final", types)
+        self.assertEqual(types[-1], "[DONE]")
+
+    def test_transport_error_retries_whole_pass_then_succeeds(self):
+        import httpx
+
+        events, calls = self._run(
+            [httpx.ConnectError("boom"), _FakeResponse(lines=SUCCESS_LINES)], candidates=("k1",)
+        )
+        # 单候选传输异常 → 整轮重试一次：共 2 次调用，最终成功
+        self.assertEqual(len(calls), 2)
+        parsed = self._parsed(events)
+        types = [p if p == "[DONE]" else p.get("type") for p in parsed]
+        self.assertIn("final", types)
+        self.assertEqual(types[-1], "[DONE]")
+
+    def test_http_failure_does_not_transport_retry(self):
+        events, calls = self._run([_FakeResponse(status_code=500)], candidates=("k1",))
+        # HTTP 确定性失败不整轮重试：仅 1 次调用，以 error 事件收束
+        self.assertEqual(len(calls), 1)
+        parsed = self._parsed(events)
+        types = [p.get("type") for p in parsed if isinstance(p, dict)]
+        self.assertIn("error", types)
+        self.assertNotIn("final", types)
 
 
 if __name__ == "__main__":

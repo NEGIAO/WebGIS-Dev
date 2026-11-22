@@ -131,7 +131,7 @@
 
 ## 🎯 项目简介
 
-**NEGIAO's WebGIS** 是一个功能完整、架构清晰的前后端分离 WebGIS 平台（当前版本 V3.7.11），前端托管于 GitHub Pages（正式域名 webgis.negiao.cn），后端以 Docker 部署在 Hugging Face Spaces，通过 RESTful API 通信，支持独立扩展。
+**NEGIAO's WebGIS** 是一个功能完整、架构清晰的前后端分离 WebGIS 平台（当前版本 V3.7.12），前端托管于 GitHub Pages（正式域名 webgis.negiao.cn），后端以 Docker 部署在 Hugging Face Spaces，通过 RESTful API 通信，支持独立扩展。
 
 > 📚 本 README 仅保留核心概览与导航。完整文档已模块化至 [`Docs/Guide/`](Docs/Guide/)，详见下方「文档导航」。
 >
@@ -618,9 +618,9 @@ tiles.negiao.cc.cd"]
 
 | 版本 | 日期 | 概要 |
 |------|------|------|
+| **V3.7.12** | 2026-11-22 | **修复：流式候选轮换外层 break（P1）+ 零输出诊断 + 传输异常整轮重试**。P1：候选成功锁定后外层循环继续下一 key → 重复请求/重复计费/内容成倍重复（多候选配置触发），补 `stream_locked` 终止外层轮换；候选零输出时记录行数/解析数/首行预览等诊断（撕裂/空流四种子因自此可在日志区分）；全部候选传输层异常失败时整轮重试一次（HTTP/空流不重试）。附：撤销 SMTP_Reply 冗余 secret。详见[完整更新日志](Docs/Guide/CHANGELOG.md) |
 | **V3.7.11** | 2026-11-22 | **修复：认证库进程内访问串行化（撕裂读根治层）**。V3.7.9 部署后生产实证撕裂窗口可持续 ~10s（重试防线赌不过持续写入：sessions 心跳每 ~5s、visit_tracking 每访问写）。连接 with 块全程持进程级互斥锁（提交发生在锁内），读与写提交物理互斥，单 worker 下确定性消灭撕裂读；19 处调用点 18 处本为 `with conn:`，location.py 唯一手动 commit 路径同步改 with；V3.7.9 重试保留为纵深防御。详见[完整更新日志](Docs/Guide/CHANGELOG.md) |
 | **V3.7.10** | 2026-11-22 | **体验：AI 对话状态信息栏简洁/详情折叠控件**。默认简洁模式仅「就绪 + 模式」徽章一行（移动端不再臃肿），点击尾部圆形按钮展开模型/消耗/额度/说明详情，偏好 localStorage 持久化；额度耗尽警告不受折叠影响恒显示；切换按钮触屏档 40×40px 目标（`pointer: coarse`）+ aria 全套，桌面/移动行为一致。详见[完整更新日志](Docs/Guide/CHANGELOG.md) |
-| **V3.7.9** | 2026-11-22 | **修复：瞬态数据库损坏窗口内请求 500——执行期自愈重试**。HF /data 网络盘上并发写提交窗口的撕裂读被并发请求看到（malformed / not a database，5 秒 4 连 500 后无 rebuild 自愈 200）；借出时 SELECT 1 探测只触页头覆盖不到。连接工厂改用自愈子类：只读语句遇损坏类错误退避重试（3 次 / 0.15s 递增，重试日志顺带补齐可观测性），写语句与非损坏错误不重试，持久损坏仍走既有恢复分支；全部 `get_auth_db_connection` 调用方零改动受益。详见[完整更新日志](Docs/Guide/CHANGELOG.md) |
 
 
 ---
@@ -643,6 +643,6 @@ tiles.negiao.cc.cd"]
 |:------:|:--------:|:--------:|
 | [GitHub](https://github.com/NEGIAO/WebGIS-Dev) | [webgis.negiao.cn](https://webgis.negiao.cn)（正式域名，GitHub Pages 托管） | [Hugging Face](https://NEGIAO-WebGIS.hf.space) |
 
-<sub>V3.7.11 · 开发中 · 最后更新 2026-11-22</sub>
+<sub>V3.7.12 · 开发中 · 最后更新 2026-11-22</sub>
 
 </div>
