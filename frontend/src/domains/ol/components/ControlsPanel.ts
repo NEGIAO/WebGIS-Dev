@@ -3,9 +3,10 @@
  * 日    期：2026/11/13（范式化改造）
  * 说    明：菜单项统一经 handleSelect 分发；子面板显隐互斥；3D 引擎下绘制/测量切换为 Cesium 面板。
  */
-import { computed, defineAsyncComponent, defineComponent, inject, ref, watch, type ExtractPropTypes, type PropType, type SetupContext } from 'vue';
+import { computed, defineComponent, inject, ref, watch, type ExtractPropTypes, type PropType, type SetupContext } from 'vue';
 import { storeToRefs } from 'pinia';
 import { useMessage } from '@common/shell/useMessage';
+import { defineResilientAsync } from '@common/utils/defineResilientAsync';
 import { useLocale } from '@common/app/useLocale';
 import AdministrativeDivisionPanel from './AdministrativeDivisionPanel.vue';
 import {
@@ -24,15 +25,15 @@ import { useLayerStore } from '@ol/stores/useLayerStore';
 import { useAppStore } from '@common/app/stores/useAppStore';
 import { BASEMAP_OPTIONS } from '@/constants';
 
-const DrawPanel = defineAsyncComponent(() => import('./DrawPanel.vue'));
-const MeasurePanel = defineAsyncComponent(() => import('./MeasurePanel.vue'));
-const SpatialAnalysisPanel = defineAsyncComponent(() => import('./SpatialAnalysisPanel.vue'));
+const DrawPanel = defineResilientAsync(() => import('./DrawPanel.vue'), { label: '绘制面板加载失败，请检查网络后重试', minHeight: 240 });
+const MeasurePanel = defineResilientAsync(() => import('./MeasurePanel.vue'), { label: '测量面板加载失败，请检查网络后重试', minHeight: 240 });
+const SpatialAnalysisPanel = defineResilientAsync(() => import('./SpatialAnalysisPanel.vue'), { label: '空间分析面板加载失败，请检查网络后重试', minHeight: 240 });
 /**
  * 3D 绘制/测量面板（引擎感知）：按当前引擎切换 UI 与功能集。
  * 域边界说明：侧栏 shell 历史上落在 @ol/components，此处按 engine 异步引入
  * @cesium-domain 面板，与 SidePanel.vue 异步引入 @ol 路由面板的既有做法一致。
  */
-const CesiumDrawMeasurePanel = defineAsyncComponent(() => import('@cesium-domain/components/CesiumDrawMeasurePanel.vue'));
+const CesiumDrawMeasurePanel = defineResilientAsync(() => import('@cesium-domain/components/CesiumDrawMeasurePanel.vue'), { label: '三维绘制测量面板加载失败，请检查网络后重试', minHeight: 240 });
 
 /** 卷帘分析支持的底图 */
 const SWIPE_SUPPORTED_BASEMAPS = BASEMAP_OPTIONS;

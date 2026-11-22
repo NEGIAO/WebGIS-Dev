@@ -15,7 +15,8 @@ import {
 	apiStatisticsCenter,
 	apiStatisticsRealtime,
 } from '@/api/backend';
-import { getAuthToken, getAuthUser, setAuthSession, syncUserRoleToUrl } from '@common/user/services/auth';
+import { getAuthToken, getAuthUser } from '@common/user/services/auth';
+import { commitLoginSession } from '@common/user/services/sessionCommit';
 import { useAuthStore } from '@common/user/stores/useAuthStore';
 import { useThemeStore, useUserPreferencesStore } from '@/stores';
 import { useTimerRegistry } from '@common/composables/useTimerRegistry';
@@ -434,13 +435,9 @@ export class Instance {
 		if (!hasAvatarIndex) merged.avatar_index = current.avatar_index ?? this.selectedAvatarIndex.value;
 
 		this.user.value = merged;
-		// 回填全局 authStore：SPA 内登录不会触发 ensureValidSession（守卫在 GIS 已加载时短路），
-		// authStore.user 若不在此同步将一直停留在登录前旧身份，依赖它的判定会读到过期数据
-		this.authStore.user = merged;
 		if (hasAvatarIndex) this.selectedAvatarIndex.value = Number(merged.avatar_index ?? this.selectedAvatarIndex.value);
-		syncUserRoleToUrl(merged);
 		const token = getAuthToken();
-		if (token) setAuthSession({ token, user: merged });
+		if (token) commitLoginSession(token, merged); // 含 URL 角色同步 + authStore 回填（V3.7.7 收口）
 		return merged;
 	};
 

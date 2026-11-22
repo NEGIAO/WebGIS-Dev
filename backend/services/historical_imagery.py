@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-from contextlib import closing
 from datetime import datetime, timedelta, timezone
 from typing import Any, Iterable, TYPE_CHECKING
 
@@ -28,7 +27,7 @@ def _now_iso() -> str:
 
 def init_historical_imagery_storage() -> None:
     """Create the metadata and sync-state tables."""
-    with closing(get_auth_db_connection()) as conn:
+    with get_auth_db_connection() as conn:
         conn.execute("""
             CREATE TABLE IF NOT EXISTS historical_imagery_layers (
                 provider TEXT NOT NULL, layer_id TEXT NOT NULL,
@@ -98,7 +97,7 @@ def sync_wayback_layers() -> dict[str, Any]:
     try:
         entries = fetch_wayback_entries()
         fetched_at = _now_iso()
-        with closing(get_auth_db_connection()) as conn:
+        with get_auth_db_connection() as conn:
             conn.execute("BEGIN IMMEDIATE")
             conn.execute("DELETE FROM historical_imagery_layers WHERE provider = ?", (PROVIDER_ID,))
             conn.executemany(
@@ -133,7 +132,7 @@ def sync_wayback_layers() -> dict[str, Any]:
     except Exception as exc:
         error_text = str(exc)[:1000]
         try:
-            with closing(get_auth_db_connection()) as conn:
+            with get_auth_db_connection() as conn:
                 conn.execute(
                     """
                     INSERT INTO historical_imagery_sync_state
@@ -168,7 +167,7 @@ def _ensure_storage_once() -> None:
 def get_wayback_catalog() -> dict[str, Any]:
     """Read the cached catalog without contacting ESRI in the request path."""
     _ensure_storage_once()
-    with closing(get_auth_db_connection()) as conn:
+    with get_auth_db_connection() as conn:
         rows = conn.execute(
             """
             SELECT layer_id, snapshot_date, code, name, xyz_url

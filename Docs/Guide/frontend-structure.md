@@ -746,7 +746,8 @@ frontend/src/
 │   │   │   ├── services/
 │   │   │   │   ├── auth.ts  # 鉴权工具
 │   │   │   │   ├── guestIdentity.ts  # 游客身份签发/续期（ensureGuestSession）与分享模式注入（V3.7.6）
-│   │   │   │   └── guestTokenStore.ts  # 游客身份签名 token 本地存储（叶子模块，X-Guest-Token 头来源）
+│   │   │   │   ├── guestTokenStore.ts  # 游客身份签名 token 本地存储（叶子模块，X-Guest-Token 头来源）
+│   │   │   │   └── sessionCommit.ts  # 登录会话统一出口（commitLoginSession/resetAuthSessionState，V3.7.7 收拢）
 │   │   │   └── stores/
 │   │   │       ├── useAuthStore.ts  # 鉴权状态
 │   │   │       └── useUserPreferencesStore.ts  # 用户偏好（语言 SSOT：setLanguagePreference + 本机 key 优先远端）

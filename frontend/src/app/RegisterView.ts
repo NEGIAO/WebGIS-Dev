@@ -43,9 +43,8 @@ import {
     getOrCreateGuestDeviceId,
     injectPositionCodeToPath,
     peekPersistedPositionCode,
-    setAuthSession,
-    syncUserRoleToUrl,
 } from '@common/user/services/auth';
+import { commitLoginSession } from '@common/user/services/sessionCommit';
 // 深导入：注册页与落地页同属首屏入口，禁止经 '../stores' 聚合桶取 store
 import { useUserPreferencesStore } from '@common/user/stores/useUserPreferencesStore';
 import { apiAuthLogin, apiAuthRegister, apiLocationTrackVisit, redirectToOAuthProvider } from '../api/backend';
@@ -422,8 +421,7 @@ export class Instance {
             const user = result?.user || null;
             if (!token || !user) throw new Error(this.t('auth.guestLoginResponseError'));
 
-            setAuthSession({ token, user });
-            syncUserRoleToUrl(user);
+            commitLoginSession(token, user);
             this.message.success(this.t('auth.guestLoginSuccess'));
             await this.router.replace(this.resolveRedirectTarget());
             consumePersistedPositionCode();
@@ -462,8 +460,7 @@ export class Instance {
             const user = result?.user || null;
             if (!token || !user) throw new Error(this.t('auth.loginResponseError'));
 
-            setAuthSession({ token, user });
-            syncUserRoleToUrl(user);
+            commitLoginSession(token, user);
             if (user?.requires_email_binding) {
                 this.requiresEmailBinding.value = true;
                 this.bindCurrentPassword.value = normalizedPassword;

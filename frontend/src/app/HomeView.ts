@@ -30,11 +30,18 @@ import {
 } from './composables/useHomePanels';
 import { useHomeEngineSwitch } from './composables/useHomeEngineSwitch';
 import { useHomeLayerAndMapRouting } from './composables/useHomeLayerAndMapRouting';
+import { defineResilientAsync } from '@common/utils/defineResilientAsync';
 
 let notifySidePanelLoadError = (_msg: string) => {};
 
-const LogMonitor = defineAsyncComponent(() => import('@ol/components/LogMonitor.vue'));
-const AttributeTable = defineAsyncComponent(() => import('@ol/layer/components/AttributeTable.vue'));
+const LogMonitor = defineResilientAsync(() => import('@ol/components/LogMonitor.vue'), {
+	label: '日志监控加载失败，请检查网络后重试',
+	minHeight: 120,
+});
+const AttributeTable = defineResilientAsync(() => import('@ol/layer/components/AttributeTable.vue'), {
+	label: '属性表加载失败，请检查网络后重试',
+	minHeight: 200,
+});
 const SidePanel = defineAsyncComponent({
     loader: loadSidePanelModule,
     delay: 0,

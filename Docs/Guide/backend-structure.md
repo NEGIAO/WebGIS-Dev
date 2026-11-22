@@ -91,6 +91,7 @@ backend/
 ├── tests/                                         # 单元测试（按域分组；子目录无 __init__，各文件自插 backend 到 sys.path）
 │   ├── test_agent_map_context.py                  # AgentMapContextV1 Schema 与 prompt 格式测试
 │   ├── test_config_env_loading.py                 # 配置与环境变量加载测试
+│   ├── test_conn_reuse.py                         # 线程本地连接复用（复用/代际丢弃/线程隔离/损坏恢复/自愈，V3.7.7-8）
 │   ├── test_guest_identity.py                     # 游客身份治理（token 签发/验签/限频/派生桶/保留期清理，V3.7.6）
 │   ├── test_historical_imagery.py                 # 历史影像 _normalize_entries 排序/去重/XYZ URL 生成测试
 │   ├── test_secret_masking.py                     # 管理面敏感值掩码（列判定/行掩码/掩码回写拦截，V3.7.6）

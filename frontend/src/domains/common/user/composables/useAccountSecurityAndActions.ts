@@ -15,7 +15,7 @@ import {
 	apiCreateUserMessage,
 	redirectToOAuthBindProvider,
 } from '@/api/backend';
-import { clearAuthSession } from '@common/user/services/auth';
+import { resetAuthSessionState } from '@common/user/services/sessionCommit';
 import { useRealtimeStats } from '@common/user/composables/useRealtimeStats';
 
 export interface AccountSecurityAndActionsDeps {
@@ -76,7 +76,8 @@ export function useAccountSecurityAndActions(deps: AccountSecurityAndActionsDeps
 	const forceBackToLogin = async (hintText = '') => {
 		// 先于 clearAuthSession 断开并上送 offline beacon，确保 Authorization 尚未清空
 		useRealtimeStats().disconnect();
-		clearAuthSession();
+		// V3.7.7：clearAuthSession → resetAuthSessionState，顺带清 authStore 残留身份
+		resetAuthSessionState();
 		deps.closePanel();
 		if (hintText) deps.message.success(hintText);
 		await deps.router.replace('/register');

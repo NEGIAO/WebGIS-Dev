@@ -21,6 +21,7 @@ from pydantic import BaseModel, Field
 from config import get_str
 
 from api.auth import (
+    auth_db_generation,
     get_auth_db_connection,
     resolve_optional_session,
 )
@@ -30,6 +31,7 @@ from core.coord_transform import wgs2gcj
 logger = logging.getLogger(__name__)
 
 _visit_tracking_table_ready = False
+_visit_tracking_table_ready_gen = -1
 
 # ==================== 配置 ====================
 
@@ -350,7 +352,7 @@ async def track_visit(
         city = province = country = None
     
     # 尝试保存到数据库
-    global _visit_tracking_table_ready
+    global _visit_tracking_table_ready, _visit_tracking_table_ready_gen
     username = str(current_user.get("username") or "") if current_user else ""
     conn = None
     try:
@@ -358,7 +360,8 @@ async def track_visit(
         cursor = conn.cursor()
 
         # 创建表（如果不存在），使用模块级标志避免每次请求执行 DDL
-        if not _visit_tracking_table_ready:
+        # V3.7.7 批次 A：就绪标志带连接代际——库被恢复/重建后自动重跑 DDL
+        if not _visit_tracking_table_ready or _visit_tracking_table_ready_gen != auth_db_generation():
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS visit_tracking (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -373,6 +376,7 @@ async def track_visit(
                 )
             """)
             _visit_tracking_table_ready = True
+            _visit_tracking_table_ready_gen = auth_db_generation()
 
         # 插入记录
         cursor.execute("""
@@ -410,8 +414,10 @@ async def track_visit(
             "message": "location detected but not persisted"
         }
     finally:
+        # V3.7.7 批次 A：连接为线程本地共享资源，不再由调用方关闭；
+        # 异常路径改为显式回滚（成功路径已在 try 内手动 commit）
         if conn is not None:
             try:
-                conn.close()
+                conn.rollback()
             except Exception:
                 pass

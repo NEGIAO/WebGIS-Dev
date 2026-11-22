@@ -21,7 +21,7 @@ _BEIJING_TZ = timezone(timedelta(hours=8))
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field
 
-from api.auth import get_auth_db_connection, require_admin, require_api_access_or_guest
+from api.auth import auth_db_generation, get_auth_db_connection, require_admin, require_api_access_or_guest
 from config import get_str
 from core.secret_masking import mask_secret
 
@@ -70,8 +70,14 @@ def _iso_now() -> str:
     return datetime.now(_BEIJING_TZ).isoformat()
 
 
+_ensure_api_keys_table_ready_gen = -1
+
+
 def _ensure_api_keys_table_sync() -> None:
-    """确保 API 密钥表存在"""
+    """确保 API 密钥表存在（V3.7.7 批次 A：代际守卫，库重建后自动重跑 DDL）"""
+    global _ensure_api_keys_table_ready_gen
+    if _ensure_api_keys_table_ready_gen == auth_db_generation():
+        return
     with _db_connection() as conn:
         conn.execute(
             """
@@ -98,6 +104,7 @@ def _ensure_api_keys_table_sync() -> None:
             """
         )
         conn.commit()
+        _ensure_api_keys_table_ready_gen = auth_db_generation()
 
 
 def _get_api_key_sync(key_name: str) -> Optional[str]:

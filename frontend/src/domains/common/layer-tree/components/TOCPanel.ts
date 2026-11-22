@@ -6,7 +6,6 @@
  */
 import {
 	computed,
-	defineAsyncComponent,
 	defineComponent,
 	onBeforeUnmount,
 	onMounted,
@@ -18,6 +17,7 @@ import {
 	type Ref,
 	type SetupContext,
 } from 'vue';
+import { defineResilientAsync } from '@common/utils/defineResilientAsync';
 import type { useSharedResourceLoader } from '@common/data-import/useSharedResourceLoader';
 import {
 	CircleDot,
@@ -56,7 +56,7 @@ import SharedResourceTreeItem from '@common/layer-tree/components/SharedResource
 import AmapAoiInjectDialog from '@common/layer-tree/components/AmapAoiInjectDialog.vue';
 import LayerPropertiesDialog from '@common/layer-tree/components/LayerPropertiesDialog.vue';
 // 异步加载：下载器仅切到 download 标签页时才需要，不随 TOC 首次渲染加载
-const MapDownloader = defineAsyncComponent(() => import('@ol/components/MapDownloader.vue'));
+const MapDownloader = defineResilientAsync(() => import('@ol/components/MapDownloader.vue'), { label: '底图下载面板加载失败，请检查网络后重试', minHeight: 240 });
 import { useGeocoding } from '../composables/useGeocoding';
 import { useFileUpload, MAX_FILE_SIZE_MB } from '../composables/useFileUpload';
 import { BASIC_CRS_PRESETS, listCgcs2000Presets, listUtmPresets } from '@common/data-import/crs/crsPresets';

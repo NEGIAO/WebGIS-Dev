@@ -22,7 +22,7 @@ from .constants import (
 )
 
 # ─── 数据库 ───
-from .db import AUTH_DB_PATH, _iso, _safe_parse_iso, _utc_now, get_auth_db_connection
+from .db import AUTH_DB_PATH, _iso, _safe_parse_iso, _utc_now, auth_db_generation, get_auth_db_connection
 
 # ─── Schema / 初始化 ───
 from .schema import init_auth_storage
@@ -117,6 +117,7 @@ __all__ = [
     "_extract_token",
     # 数据库
     "AUTH_DB_PATH",
+    "auth_db_generation",
     "get_auth_db_connection",
     # 初始化
     "init_auth_storage",

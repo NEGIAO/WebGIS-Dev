@@ -6,7 +6,6 @@
  */
 import {
     computed,
-    defineAsyncComponent,
     defineComponent,
     markRaw,
     onUnmounted,
@@ -15,6 +14,7 @@ import {
     type Ref,
     type SetupContext,
 } from 'vue';
+import { defineResilientAsync } from '@common/utils/defineResilientAsync';
 import { Copy, Eye, EyeOff, House, Upload } from '@lucide/vue';
 import '@cesium-domain/vendors/cesium-navigation/styles/cesium-navigation.css';
 
@@ -60,8 +60,9 @@ import { useCesiumBootstrap } from '../composables/core/useCesiumBootstrap';
 import { useCesiumWind } from '@cesium-domain/modules/wind/useCesiumWind';
 import { usePlayerController } from '@cesium-domain/modules/player-controller/usePlayerController';
 
-const ShallowWaterOverlay = defineAsyncComponent(() =>
-    import('@cesium-domain/modules/shallow-water/ShallowWaterOverlay.vue'),
+const ShallowWaterOverlay = defineResilientAsync(
+    () => import('@cesium-domain/modules/shallow-water/ShallowWaterOverlay.vue'),
+    { label: '水面特效模块加载失败，请重试', minHeight: 80 },
 );
 
 // 模块加载即注册图层树端口（早于组件挂载，图层树首帧即可见「三维数据」分组）

@@ -17,9 +17,62 @@
 > 注：V3.7.2 号段已于同日重新启用，对应《修复 OpenLayers 加载 OSM 标准瓦片 403》条目，与本条无冲突。
 > 分主题的原始过程记录保留在 `Docs/LLM_record/26-11/2026-11-14/`，不迁移、不改写。
 
+### V3.7.7 (2026-11-22) — SQLite 连接复用 · 登录会话统一出口 · 异步组件批量加固 · P0 连接关闭自愈
+
+> **版本号归并（2026-11-22）**：三批性能稳定治理与 P0 热修（曾用号 V3.7.7 / V3.7.8 / V3.7.9）为**同一批未提交工作**的增量序列，
+> 按用户「这个版本才是 3.7.7」的指令归并为单条 **V3.7.7**；曾用中间号自本条起废弃，本批代码注释与文档版本字样已统一改写
+> （历史提交中的旧 V3.7.7 字样属 V3.7.1 归并语义，不涉本条）。分主题过程记录保留在 `Docs/LLM_record/26-11/2026-11-21/` 与
+> `2026-11-22-hotfix-closed-conn.md` 四份日志，不迁移、不改写。
+
+> **一句话**：① SQLite 线程本地连接复用 + 代际失效计数器 + 四处热路径 DDL 守卫（高频端点每请求省 4–36 次 PRAGMA 磁盘往返）；
+> ② `sessionCommit.ts` 登录会话唯一出口（5 处散点 + mergeUserPatch 收拢，authStore 回填全链路生效；登出清残留）；
+> ③ 14 处裸 `defineAsyncComponent` 加固为 `defineResilientAsync`（分片失败占位 + 可点重试，消灭「面板永久空白」）；
+> ④ P0：`historical_imagery` 4 处 `closing()` 关闭共享连接致全站登录 500，根修 + 快路径 closed/not-a-database 自愈重建（防御纵深）。
+
+**A. SQLite 线程本地连接复用（性能）**：
+1. `db.py`：线程本地缓存 + `SELECT 1` 存活探测 + 代际计数器（恢复/重建推进，所有线程丢弃旧库文件连接）；`auth_db_generation()` 导出。
+2. 四处热路径 DDL（api_keys ×9 / agent_chat ×8 / api_log ×3 / location）接入代际守卫，修复 location「库重建后误跳 DDL」隐患。
+3. `location.py` finally `close` → 显式 `rollback`（共享连接不再由调用方关闭）。实施前审计：98 个开启函数、全部 with 块**零嵌套**、`.close()` 仅 3 处（已处理）。
+4. **验证**：新增 5 单测（复用/代际丢弃/线程隔离/损坏转恢复/非损坏抛出）+ 相关域 86/86 全绿。
+
+**B. 登录会话统一出口（收口）**：
+1. 新增 `sessionCommit.ts`：`commitLoginSession(token, user)`（sessionStorage + URL 角色 + authStore 回填）与 `resetAuthSessionState()`（登出清残留）。
+2. 5 处登录出口（RegisterView×2 / OAuth / OneTap / 绑定邮箱）+ `mergeUserPatch` 全部收拢；`forceBackToLogin` 清 authStore 残留身份。
+3. **验证**：vue-tsc/eslint 0 问题；登录面文件 `setAuthSession` 直调归零。实机三步（三登录路径即时身份正确 / 换号无残留 / 绑定续接）待用户执行。
+
+**C. 异步组件批量加固（可用性）**：
+1. 14 处裸 `defineAsyncComponent` → `defineResilientAsync`（占位 + 可点重试 + 超时反馈），覆盖 LogMonitor/属性表/水面特效/绘制测量四面板/侧栏六面板/MapDownloader；1 处有意保留（HomeView SidePanel 对象形态自带 onError 自愈）。
+2. **验证**：vue-tsc/eslint 0 问题；实机两步（断网面板占位可重试 / 3D 水面特效正常）待用户执行。
+
+**D. P0 紧急修复：closing 关闭共享连接 → 全站登录 500（部署事故，含 V3.7.9 分类扩展增补）** —— 日志 [2026-11-22-hotfix-closed-conn](../LLM_record/26-11/2026-11-21/2026-11-22-hotfix-closed-conn.md)：
+1. **事故**：批次 A 部署后，`services/historical_imagery.py` 4 处 `contextlib.closing(get_auth_db_connection())` 退出时关闭共享线程本地连接，`ProgrammingError("Cannot operate on a closed database")` 不走自愈分支直接 500，登录/`/auth/me`/访问追踪大面积不可用；`closing()` 无 `.close()` 字面量**绕过了批次 A 的 close 审计**（审计失误已如实复盘）。
+2. **fix（P0）**：4 处改 `with get_auth_db_connection() as conn:`（sqlite3 连接的 with = 事务语义，不关闭共享连接）；移除 `closing` 导入。
+3. **fix（防御纵深）**：db.py 快路径 `ProgrammingError` + "closed" 分支 → 丢弃旧连接自愈重建，未来任何外部关闭点从 500 降级为一次重建；连接契约「调用方禁止关闭」写入 db.py 注释（dev-conventions 增补为待办）。
+4. **增补（V3.7.9 语义，同事故序列）**：部署恢复后 1 秒瞬态 500——`file is not a database` 不含 malformed/corrupt 字样被分类器放过；已将「not a database」纳入损坏类消息全集转恢复分支。启动时库损坏（事故遗留损伤）被恢复机制完整重建 **16816 行数据零丢失**。
+5. **验证**：新增 2 回归单测（外部 close 自愈 / not-a-database 转恢复）+ 相关域 95/96（唯一失败为本机缺 pytest-asyncio 既有环境项）；全仓 `closing(` 清零；HF 日志实证事故与恢复全程。
+
+### V3.7.7 (2026-11-21) — SQLite 连接复用 · 登录会话统一出口 · 异步组件批量加固
+
+> **一句话**：三批性能与稳定治理——① SQLite 线程本地连接复用 + 代际失效计数器 + 四处热路径 DDL 守卫（高频端点每请求省 4–36 次 PRAGMA 磁盘往返）；② 新增 `sessionCommit.ts` 登录会话唯一出口（5 处散点 + mergeUserPatch 收拢，authStore 回填全链路生效；登出走 resetAuthSessionState 清残留）；③ 14 处裸 `defineAsyncComponent` 批量加固为 `defineResilientAsync`（分片失败占位 + 可点重试，消灭「面板永久空白」）。日志：[SQLite 连接复用](../LLM_record/26-11/2026-11-21/2026-11-21-sqlite-conn-reuse.md)、[登录收拢](../LLM_record/26-11/2026-11-21/2026-11-21-login-session-commit.md)、[异步组件加固](../LLM_record/26-11/2026-11-21/2026-11-21-resilient-async-batch.md)。
+
+**A. SQLite 线程本地连接复用（性能）**：
+1. `db.py`：线程本地缓存 + `SELECT 1` 存活探测 + 代际计数器（恢复/重建推进，所有线程丢弃旧库文件连接）；`auth_db_generation()` 导出。
+2. 四处热路径 DDL（api_keys ×9 / agent_chat ×8 / api_log ×3 / location）接入代际守卫，修复 location「库重建后误跳 DDL」隐患。
+3. `location.py` finally `close` → 显式 `rollback`（共享连接不再由调用方关闭）。实施前审计：98 个开启函数、全部 with 块**零嵌套**、`.close()` 仅 3 处（已处理）。
+4. **验证**：新增 5 单测（复用/代际丢弃/线程隔离/损坏转恢复/非损坏抛出）+ 相关域 86/86 全绿。
+
+**B. 登录会话统一出口（收口）**：
+1. 新增 `sessionCommit.ts`：`commitLoginSession(token, user)`（sessionStorage + URL 角色 + authStore 回填）与 `resetAuthSessionState()`（登出清残留）。
+2. 5 处登录出口（RegisterView×2 / OAuth / OneTap / 绑定邮箱）+ `mergeUserPatch` 全部收拢；`forceBackToLogin` 清 authStore 残留身份。
+3. **验证**：vue-tsc/eslint 0 问题；登录面文件 `setAuthSession` 直调归零。实机三步（三登录路径即时身份正确 / 换号无残留 / 绑定续接）待用户执行。
+
+**C. 异步组件批量加固（可用性）**：
+1. 14 处裸 `defineAsyncComponent` → `defineResilientAsync`（占位 + 可点重试 + 超时反馈），覆盖 LogMonitor/属性表/水面特效/绘制测量四面板/侧栏六面板/MapDownloader；1 处有意保留（HomeView SidePanel 对象形态自带 onError 自愈）。
+2. **验证**：vue-tsc/eslint 0 问题；实机两步（断网面板占位可重试 / 3D 水面特效正常）待用户执行。
+
 ### V3.7.6 (2026-11-21) — 游客身份治理（L3） · 管理面敏感值掩码 · 管理员首进 UI 修复
 
-> **版本号归并（2026-11-21）**：首进修复（曾用号 V3.7.6）/ 游客身份治理（曾用号 V3.7.7）/ 管理面掩码（曾用号 V3.7.8）三条记录为**同一批未提交工作**的三次增量，按用户「本次版本为 3.7.6」的指令归并为单条 **V3.7.6**；曾用中间号 V3.7.7 / V3.7.8 自本条起废弃，本批代码注释与文档中的版本字样已统一改写（历史提交中的旧 V3.7.7 字样属 V3.7.1 归并语义，不涉本条）。分主题过程记录保留在 `Docs/LLM_record/26-11/2026-11-21/` 三份日志，不迁移、不改写。
+> **版本号归并（2026-11-21）**：首进修复（曾用号 V3.7.6）/ 游客身份治理（曾用号 V3.7.7）/ 管理面掩码（曾用号 V3.7.7）三条记录为**同一批未提交工作**的三次增量，按用户「本次版本为 3.7.6」的指令归并为单条 **V3.7.6**；曾用中间号 V3.7.7 / V3.7.7 自本条起废弃，本批代码注释与文档中的版本字样已统一改写（历史提交中的旧 V3.7.7 字样属 V3.7.1 归并语义，不涉本条）。分主题过程记录保留在 `Docs/LLM_record/26-11/2026-11-21/` 三份日志，不迁移、不改写。
 
 > **一句话**：三批安全与体验治理打包落地——① `require_login` 恢复 fail-closed 并建立服务端签发的游客身份体系（配额不可再伪造）；② 管理面（密钥状态/表浏览器）不再下发密钥与令牌明文，改按需 reveal 拉取；③ 修复管理员 SPA 登录后首次进用户中心缺失管理 UI。
 
@@ -34,7 +87,7 @@
 7. **chore**：4 个配置 key 登记（L3 `GUEST_TOKEN_SECRET` / L2 TTL·限频·保留期）；结构树补录 4 个新文件。
 8. **验证**：新增 15 单测（签发/验签/篡改/过期/降级/限频隔离/派生确定性/purge）+ 相关域 40 测试全绿；`vue-tsc` 0 错误；双门禁 738/738、catalog 138 key 全绿；§11.2 红线仅命中已知假阳性 `maxRayDistance`。实机八步清单待用户执行（见日志）。
 
-**B. 管理面敏感值掩码（曾用号 V3.7.8）** —— 日志 [admin-secret-masking](../LLM_record/26-11/2026-11-21/2026-11-21-admin-secret-masking.md)：
+**B. 管理面敏感值掩码（曾用号 V3.7.7）** —— 日志 [admin-secret-masking](../LLM_record/26-11/2026-11-21/2026-11-21-admin-secret-masking.md)：
 
 1. **feat**：`core/secret_masking.py` —— `mask_secret`（前4后4、≤8 位整体打码、空值返空保「未配置」语义）、`is_sensitive_column`（精确集 + token/password/secret/credential/key_value 子串，大小写不敏感）、`mask_sensitive_row`、`assert_no_masked_writeback`。
 2. **fix（安全）**：`GET /api/admin/api-keys/status`、`GET /{key_name}`、`GET /api/admin/db/table/{t}/rows` 的 `key_value` / `token` / `password_hash` 等敏感列改掩码下发，常态暴露面（反代日志/DevTools/截屏）收敛。
@@ -51,6 +104,12 @@
 3. **后端权威裁决不变**：进入管理页签仍需 `apiAdminOverview` 403 探活，`adminDenied` 收回机制保留；前端可见性判定仅为 UI 引导，不构成权限放大。
 4. **遗留**：5 处登录成功点（RegisterView×2 / OAuthCallbackView / OneTap / 验证流程）回填 `authStore.user`（消除「登录完成 → 面板首载 `/auth/me`」间的秒级窗口）记入 `Docs/TODO/bugfix-optimization-plan.md` 后续跟进。
 5. **验证**：`vue-tsc --noEmit` 修复前后各一次、对比零新增报错；`CheckStructureTree.py` / `CheckConfigRegistry.py` 全绿；实机五步清单（游客浏览→登录→不刷新进用户中心 / 普通用户无页签 / 换号不残留 / OAuth 与 OneTap 复验）待用户执行。
+
+**D. 移除前端启动关键路径的第三方 IP 服务依赖（本号原生批次）** —— 日志 [remove-ipify-critical-path](../LLM_record/26-11/2026-11-21/2026-11-21-remove-ipify-critical-path.md)：
+
+1. **fix（可用性）**：删除 `client.ts` 的 api.ipify.org 获取链与请求拦截器 `X-Client-IP` 附加——广告拦截插件普遍封禁 ipify（`ERR_BLOCKED_BY_CLIENT` 常驻红色请求），国内访问慢导致 30s 负缓存过期后每 30s 首请求空等 3s。
+2. **fix**：`useUserLocation.ts` 删除两处 `await getPublicIp()` 预热；公网 IP 语义转由后端 `_extract_client_ip` 回落 **XFF 反代真实末跳**承担（展示/审计/IP 国别/IP 定位更准且零第三方依赖），后端零改动。
+3. **遗留**：「国内无法访问」主因是 HF Space 后端国内可达性（bugfix-plan 已登记的 L3 决策项：多活/中转/降级），待用户拍板另行立项。
 
 ### V3.7.5 (2026-11-18) — 暂存区整合：MVT + FOUC + 51.la + WMS/WMTS 协议与 TOC 多子层控制
 
