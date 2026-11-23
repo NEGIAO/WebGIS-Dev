@@ -40,9 +40,19 @@ export interface GISCommanderDeps {
     commandBus?: any;
     /** 返回当前地图上下文快照（含 center），用于「附近的餐馆」这类周边检索 */
     getMapContext?: () => any;
+    /**
+     * 只读图层清单（V3.7.9）。由宿主注入，聚合 2D 受管图层与 3D 图层记录；
+     * 缺失时 `list_layers` / `get_layer_info` 返回结构化失败，不谎报空列表。
+     */
+    getLayers?: () => Array<Record<string, any>>;
+    /**
+     * 只读测量结果（V3.7.9 引入，V3.7.10 补齐 2D）。
+     * 2D 与 3D 均有落库，返回值带 `view` 说明来源引擎。
+     */
+    getMeasureResult?: () => Record<string, any>;
 }
 
-export function createGISCommander({ commandBus, getMapContext }: GISCommanderDeps = {}) {
+export function createGISCommander({ commandBus, getMapContext, getLayers, getMeasureResult }: GISCommanderDeps = {}) {
     /**
      * 当前视图中心所在城市（用于文本检索的 city 限定），按约 1km 网格缓存。
      *
@@ -346,6 +356,264 @@ export function createGISCommander({ commandBus, getMapContext }: GISCommanderDe
         return execute('switchBasemap', params);
     }
 
+    // ────────────────── 图层管理（V3.7.9） ──────────────────
+
+    /** 读取宿主注入的图层清单；宿主未提供时返回 null 由调用方判定失败 */
+    function readLayers(): Array<Record<string, any>> | null {
+        if (typeof getLayers !== 'function') return null;
+        try {
+            return getLayers() || [];
+        } catch (error: unknown) {
+            console.warn(`[GISCommander] 图层清单读取失败：${getErrorMessage(error)}`);
+            return null;
+        }
+    }
+
+    /**
+     * 读取当前地图状态（引擎、中心、缩放/相机、底图、图层计数）。
+     * 纯读，不改画布，因此不走 commandBus。
+     *
+     * @param {Object} params
+     * @param {boolean} [params.includeLayerNames=false] - 是否附带图层名称清单（图层多时会变长）
+     */
+    function getMapState({ includeLayerNames = false } = {} as { includeLayerNames?: boolean }) {
+        const context = typeof getMapContext === 'function' ? getMapContext() : null;
+        if (!context) {
+            return {
+                success: false,
+                code: 'MAP_CONTEXT_UNAVAILABLE',
+                message: 'Map context is not available yet',
+            };
+        }
+
+        const layers = readLayers();
+        const list = layers || [];
+        const cameraHeight = Number(context?.cesium?.cameraHeight);
+
+        return {
+            success: true,
+            code: 'OK',
+            message: `${context.view === 'cesium' ? '3D' : '2D'} 视图，当前图层 ${
+                layers ? list.length : '未知'
+            } 个`,
+            view: context.view,
+            center: context.center,
+            zoom: Number.isFinite(Number(context?.ol?.zoom)) ? Number(context.ol.zoom) : null,
+            camera: Number.isFinite(cameraHeight)
+                ? {
+                      height: cameraHeight,
+                      heading: context.cesium.heading,
+                      pitch: context.cesium.pitch,
+                      roll: context.cesium.roll,
+                  }
+                : null,
+            basemap: context.basemap || null,
+            layerCount: layers ? list.length : null,
+            visibleLayerCount: layers ? list.filter((l) => l?.visible !== false).length : null,
+            ...(includeLayerNames ? { layerNames: list.map((l) => l?.name).filter(Boolean) } : {}),
+        };
+    }
+
+    /**
+     * 列出可被操作的图层（只读）。
+     *
+     * @param {Object} params
+     * @param {'all'|'ol'|'cesium'} [params.engine='all'] - 按引擎过滤
+     * @param {boolean} [params.visibleOnly=false] - 仅返回可见图层
+     * @param {string} [params.keyword=''] - 按名称/id 模糊匹配
+     * @param {number} [params.limit=50] - 返回条数上限（1~200），超出部分用 total 提示
+     */
+    function listLayers({
+        engine = 'all',
+        visibleOnly = false,
+        keyword = '',
+        limit = 50,
+    } = {} as { engine?: string; visibleOnly?: boolean; keyword?: string; limit?: number }) {
+        const layers = readLayers();
+        if (!layers) {
+            return {
+                success: false,
+                code: 'LAYER_LIST_UNAVAILABLE',
+                message: 'Layer listing is not available in the current runtime',
+            };
+        }
+
+        let filtered = layers;
+        if (engine === 'ol' || engine === 'cesium') {
+            filtered = filtered.filter((l) => l?.engine === engine);
+        }
+        if (visibleOnly) {
+            filtered = filtered.filter((l) => l?.visible !== false);
+        }
+        const kw = String(keyword || '').trim().toLowerCase();
+        if (kw) {
+            filtered = filtered.filter(
+                (l) =>
+                    String(l?.name || '').toLowerCase().includes(kw) ||
+                    String(l?.id || '').toLowerCase().includes(kw),
+            );
+        }
+
+        const total = filtered.length;
+        const cap = Number.isFinite(Number(limit)) ? Math.max(1, Math.min(200, Number(limit))) : 50;
+        return {
+            success: true,
+            code: 'OK',
+            message: `共 ${total} 个图层${total > cap ? `，返回前 ${cap} 个` : ''}`,
+            total,
+            returned: Math.min(total, cap),
+            truncated: total > cap,
+            layers: filtered.slice(0, cap),
+        };
+    }
+
+    /**
+     * 读取单个图层的详情（只读）。
+     * @param {Object} params
+     * @param {string} params.layerId - 图层 id（`list_layers` 返回的 id 或 rawId）
+     */
+    function getLayerInfo({ layerId } = {} as { layerId?: string }) {
+        const id = String(layerId || '').trim();
+        if (!id) {
+            return { success: false, code: 'INVALID_ARGUMENT', message: 'layerId is required' };
+        }
+        const layers = readLayers();
+        if (!layers) {
+            return {
+                success: false,
+                code: 'LAYER_LIST_UNAVAILABLE',
+                message: 'Layer listing is not available in the current runtime',
+            };
+        }
+        const hit = layers.find((l) => l?.id === id || l?.rawId === id);
+        if (!hit) {
+            return {
+                success: false,
+                code: 'LAYER_NOT_FOUND',
+                message: `No layer matches id "${id}"`,
+            };
+        }
+        return { success: true, code: 'OK', message: `图层「${hit.name || hit.id}」详情已读取`, layer: hit };
+    }
+
+    /** 读取 3D 最近一次测量结果（只读） */
+    function readMeasureResult() {
+        if (typeof getMeasureResult !== 'function') {
+            return {
+                success: false,
+                code: 'MEASURE_UNAVAILABLE',
+                message: 'Measurement results are not available in the current runtime',
+            };
+        }
+        try {
+            return getMeasureResult() || {
+                success: false,
+                code: 'NO_MEASUREMENT',
+                message: 'No measurement result recorded yet',
+            };
+        } catch (error: unknown) {
+            return {
+                success: false,
+                code: 'MEASURE_UNAVAILABLE',
+                message: `Failed to read measurement result: ${getErrorMessage(error)}`,
+            };
+        }
+    }
+
+    /**
+     * 设置图层可见性（走 commandBus）。
+     * @param {Object} params
+     * @param {string} params.layerId - 图层 id
+     * @param {boolean} params.visible - 目标可见性
+     */
+    async function setLayerVisibility(params: any = {}) {
+        const result = await execute('setLayerVisibility', params);
+        if (result?.success && !result.message) {
+            result.message = `图层「${result.layerId}」已${result.visible ? '显示' : '隐藏'}`;
+        }
+        return result;
+    }
+
+    /**
+     * 设置图层透明度（走 commandBus）。
+     * @param {Object} params
+     * @param {string} params.layerId - 图层 id
+     * @param {number} params.opacity - 0~1
+     */
+    async function setLayerOpacity(params: any = {}) {
+        const result = await execute('setLayerOpacity', params);
+        if (result?.success && !result.message) {
+            const pct = Math.round(Number(result.opacity ?? params?.opacity ?? 0) * 100);
+            result.message = `图层「${result.layerId}」透明度已设为 ${pct}%`;
+        }
+        return result;
+    }
+
+    /**
+     * 缩放到指定图层范围（走 commandBus）。
+     * @param {Object} params
+     * @param {string} params.layerId - 图层 id
+     */
+    async function zoomToLayer(params: any = {}) {
+        const result = await execute('zoomToLayer', params);
+        if (result?.success && !result.message) {
+            result.message = `已缩放到图层「${result.layerId}」范围`;
+        }
+        return result;
+    }
+
+    /**
+     * 单独显示指定图层（隐藏其余用户图层，走 commandBus；仅 2D）。
+     * @param {Object} params
+     * @param {string} params.layerId - 图层 id
+     */
+    async function soloLayer(params: any = {}) {
+        const result = await execute('soloLayer', params);
+        if (result?.success && !result.message) {
+            const hidden = Array.isArray(result.hiddenLayers) ? result.hiddenLayers : [];
+            result.message = hidden.length
+                ? `已只显示图层「${result.layerId}」，隐藏了 ${hidden.length} 个图层：${hidden.join('、')}`
+                : `已只显示图层「${result.layerId}」`;
+        }
+        return result;
+    }
+
+    /**
+     * 删除图层（不可撤销，走 commandBus）。
+     * @param {Object} params
+     * @param {string} params.layerId - 图层 id
+     */
+    async function removeLayer(params: any = {}) {
+        const result = await execute('removeLayer', params);
+        if (result?.success && !result.message) {
+            const name = result.name || result.layerId;
+            const count = Number(result.featureCount ?? 0);
+            // 3D 场景未挂载时只删了记录，数据源可能残留在 dataSources 里，必须说明
+            const sceneNote =
+                result.sceneApplied === false ? '（3D 场景未挂载，仅移除了图层记录，场景数据可能残留）' : '';
+            result.message = `已删除图层「${name}」${count > 0 ? `（${count} 个要素）` : ''}${sceneNote}`;
+        }
+        return result;
+    }
+
+    /**
+     * 导出图层要素为 GeoJSON 文本（不写文件，走 commandBus；仅 2D）。
+     * @param {Object} params
+     * @param {string} params.layerId - 图层 id
+     * @param {number} [params.limit=500] - 最大返回要素数（1~2000）
+     */
+    async function exportLayerGeoJson(params: any = {}) {
+        const result = await execute('exportLayerGeoJson', params);
+        if (result?.success && !result.message) {
+            const total = Number(result.featureCount ?? 0);
+            const returned = Number(result.returnedFeatures ?? 0);
+            result.message = result.truncated
+                ? `图层「${result.layerName || result.layerId}」共 ${total} 个要素，已返回前 ${returned} 个（已截断）`
+                : `图层「${result.layerName || result.layerId}」共 ${returned} 个要素，已全部返回`;
+        }
+        return result;
+    }
+
     /**
      * 把搜索命中的地点作为图层落到 TOC（符号化沿用各引擎的默认样式）。
      *
@@ -509,6 +777,18 @@ export function createGISCommander({ commandBus, getMapContext }: GISCommanderDe
         switchBasemap,
         addSearchResultLayer,
         getWeather,
+        // 只读图层与测量（V3.7.9）
+        getMapState,
+        listLayers,
+        getLayerInfo,
+        readMeasureResult,
+        // 图层变更（V3.7.9，经 commandBus）
+        setLayerVisibility,
+        setLayerOpacity,
+        zoomToLayer,
+        soloLayer,
+        exportLayerGeoJson,
+        removeLayer,
         dispose,
     };
 }

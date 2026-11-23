@@ -12,8 +12,10 @@ import { getAgentBasemapPresetLabel } from '../agentMapPresets';
 import {
     DEFAULT_TRANSITION_DURATION_MS,
     getTransitionError,
+    normalizeLayerIdArg,
     parseFiniteNumber,
     runCesiumCameraFlight,
+    toMapCommandResult,
     validateBasemapArg,
     validateBbox,
     validateLngLat,
@@ -38,6 +40,14 @@ export interface CesiumMapCommandAdapterOptions {
     setBasemap?: (validated: ValidatedBasemapArg) => any;
     /** GeoJSON 导入 sink（复用统一导入管线） */
     importGeoJson?: (payload: { resources: File[]; silent: boolean }) => any;
+    /** 3D 图层显隐 sink（由 cesiumLayers store 注入，返回 LayerActionResult） */
+    setLayerVisibility?: (layerId: string, visible: boolean) => any;
+    /** 3D 图层透明度 sink（0~1，仅 supportsOpacity 类型生效） */
+    setLayerOpacity?: (layerId: string, opacity: number) => any;
+    /** 3D 图层定位 sink（相机飞行到图层） */
+    zoomToLayer?: (layerId: string) => any;
+    /** 3D 图层删除 sink（不可撤销） */
+    removeLayer?: (layerId: string) => any;
 }
 
 export function createCesiumMapCommandAdapter({
@@ -46,6 +56,10 @@ export function createCesiumMapCommandAdapter({
     getRuntimeState,
     setBasemap,
     importGeoJson,
+    setLayerVisibility: setLayerVisibilitySink,
+    setLayerOpacity: setLayerOpacitySink,
+    zoomToLayer: zoomToLayerSink,
+    removeLayer: removeLayerSink,
 } = {} as CesiumMapCommandAdapterOptions) {
     const captureState = () => getRuntimeState?.() || null;
 
@@ -340,6 +354,91 @@ export function createCesiumMapCommandAdapter({
         }
     }
 
+    /**
+     * 设置 3D 图层可见性。
+     * @param layerId 裸图层 id（调用方已剥离 `cesium:` 前缀）
+     * @param visible 目标可见性
+     */
+    async function setLayerVisibility({ layerId, visible } = {} as {
+        layerId?: unknown;
+        visible?: unknown;
+    }): Promise<MapCommandResult> {
+        const id = normalizeLayerIdArg(layerId).replace(/^cesium:/, '');
+        if (!id) {
+            return { success: false, code: 'INVALID_ARGUMENT', message: 'layerId is required' };
+        }
+        if (typeof visible !== 'boolean') {
+            return { success: false, code: 'INVALID_ARGUMENT', message: 'visible must be a boolean' };
+        }
+        if (typeof setLayerVisibilitySink !== 'function') {
+            return { success: false, code: 'MAP_RUNTIME_NOT_READY', message: '3D layer controls are not ready' };
+        }
+        const raw = await setLayerVisibilitySink(id, visible);
+        return toMapCommandResult(raw, { layerId: id, visible });
+    }
+
+    /**
+     * 设置 3D 图层透明度。
+     * @param layerId 裸图层 id
+     * @param opacity 0~1
+     */
+    async function setLayerOpacity({ layerId, opacity } = {} as {
+        layerId?: unknown;
+        opacity?: unknown;
+    }): Promise<MapCommandResult> {
+        const id = normalizeLayerIdArg(layerId).replace(/^cesium:/, '');
+        if (!id) {
+            return { success: false, code: 'INVALID_ARGUMENT', message: 'layerId is required' };
+        }
+        const value = Number(opacity);
+        if (!Number.isFinite(value) || value < 0 || value > 1) {
+            return { success: false, code: 'INVALID_ARGUMENT', message: 'opacity must be a number within [0, 1]' };
+        }
+        if (typeof setLayerOpacitySink !== 'function') {
+            return { success: false, code: 'MAP_RUNTIME_NOT_READY', message: '3D layer controls are not ready' };
+        }
+        const raw = await setLayerOpacitySink(id, value);
+        return toMapCommandResult(raw, { layerId: id, opacity: value });
+    }
+
+    /**
+     * 相机飞行到指定 3D 图层。
+     */
+    async function zoomToLayer({ layerId } = {} as { layerId?: unknown }): Promise<MapCommandResult> {
+        const id = normalizeLayerIdArg(layerId).replace(/^cesium:/, '');
+        if (!id) {
+            return { success: false, code: 'INVALID_ARGUMENT', message: 'layerId is required' };
+        }
+        if (typeof zoomToLayerSink !== 'function') {
+            return { success: false, code: 'MAP_RUNTIME_NOT_READY', message: '3D layer controls are not ready' };
+        }
+        const raw = await zoomToLayerSink(id);
+        const result = toMapCommandResult(raw, { layerId: id });
+        if (result.success) {
+            result.resultingMapState = captureState();
+        }
+        return result;
+    }
+
+    /**
+     * 删除 3D 图层（不可撤销）。
+     */
+    async function removeLayer({ layerId } = {} as { layerId?: unknown }): Promise<MapCommandResult> {
+        const id = normalizeLayerIdArg(layerId).replace(/^cesium:/, '');
+        if (!id) {
+            return { success: false, code: 'INVALID_ARGUMENT', message: 'layerId is required' };
+        }
+        if (typeof removeLayerSink !== 'function') {
+            return { success: false, code: 'MAP_RUNTIME_NOT_READY', message: '3D layer controls are not ready' };
+        }
+        const raw = await removeLayerSink(id);
+        const result = toMapCommandResult(raw, { layerId: id });
+        if (result.success) {
+            result.resultingMapState = captureState();
+        }
+        return result;
+    }
+
     return {
         captureState,
         setViewCenter,
@@ -347,5 +446,9 @@ export function createCesiumMapCommandAdapter({
         zoomToExtent,
         switchBasemap,
         addSearchResultLayer,
+        setLayerVisibility,
+        setLayerOpacity,
+        zoomToLayer,
+        removeLayer,
     };
 }

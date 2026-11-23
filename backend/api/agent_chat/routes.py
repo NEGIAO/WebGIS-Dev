@@ -476,8 +476,12 @@ async def agent_chat_default_proxy(
         if ip_location:
             location_context = ip_location
 
+    # V3.7.11：优先使用前端构建的系统提示词（含 16 工具清单、选型规则与「先 list_layers
+    # 拿 id」约束），缺失时回退默认。此前恒用 DEFAULT_AGENT_SYSTEM_PROMPT（一句话通用角色），
+    # 前端 buildSystemPromptWithTools() 的内容被整段丢弃。
+    user_system_prompt = str(payload.system_prompt or "").strip()
     system_prompt = _build_agent_system_prompt(
-        DEFAULT_AGENT_SYSTEM_PROMPT,
+        user_system_prompt or DEFAULT_AGENT_SYSTEM_PROMPT,
         location_context,
         payload.map_context,
     )
@@ -605,8 +609,12 @@ async def agent_chat_default_proxy_stream(
         if ip_location:
             location_context = ip_location
 
+    # V3.7.11：优先使用前端构建的系统提示词（含 16 工具清单、选型规则与「先 list_layers
+    # 拿 id」约束），缺失时回退默认。此前恒用 DEFAULT_AGENT_SYSTEM_PROMPT（一句话通用角色），
+    # 前端 buildSystemPromptWithTools() 的内容被整段丢弃。
+    user_system_prompt = str(payload.system_prompt or "").strip()
     system_prompt = _build_agent_system_prompt(
-        DEFAULT_AGENT_SYSTEM_PROMPT,
+        user_system_prompt or DEFAULT_AGENT_SYSTEM_PROMPT,
         location_context,
         payload.map_context,
     )

@@ -13,6 +13,7 @@
 
 import { computed, ref } from 'vue';
 import { defineStore } from 'pinia';
+import { layerActionFailed, layerActionOk, type LayerActionResult } from '@common/map-adapter/types';
 
 /**
  * 支持透明度调节的类型（二期已放开矢量类：per-entity 原色快照缩放，
@@ -233,37 +234,54 @@ export const useCesiumLayersStore = defineStore('cesiumLayers', () => {
         records.value = [...kept, ...added];
     }
 
-    /** 切换/设置可见性（元数据 + 场景同步） */
-    function setVisible(id: string, visible: boolean): void {
+    /**
+     * 切换/设置可见性（元数据 + 场景同步）。
+     * @returns 统一结果；记录缺失返回 `LAYER_NOT_FOUND`，场景未挂载返回 `ADAPTER_NOT_READY`
+     */
+    function setVisible(id: string, visible: boolean): LayerActionResult {
         const record = getRecord(id);
         if (!record) {
             // 静默 no-op 会让「TOC 点了没反应」无从排查（§2.8 禁止静默降级）
             console.warn('[cesiumLayers] setVisible 找不到记录（id 未建档或已销档）', { id });
-            return;
+            return layerActionFailed('LAYER_NOT_FOUND', `No 3D layer matches id "${id}"`, String(id));
         }
         record.visible = !!visible;
         records.value = [...records.value];
         if (!adapter) {
             console.warn('[cesiumLayers] setVisible 仅更新元数据：adapter 未注册（场景未挂载）', { id });
-            return;
+            return layerActionFailed(
+                'ADAPTER_NOT_READY',
+                '3D scene adapter is not registered; layer metadata updated but the scene was not changed',
+                id,
+            );
         }
         adapter.setVisible(id, !!visible);
+        return layerActionOk(id, { visible: !!visible });
     }
 
-    /** 设置透明度 0~1（仅 supportsOpacity 类型生效） */
-    function setOpacity(id: string, opacity: number): void {
+    /**
+     * 设置透明度 0~1（仅 supportsOpacity 类型生效）。
+     * @returns 统一结果；类型不支持返回 `OPACITY_UNSUPPORTED`
+     */
+    function setOpacity(id: string, opacity: number): LayerActionResult {
         const record = getRecord(id);
         if (!record) {
             console.warn('[cesiumLayers] setOpacity 找不到记录（id 未建档或已销档）', { id });
-            return;
+            return layerActionFailed('LAYER_NOT_FOUND', `No 3D layer matches id "${id}"`, String(id));
         }
         if (!record.supportsOpacity) {
             // 类型未登记在 OPACITY_SUPPORTED_TYPES 时滑杆应被隐藏；走到这里说明判据不一致
             console.warn('[cesiumLayers] setOpacity 该类型不支持透明度', { id, type: record.type });
-            return;
+            return layerActionFailed(
+                'OPACITY_UNSUPPORTED',
+                `Layer type "${record.type}" does not support opacity in 3D`,
+                id,
+            );
         }
         const clamped = Math.min(1, Math.max(0, Number(opacity) || 0));
-        if (record.opacity === clamped) return;
+        if (record.opacity === clamped) {
+            return layerActionOk(id, { opacity: clamped, unchanged: true });
+        }
         // 只改字段，**不要**再 `records.value = [...records.value]`。
         // records 是 ref 深响应式，改 record.opacity 已经能触发订阅；
         // 而整体换数组会让 buildCesiumDataGroup 重建全部节点、整棵 TOC 重渲染、
@@ -272,9 +290,14 @@ export const useCesiumLayersStore = defineStore('cesiumLayers', () => {
         record.opacity = clamped;
         if (!adapter) {
             console.warn('[cesiumLayers] setOpacity 仅更新元数据：adapter 未注册（场景未挂载）', { id });
-            return;
+            return layerActionFailed(
+                'ADAPTER_NOT_READY',
+                '3D scene adapter is not registered; layer metadata updated but the scene was not changed',
+                id,
+            );
         }
         adapter.setOpacity(id, clamped);
+        return layerActionOk(id, { opacity: clamped });
     }
 
     /** 重命名（纯元数据：显示名，卡片与 TOC 同步生效） */
@@ -286,19 +309,54 @@ export const useCesiumLayersStore = defineStore('cesiumLayers', () => {
         records.value = [...records.value];
     }
 
-    /** 视角定位（转发 adapter） */
-    function flyTo(id: string): void {
-        adapter?.flyTo(id);
+    /**
+     * 视角定位（转发 adapter）。
+     * @returns 统一结果；记录缺失或场景未挂载时返回对应错误码
+     */
+    function flyTo(id: string): LayerActionResult {
+        const record = getRecord(id);
+        if (!record) {
+            return layerActionFailed('LAYER_NOT_FOUND', `No 3D layer matches id "${id}"`, String(id));
+        }
+        if (!adapter) {
+            return layerActionFailed(
+                'ADAPTER_NOT_READY',
+                '3D scene adapter is not registered; cannot fly to the layer',
+                id,
+            );
+        }
+        adapter.flyTo(id);
+        return layerActionOk(id, { name: record.name });
     }
 
-    /** 移除（adapter 清场景 → loadedDataSources 变化 → watch 回调 syncFromImport 删档） */
-    function remove(id: string): void {
-        adapter?.remove(id);
-        // draw / route 类无 loadedDataSources 回声链路，由 store 即时删档
-        const record = getRecord(id);
-        if (record && MANAGED_CATEGORIES.has(record.category || 'data')) {
-            records.value = records.value.filter((item) => item.id !== id);
+    /**
+     * 移除 3D 图层（**不可撤销**）。
+     *
+     * @returns 统一结果，回带被删图层名称与要素数；场景未挂载时记录仍会被删除，
+     *          以 `sceneApplied: false` 标明「场景侧未同步」。
+     */
+    function remove(id: string): LayerActionResult {
+        const key = String(id || '').trim();
+        if (!key) {
+            return layerActionFailed('LAYER_ID_INVALID', 'layerId is required');
         }
+
+        const record = getRecord(key);
+        if (!record) {
+            return layerActionFailed('LAYER_NOT_FOUND', `No 3D layer matches id "${key}"`, key);
+        }
+
+        const name = String(record.name || key);
+        const featureCount = Number(record.featureCount ?? 0);
+        const sceneApplied = adapter !== null;
+
+        adapter?.remove(key);
+        // draw / route 类无 loadedDataSources 回声链路，由 store 即时删档
+        if (MANAGED_CATEGORIES.has(record.category || 'data')) {
+            records.value = records.value.filter((item) => item.id !== key);
+        }
+
+        return layerActionOk(key, { name, featureCount, deleted: true, sceneApplied });
     }
 
     /**

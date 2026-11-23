@@ -133,6 +133,10 @@ class AgentChatRequest(BaseModel):
     override_temperature: Optional[float] = Field(default=None, ge=0.0, le=2.0)
     override_top_p: Optional[float] = Field(default=None, ge=0.0, le=1.0)
     override_extra_body: Optional[Dict[str, Any]] = Field(default=None, description="附加上游请求体字段")
+    # V3.7.11：默认通道此前缺此字段，前端 buildSystemPromptWithTools() 构建的工具清单/
+    # 选型规则/约束被 Pydantic 静默丢弃，模型只看到 tools 声明 → 不知道该先 list_layers
+    # 再操作图层，只能猜 layerId 导致 LAYER_NOT_FOUND。与 AgentChatProxyRequest 对齐。
+    system_prompt: Optional[str] = Field(default=None, max_length=8000)
     tools: Optional[List[Dict[str, Any]]] = Field(default=None, description="Function Calling 工具声明（OpenAI 格式）")
     # tool_choice 支持字符串 ("auto"/"none"/"required") 或对象 ({"type":"function","function":{"name":"xxx"}})
     tool_choice: Optional[Union[str, Dict[str, Any]]] = Field(default=None, description="工具选择策略")

@@ -945,6 +945,7 @@ frontend/src/
 │       ├── stores/
 │       │   ├── useFeatureStyleStore.ts  # 要素高亮样式
 │       │   ├── useLayerStore.ts  # 图层状态
+│       │   ├── useOlMeasureStore.ts  # 2D 测量结果（Agent get_measure_result 数据源）
 │       │   ├── useSwipeConfigStore.ts  # 卷帘配置
 │       │   └── layer/
 │       │       ├── index.ts  # barrel export

@@ -10,10 +10,15 @@ import { fromLonLat } from 'ol/proj';
 import { getAgentBasemapPresetLabel } from '../agentMapPresets';
 import {
     captureOlState,
+    countGeoJsonFeatures,
     DEFAULT_TRANSITION_DURATION_MS,
+    downloadTextFile,
     getTransitionError,
+    normalizeLayerIdArg,
     parseFiniteNumber,
     runOlViewTransition,
+    toMapCommandResult,
+    truncateGeoJsonFeatures,
     validateBasemapArg,
     validateBbox,
     validateLngLat,
@@ -36,6 +41,18 @@ export interface OlMapCommandAdapterOptions {
         service: string;
         raw: { address: string } | null;
     }) => any;
+    /** 图层显隐 sink（由 MapContainer 注入，返回 LayerActionResult） */
+    setLayerVisibility?: (layerId: string, visible: boolean) => any;
+    /** 图层透明度 sink（0~1） */
+    setLayerOpacity?: (layerId: string, opacity: number) => any;
+    /** 图层定位 sink */
+    zoomToLayer?: (layerId: string) => any;
+    /** 单独显示 sink（隐藏其余用户图层） */
+    soloLayer?: (layerId: string) => any;
+    /** 图层导出 sink（返回 { name, text } 或 null） */
+    exportLayerGeoJson?: (layerId: string) => any;
+    /** 图层删除 sink（不可撤销） */
+    removeLayer?: (layerId: string) => any;
 }
 
 export function createOlMapCommandAdapter({
@@ -43,6 +60,12 @@ export function createOlMapCommandAdapter({
     getRuntimeState,
     setBasemap,
     addSearchLayer,
+    setLayerVisibility: setLayerVisibilitySink,
+    setLayerOpacity: setLayerOpacitySink,
+    zoomToLayer: zoomToLayerSink,
+    soloLayer: soloLayerSink,
+    exportLayerGeoJson: exportLayerGeoJsonSink,
+    removeLayer: removeLayerSink,
 } = {} as OlMapCommandAdapterOptions) {
     const captureState = () => captureOlState(getMap?.(), getRuntimeState);
 
@@ -270,11 +293,212 @@ export function createOlMapCommandAdapter({
         };
     }
 
+    /**
+     * 设置图层可见性。
+     * @param layerId 裸图层 id（不含引擎前缀）
+     * @param visible 目标可见性
+     */
+    async function setLayerVisibility({ layerId, visible } = {} as {
+        layerId?: unknown;
+        visible?: unknown;
+    }): Promise<MapCommandResult> {
+        const id = normalizeLayerIdArg(layerId);
+        if (!id) {
+            return { success: false, code: 'INVALID_ARGUMENT', message: 'layerId is required' };
+        }
+        if (typeof visible !== 'boolean') {
+            return { success: false, code: 'INVALID_ARGUMENT', message: 'visible must be a boolean' };
+        }
+        if (typeof setLayerVisibilitySink !== 'function') {
+            return { success: false, code: 'MAP_RUNTIME_NOT_READY', message: '2D layer controls are not ready' };
+        }
+        const raw = await setLayerVisibilitySink(id, visible);
+        return toMapCommandResult(raw, { layerId: id, visible });
+    }
+
+    /**
+     * 设置图层透明度。
+     * @param layerId 裸图层 id
+     * @param opacity 0~1
+     */
+    async function setLayerOpacity({ layerId, opacity } = {} as {
+        layerId?: unknown;
+        opacity?: unknown;
+    }): Promise<MapCommandResult> {
+        const id = normalizeLayerIdArg(layerId);
+        if (!id) {
+            return { success: false, code: 'INVALID_ARGUMENT', message: 'layerId is required' };
+        }
+        const value = Number(opacity);
+        if (!Number.isFinite(value) || value < 0 || value > 1) {
+            return { success: false, code: 'INVALID_ARGUMENT', message: 'opacity must be a number within [0, 1]' };
+        }
+        if (typeof setLayerOpacitySink !== 'function') {
+            return { success: false, code: 'MAP_RUNTIME_NOT_READY', message: '2D layer controls are not ready' };
+        }
+        const raw = await setLayerOpacitySink(id, value);
+        return toMapCommandResult(raw, { layerId: id, opacity: value });
+    }
+
+    /**
+     * 缩放到指定图层的范围（成功后回带 resultingMapState）。
+     */
+    async function zoomToLayer({ layerId } = {} as { layerId?: unknown }): Promise<MapCommandResult> {
+        const id = normalizeLayerIdArg(layerId);
+        if (!id) {
+            return { success: false, code: 'INVALID_ARGUMENT', message: 'layerId is required' };
+        }
+        if (typeof zoomToLayerSink !== 'function') {
+            return { success: false, code: 'MAP_RUNTIME_NOT_READY', message: '2D layer controls are not ready' };
+        }
+        const raw = await zoomToLayerSink(id);
+        const result = toMapCommandResult(raw, { layerId: id });
+        if (result.success) {
+            result.resultingMapState = captureState();
+        }
+        return result;
+    }
+
+    /**
+     * 单独显示指定图层（其余用户图层隐藏），回带被隐藏的图层名清单。
+     */
+    async function soloLayer({ layerId } = {} as { layerId?: unknown }): Promise<MapCommandResult> {
+        const id = normalizeLayerIdArg(layerId);
+        if (!id) {
+            return { success: false, code: 'INVALID_ARGUMENT', message: 'layerId is required' };
+        }
+        if (typeof soloLayerSink !== 'function') {
+            return { success: false, code: 'MAP_RUNTIME_NOT_READY', message: '2D layer controls are not ready' };
+        }
+        const raw = await soloLayerSink(id);
+        return toMapCommandResult(raw, { layerId: id });
+    }
+
+    /**
+     * 导出图层要素。
+     *
+     * 两种模式：
+     * - `download`（默认）：把**全部**要素写成 `.geojson` 文件交给浏览器下载，
+     *   结果里不返回 GeoJSON 正文（省上下文），只回文件名与要素数；
+     * - `inline`：返回截断后的 GeoJSON 文本，供模型在对话内直接分析，
+     *   受要素数（默认 500，上限 2000）与 60k 字符双闸门。
+     *
+     * 下载通道不可用时自动退回 inline，避免用户完全拿不到数据。
+     */
+    async function exportLayerGeoJson({ layerId, limit, mode } = {} as {
+        layerId?: unknown;
+        limit?: unknown;
+        mode?: unknown;
+    }): Promise<MapCommandResult> {
+        const id = normalizeLayerIdArg(layerId);
+        if (!id) {
+            return { success: false, code: 'INVALID_ARGUMENT', message: 'layerId is required' };
+        }
+        if (typeof exportLayerGeoJsonSink !== 'function') {
+            return { success: false, code: 'MAP_RUNTIME_NOT_READY', message: '2D layer export is not ready' };
+        }
+
+        const raw = await exportLayerGeoJsonSink(id);
+        const text = String(raw?.text || '');
+        if (!text) {
+            return {
+                success: false,
+                code: 'LAYER_EXPORT_EMPTY',
+                message: `Layer "${id}" has no exportable features or does not exist`,
+                layerId: id,
+            };
+        }
+
+        const layerName = String(raw?.name || id);
+        const wantInline = mode === 'inline';
+
+        if (!wantInline) {
+            const total = countGeoJsonFeatures(text);
+            const file = downloadTextFile(`${layerName}.geojson`, text, 'application/geo+json');
+            if (file.success) {
+                return {
+                    success: true,
+                    code: 'OK',
+                    layerId: id,
+                    layerName,
+                    featureCount: total,
+                    downloaded: true,
+                    filename: file.filename,
+                    message: `已导出图层「${layerName}」的 ${total} 个要素，文件名 ${file.filename}，已触发浏览器下载（若未出现，请检查浏览器是否拦截了本站下载）`,
+                };
+            }
+
+            // 下载被拦或环境不支持：退回内联文本，至少让用户拿到数据
+            const fallback = truncateGeoJsonFeatures(text, 500);
+            return {
+                success: true,
+                code: 'OK_INLINE_FALLBACK',
+                layerId: id,
+                layerName,
+                featureCount: fallback.total,
+                returnedFeatures: fallback.kept,
+                truncated: fallback.truncated,
+                geojson: fallback.text,
+                message: `${file.message || '文件下载不可用'}，已改为返回 GeoJSON 文本`,
+            };
+        }
+
+        const cap = Number.isFinite(Number(limit)) ? Math.max(1, Math.min(2000, Number(limit))) : 500;
+        const sliced = truncateGeoJsonFeatures(text, cap);
+        if (!sliced.text) {
+            return {
+                success: false,
+                code: 'LAYER_EXPORT_PARSE_FAILED',
+                message: `Layer "${id}" export could not be parsed as GeoJSON`,
+                layerId: id,
+            };
+        }
+
+        return {
+            success: true,
+            code: sliced.truncated ? 'OK_TRUNCATED' : 'OK',
+            layerId: id,
+            layerName,
+            featureCount: sliced.total,
+            returnedFeatures: sliced.kept,
+            truncated: sliced.truncated,
+            geojson: sliced.text,
+        };
+    }
+
+    /**
+     * 删除图层（不可撤销）。
+     *
+     * 调用方（模型）须先用 list_layers 确认目标；本命令只负责执行与回报
+     * 「删掉了什么」，不做二次确认 —— 确认责任在对话层。
+     */
+    async function removeLayer({ layerId } = {} as { layerId?: unknown }): Promise<MapCommandResult> {
+        const id = normalizeLayerIdArg(layerId);
+        if (!id) {
+            return { success: false, code: 'INVALID_ARGUMENT', message: 'layerId is required' };
+        }
+        if (typeof removeLayerSink !== 'function') {
+            return { success: false, code: 'MAP_RUNTIME_NOT_READY', message: '2D layer controls are not ready' };
+        }
+        const raw = await removeLayerSink(id);
+        const result = toMapCommandResult(raw, { layerId: id });
+        if (result.success) {
+            result.resultingMapState = captureState();
+        }
+        return result;
+    }
+
     return {
         captureState,
         setViewCenter,
         zoomToExtent,
         switchBasemap,
         addSearchResultLayer,
+        setLayerVisibility,
+        setLayerOpacity,
+        zoomToLayer,
+        soloLayer,
+        exportLayerGeoJson,
+        removeLayer,
     };
 }

@@ -2,6 +2,7 @@ import { useMessage } from '@common/shell/useMessage';
 import { useFeatureStyleStore } from '@ol/stores/useFeatureStyleStore';
 import { getFeatureIdFromFeature } from '@common/data-protocol/featureKey';
 import { forgetSourceSnapshot } from '@common/data-import/crs/sourceSnapshot';
+import { layerActionFailed, layerActionOk, type LayerActionResult } from '@common/map-adapter/types';
 
 export interface UserLayerActionsDeps {
     mapInstance: any;
@@ -93,20 +94,41 @@ export function useUserLayerActions({
         });
     }
 
-    function setUserLayerVisibility(layerId: any, visible: boolean | number) {
+    /**
+     * 设置用户图层可见性。
+     * @returns 统一结果；找不到图层时返回 `LAYER_NOT_FOUND`（原实现为静默 no-op）
+     */
+    function setUserLayerVisibility(layerId: any, visible: boolean | number): LayerActionResult {
         const target = findUserLayer(layerId);
-        if (!target) return;
+        if (!target) {
+            return layerActionFailed(
+                'LAYER_NOT_FOUND',
+                `No user layer matches id "${String(layerId ?? '')}"`,
+                normalizeLayerId(layerId),
+            );
+        }
         target.visible = !!visible;
         target.layer?.setVisible?.(target.visible);
         if (target.labelLayer) {
             target.labelLayer.setVisible?.(target.visible && !!target.labelVisible);
         }
         emitUserLayersChange();
+        return layerActionOk(target.id, { visible: target.visible });
     }
 
-    function setUserLayerOpacity(layerId: any, opacity: number | string) {
+    /**
+     * 设置用户图层透明度（0~1，内部 clamp）。
+     * @returns 统一结果；找不到图层时返回 `LAYER_NOT_FOUND`
+     */
+    function setUserLayerOpacity(layerId: any, opacity: number | string): LayerActionResult {
         const target = findUserLayer(layerId);
-        if (!target) return;
+        if (!target) {
+            return layerActionFailed(
+                'LAYER_NOT_FOUND',
+                `No user layer matches id "${String(layerId ?? '')}"`,
+                normalizeLayerId(layerId),
+            );
+        }
         const val = Math.min(1, Math.max(0, Number(opacity)));
         target.opacity = Number.isFinite(val) ? val : 1;
         target.layer?.setOpacity?.(target.opacity);
@@ -114,28 +136,54 @@ export function useUserLayerActions({
             target.labelLayer.setOpacity?.(target.opacity);
         }
         emitUserLayersChange();
+        return layerActionOk(target.id, { opacity: target.opacity });
     }
 
-    function removeUserLayer(layerId: any) {
-        if (!mapInstance?.value) return;
+    /**
+     * 删除用户图层（**不可撤销**）。
+     *
+     * @returns 统一结果，并回带被删图层的名称与要素数 —— Agent 需要据此如实汇报
+     *          「删了什么」，而不是只说「已完成」。
+     */
+    function removeUserLayer(layerId: any): LayerActionResult {
+        if (!mapInstance?.value) {
+            return layerActionFailed(
+                'ADAPTER_NOT_READY',
+                'Map instance is not ready',
+                normalizeLayerId(layerId),
+            );
+        }
 
         const id = normalizeLayerId(layerId);
-        if (!id) return;
+        if (!id) {
+            return layerActionFailed('LAYER_ID_INVALID', 'layerId is required');
+        }
+
+        // 删除前先记录身份信息：删完就取不到了
+        const idx = userDataLayers.findIndex((item: any) => normalizeLayerId(item?.id) === id);
+        const before = idx >= 0 ? userDataLayers[idx] : null;
+        const removedName = String(before?.name || id);
+        const removedFeatureCount = Number(before?.featureCount ?? 0);
 
         // 图层一旦移除，导入期留存的原始几何即失去归属：同步释放，避免 id 复用时张冠李戴。
         // 放在此处而非各 return 前，是因为下面两条分支（有记录 / 只剩地图图层）都以「该 id 已不存在」收场。
         forgetSourceSnapshot(id);
 
-        const idx = userDataLayers.findIndex((item: any) => normalizeLayerId(item?.id) === id);
         if (idx < 0) {
             const managedLayers = findMapLayersByManagedId(id);
-            if (!managedLayers.length) return;
+            if (!managedLayers.length) {
+                return layerActionFailed('LAYER_NOT_FOUND', `No user layer matches id "${id}"`, id);
+            }
             managedLayers.forEach((layer: any) => {
                 clearLayerSource(layer);
                 mapInstance.value.removeLayer(layer);
             });
             emitGraphicsOverview();
-            return;
+            return layerActionOk(id, {
+                name: removedName,
+                featureCount: removedFeatureCount,
+                deleted: true,
+            });
         }
 
         const removed = userDataLayers[idx];
@@ -158,6 +206,12 @@ export function useUserLayerActions({
         refreshUserLayerZIndex();
         emitUserLayersChange();
         emitGraphicsOverview();
+
+        return layerActionOk(id, {
+            name: String(removed?.name || removedName),
+            featureCount: Number(removed?.featureCount ?? removedFeatureCount),
+            deleted: true,
+        });
     }
 
     function reorderUserLayers({ fromId, toId }: { fromId: string; toId: string }) {
@@ -171,15 +225,33 @@ export function useUserLayerActions({
         emitUserLayersChange();
     }
 
-    function soloUserLayer(layerId: any) {
+    /**
+     * 单独显示某图层（其余全部隐藏）。
+     * @returns 统一结果 + 被隐藏的图层名清单（便于模型如实汇报）
+     */
+    function soloUserLayer(layerId: any): LayerActionResult {
+        const targetId = normalizeLayerId(layerId);
+        const target = findUserLayer(targetId);
+        if (!target) {
+            return layerActionFailed(
+                'LAYER_NOT_FOUND',
+                `No user layer matches id "${targetId}"`,
+                targetId,
+            );
+        }
+
+        const hiddenLayers: string[] = [];
         userDataLayers.forEach((item: any) => {
-            item.visible = item.id === layerId;
+            const isTarget = normalizeLayerId(item?.id) === targetId;
+            item.visible = isTarget;
             item.layer?.setVisible?.(item.visible);
             if (item.labelLayer) {
                 item.labelLayer.setVisible?.(item.visible && !!item.labelVisible);
             }
+            if (!isTarget) hiddenLayers.push(String(item?.name || item?.id || ''));
         });
         emitUserLayersChange();
+        return layerActionOk(targetId, { visible: true, hiddenLayers, hiddenCount: hiddenLayers.length });
     }
 
     function setUserLayerStyle({ layerId, styleConfig }: { layerId: any; styleConfig: any }) {
@@ -272,15 +344,37 @@ export function useUserLayerActions({
         refreshLayersState?.();
     }
 
-    function zoomToUserLayer(layerId: any) {
-        if (!mapInstance?.value) return;
+    /**
+     * 缩放到用户图层范围。
+     *
+     * 原实现为 fire-and-forget（`source.getView().then(...)` 后无回传），Agent 无法知道
+     * 是否真的定位成功；现改为 await 并把结果归一为 `LayerActionResult`。
+     * UI 侧原有调用不 await 亦兼容（仅不再静默吞掉失败）。
+     *
+     * @returns 成功时携带实际 extent；无可用范围时返回 `EXTENT_UNAVAILABLE`
+     */
+    async function zoomToUserLayer(layerId: any): Promise<LayerActionResult> {
+        if (!mapInstance?.value) {
+            return layerActionFailed(
+                'ADAPTER_NOT_READY',
+                'Map instance is not ready',
+                normalizeLayerId(layerId),
+            );
+        }
 
         const target = findUserLayer(layerId);
-        if (!target) return;
+        if (!target) {
+            return layerActionFailed(
+                'LAYER_NOT_FOUND',
+                `No user layer matches id "${String(layerId ?? '')}"`,
+                normalizeLayerId(layerId),
+            );
+        }
 
         const source = target.layer.getSource?.();
-        const fitExtent = (extent: any) => {
-            if (!extent || extent.some((v: any) => !Number.isFinite(v))) return;
+        const fitExtent = (extent: any): boolean => {
+            if (!extent || typeof extent.some !== 'function') return false;
+            if (extent.some((v: any) => !Number.isFinite(v))) return false;
             const projected = projectExtentToMapView
                 ? projectExtentToMapView(extent, target.metadata?.sourceProjection) || extent
                 : extent;
@@ -289,28 +383,37 @@ export function useUserLayerActions({
                 duration: 800,
                 maxZoom: 18,
             });
+            return true;
         };
 
         const extent = source?.getExtent?.();
-        if (extent && extent.every((v: any) => Number.isFinite(v))) {
+        if (extent && extent.every?.((v: any) => Number.isFinite(v))) {
             fitExtent(extent);
-            return;
+            return layerActionOk(target.id, { extent: Array.from(extent) });
         }
 
         if (typeof source?.getView === 'function') {
-            source
-                .getView()
-                .then((viewCfg: any) => {
-                    if (viewCfg?.projection) {
-                        target.metadata = {
-                            ...(target.metadata || {}),
-                            sourceProjection: viewCfg.projection,
-                        };
-                    }
-                    fitExtent(viewCfg?.extent);
-                })
-                .catch(() => {});
+            try {
+                const viewCfg = await source.getView();
+                if (viewCfg?.projection) {
+                    target.metadata = {
+                        ...(target.metadata || {}),
+                        sourceProjection: viewCfg.projection,
+                    };
+                }
+                if (fitExtent(viewCfg?.extent)) {
+                    return layerActionOk(target.id, { extent: Array.from(viewCfg.extent) });
+                }
+            } catch {
+                /* 落到下方统一失败返回 */
+            }
         }
+
+        return layerActionFailed(
+            'EXTENT_UNAVAILABLE',
+            `Layer "${target.name || target.id}" exposes no usable extent`,
+            target.id,
+        );
     }
 
     function viewUserLayer(layerId: any) {

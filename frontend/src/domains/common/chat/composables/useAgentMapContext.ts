@@ -207,6 +207,38 @@ export function useAgentMapContext() {
         return buildMapContext();
     }
 
+    /**
+     * 转发运行时桥的图层清单（只读、零副作用）。
+     * 桥未挂载时返回空数组，由工具层给出「图层不可用」而非谎报。
+     */
+    function listLayers(): Array<Record<string, any>> {
+        try {
+            return runtimeBridge?.listLayers?.() || [];
+        } catch (error) {
+            console.warn('[AgentMapContext] listLayers failed:', error);
+            return [];
+        }
+    }
+
+    /** 转发运行时桥的 3D 测量结果（只读） */
+    function getMeasureResult(): Record<string, any> {
+        try {
+            return (
+                runtimeBridge?.getMeasureResult?.() || {
+                    success: false,
+                    code: 'RUNTIME_NOT_READY',
+                    message: '地图运行时桥未就绪',
+                }
+            );
+        } catch (error) {
+            return {
+                success: false,
+                code: 'RUNTIME_NOT_READY',
+                message: `读取测量结果失败：${(error as { message?: string })?.message || 'unknown'}`,
+            };
+        }
+    }
+
     return {
         buildMapContext,
         buildSettledMapContext,
@@ -215,6 +247,9 @@ export function useAgentMapContext() {
         recordMapAction: recordMapAction,
         getMapActionJournal: () => [...mapActionJournal],
         resetMapContextSession,
+        // 只读能力（V3.7.9）：图层清单与 3D 测量结果，供 Agent 工具调用
+        listLayers,
+        getMeasureResult,
     };
 }
 

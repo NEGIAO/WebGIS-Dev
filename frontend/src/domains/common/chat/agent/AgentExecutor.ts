@@ -95,6 +95,17 @@ const TOOL_REGISTRY: Record<string, string> = {
     switch_basemap: 'switchBasemap',
     // 只读数据查询，不经过 MapCommandBus（见 GISCommander.getWeather 注释）
     get_weather: 'getWeather',
+    // V3.7.9 图层管理：只读四个直连门面，变更四个与导出经门面内部走 commandBus
+    get_map_state: 'getMapState',
+    list_layers: 'listLayers',
+    get_layer_info: 'getLayerInfo',
+    get_measure_result: 'readMeasureResult',
+    set_layer_visibility: 'setLayerVisibility',
+    set_layer_opacity: 'setLayerOpacity',
+    zoom_to_layer: 'zoomToLayer',
+    solo_layer: 'soloLayer',
+    export_layer_geojson: 'exportLayerGeoJson',
+    remove_layer: 'removeLayer',
 };
 
 // ============================================================

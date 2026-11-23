@@ -33,6 +33,10 @@ import {
     createOlMapCommandAdapter,
 } from '@common/chat/agent/mapCommandAdapters';
 import type { RuntimeMapState } from '@common/chat/agent/mapCommand/shared';
+import { CESIUM_NODE_PREFIX } from '@common/layer-tree/protocol';
+import { useCesiumLayersStore } from '@cesium-domain/stores/cesiumLayers';
+import { useDrawMeasureStore } from '@cesium-domain/stores/useDrawMeasureStore';
+import { useOlMeasureStore } from '@ol/stores/useOlMeasureStore';
 import { setActiveEngineType } from '@common/map-adapter';
 import { MAP_VIEW_CESIUM, MAP_VIEW_OL } from '@ol/url-state/useMapViewUrlState';
 import { importCesiumContainerWithRetry } from './useLazyModules';
@@ -75,6 +79,11 @@ export function useHomeEngineSwitch(deps: UseHomeEngineSwitchDeps) {
     const { t } = useLocale();
     const route = useRoute();
     const { later, cancel } = useTimerRegistry();
+
+    // 引擎状态店：Agent 只读工具与变更 sink 都要用，须在 bridge 之前初始化（避免 TDZ）
+    const cesiumLayersStore = useCesiumLayersStore();
+    const drawMeasureStore = useDrawMeasureStore();
+    const olMeasureStore = useOlMeasureStore();
 
     const { getLayerIdByIndex, getLayerIndexById } = createBasemapUrlMappingFeature({
         urlLayerOptions: URL_LAYER_OPTIONS,
@@ -171,6 +180,92 @@ export function useHomeEngineSwitch(deps: UseHomeEngineSwitchDeps) {
                 );
             }
             return waitForOlMapIdle(mapContainerRef.value?.mapInstance || null, options);
+        },
+        /**
+         * 聚合当前可被 Agent 操作的图层清单（只读，零副作用）。
+         *
+         * 2D 侧按 `managedLayerId` 过滤 OL 图层（排除底图/标注等非受管层）；
+         * 3D 侧直接读 cesiumLayers store 的元数据。
+         * 3D 的 id 带 `cesium:` 前缀以对齐 TOC 节点协议；变更类命令两种写法都接受。
+         *
+         * @returns 图层数组，字段：id / rawId / engine / name / type / category /
+         *          visible / opacity / supportsOpacity / featureCount
+         */
+        listLayers() {
+            const result: Array<Record<string, any>> = [];
+
+            for (const record of cesiumLayersStore.records) {
+                result.push({
+                    id: `${CESIUM_NODE_PREFIX}${record.id}`,
+                    rawId: record.id,
+                    engine: 'cesium',
+                    name: record.name,
+                    type: record.type,
+                    category: record.category || null,
+                    visible: record.visible,
+                    opacity: record.opacity,
+                    supportsOpacity: record.supportsOpacity,
+                    featureCount: record.featureCount ?? null,
+                });
+            }
+
+            const olLayers = mapContainerRef.value?.mapInstance?.getLayers?.().getArray?.() || [];
+            for (const layer of olLayers) {
+                const managedId = String(layer?.get?.('managedLayerId') || '').trim();
+                if (!managedId) continue;
+                // 标注层与几何层共用 managedLayerId，只保留几何层以免同一图层出现两次
+                if (layer?.get?.('isLabelLayer') === true) continue;
+                const source = layer?.getSource?.();
+                const features = source?.getFeatures?.();
+                result.push({
+                    id: managedId,
+                    rawId: managedId,
+                    engine: 'ol',
+                    name: String(layer?.get?.('name') || managedId),
+                    type: String(layer?.get?.('sourceType') || 'vector'),
+                    category: null,
+                    visible: layer?.getVisible?.() !== false,
+                    opacity: Number(layer?.getOpacity?.() ?? 1),
+                    supportsOpacity: true,
+                    featureCount: Array.isArray(features) ? features.length : null,
+                });
+            }
+
+            return result;
+        },
+        /**
+         * 读取最近一次测量结果（2D / 3D 均支持）。
+         *
+         * 优先级：当前引擎最近一次 → 另一引擎最近一次（切引擎后仍可回答「刚才量的」）。
+         * 返回值带 `view` 说明数据来源，避免模型把 2D 的结果当成 3D 的。
+         *
+         * 2D 侧在 `useDrawMeasure` 的 drawend 时写入 `olMeasure` store（V3.7.10 修复：
+         * 此前只写 tooltip DOM，Agent 读不到）。
+         */
+        getMeasureResult() {
+            const cesiumLast = drawMeasureStore.lastResult;
+            const olLast = olMeasureStore.lastResult;
+
+            const picked = is3DMode.value
+                ? cesiumLast
+                    ? { view: 'cesium', data: cesiumLast }
+                    : olLast
+                      ? { view: 'ol', data: olLast }
+                      : null
+                : olLast
+                  ? { view: 'ol', data: olLast }
+                  : cesiumLast
+                    ? { view: 'cesium', data: cesiumLast }
+                    : null;
+
+            if (!picked) {
+                return {
+                    success: false,
+                    code: 'NO_MEASUREMENT',
+                    message: '还没有测量结果，请先用测量工具量一次',
+                };
+            }
+            return { success: true, code: 'OK', view: picked.view, result: picked.data };
         },
     };
     provide('agentMapRuntimeBridge', agentMapRuntimeBridge);
@@ -545,6 +640,17 @@ export function useHomeEngineSwitch(deps: UseHomeEngineSwitchDeps) {
             return mapContainerRef.value.setBaseLayerActive?.(params.presetId);
         },
         addSearchLayer: (payload: any) => mapContainerRef.value?.addSearchResultLayer?.(payload),
+        // 图层管理（V3.7.9）：容器方法均为 async 且返回 LayerActionResult，
+        // Agent 侧据此判断成败，不再出现「UI 没变但模型说已完成」。
+        setLayerVisibility: (id: string, visible: boolean) =>
+            mapContainerRef.value?.setUserLayerVisibility?.(id, visible),
+        setLayerOpacity: (id: string, opacity: number) =>
+            mapContainerRef.value?.setUserLayerOpacity?.(id, opacity),
+        zoomToLayer: (id: string) => mapContainerRef.value?.zoomToUserLayer?.(id),
+        soloLayer: (id: string) => mapContainerRef.value?.soloUserLayer?.(id),
+        exportLayerGeoJson: (id: string) =>
+            mapContainerRef.value?.exportUserLayerGeoJSON?.({ layerId: id }),
+        removeLayer: (id: string) => mapContainerRef.value?.removeUserLayer?.(id),
     });
 
     const agentCesiumMapCommandAdapter = createCesiumMapCommandAdapter({
@@ -562,6 +668,12 @@ export function useHomeEngineSwitch(deps: UseHomeEngineSwitchDeps) {
             return cesiumContainerRef.value.setBasemapById?.(params.presetId);
         },
         importGeoJson: (payload: any) => cesiumContainerRef.value?.importUserData?.(payload),
+        // 3D 图层操作直连 cesiumLayers store：它是「元数据 + adapter 回调」的唯一入口，
+        // 不走容器方法，避免再暴露一层同义 API。
+        setLayerVisibility: (id: string, visible: boolean) => cesiumLayersStore.setVisible(id, visible),
+        setLayerOpacity: (id: string, opacity: number) => cesiumLayersStore.setOpacity(id, opacity),
+        zoomToLayer: (id: string) => cesiumLayersStore.flyTo(id),
+        removeLayer: (id: string) => cesiumLayersStore.remove(id),
     });
 
     const agentMapCommandBus = createMapCommandBus({

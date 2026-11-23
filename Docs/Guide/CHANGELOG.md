@@ -17,6 +17,74 @@
 > 注：V3.7.2 号段已于同日重新启用，对应《修复 OpenLayers 加载 OSM 标准瓦片 403》条目，与本条无冲突。
 > 分主题的原始过程记录保留在 `Docs/LLM_record/26-11/2026-11-14/`，不迁移、不改写。
 
+### V3.7.9 (2026-11-23) — Agent 工具能力扩展（7 → 17）+ 多轮编排 + 全链路修复
+
+> 方案 [2026-11-23-agent-tool-expansion-plan](../TODO/2026-11-23-agent-tool-expansion-plan.md)（L3，含架构 Mermaid）
+> 过程日志 7 篇：[layer-tools](../LLM_record/26-11/2026-11-23/2026-11-23-feat-agent-layer-tools.md) ·
+> [ol-measure](../LLM_record/26-11/2026-11-23/2026-11-23-fix-ol-measure-result-not-persisted.md) ·
+> [default-channel-prompt](../LLM_record/26-11/2026-11-23/2026-11-23-fix-default-channel-drops-system-prompt.md) ·
+> [export-to-file](../LLM_record/26-11/2026-11-23/2026-11-23-fix-export-returns-text-not-file.md) ·
+> [remove-layer](../LLM_record/26-11/2026-11-23/2026-11-23-feat-remove-layer-and-fix-followup-prompt.md) ·
+> [multi-round](../LLM_record/26-11/2026-11-23/2026-11-23-feat-multi-round-tool-orchestration.md) ·
+> [code-review](../LLM_record/26-11/2026-11-23/2026-11-23-review-agent-tool-chain.md)
+
+**背景**：Agent 只有 7 个视图类工具，图层管理、测量结果等已实现能力未暴露；更关键的是图层 5 个操作函数
+返回 `void` 且静默失败，Agent 判断不了成败，会把失败当成功回传（「已调成 30%」而地图没变）。
+
+**A. 底座：图层操作契约化**
+1. 新增跨引擎 `LayerActionResult{success, code, message, layerId}` 与 `layerActionOk/Failed`（`map-adapter/types.ts`），
+   放 common 层避免 OL/Cesium 反向依赖 Agent 域。
+2. `useUserLayerActions` 的 `setUserLayerVisibility` / `setUserLayerOpacity` / `soloUserLayer` / `removeUserLayer`
+   改为返回结构化结果；`zoomToUserLayer` 改 `async` 并 `await getView()`，无可用范围返回 `EXTENT_UNAVAILABLE`。
+3. `cesiumLayers` 的 `setVisible` / `setOpacity` / `flyTo` / `remove` 同样返回结构化结果，
+   区分 `LAYER_NOT_FOUND` / `OPACITY_UNSUPPORTED` / `ADAPTER_NOT_READY`；3D 删除附 `sceneApplied`（场景未挂载时只删记录）。
+
+**B. 新增 10 个工具（7 → 17）**
+1. 只读 4：`get_map_state` / `list_layers` / `get_layer_info` / `get_measure_result`。经 `agentMapRuntimeBridge`
+   聚合（2D 按 `managedLayerId` 过滤 OL 图层、3D 读 `cesiumLayers.records`），**不走命令总线、零画布副作用**。
+2. 变更 4：`set_layer_visibility` / `set_layer_opacity` / `zoom_to_layer`（双引擎）、`solo_layer`（仅 2D）。
+3. 导出 1：`export_layer_geojson` —— `mode=download`（默认）导出**全部**要素并触发浏览器下载、结果只回文件名与要素数；
+   `inline` 返回截断文本（≤500 要素 + 60k 字符，进 LLM 再截 6k）；下载被拦降级 `OK_INLINE_FALLBACK`。
+4. 删除 1：`remove_layer`（双引擎），删除**前**记录 `name`/`featureCount` 并回带；
+   提示词强制「先 list_layers 确认、多候选先问清、删完说出名称与要素数」，不设 `confirm` 参数（模型会直接传 true）。
+5. `COMMAND_SPECS` 6 → 12 条，`supportedViews` 显式声明：3D 调 `solo_layer`/`export_layer_geojson`
+   返回 `COMMAND_UNSUPPORTED_FOR_VIEW` 而非静默降级。
+6. `mapCommand/shared.ts` 新增 `normalizeLayerIdArg` / `toMapCommandResult`（**fail-closed**：sink 无结构化返回判失败）/
+   `truncateGeoJsonFeatures` / `countGeoJsonFeatures` / `downloadTextFile`。
+
+**C. 多轮工具编排**
+1. 由「一轮工具 + 一轮总结」改为 `while` 循环（`MAX_TOOL_ROUNDS=4`）：每轮带完整 systemPrompt + tools，
+   `nextCalls` 非空则执行工具并继续，为空则落地总结。
+2. 原实现第二轮只做 `stripToolCallBlocks` + 落地文本，**从不检查再次出现的 `tool_calls`**，
+   模型请求的第二步被清掉 —— `list_layers → remove_layer` 这类参数依赖的串行任务永远停在第一步。
+3. 三道护栏：轮次上限（超限提示「任务可能尚未完成」）、`stableToolSignature` 重复调用检测（键序递归排序，
+   原 `JSON.stringify` 对参数键顺序敏感会绕过）、单轮 LLM 异常/配额降级。
+
+**D. 默认通道提示词链路**
+1. `AgentChatRequest` 缺 `system_prompt` 字段，前端 `buildSystemPromptWithTools()` 构建的工具清单、
+   选型规则与「先取 id」约束被 Pydantic **静默丢弃**（直接继承 `BaseModel`，无 `extra="forbid"`）。
+2. `/chat/default-proxy` 与其 stream 端点又硬编码 `DEFAULT_AGENT_SYSTEM_PROMPT`（仅一句通用角色），
+   与 `proxy/stream` 行为不一致。现补字段并改为「前端提示词优先、缺失回退默认」。
+3. 第二轮 `systemPrompt: ''` 一并修复（原会导致只回「操作完成」或空回复 → 前端回退显示工具摘要）。
+
+**E. 其他修复**
+1. 2D 测量结果原本只写 tooltip DOM、`drawend` 后几何被丢弃 → 新增 `useOlMeasureStore`，
+   `drawend` 落库（数值与 tooltip **同源**，不做 EPSG:4326 换算以免模型与屏幕数字不一致），
+   `clearAllGraphics` 同步 `reset()`；`getMeasureResult` 支持双引擎并「当前引擎 → 另一引擎」兜底，返回 `view` 标明来源。
+2. `detectGISIntent` 的搜索正则会抢走图层意图（「看看有哪些图层」→ 兜底成 `search_and_zoom("有哪些图层")`），
+   现对含「图层/layer」的消息跳过正则兜底，交给 LLM 的 Function Calling。
+3. `formatToolResultForLLM` 的 `extraKeys` 补齐 `layers` / `layer` / `hiddenLayers` / `downloaded` / `filename` /
+   `name` / `deleted` / `sceneApplied` 等 14 个字段，并对 `geojson` 做 6000 字符二级截断。
+
+**红线（明确不暴露）**：删除之外的破坏性批量操作、任意 URL 加载（无域名白名单 = SSRF 出口、
+与 `proxy-ssrf-hardening-plan.md` 冲突）、直接文件写入、地图截图（跨域瓦片污染 canvas）、
+路径规划（消耗天地图 token 配额，且 `api/backend/routing.ts` 为零调用死代码）。
+
+**验证**：`vue-tsc --noEmit` 0 报错；`eslint`（变更文件）0 warning；`vite build` 成功（4765 modules）；
+结构树 740/740 零漂移；配置登记门禁全绿；把**真实** `MapCommandBus` 编译为 CJS 注入 mock adapter，
+跑 29 项路由断言（双引擎路由 / 引擎能力拦截 / 参数透传 / 异常归一 / 未知命令 / 白名单条数）**全通过**。
+**未实机验证**：图层操作的地图真实效果、导出文件落盘、多轮编排是否出现两张工具卡片 —— 需浏览器确认。
+
 ### V3.7.8 (2026-11-22) — AI 对话三通道全量流式 · 思考过程展示 · 数据库撕裂防线四层 · 展示与配置修缮
 
 > **版本号归并（2026-11-22）**：本条整合同一批未提交工作的全部增量——曾用号 V3.7.8（展示修复两例）～ V3.7.15（思考过程展示）

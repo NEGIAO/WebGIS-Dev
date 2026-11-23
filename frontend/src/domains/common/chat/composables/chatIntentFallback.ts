@@ -135,6 +135,11 @@ export function detectGISIntent(userMsg: any) {
     // Never turn pasted URLs into Agent tool calls.
     if (/https?:\/\/[^\s]+/i.test(rawMsg)) return null;
 
+    // V3.7.9：图层管理类意图不参与正则兜底。
+    // 兜底拿不到 layerId，只会退化成 search_and_zoom("有哪些图层") 这种必然失败的搜索；
+    // 这类请求必须交给 LLM 的 Function Calling（先 list_layers 再操作）。
+    if (/(图层|layer)/i.test(rawMsg)) return null;
+
     // 天气必须排在搜索之前：SEARCH_PATTERNS 的「查找?」会把「**查**询北京的天气」里的
     // 单个「查」当作搜索动词，解析出 "询北京的天气和温度" 这种垃圾 query。
     for (const pattern of WEATHER_PATTERNS) {
@@ -196,6 +201,17 @@ export function getToolDisplayName(name: string, args: Record<string, any> = {})
         get_weather: `查询天气：${escapeHtml(args.city || args.adcode || '未知城市')}${
             args.type === 'all' ? '（未来预报）' : '（实况）'
         }`,
+        // 图层管理（V3.7.9）：只读四个 + 变更四个 + 导出
+        get_map_state: '读取当前地图状态',
+        list_layers: `列出图层${args.engine && args.engine !== 'all' ? `（${escapeHtml(args.engine)}）` : ''}`,
+        get_layer_info: `读取图层详情：${escapeHtml(args.layerId || '未指定')}`,
+        get_measure_result: '读取 3D 测量结果',
+        set_layer_visibility: `${args.visible === false ? '隐藏' : '显示'}图层：${escapeHtml(args.layerId || '未指定')}`,
+        set_layer_opacity: `调整图层透明度：${escapeHtml(args.layerId || '未指定')}`,
+        zoom_to_layer: `缩放到图层：${escapeHtml(args.layerId || '未指定')}`,
+        solo_layer: `只显示图层：${escapeHtml(args.layerId || '未指定')}`,
+        export_layer_geojson: `导出图层要素：${escapeHtml(args.layerId || '未指定')}`,
+        remove_layer: `删除图层：${escapeHtml(args.layerId || '未指定')}`,
     };
     return displayNames[name] || `执行工具：${escapeHtml(name)}`;
 }

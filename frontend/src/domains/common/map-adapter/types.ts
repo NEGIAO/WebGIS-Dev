@@ -72,3 +72,42 @@ export interface MapCommand<T = unknown> {
 
 /** 通用事件监听器 */
 export type MapEventListener<T = any> = (payload: T) => void;
+
+/**
+ * 图层操作统一返回结构。
+ *
+ * 背景：`useUserLayerActions` 与 `cesiumLayers` 的图层操作原为 `void` 且在目标不存在时
+ * 静默 return，UI 层可以忽略返回值，但 Agent 工具无法判断成败，会把失败当成功回传。
+ * 本类型统一 2D / 3D 两侧的契约，供 Adapter 与 GISCommander 透传。
+ *
+ * code 约定：
+ * - `OK`                    操作成功
+ * - `LAYER_ID_INVALID`      未提供有效 layerId
+ * - `LAYER_NOT_FOUND`       在当前引擎中找不到该图层
+ * - `OPACITY_UNSUPPORTED`   图层类型不支持透明度（仅 3D 部分类型）
+ * - `EXTENT_UNAVAILABLE`    无可用于定位的范围/几何
+ * - `ADAPTER_NOT_READY`     场景适配器未注册（3D 容器未挂载）
+ */
+export interface LayerActionResult {
+    success: boolean;
+    code: string;
+    /** 面向用户/模型的说明，成功时可省略 */
+    message?: string;
+    /** 实际操作命中的图层 id（已归一，不含引擎前缀） */
+    layerId?: string;
+    [key: string]: unknown;
+}
+
+/** 构造成功结果 */
+export function layerActionOk(layerId?: string, extra: Record<string, unknown> = {}): LayerActionResult {
+    return { success: true, code: 'OK', ...(layerId ? { layerId } : {}), ...extra };
+}
+
+/** 构造失败结果 */
+export function layerActionFailed(
+    code: string,
+    message: string,
+    layerId?: string,
+): LayerActionResult {
+    return { success: false, code, message, ...(layerId ? { layerId } : {}) };
+}

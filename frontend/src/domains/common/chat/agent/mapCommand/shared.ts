@@ -43,6 +43,11 @@ export interface MapCommandResult {
     layerIndex?: number | null;
     url?: string;
     resultingMapState?: RuntimeMapState | null;
+    /**
+     * 命令附加字段（随命令而异）：如图层操作的 visible / opacity / hiddenLayers，
+     * 导出的 featureCount / returnedFeatures / truncated / geojson。
+     */
+    [key: string]: any;
 }
 
 /** 经纬度校验结果（判别联合：ok=false 即失败） */
@@ -246,4 +251,139 @@ export function validateBasemapArg({ presetId, url }: { presetId?: string; url?:
     }
 
     return { error: 'Must provide either an allowlisted presetId or a standard XYZ tile URL template' };
+}
+
+/**
+ * 归一化图层 id：去空白，不接受空值。
+ * 3D 侧图层在 TOC 中带 `cesium:` 前缀，调用前由调用方剥离；本函数只做字符串规整。
+ */
+export function normalizeLayerIdArg(value: unknown): string {
+    return String(value ?? '').trim();
+}
+
+/**
+ * 把容器层的 LayerActionResult 归一为 MapCommandResult。
+ *
+ * fail-closed：sink 未返回结构化结果时判失败，避免把「没执行」当成功回传给模型。
+ * 容器可能回带业务字段（如 `hiddenLayers`、`opacity`），这里原样保留给上层与模型。
+ *
+ * @param raw 容器方法返回值
+ * @param extra 需要覆盖或补充的字段（如 visible / opacity）
+ */
+export function toMapCommandResult(raw: any, extra: Record<string, any> = {}): MapCommandResult {
+    if (raw && typeof raw === 'object' && typeof raw.success === 'boolean') {
+        const { success, code, message, layerId, ...rest } = raw;
+        return {
+            success: Boolean(success),
+            code: String(code || (success ? 'OK' : 'LAYER_ACTION_FAILED')),
+            ...(message ? { message: String(message) } : {}),
+            ...(layerId ? { layerId: String(layerId) } : {}),
+            ...rest,
+            ...extra,
+        };
+    }
+    return {
+        success: false,
+        code: 'LAYER_ACTION_NO_RESULT',
+        message: 'Layer action returned no structured result',
+        ...extra,
+    };
+}
+
+/** 图层导出文本的硬上限（字符数）：约 15k token，防止单次工具结果撑爆上下文 */
+export const LAYER_EXPORT_MAX_CHARS = 60000;
+
+/**
+ * 截断 GeoJSON FeatureCollection 到指定要素数与字符上限。
+ *
+ * 两道闸门：要素数（用户可选 1~2000）与序列化字符数（固定 60k）。
+ * 后者优先，因为少量超大几何同样会撑爆上下文。
+ *
+ * @param text 原始 GeoJSON 文本
+ * @param maxFeatures 要素数上限
+ * @returns 截断后的文本与统计（解析失败时 text 为空串）
+ */
+export function truncateGeoJsonFeatures(text: string, maxFeatures: number) {
+    let obj: any;
+    try {
+        obj = JSON.parse(text);
+    } catch {
+        return { total: 0, kept: 0, truncated: false, text: '' };
+    }
+
+    if (obj?.type !== 'FeatureCollection' || !Array.isArray(obj.features)) {
+        return { total: 1, kept: 1, truncated: false, text };
+    }
+
+    const total = obj.features.length;
+    const cap = Math.max(1, Math.min(2000, Number(maxFeatures) || 500));
+    let kept = Math.min(total, cap);
+    let out = JSON.stringify({ ...obj, features: obj.features.slice(0, kept) });
+
+    while (out.length > LAYER_EXPORT_MAX_CHARS && kept > 1) {
+        kept = Math.max(1, Math.floor(kept / 2));
+        out = JSON.stringify({ ...obj, features: obj.features.slice(0, kept) });
+    }
+
+    return { total, kept, truncated: kept < total, text: out };
+}
+
+/** 统计 GeoJSON 要素数（解析失败返回 0） */
+export function countGeoJsonFeatures(text: string): number {
+    try {
+        const obj = JSON.parse(text);
+        if (Array.isArray(obj?.features)) return obj.features.length;
+        return obj?.type ? 1 : 0;
+    } catch {
+        return 0;
+    }
+}
+
+/**
+ * 触发浏览器下载一段文本（GeoJSON 等）。
+ *
+ * 与「不自动写文件」的既有约定不冲突：本函数只在用户显式要求导出/下载时调用，
+ * 且以 `a.download` 落盘（受浏览器下载策略约束，用户可在设置里拦截）。
+ *
+ * @param filename 下载文件名（会清洗非法字符并补齐扩展名）
+ * @param text 文件内容
+ * @param mime 内容类型
+ * @returns `{ success, filename }`；DOM 不可用时返回 success=false
+ */
+export function downloadTextFile(
+    filename: string,
+    text: string,
+    mime: string,
+): { success: boolean; filename: string; message?: string } {
+    const safeName =
+        String(filename || 'export.geojson')
+            .replace(/[\\/:*?"<>|]+/g, '_')
+            .replace(/^\.+/, '')
+            .slice(0, 120) || 'export.geojson';
+
+    if (typeof document === 'undefined' || typeof URL === 'undefined' || !URL.createObjectURL) {
+        return { success: false, filename: safeName, message: '当前运行环境不支持文件下载' };
+    }
+
+    try {
+        const blob = new Blob([text], { type: mime || 'application/octet-stream' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = safeName;
+        link.rel = 'noopener';
+        link.style.display = 'none';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        // 延迟释放：立即 revoke 在部分浏览器会取消未开始的下载
+        window.setTimeout(() => URL.revokeObjectURL(url), 10000);
+        return { success: true, filename: safeName };
+    } catch (error: unknown) {
+        return {
+            success: false,
+            filename: safeName,
+            message: `文件下载失败：${(error as { message?: string })?.message || 'unknown'}`,
+        };
+    }
 }

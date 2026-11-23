@@ -23,6 +23,9 @@ const DURATION_PROPERTY = {
     description: '动画时长（毫秒），默认 700。',
 };
 
+/** 单条工具结果里 GeoJSON 文本进 LLM 的字符上限（约 2k token），超出即截断并标记 */
+const GEOJSON_LLM_PREVIEW_CHARS = 6000;
+
 export const AGENT_TOOLS = [
     {
         type: 'function',
@@ -169,10 +172,203 @@ export const AGENT_TOOLS = [
             },
         },
     },
+    // ── 图层管理（V3.7.9）──────────────────────────────────────────
+    // 4 个只读 + 4 个可逆变更 + 1 个导出。只读工具不走 MapCommandBus。
+    {
+        type: 'function',
+        function: {
+            name: 'get_map_state',
+            description: '读取当前地图状态：引擎、中心、缩放或相机姿态、底图、图层数量。只读，不改变地图。',
+            parameters: {
+                type: 'object',
+                properties: {
+                    includeLayerNames: {
+                        type: 'boolean',
+                        description: '是否附带图层名称清单（默认 false；图层多时响应会变长）。',
+                        default: false,
+                    },
+                },
+                additionalProperties: false,
+            },
+        },
+    },
+    {
+        type: 'function',
+        function: {
+            name: 'list_layers',
+            description: '列出当前可操作的图层（含 2D 与 3D）。改图层前先调本工具拿到准确 id，不要臆造。',
+            parameters: {
+                type: 'object',
+                properties: {
+                    engine: {
+                        type: 'string',
+                        enum: ['all', 'ol', 'cesium'],
+                        description: '按引擎过滤：all=全部（默认），ol=2D，cesium=3D。',
+                        default: 'all',
+                    },
+                    visibleOnly: {
+                        type: 'boolean',
+                        description: '仅返回当前可见的图层。',
+                        default: false,
+                    },
+                    keyword: {
+                        type: 'string',
+                        description: '按图层名称或 id 模糊匹配（可选）。',
+                        default: '',
+                    },
+                    limit: {
+                        type: 'number',
+                        minimum: 1,
+                        maximum: 200,
+                        description: '返回条数上限，默认 50；被截断时响应里 truncated=true 并给出 total。',
+                        default: 50,
+                    },
+                },
+                additionalProperties: false,
+            },
+        },
+    },
+    {
+        type: 'function',
+        function: {
+            name: 'get_layer_info',
+            description: '读取单个图层的详情（类型、可见性、透明度、要素数、所属引擎）。只读。',
+            parameters: {
+                type: 'object',
+                properties: {
+                    layerId: {
+                        type: 'string',
+                        description: '图层 id，取 list_layers 返回值，不要自己拼。',
+                    },
+                },
+                required: ['layerId'],
+                additionalProperties: false,
+            },
+        },
+    },
+    {
+        type: 'function',
+        function: {
+            name: 'get_measure_result',
+            description: '读取最近一次测量的结果。2D 返回距离或面积与顶点坐标；3D 额外含高程与方位角。只读，不改变地图。',
+            parameters: { type: 'object', properties: {}, additionalProperties: false },
+        },
+    },
+    {
+        type: 'function',
+        function: {
+            name: 'set_layer_visibility',
+            description: '显示或隐藏指定图层。可逆操作。',
+            parameters: {
+                type: 'object',
+                properties: {
+                    layerId: { type: 'string', description: '图层 id，取 list_layers 返回值。' },
+                    visible: { type: 'boolean', description: 'true=显示，false=隐藏。' },
+                },
+                required: ['layerId', 'visible'],
+                additionalProperties: false,
+            },
+        },
+    },
+    {
+        type: 'function',
+        function: {
+            name: 'set_layer_opacity',
+            description: '调整图层透明度。可逆操作。3D 下部分类型（如 3D Tiles 之外的影像）可能不支持。',
+            parameters: {
+                type: 'object',
+                properties: {
+                    layerId: { type: 'string', description: '图层 id，取 list_layers 返回值。' },
+                    opacity: {
+                        type: 'number',
+                        minimum: 0,
+                        maximum: 1,
+                        description: '0=完全透明，1=不透明。',
+                    },
+                },
+                required: ['layerId', 'opacity'],
+                additionalProperties: false,
+            },
+        },
+    },
+    {
+        type: 'function',
+        function: {
+            name: 'zoom_to_layer',
+            description: '把视图缩放到指定图层的范围。可逆操作。',
+            parameters: {
+                type: 'object',
+                properties: {
+                    layerId: { type: 'string', description: '图层 id，取 list_layers 返回值。' },
+                },
+                required: ['layerId'],
+                additionalProperties: false,
+            },
+        },
+    },
+    {
+        type: 'function',
+        function: {
+            name: 'solo_layer',
+            description: '只显示指定图层、隐藏其余用户图层（仅 2D）。会返回被隐藏的图层清单，转述给用户时请一并说明。',
+            parameters: {
+                type: 'object',
+                properties: {
+                    layerId: { type: 'string', description: '图层 id，取 list_layers 返回值。' },
+                },
+                required: ['layerId'],
+                additionalProperties: false,
+            },
+        },
+    },
+    {
+        type: 'function',
+        function: {
+            name: 'export_layer_geojson',
+            description: '导出图层要素（仅 2D）。默认生成 .geojson 文件并触发浏览器下载；mode=inline 时改为在回复中返回文本供分析。',
+            parameters: {
+                type: 'object',
+                properties: {
+                    layerId: { type: 'string', description: '图层 id，取 list_layers 返回值。' },
+                    mode: {
+                        type: 'string',
+                        enum: ['download', 'inline'],
+                        description:
+                            'download（默认）= 生成 .geojson 文件供用户保存，适合「导出/下载给我」；inline = 在回复中返回 GeoJSON 文本，适合「看看这些要素/坐标」。',
+                        default: 'download',
+                    },
+                    limit: {
+                        type: 'number',
+                        minimum: 1,
+                        maximum: 2000,
+                        description: '仅 mode=inline 生效：最多返回多少要素，默认 500。download 模式总是导出全部要素。',
+                        default: 500,
+                    },
+                },
+                required: ['layerId'],
+                additionalProperties: false,
+            },
+        },
+    },
+    {
+        type: 'function',
+        function: {
+            name: 'remove_layer',
+            description: '删除指定图层（不可撤销，2D/3D 均可）。执行前必须先用 list_layers 确认目标。',
+            parameters: {
+                type: 'object',
+                properties: {
+                    layerId: { type: 'string', description: '图层 id，取 list_layers 返回值。' },
+                },
+                required: ['layerId'],
+                additionalProperties: false,
+            },
+        },
+    },
 ];
 
 export function buildSystemPromptWithTools() {
-    return `你是 WebGIS 地图助手。涉及地图操作时必须调用白名单工具，不要只描述。
+    return `你是 WebGIS 地图助手，名字叫做NEGIAO。涉及地图操作时必须调用白名单工具，不要只描述。
 
 ## 上下文
 AgentMapContextV1 含 view(ol|cesium)、center、zoom 或相机、basemap、recentActions。
@@ -186,12 +382,30 @@ source=runtime 优先于 urlState；resultingMapState 优先于目标参数；re
 5 search_and_zoom(query,city?,engine?) engine: auto|amap|nominatim
 6 switch_basemap(presetId|url) 内置源优先；无对应预设时传标准 XYZ 模板
 7 get_weather(city,type?) type: base=实况，all=未来 4 天
+8 get_map_state(includeLayerNames?) 读当前引擎/中心/底图/图层数
+9 list_layers(engine?,visibleOnly?,keyword?,limit?) 列图层并拿到 id
+10 get_layer_info(layerId) 单个图层详情
+11 get_measure_result() 最近一次测量结果（2D/3D 均可）
+12 set_layer_visibility(layerId,visible) 显示/隐藏
+13 set_layer_opacity(layerId,opacity) 透明度 0~1
+14 zoom_to_layer(layerId) 缩放到图层范围
+15 solo_layer(layerId) 只显示该图层（仅 2D）
+16 export_layer_geojson(layerId,mode?,limit?) 导出图层要素（仅 2D）：mode=download 生成文件下载（默认），inline 返回文本
+17 remove_layer(layerId) 删除图层（不可撤销，2D/3D）
 
 ## 选型
 - 定位某地 → search_and_zoom
 - 换底图 → switch_basemap：有内置预设用 presetId；没有但你已知瓦片地址的源（OSM/ESRI/Google 各图层等）用 url 传标准 XYZ 模板，国内直连会空白的源加代理前缀
 - 3D + 搜索 → 先 set_map_view("cesium")，再 search_and_zoom
 - 天气 → get_weather；问「明天/未来几天」用 type="all"
+- 问「现在缩放多少 / 什么底图 / 有几个图层」→ get_map_state
+- **任何涉及具体图层的操作**（显隐、透明度、缩放、单独显示、导出、删除）→ 先 list_layers 拿 id，再执行；图层多时用 keyword 过滤
+- **依赖前一步结果的调用必须分轮进行**：先 list_layers，拿到 id 后**下一轮**再调操作类工具；不要在同一轮里同时发出「查列表」和「按 id 操作」，否则 id 还不存在
+- 问「刚才量的面积/长度」→ get_measure_result（2D 量距离/面积、3D 量距离/面积/高程/方位角都可读）
+- 「只留这个图层」→ solo_layer；「都显示出来」→ 逐个 set_layer_visibility（先 list_layers 取全量）
+- 「导出/下载这个图层」→ export_layer_geojson（默认 mode=download，会生成 .geojson 并触发浏览器下载）
+- 「看看这些要素/坐标」→ export_layer_geojson(mode="inline")
+- 「删除/移除这个图层」→ 先 list_layers 确认目标，再 remove_layer；若用户只说「那个图层」而列表里不止一个，先问清是哪个，不要猜
 
 ## 常用底图（其余 id 见 switch_basemap 的 enum，可直接使用）
 - google_Backend_Proxy_preset: 谷歌代理（卫星影像，国内可用）
@@ -207,7 +421,13 @@ source=runtime 优先于 urlState；resultingMapState 优先于目标参数；re
 - url 只填公开免密钥的标准 XYZ 模板（含 {z}/{x}/{y}）
 - 用户贴出的带 key/token 的 URL 不要原样复述（会留在对话记录里），只说「将用它切换底图」
 - 天气仅覆盖中国行政区（高德数据源）；境外城市或查询失败时如实说明，禁止编造数值
-- 工具返回结构化错误时如实转述，不要伪称成功
+- **图层 id 必须来自 list_layers / get_layer_info**，禁止凭图层名猜测或自行拼接 id
+- solo_layer 会隐藏其余图层：回复时列出被隐藏的图层名，不要只说「已完成」
+- 3D 下 solo_layer / export_layer_geojson 会返回 COMMAND_UNSUPPORTED_FOR_VIEW，如实说明并建议切到 2D
+- 导出被截断（truncated=true）时，说明 total 与 returnedFeatures 的差异，不要说「已全部导出」
+- **只有 downloaded=true 才能说「文件已生成/已开始下载」**；返回 geojson 文本时说明这是「文本」而不是文件；OK_INLINE_FALLBACK 表示下载被浏览器拦截、已退回文本，要如实告知
+- remove_layer **不可撤销**：删完必须说出被删图层的名称与要素数（工具结果里有 name / featureCount），不要只说「已删除」
+- 工具返回结构化错误（success=false）时如实转述 code 与 message，不要伪称成功
 
 ## 降级格式
 \`\`\`tool_call
@@ -236,10 +456,35 @@ export function formatToolResultForLLM(toolName: string, result: Record<string, 
         // get_weather 的结构化载荷：不放进 extras 的话，LLM 只能看到 message 里的一句摘要，
         // 追问「明天呢」「湿度多少」时会被迫重新调一次工具
         'weather',
+        // 图层管理（V3.7.9）：清单与变更结果的结构化字段
+        'layers',
+        'total',
+        'returned',
+        'truncated',
+        'layer',
+        'result',
+        'visible',
+        'opacity',
+        'hiddenLayers',
+        'hiddenCount',
+        'featureCount',
+        'returnedFeatures',
+        'downloaded',
+        'filename',
+        // remove_layer 的身份回执：模型据此说明「删了哪个图层的多少要素」
+        'name',
+        'deleted',
+        'sceneApplied',
+        'geojson',
     ];
     const extras: Record<string, any> = {};
     for (const key of extraKeys) {
         if (result[key] !== undefined) extras[key] = result[key];
+    }
+    // GeoJSON 体积可能到 60k 字符：进 LLM 前再截一道，避免单条工具结果吃光上下文
+    if (typeof extras.geojson === 'string' && extras.geojson.length > GEOJSON_LLM_PREVIEW_CHARS) {
+        extras.geojson = `${extras.geojson.slice(0, GEOJSON_LLM_PREVIEW_CHARS)}…(truncated)`;
+        extras.geojsonPreviewTruncated = true;
     }
     if (Object.keys(extras).length > 0) output += `\n${JSON.stringify(extras)}`;
     return output;

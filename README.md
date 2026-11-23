@@ -131,7 +131,7 @@
 
 ## 🎯 项目简介
 
-**NEGIAO's WebGIS** 是一个功能完整、架构清晰的前后端分离 WebGIS 平台（当前版本 V3.7.8），前端托管于 GitHub Pages（正式域名 webgis.negiao.cn），后端以 Docker 部署在 Hugging Face Spaces，通过 RESTful API 通信，支持独立扩展。
+**NEGIAO's WebGIS** 是一个功能完整、架构清晰的前后端分离 WebGIS 平台（当前版本 V3.7.9），前端托管于 GitHub Pages（正式域名 webgis.negiao.cn），后端以 Docker 部署在 Hugging Face Spaces，通过 RESTful API 通信，支持独立扩展。
 
 > 📚 本 README 仅保留核心概览与导航。完整文档已模块化至 [`Docs/Guide/`](Docs/Guide/)，详见下方「文档导航」。
 >
@@ -618,9 +618,7 @@ tiles.negiao.cc.cd"]
 
 | 版本 | 日期 | 概要 |
 |------|------|------|
-| **V3.7.8** | 2026-11-22 | **AI 对话三通道全量流式 · 思考过程展示 · 数据库撕裂防线四层 · 展示与配置修缮**。① 三通道（默认 AI / 个人 Key / 后端代理）全量 SSE 流式 + IP 定位 TTL 缓存，final rawData 与非流式一致（工具链路无感）；② 思考型模型思考过程实时流式展示（DeepSeek 式：思考中自动展开、正文到达自动折叠、可点开回看）；③ HF /data 网络盘撕裂读防线四层（执行期重试 → 进程内访问串行化 → 耗尽触发恢复 → 持久损坏保全），生产验证 0×500；④ 思考型模型零正文根治（精确报错）+ temperature clamp [0,1.99]；max_tokens 默认 65536/上限 131072（含 schema 4 处校验上限全链路对齐）；⑤ 状态栏简洁/详情折叠控件 + Extra Body 注入通道 + 灵动岛黑点修复 + 流式轮换 P1 修复与零输出诊断；⑥ 思考块长文本自动跟随滚动（两阶段采样 + 智能跟随）+ Markdown 渲染 XSS 缺口收敛（原始 HTML 透传分支与净化库未就绪窗口一并改为 fail-closed）。详见[完整更新日志](Docs/Guide/CHANGELOG.md) |
-| **V3.7.7** | 2026-11-22 | **SQLite 连接复用 · 登录会话统一出口 · 异步组件批量加固 · P0 连接关闭自愈**。① 线程本地连接 + `SELECT 1` 存活探测 + 代际失效计数器 + 四处热路径 DDL 守卫（高频端点每请求省 4–36 次 PRAGMA 磁盘往返）；② `sessionCommit.ts` 登录会话唯一出口：5 处散点登录收拢 + authStore 回填全链路生效 + 登出清残留；③ 14 处裸 `defineAsyncComponent` → `defineResilientAsync`（占位 + 可点重试，消灭面板永久空白）；④ P0：历史影像 4 处 `closing()` 关闭共享连接致全站登录 500，根修 + 快路径 closed/not-a-database 自愈重建，启动库损坏被恢复机制重建 16816 行零丢失。详见[完整更新日志](Docs/Guide/CHANGELOG.md) |
-| **V3.7.6** | 2026-11-21 | **游客身份治理（L3）+ 管理面敏感值掩码 + 管理员首进 UI 修复**。① require_login 恢复 fail-closed（18 端点重分类，11 个游客可达端点显式转 `or_guest_noconsume`），新增 `POST /auth/guest/session` HMAC 签发游客身份（按 XFF末跳IP+UA 限频 6 次/小时），无 token 配额桶收敛 `H(末跳IP|UA)` 确定性派生（轮换 device_id 不再绕限额），游客记录 90 天清理；② 新增 `core/secret_masking.py` 统一掩码器：`/status`、`GET /{name}`、表浏览器 rows 不再下发密钥/token/密码哈希明文，明文改 `GET /{name}/reveal` 逐 key 显式拉取，insert/update 拦截掩码占位值回写；③ `isAdmin` 判定源改为面板本地用户优先 + `mergeUserPatch` 回填 authStore，修复管理员登录后首次进用户中心缺管理 UI。详见[完整更新日志](Docs/Guide/CHANGELOG.md) |
+| **V3.7.9** | 2026-11-23 | **Agent 工具能力扩展 7 → 17 + 多轮编排 + 全链路修复**。① 底座：图层 5 个操作由 `void` 静默失败改为 `LayerActionResult` 结构化返回（`LAYER_NOT_FOUND` / `OPACITY_UNSUPPORTED` / `ADAPTER_NOT_READY`），`zoomToUserLayer` 改 async；② 新增 10 工具：只读四（`get_map_state` / `list_layers` / `get_layer_info` / `get_measure_result`，经运行时桥聚合、零画布副作用）、变更四（显隐/透明度/缩放/单独显示）、导出（默认真下载 .geojson，inline 返回截断文本）、删除（`remove_layer` 双引擎，回带图层名与要素数）；③ 命令白名单 6 → 12 条，3D 不支持项返回 `COMMAND_UNSUPPORTED_FOR_VIEW`；④ 多轮编排：两轮改 `while` 循环（≤4 轮）+ 轮次上限/重复调用/异常降级三道护栏，修复「列完图层就停」；⑤ 默认通道补 `system_prompt` 字段（原被 Pydantic 静默丢弃）、第二轮提示词不再为空；⑥ 2D 测量结果落库、导出真实产文件、正则兜底不再抢图层意图。详见[完整更新日志](Docs/Guide/CHANGELOG.md) |
 
 
 ---
@@ -643,6 +641,6 @@ tiles.negiao.cc.cd"]
 |:------:|:--------:|:--------:|
 | [GitHub](https://github.com/NEGIAO/WebGIS-Dev) | [webgis.negiao.cn](https://webgis.negiao.cn)（正式域名，GitHub Pages 托管） | [Hugging Face](https://NEGIAO-WebGIS.hf.space) |
 
-<sub>V3.7.8 · 开发中 · 最后更新 2026-11-22</sub>
+<sub>V3.7.9 · 开发中 · 最后更新 2026-11-23</sub>
 
 </div>

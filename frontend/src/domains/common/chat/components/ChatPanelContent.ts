@@ -47,6 +47,27 @@ import { useChatStore } from '@common/chat/stores/useChatStore';
 // 一、Emits
 type EmitsType = ['close-chat'];
 
+/**
+ * 工具调用的稳定签名（V3.7.15）：键按字典序排序后序列化。
+ *
+ * 用于多轮编排的「重复调用」检测。直接 `JSON.stringify(args)` 对键顺序敏感，
+ * 模型把 `{layerId, visible}` 写成 `{visible, layerId}` 就会被判为不同调用，
+ * 护栏失效 → 原地打转烧 token。
+ */
+function stableToolSignature(calls: Array<{ name?: string; arguments?: unknown }>): string {
+    const canon = (value: any): string => {
+        if (Array.isArray(value)) return `[${value.map(canon).join(',')}]`;
+        if (value && typeof value === 'object') {
+            return `{${Object.keys(value)
+                .sort()
+                .map((key) => `${key}:${canon(value[key])}`)
+                .join(',')}}`;
+        }
+        return JSON.stringify(value ?? null);
+    };
+    return calls.map((call) => `${call?.name ?? ''}${canon(call?.arguments ?? {})}`).join('|');
+}
+
 // 二、Props
 const propDefine = {
 	/** 当前激活的 tab，用于检测切回 chat 时刷新实时配额 */
@@ -238,6 +259,10 @@ export class Instance {
 				commandBus: this.agentMapCommandBus,
 				// 「附近的餐馆」需要当前视图中心做周边检索；这里传无副作用快照，避免推进 changesSinceLastTurn 基准
 				getMapContext: this.mapContextApi.captureMapContext,
+				// V3.7.9 只读能力：图层清单与 3D 测量结果由运行时桥聚合，
+				// 命令总线只管变更，读取不产生任何画布副作用
+				getLayers: this.mapContextApi.listLayers,
+				getMeasureResult: this.mapContextApi.getMeasureResult,
 			});
 			this.agentExecutor.value = new AgentExecutor({
 				gisCommander: this.gisCommander.value,
@@ -542,66 +567,118 @@ export class Instance {
 					},
 				];
 
-				// 第二轮流式占位建在 try 外（V3.7.8）：空回复/失败回退复用占位气泡，避免残留空气泡
-				const finalIdx = this.session.pushAssistant('');
-				list[finalIdx].reasoning = '';
-				try {
-					// V3.7.7 批次 F：第二轮回复同样支持流式渐进渲染
-					const secondRound = await this.config.callLLM({
-						message: '请根据上述工具执行结果回复用户。',
-						history: toolRoundHistory.slice(-6),
-						locationContext: '',
-						mapContext: resultingMapContext,
-						systemPrompt: '',
-						tools: AGENT_TOOLS,
-						onDelta: (accumulated: string) => {
-							if (seq !== this.requestSeq) return;
-							list[finalIdx].content = accumulated;
-							this.messageListRef.value?.scrollToBottom(true);
-						},
-						// V3.7.8：第二轮思考增量同样实时写入思考块
-						onReasoning: (accumulated: string) => {
-							if (seq !== this.requestSeq) return;
-							list[finalIdx].reasoning = accumulated;
-							this.messageListRef.value?.scrollToBottom(true);
-						},
-						signal: abort.signal,
-					});
+				// V3.7.14：由「一轮工具 + 一轮总结」改为多轮编排。
+				// 原实现只把第二轮当最终回复：模型若在第二轮继续请求工具（典型的
+				// list_layers → remove_layer），其 tool_calls 会被 stripToolCallBlocks
+				// 清掉，表现为「列完图层就停」。现循环执行，直到模型不再请求工具。
+				const MAX_TOOL_ROUNDS = 4;
+				let pendingCalls: any[] = finalToolCalls;
+				let pendingHistory: any[] = toolRoundHistory;
+				let pendingMapContext = resultingMapContext;
+				let lastUserResultSummary = userResultSummary;
+				let roundNo = 1;
+				let previousSignature = stableToolSignature(finalToolCalls);
+
+				while (pendingCalls.length > 0 && roundNo <= MAX_TOOL_ROUNDS) {
+					// 每轮新建回复气泡；若本轮模型只返回工具调用，该空气泡会被
+					// executeToolsAndUpdateUI 回收，避免残留
+					const finalIdx = this.session.pushAssistant('');
+					list[finalIdx].reasoning = '';
+
+					let nextRound: any;
+					try {
+						nextRound = await this.config.callLLM({
+							message: '请根据上述工具执行结果判断任务是否完成：完成则简洁总结，未完成则直接调用下一个工具。',
+							history: pendingHistory.slice(-8),
+							locationContext: '',
+							mapContext: pendingMapContext,
+							// 每轮都带完整系统提示词：约束（先 list_layers、不得伪称成功）必须跨轮一致
+							systemPrompt: systemPrompt,
+							tools: AGENT_TOOLS,
+							onDelta: (accumulated: string) => {
+								if (seq !== this.requestSeq) return;
+								list[finalIdx].content = accumulated;
+								this.messageListRef.value?.scrollToBottom(true);
+							},
+							onReasoning: (accumulated: string) => {
+								if (seq !== this.requestSeq) return;
+								list[finalIdx].reasoning = accumulated;
+								this.messageListRef.value?.scrollToBottom(true);
+							},
+							signal: abort.signal,
+						});
+					} catch (roundErr: any) {
+						if (roundErr?.isQuotaExceeded) {
+							this.config.statusHint = this.t('chat.quotaLimitHint');
+							await this.config.reloadAgentConfig(false);
+							if (!list[finalIdx]?.content) list.splice(finalIdx, 1);
+						} else if (!list[finalIdx]?.content) {
+							list[finalIdx].content = `✅ ${this.t('chat.opDone')}：\n${lastUserResultSummary}`;
+						}
+						break;
+					}
 					if (seq !== this.requestSeq) return;
 
-					// 累计第二轮消耗（同一轮对话内的多轮 LLM 调用）；quota 仍只在最后统一刷新
-					if (secondRound.cost && !this.config.isDefaultAIMode) totalCallCost += secondRound.cost;
-					if (secondRound.usedModel) this.config.modelName = secondRound.usedModel;
+					if (nextRound.cost && !this.config.isDefaultAIMode) totalCallCost += nextRound.cost;
+					if (nextRound.usedModel) this.config.modelName = nextRound.usedModel;
 
-					if (secondRound.reply) {
-						// V3.7.8 修复：第二轮回复若夹带 ```tool_call 块同样不得直出——先清洗再落定
-						const cleanSecondReply = AgentExecutor.stripToolCallBlocks(secondRound.reply);
-						if (cleanSecondReply) {
-							// 流式批次内容已渐进呈现，直接落定；非流式保留打字机观感
-							if (secondRound.streamed) {
-								list[finalIdx].content = cleanSecondReply;
+					const nextCalls = AgentExecutor.extractToolCalls(nextRound.rawData) || [];
+					const nextText = AgentExecutor.stripToolCallBlocks(nextRound.reply || '');
+
+					// 模型不再请求工具 → 本次任务结束
+					if (nextCalls.length === 0) {
+						if (nextText) {
+							if (nextRound.streamed) {
+								list[finalIdx].content = nextText;
 							} else {
-								await this.typewriterReveal(finalIdx, cleanSecondReply, seq);
+								await this.typewriterReveal(finalIdx, nextText, seq);
 							}
 						} else {
-							// 清洗后为空（纯工具块）→ 工具已完成摘要回退
-							list[finalIdx].content = `✅ ${this.t('chat.opDone')}：\n${userResultSummary}`;
+							list[finalIdx].content = `✅ ${this.t('chat.opDone')}：\n${lastUserResultSummary}`;
 						}
-					} else {
-						// V3.7.8：空回复回退写入占位——用户可见摘要（无 JSON 载荷），不再另推新气泡
-						list[finalIdx].content = `✅ ${this.t('chat.opDone')}：\n${userResultSummary}`;
+						pendingCalls = [];
+						break;
 					}
-				} catch (secondErr: any) {
-					// 第二轮失败：区分额度耗尽（提示并刷新）与其他错误（静默降级为成功摘要）
-					if (secondErr?.isQuotaExceeded) {
-						this.config.statusHint = this.t('chat.quotaLimitHint');
-						await this.config.reloadAgentConfig(false);
-						// 配额提示走 statusHint，空占位直接移除
-						if (!list[finalIdx]?.content) list.splice(finalIdx, 1);
-					} else if (!list[finalIdx]?.content) {
-						// V3.7.8：占位无内容（未产出增量）→ 写入用户可见摘要；已有部分流式内容则保留原样
-						list[finalIdx].content = `✅ ${this.t('chat.opDone')}：\n${userResultSummary}`;
+
+					// 还有后续工具：先落地本轮文本，再检查护栏
+					if (nextText) list[finalIdx].content = nextText;
+
+					const signature = stableToolSignature(nextCalls);
+					if (signature === previousSignature) {
+						// 同一组调用重复出现 = 模型在原地打转，继续只会烧 token
+						console.warn('[Chat] 检测到重复的工具调用，终止多轮编排');
+						list[finalIdx].content =
+							'⚠️ 检测到重复的工具调用，已中止以避免死循环。已执行结果见上方卡片；如需继续，请补充信息后再试。';
+						break;
 					}
+					previousSignature = signature;
+
+					if (roundNo >= MAX_TOOL_ROUNDS) {
+						list[finalIdx].content =
+							`⚠️ 已达单次对话最多 ${MAX_TOOL_ROUNDS} 步工具调用，任务可能尚未完成。已执行结果见上方卡片；如需继续，请再发一条指令。`;
+						break;
+					}
+					roundNo++;
+
+					const executed = await this.executeToolsAndUpdateUI(nextCalls, finalIdx);
+					if (seq !== this.requestSeq) return;
+					lastUserResultSummary = executed.userResultSummary;
+
+					const toolExecutedLabel = this.t('chat.toolExecuted');
+					const toolResultLabel = this.t('chat.toolResult');
+					pendingHistory = [
+						...pendingHistory,
+						{
+							role: 'assistant',
+							content: nextText ? `${nextText}\n\n${toolExecutedLabel}` : toolExecutedLabel,
+						},
+						{
+							role: 'user',
+							content: `${toolResultLabel}\n${executed.toolResultSummary}\n\n若任务已完成，用简洁中文总结；若还需继续操作，直接调用下一个工具。`,
+						},
+					];
+					pendingMapContext = executed.resultingMapContext;
+					pendingCalls = nextCalls;
 				}
 			} else {
 				// V3.7.7 批次 E：流式批次的内容已渐进呈现，直接落定；非流式保留打字机观感

@@ -10,9 +10,11 @@ import Draw from 'ol/interaction/Draw';
 import Snap from 'ol/interaction/Snap';
 import Overlay from 'ol/Overlay';
 import { Polygon } from 'ol/geom';
+import { toLonLat } from 'ol/proj';
 import { getArea, getLength } from 'ol/sphere';
 import { unByKey } from 'ol/Observable';
 import { formatAreaMeasure, formatDistanceMeasure } from '@common/map-view/units';
+import { useOlMeasureStore } from '@ol/stores/useOlMeasureStore';
 import {
     applyDrawingFeatureStyle,
     createDrawingStyleFromParams,
@@ -83,6 +85,9 @@ export function createDrawMeasureFeature({
     let helpTooltipOverlay: any = null;
     let sketchFeature: any = null;
     let geometryChangeKey: any = null;
+
+    // 2D 测量结果店：drawend 时落库，供 Agent 的 get_measure_result 读取（V3.7.10）
+    const olMeasureStore = useOlMeasureStore();
     const drawListenerKeys: any[] = []; // [C7] 存储 drawstart/drawend 监听器 key
 
     /**
@@ -101,6 +106,47 @@ export function createDrawMeasureFeature({
      */
     function formatArea(poly: any) {
         return formatAreaMeasure(getArea(poly));
+    }
+
+    /**
+     * 把刚完成的测量写入结果店（供 Agent 的 `get_measure_result` 读取）。
+     *
+     * 数值与 tooltip 同源：距离用 `getLength`、面积用 `getArea`，再交给同一套
+     * `formatDistanceMeasure` / `formatAreaMeasure` 生成文本 —— 保证模型报出的数字
+     * 与用户屏幕上看到的一致（此处不改用 EPSG:4326 大地测量，否则两者会分歧）。
+     *
+     * @param geom 完成测量的几何（地图投影坐标）
+     * @param measureType `MeasureDistance` 或 `MeasureArea`
+     */
+    function recordMeasureResult(geom: any, measureType: string) {
+        if (!geom) return;
+        try {
+            const isArea = measureType === 'MeasureArea';
+            const value = isArea ? getArea(geom) : getLength(geom);
+            const text = isArea ? formatArea(geom) : formatLength(geom);
+            const rawCoords = isArea
+                ? geom.getCoordinates?.()?.[0] || []
+                : geom.getCoordinates?.() || [];
+            const coordinates = (rawCoords as any[])
+                .map((pair: any) => {
+                    const [lng, lat] = toLonLat(pair);
+                    return [Number(lng), Number(lat)] as [number, number];
+                })
+                .filter(
+                    (pair: [number, number]) =>
+                        Number.isFinite(pair[0]) && Number.isFinite(pair[1]),
+                );
+
+            olMeasureStore.setResult({
+                type: isArea ? 'MeasureArea' : 'MeasureDistance',
+                value: Number(value) || 0,
+                text,
+                coordinates,
+            });
+        } catch (error: unknown) {
+            // 落库失败不影响绘制本身：tooltip 已显示，不打断用户操作
+            console.warn('[DrawMeasure] 测量结果落库失败：', error);
+        }
     }
 
     /**
@@ -233,6 +279,8 @@ export function createDrawMeasureFeature({
                 });
             }));
             drawListenerKeys.push(drawInteraction.on('drawend', () => {
+                // 先落库再清空 sketchFeature：Agent 要能读到这次测量（V3.7.10）
+                recordMeasureResult(sketchFeature?.getGeometry?.(), type);
                 if (measureTooltipEl) {
                     measureTooltipEl.className = 'ol-tooltip ol-tooltip-static';
                 }
@@ -283,6 +331,8 @@ export function createDrawMeasureFeature({
         if (!map || !drawSource) return;
 
         drawSource.clear();
+        // 图形清空后测量结果已无对应实体：同步失效，避免 Agent 报出与画面不符的旧值
+        olMeasureStore.reset();
 
         const drawLayerIds = userDataLayers
             .filter((item) => item?.sourceType === 'draw')
