@@ -76,22 +76,22 @@ jobs:
             });
 
             // ========================
-            // 4. 获取“大前天”的日期 (T-3)，因为Github的数据延迟很多
+            // 4. 获取“大前天”及其之前遗漏的日期 (T-3)
+            // GitHub traffic API 通常会延迟，因此始终以 UTC 大前天为截止日期。
             // ========================
             const targetDate = new Date();
-            targetDate.setUTCDate(targetDate.getUTCDate() - 3); 
-            const targetDateStr = targetDate.toISOString().split('T')[0];
+            targetDate.setUTCHours(0, 0, 0, 0);
+            targetDate.setUTCDate(targetDate.getUTCDate() - 3);
+            const targetDateStr = targetDate.toISOString().slice(0, 10);
 
-            const targetViewsObj = views.data.views.find(v => v.timestamp.startsWith(targetDateStr));
-            const targetClonesObj = clones.data.clones.find(c => c.timestamp.startsWith(targetDateStr));
-
-            const tViews = targetViewsObj ? targetViewsObj.count : 0;
-            const tUViews = targetViewsObj ? targetViewsObj.uniques : 0;
-            const tClones = targetClonesObj ? targetClonesObj.count : 0;
-            const tUClones = targetClonesObj ? targetClonesObj.uniques : 0;
-
-            console.log(`Target Date (T-2): ${targetDateStr}`);
-            console.log(`Views: ${tViews}, Clones: ${tClones}`);
+            let nextDateStr = targetDateStr;
+            if (data.lastCountedDate) {
+              const lastCounted = new Date(`${data.lastCountedDate}T00:00:00Z`);
+              if (!Number.isNaN(lastCounted.getTime())) {
+                lastCounted.setUTCDate(lastCounted.getUTCDate() + 1);
+                nextDateStr = lastCounted.toISOString().slice(0, 10);
+              }
+            }
 
             // ========================
             // 5. 初始化（仅第一次）
@@ -106,28 +106,49 @@ jobs:
             }
 
             // ========================
-            // 6. 防重复统计与累加（核心）
+            // 6. 防重复统计与逐日累加（核心）
+            // 从上次计数日期的下一天，一直处理到当前可用的截止日期。
+            // 已存在于 daily 中的日期不会重复累加；每天必须被处理后才推进 lastCountedDate。
             // ========================
-            if (data.lastCountedDate !== targetDateStr) {
-              // 只有在非初次运行的情况下，才进行累加，防止第一次运行把今天的数据重复加上
-              if (!isFirstRun) {
-                data.totalViews += tViews;
-                data.totalUniqueViews += tUViews;
-                data.totalClones += tClones;
-                data.totalUniqueClones += tUClones;
+            if (isFirstRun) {
+              nextDateStr = targetDateStr;
+            }
+
+            const cursor = new Date(`${nextDateStr}T00:00:00Z`);
+            const cutoff = new Date(`${targetDateStr}T00:00:00Z`);
+
+            if (!Number.isNaN(cursor.getTime()) && !Number.isNaN(cutoff.getTime())) {
+              for (; cursor <= cutoff; cursor.setUTCDate(cursor.getUTCDate() + 1)) {
+                const dateStr = cursor.toISOString().slice(0, 10);
+                if (data.daily[dateStr]) {
+                  console.log(`Data for ${dateStr} already recorded. Skipping addition.`);
+                } else {
+                  const viewsObj = views.data.views.find(v => v.timestamp.startsWith(dateStr));
+                  const clonesObj = clones.data.clones.find(c => c.timestamp.startsWith(dateStr));
+
+                  const dayViews = viewsObj ? viewsObj.count : 0;
+                  const dayUniqueViews = viewsObj ? viewsObj.uniques : 0;
+                  const dayClones = clonesObj ? clonesObj.count : 0;
+                  const dayUniqueClones = clonesObj ? clonesObj.uniques : 0;
+
+                  if (!isFirstRun) {
+                    data.totalViews += dayViews;
+                    data.totalUniqueViews += dayUniqueViews;
+                    data.totalClones += dayClones;
+                    data.totalUniqueClones += dayUniqueClones;
+                  }
+
+                  data.daily[dateStr] = {
+                    views: dayViews,
+                    uniqueViews: dayUniqueViews,
+                    clones: dayClones,
+                    uniqueClones: dayUniqueClones
+                  };
+                  console.log(`Counted ${dateStr}: views=${dayViews}, clones=${dayClones}`);
+                }
               }
 
               data.lastCountedDate = targetDateStr;
-
-              // 记录每日详情
-              data.daily[targetDateStr] = {
-                views: tViews,
-                uniqueViews: tUViews,
-                clones: tClones,
-                uniqueClones: tUClones
-              };
-            } else {
-              console.log(`Data for ${targetDateStr} already counted. Skipping addition.`);
             }
 
             data.lastUpdate = new Date().toISOString();
