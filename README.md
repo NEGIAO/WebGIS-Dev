@@ -131,7 +131,7 @@
 
 ## 🎯 项目简介
 
-**NEGIAO's WebGIS** 是一个功能完整、架构清晰的前后端分离 WebGIS 平台（当前版本 V3.7.17），前端托管于 GitHub Pages（正式域名 webgis.negiao.cn），后端以 Docker 部署在 Hugging Face Spaces，通过 RESTful API 通信，支持独立扩展。
+**NEGIAO's WebGIS** 是一个功能完整、架构清晰的前后端分离 WebGIS 平台（当前版本 V3.7.18），前端托管于 GitHub Pages（正式域名 webgis.negiao.cn），后端以 Docker 部署在 Hugging Face Spaces，通过 RESTful API 通信，支持独立扩展。
 
 > 📚 本 README 仅保留核心概览与导航。完整文档已模块化至 [`Docs/Guide/`](Docs/Guide/)，详见下方「文档导航」。
 >
@@ -618,10 +618,9 @@ tiles.negiao.cc.cd"]
 
 | 版本 | 日期 | 概要 |
 |------|------|------|
+| **V3.7.18** | 2026-11-24 | **增加 Supabase 访客同步 payload 单测**。锁定 `_build_supabase_visit_payload` 的 event_id 映射与默认值行为；本地 5 例通过。详见[完整更新日志](Docs/Guide/CHANGELOG.md) |
 | **V3.7.17** | 2026-11-24 | **向 Agent 明示单轮 10 次工具调用预算**。说明这是用户体验与防循环策略，要求接近上限时总结而非重试。详见[完整更新日志](Docs/Guide/CHANGELOG.md) |
 | **V3.7.16** | 2026-11-24 | **明确额度耗尽指 WebGIS 平台 API 额度**。guest 默认 100/日、注册用户 1000/日（管理员可调），API 工具调用会消耗该额度；提示词与文案同步修正。 |
-| **V3.7.15** | 2026-11-24 | **Agent 单次对话工具调用上限提升至 10 步**。解决复杂 GIS 任务在第 6 步被提前中止的问题；保留重复调用与额度耗尽护栏。 |
-| **V3.7.8** | 2026-11-22 | **AI 对话三通道全量流式 · 思考过程展示 · 数据库撕裂防线四层 · 展示与配置修缮**。详见[完整更新日志](Docs/Guide/CHANGELOG.md) |
 
 
 ---
@@ -644,6 +643,6 @@ tiles.negiao.cc.cd"]
 |:------:|:--------:|:--------:|
 | [GitHub](https://github.com/NEGIAO/WebGIS-Dev) | [webgis.negiao.cn](https://webgis.negiao.cn)（正式域名，GitHub Pages 托管） | [Hugging Face](https://NEGIAO-WebGIS.hf.space) |
 
-<sub>V3.7.17 · 开发中 · 最后更新 2026-11-24</sub>
+<sub>V3.7.18 · 开发中 · 最后更新 2026-11-24</sub>
 
 </div>

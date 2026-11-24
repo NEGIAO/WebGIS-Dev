@@ -99,7 +99,8 @@ backend/
 │   ├── test_secret_masking.py                     # 管理面敏感值掩码（列判定/行掩码/掩码回写拦截，V3.7.6）
 │   ├── test_webhook_helpers.py                    # HF Webhook 密钥头 / Space id 信任边界 / stage 提取单元测试
 │   ├── test_realtime_stats.py                     # 实时在线追踪回归（多标签隔离/同浏览器去重/注销清理/TTL/beacon/is_disconnected await 21 例）
-│   └── test_sqlite_recovery.py                    # SQL 清理、维护事件、恢复成功/失败与激活回滚测试
+│   ├── test_sqlite_recovery.py                    # SQL 清理、维护事件、恢复成功/失败与激活回滚测试
+│   └── test_statistics_supabase.py                # Supabase 访客同步 payload 测试（event_id 映射/默认值/经纬度透传/quota_subject 回退，V3.7.18）
 │
 └── core/                                          # 横切基础能力
     ├── __init__.py                                # 包初始化
