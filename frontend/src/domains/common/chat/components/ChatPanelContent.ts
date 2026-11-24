@@ -56,7 +56,10 @@ type EmitsType = ['close-chat'];
  * 模型把 `{layerId, visible}` 写成 `{visible, layerId}` 就会被判为不同调用，
  * 护栏失效 → 原地打转烧 token。
  */
-function stableToolSignature(calls: Array<{ name?: string; arguments?: unknown }>): string {
+function stableToolSignature(
+    calls: Array<{ name?: string; arguments?: unknown }>,
+    view = '',
+): string {
     const canon = (value: any): string => {
         if (Array.isArray(value)) return `[${value.map(canon).join(',')}]`;
         if (value && typeof value === 'object') {
@@ -67,7 +70,28 @@ function stableToolSignature(calls: Array<{ name?: string; arguments?: unknown }
         }
         return JSON.stringify(value ?? null);
     };
-    return calls.map((call) => `${call?.name ?? ''}${canon(call?.arguments ?? {})}`).join('|');
+    return `${view}::${calls.map((call) => `${call?.name ?? ''}${canon(call?.arguments ?? {})}`).join('|')}`;
+}
+
+/**
+ * V3.7.16：用户明确要求「导出/下载/保存文件」时，强制 export_layer_geojson 走
+ * download 模式。模型偶尔会把「导出」误判为 inline 取文本，结果只返回一段
+ * GeoJSON 而不触发浏览器下载；这里在编排层按用户原话兜底，避免误判。
+ * 「看看要素/坐标/文本」等纯查看意图不强制，保留 inline。
+ */
+function forceDownloadModeForExport(calls: any[] | null, userMsg: string): any[] | null {
+    if (!Array.isArray(calls) || calls.length === 0) return calls;
+    const wantsFile = /(导出|下载|保存|存成|生成文件|\.geojson|geojson\s*文件)/i.test(userMsg);
+    const wantsPlainText =
+        /(看看|查看|显示|预览|文本|内容|坐标)/.test(userMsg) &&
+        !/(下载|保存|文件|导出为|生成文件)/.test(userMsg);
+    if (!wantsFile || wantsPlainText) return calls;
+
+    return calls.map((call: any) =>
+        call?.name === 'export_layer_geojson'
+            ? { ...call, arguments: { ...(call.arguments || {}), mode: 'download' } }
+            : call,
+    );
 }
 
 // 二、Props
@@ -503,8 +527,16 @@ export class Instance {
 	private async dispatchSend(rawText: string, { skipUserPush = false } = {}) {
 		const userMsg = String(rawText || '').trim();
 		if (!userMsg || this.isLoading.value) return;
-		// 默认 AI / 个人 Key 模式不受配额限制；仅后端代理模式受配额限制
-		if (!this.config.isDefaultAIMode && !this.config.isPersonalMode && (!this.config.serviceReady || this.config.quotaExhausted)) return;
+		// 默认 AI / 个人 Key 模式不受配额限制；仅后端代理模式受配额限制。
+		// V3.7.12：额度耗尽不得静默丢弃提问，必须给用户可见的终止提示。
+		if (!this.config.isDefaultAIMode && !this.config.isPersonalMode && (!this.config.serviceReady || this.config.quotaExhausted)) {
+			const quotaMsg = this.t('chat.quotaToolUnavailable');
+			this.config.statusHint = quotaMsg;
+			const idx = this.session.pushAssistant(quotaMsg);
+			this.session.messages.value[idx].isError = true;
+			this.session.schedulePersist();
+			return;
+		}
 
 		if (this.session.pruneHistoryIfNeeded(this.buildWelcome)) {
 			this.config.statusHint = this.t('chat.historyTrimmed');
@@ -584,6 +616,9 @@ export class Instance {
 				}
 			}
 
+			// 用户说「导出/下载」时，即使模型误选 inline 也强制走文件下载
+			finalToolCalls = forceDownloadModeForExport(finalToolCalls, userMsg);
+
 			if (finalToolCalls && finalToolCalls.length > 0 && this.agentExecutor.value) {
 				const cleanReply = AgentExecutor.stripToolCallBlocks(reply);
 
@@ -601,19 +636,22 @@ export class Instance {
 				);
 				if (seq !== this.requestSeq) return;
 
-				const toolExecuted = this.t('chat.toolExecuted');
 				const toolResult = this.t('chat.toolResult');
+				// V3.7.16：前端状态标签绝不能作为模型的历史发言。旧实现把
+				// t('chat.toolExecuted')（即「[工具调用已执行]」）写进 assistant
+				// 消息，模型会模仿自己的上一句，把占位标签当成最终答复并提前停止。
+				const toolHandoffForLLM = `我已调用工具：${finalToolCalls.map((tc: any) => tc.name).join('、')}。工具结果见下一条消息。`;
 				const toolRoundHistory = [
 					...requestHistory,
 					{ role: 'user', content: userMsg },
 					{
 						role: 'assistant',
-						content: cleanReply ? `${cleanReply}\n\n${toolExecuted}` : toolExecuted,
+						content: cleanReply ? `${cleanReply}\n\n${toolHandoffForLLM}` : toolHandoffForLLM,
 					},
 					{
 						role: 'user',
 						// 后续指令为 LLM 协议提示，不作为 UI 文案
-						content: `${toolResult}\n${toolResultSummary}\n\n请根据工具执行结果给用户一个简洁友好的回复。如果工具执行成功，告诉用户已完成什么操作；如果失败，告诉用户失败原因和建议。`,
+						content: `${toolResult}\n${toolResultSummary}\n\n原始任务：${userMsg}\n请逐项核对原始任务：若仍有步骤未执行，下一步只输出下一个 tool_call 块；若全部完成，输出包含具体结果（地名、地址、图层详情等）的最终答复，并说明该任务是否改变了地图状态。不要输出执行状态占位语。`,
 					},
 				];
 
@@ -621,13 +659,16 @@ export class Instance {
 				// 原实现只把第二轮当最终回复：模型若在第二轮继续请求工具（典型的
 				// list_layers → remove_layer），其 tool_calls 会被 stripToolCallBlocks
 				// 清掉，表现为「列完图层就停」。现循环执行，直到模型不再请求工具。
-				const MAX_TOOL_ROUNDS = 4;
+				// V3.7.11：双视图定位（OL+Cesium）+ 启用罗盘需要 5~6 步，4 轮不足以闭环。
+				// V3.7.15：复杂任务（多轮定位 + 图层核验 + 罗盘/分析）仍会超过 6 步，提升到 10；
+				// 重复调用检测仍然保留，避免同一组参数原地打转。
+				const MAX_TOOL_ROUNDS = 10;
 				let pendingCalls: any[] = finalToolCalls;
 				let pendingHistory: any[] = toolRoundHistory;
 				let pendingMapContext = resultingMapContext;
 				let lastUserResultSummary = userResultSummary;
 				let roundNo = 1;
-				let previousSignature = stableToolSignature(finalToolCalls);
+				let previousSignature = stableToolSignature(finalToolCalls, String(mapContext?.view || ''));
 
 				while (pendingCalls.length > 0 && roundNo <= MAX_TOOL_ROUNDS) {
 					// 每轮新建回复气泡；若本轮模型只返回工具调用，该空气泡会被
@@ -638,7 +679,7 @@ export class Instance {
 					let nextRound: any;
 					try {
 						nextRound = await this.config.callLLM({
-							message: '请根据上述工具执行结果判断任务是否完成：完成则简洁总结，未完成则直接调用下一个工具。',
+							message: `原始任务：${userMsg}\n当前工具结果已在历史中。若仍有未完成步骤，下一步只输出下一个 tool_call 块；若全部完成，输出包含具体结果的最终答复，并说明是否改变了地图状态。不要输出执行状态占位语。`,
 							history: pendingHistory.slice(-8),
 							locationContext: '',
 							mapContext: pendingMapContext,
@@ -659,9 +700,11 @@ export class Instance {
 						});
 					} catch (roundErr: any) {
 						if (roundErr?.isQuotaExceeded) {
-							this.config.statusHint = this.t('chat.quotaLimitHint');
+							const quotaMsg = this.t('chat.quotaToolUnavailable');
+							this.config.statusHint = quotaMsg;
+							list[finalIdx].content = quotaMsg;
+							list[finalIdx].isError = true;
 							await this.config.reloadAgentConfig(false);
-							if (!list[finalIdx]?.content) list.splice(finalIdx, 1);
 						} else if (!list[finalIdx]?.content) {
 							list[finalIdx].content = `✅ ${this.t('chat.opDone')}：\n${lastUserResultSummary}`;
 						}
@@ -672,7 +715,10 @@ export class Instance {
 					if (nextRound.cost && !this.config.isDefaultAIMode) totalCallCost += nextRound.cost;
 					if (nextRound.usedModel) this.config.modelName = nextRound.usedModel;
 
-					const nextCalls = AgentExecutor.extractToolCalls(nextRound.rawData) || [];
+					const nextCalls = forceDownloadModeForExport(
+						AgentExecutor.extractToolCalls(nextRound.rawData) || [],
+						userMsg,
+					) || [];
 					const nextText = AgentExecutor.stripToolCallBlocks(nextRound.reply || '');
 
 					// 模型不再请求工具 → 本次任务结束
@@ -693,7 +739,10 @@ export class Instance {
 					// 还有后续工具：先落地本轮文本，再检查护栏
 					if (nextText) list[finalIdx].content = nextText;
 
-					const signature = stableToolSignature(nextCalls);
+					const signature = stableToolSignature(
+						nextCalls,
+						String(pendingMapContext?.view || ''),
+					);
 					if (signature === previousSignature) {
 						// 同一组调用重复出现 = 模型在原地打转，继续只会烧 token
 						console.warn('[Chat] 检测到重复的工具调用，终止多轮编排');
@@ -714,17 +763,17 @@ export class Instance {
 					if (seq !== this.requestSeq) return;
 					lastUserResultSummary = executed.userResultSummary;
 
-					const toolExecutedLabel = this.t('chat.toolExecuted');
 					const toolResultLabel = this.t('chat.toolResult');
+					const nextToolHandoff = `我已调用工具：${nextCalls.map((tc: any) => tc.name).join('、')}。工具结果见下一条消息。`;
 					pendingHistory = [
 						...pendingHistory,
 						{
 							role: 'assistant',
-							content: nextText ? `${nextText}\n\n${toolExecutedLabel}` : toolExecutedLabel,
+							content: nextText ? `${nextText}\n\n${nextToolHandoff}` : nextToolHandoff,
 						},
 						{
 							role: 'user',
-							content: `${toolResultLabel}\n${executed.toolResultSummary}\n\n若任务已完成，用简洁中文总结；若还需继续操作，直接调用下一个工具。`,
+							content: `${toolResultLabel}\n${executed.toolResultSummary}\n\n原始任务：${userMsg}\n逐项核对原始任务：若仍有步骤未执行，下一步只输出下一个 tool_call 块；若全部完成，输出包含具体结果的最终答复，并说明是否改变了地图状态。不要输出执行状态占位语。`,
 						},
 					];
 					pendingMapContext = executed.resultingMapContext;
@@ -753,13 +802,15 @@ export class Instance {
 			}
 		} catch (error: any) {
 			if (seq !== this.requestSeq) return;
-			list[assistantMsgIndex].content = this.t('chat.requestFailed', { error: error.message });
-			list[assistantMsgIndex].isError = true;
-
 			if (error?.isQuotaExceeded) {
-				this.config.statusHint = this.t('chat.quotaLimitHint');
+				const quotaMsg = this.t('chat.quotaToolUnavailable');
+				list[assistantMsgIndex].content = quotaMsg;
+				this.config.statusHint = quotaMsg;
 				await this.config.reloadAgentConfig(false);
+			} else {
+				list[assistantMsgIndex].content = this.t('chat.requestFailed', { error: error.message });
 			}
+			list[assistantMsgIndex].isError = true;
 		} finally {
 			if (seq === this.requestSeq) {
 				this.isLoading.value = false;

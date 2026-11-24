@@ -131,7 +131,7 @@
 
 ## 🎯 项目简介
 
-**NEGIAO's WebGIS** 是一个功能完整、架构清晰的前后端分离 WebGIS 平台（当前版本 V3.7.10），前端托管于 GitHub Pages（正式域名 webgis.negiao.cn），后端以 Docker 部署在 Hugging Face Spaces，通过 RESTful API 通信，支持独立扩展。
+**NEGIAO's WebGIS** 是一个功能完整、架构清晰的前后端分离 WebGIS 平台（当前版本 V3.7.17），前端托管于 GitHub Pages（正式域名 webgis.negiao.cn），后端以 Docker 部署在 Hugging Face Spaces，通过 RESTful API 通信，支持独立扩展。
 
 > 📚 本 README 仅保留核心概览与导航。完整文档已模块化至 [`Docs/Guide/`](Docs/Guide/)，详见下方「文档导航」。
 >
@@ -618,8 +618,9 @@ tiles.negiao.cc.cd"]
 
 | 版本 | 日期 | 概要 |
 |------|------|------|
-| **V3.7.10** | 2026-11-24 | **罗盘全链路增强 · Agent 工具扩展 · 双引擎修复 · Code Review 收口**。新增 3D 贴地罗盘与 HUD，共用 2D/3D 几何、命中与纹理内核；五主题角度/解释/视觉校正，宫位问答与 km 半径输入落地；`cs` 短码扩展至 28 bit 半径 + 3 bit 主题并保持旧链接兼容；Agent 新增双向地理编码与 `enable_compass`（工具 17→20），3D 坐标/AOI 导入与 `solo_layer` 补齐；本次 Code Review 修复预置提问丢失、假成功回报、3D 点查冲突等 5 处缺陷。详见[完整更新日志](Docs/Guide/CHANGELOG.md) |
-| **V3.7.9** | 2026-11-23 | **Agent 工具能力扩展 7 → 17 + 多轮编排 + 全链路修复**。图层操作改为结构化返回，新增只读/变更/导出/删除 10 个工具，命令白名单 6 → 12；多轮编排与提示词修复，2D 测量结果落库。详见[完整更新日志](Docs/Guide/CHANGELOG.md) |
+| **V3.7.17** | 2026-11-24 | **向 Agent 明示单轮 10 次工具调用预算**。说明这是用户体验与防循环策略，要求接近上限时总结而非重试。详见[完整更新日志](Docs/Guide/CHANGELOG.md) |
+| **V3.7.16** | 2026-11-24 | **明确额度耗尽指 WebGIS 平台 API 额度**。guest 默认 100/日、注册用户 1000/日（管理员可调），API 工具调用会消耗该额度；提示词与文案同步修正。 |
+| **V3.7.15** | 2026-11-24 | **Agent 单次对话工具调用上限提升至 10 步**。解决复杂 GIS 任务在第 6 步被提前中止的问题；保留重复调用与额度耗尽护栏。 |
 | **V3.7.8** | 2026-11-22 | **AI 对话三通道全量流式 · 思考过程展示 · 数据库撕裂防线四层 · 展示与配置修缮**。详见[完整更新日志](Docs/Guide/CHANGELOG.md) |
 
 
@@ -643,6 +644,6 @@ tiles.negiao.cc.cd"]
 |:------:|:--------:|:--------:|
 | [GitHub](https://github.com/NEGIAO/WebGIS-Dev) | [webgis.negiao.cn](https://webgis.negiao.cn)（正式域名，GitHub Pages 托管） | [Hugging Face](https://NEGIAO-WebGIS.hf.space) |
 
-<sub>V3.7.10 · 开发中 · 最后更新 2026-11-24</sub>
+<sub>V3.7.17 · 开发中 · 最后更新 2026-11-24</sub>
 
 </div>

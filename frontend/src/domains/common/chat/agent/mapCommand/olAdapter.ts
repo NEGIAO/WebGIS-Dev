@@ -428,18 +428,22 @@ export function createOlMapCommandAdapter({
                 };
             }
 
-            // 下载被拦或环境不支持：退回内联文本，至少让用户拿到数据
+            // V3.7.16：download 模式的唯一交付方式是浏览器下载。过去这里返回
+            // success=true + 内联 GeoJSON，模型会据此总结「返回完整文本（未截断）」，
+            // 用户却等不到下载任务——属于把失败伪装成成功。现在明确失败并给出处置指引，
+            // 同时保留文本载荷供人工排查，但绝不声称导出已完成。
             const fallback = truncateGeoJsonFeatures(text, 500);
             return {
-                success: true,
-                code: 'OK_INLINE_FALLBACK',
+                success: false,
+                code: 'DOWNLOAD_BLOCKED',
                 layerId: id,
                 layerName,
                 featureCount: fallback.total,
                 returnedFeatures: fallback.kept,
                 truncated: fallback.truncated,
+                downloaded: false,
                 geojson: fallback.text,
-                message: `${file.message || '文件下载不可用'}，已改为返回 GeoJSON 文本`,
+                message: `${file.message || '浏览器下载被拦截'}。export 的 download 模式必须触发浏览器下载任务；请允许本站下载后重试。若确实只想在对话里看文本，请明确说「在回复中显示 GeoJSON 文本」并使用 mode=inline。`,
             };
         }
 

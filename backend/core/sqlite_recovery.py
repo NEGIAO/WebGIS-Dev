@@ -211,7 +211,14 @@ def validate_sqlite_database(
 
 
 def is_sqlite_database_corrupted(db_path: Path) -> bool:
-    """Return True for SQLite corruption; propagate unrelated filesystem errors."""
+    """Return True for SQLite corruption; propagate unrelated filesystem errors.
+
+    V3.7.11: 使用完整 integrity_check 而非 quick_check(1)。quick_check 不校验
+    索引与表的一致性，索引级损坏时返回 ok，导致恢复分支永远不触发；而启动后的
+    validate_sqlite_database() 完整校验失败，应用进入永久降级并逐请求重试。
+    integrity_check(N) 的 N 只限制返回的错误条数，仍会扫描整个库，因此用 1
+    即可在发现首个问题时立即返回，避免损坏库输出大量错误行。
+    """
     db_path = Path(db_path)
     if not db_path.exists():
         return False
@@ -219,8 +226,8 @@ def is_sqlite_database_corrupted(db_path: Path) -> bool:
     try:
         conn = sqlite3.connect(_read_only_uri(db_path), uri=True, timeout=5)
         try:
-            result = conn.execute("PRAGMA quick_check(1)").fetchone()
-            return result is None or str(result[0]).lower() != "ok"
+            rows = conn.execute("PRAGMA integrity_check(1)").fetchall()
+            return not rows or any(str(row[0]).lower() != "ok" for row in rows)
         finally:
             conn.close()
     except sqlite3.DatabaseError:
@@ -497,7 +504,17 @@ def _activate_candidate(
             staging,
         )
 
-        if _bundle_fingerprints(db_path) != source_bundle:
+        # Recovery work may overlap with read/write activity that updates SQLite
+        # WAL/SHM sidecars or another connection. Only replacement of the live
+        # main file must cancel activation; moving sidecars below is intentional.
+        live_bundle = _bundle_fingerprints(db_path)
+        live_main = live_bundle.get("main")
+        source_main = source_bundle.get("main")
+        if (
+            live_main is None
+            or source_main is None
+            or live_main["sha256"] != source_main["sha256"]
+        ):
             raise SQLiteRecoveryError(
                 "live database changed during recovery; activation cancelled"
             )
