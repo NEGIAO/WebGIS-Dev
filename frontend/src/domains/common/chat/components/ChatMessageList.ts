@@ -105,6 +105,7 @@ export class Instance {
 		this.t('chat.suggestions.switchBase'),
 		this.t('chat.suggestions.search'),
 		this.t('chat.suggestions.weather'),
+		this.t('chat.suggestions.compassFengShui'),
 	]);
 
 	public heroMode = computed(() => this.props.messages.length <= 1 && !this.props.isLoading);

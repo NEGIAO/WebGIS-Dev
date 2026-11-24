@@ -2,10 +2,38 @@
     <div
         id="cesiumContainer"
         class="cesium-container"
+        :class="{
+            'compass-placement-mode':
+                compassStore.enabled &&
+                compassStore.mode === 'vector' &&
+                compassStore.placementMode,
+        }"
         @dragover.prevent="onDragOver"
         @dragleave.prevent="onDragLeave"
         @drop.prevent="onDrop"
     ></div>
+
+    <!-- 风水罗盘 HUD（与 2D MapContainer 同源组件，3D 下固定屏幕显示） -->
+    <div
+        v-if="compassStore.hudVisible"
+        class="compass-hud-wrapper"
+        :style="{
+            opacity: compassStore.opacity,
+            ...compassBgVars(compassStore.bgColor),
+        }"
+    >
+        <FengShuiCompassSvg
+            :key="compassStore.renderCacheToken"
+            :config="compassStore.hudRenderConfig"
+        />
+    </div>
+
+    <!-- 风水宫位解释面板（贴地罗盘点选后显示） -->
+    <PalaceExplanationPanel
+        :selected-palace="compassStore.selectedPalace"
+        :theme-config="compassStore.config"
+        @close="compassStore.setSelectedPalace(null)"
+    />
 
     <component
         :is="CesiumAdvancedEffects"
@@ -904,5 +932,41 @@
 .route-fly-hud .hud-tip {
     color: #7fd4ff;
     font-weight: 600;
+}
+
+/* ===== 风水罗盘：3D HUD 与点选定位光标 ===== */
+.cesium-container.compass-placement-mode {
+    cursor: crosshair;
+}
+
+.compass-hud-wrapper {
+    position: fixed;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 1210;
+    pointer-events: none;
+    display: grid;
+    place-items: center;
+    width: max-content;
+    height: max-content;
+    padding: clamp(6px, 1.2vw, 12px);
+    border-radius: 999px;
+    background:
+        radial-gradient(circle at 50% 50%,
+            var(--compass-bg-g1, rgba(0, 0, 0, 0.45)),
+            var(--compass-bg-g2, rgba(0, 0, 0, 0.25)) 30%,
+            var(--compass-bg-g3, rgba(0, 0, 0, 0.10)) 60%,
+            transparent 100%);
+    filter: drop-shadow(0 14px 30px rgba(0, 0, 0, 0.26));
+    overflow: visible;
+    will-change: transform;
+}
+
+.compass-hud-wrapper :deep(.feng-shui-compass-svg),
+.compass-hud-wrapper :deep(.feng-shui-compass-svg svg) {
+    display: block;
+    flex: 0 0 auto;
+    overflow: visible;
 }
 </style>

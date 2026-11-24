@@ -39,7 +39,7 @@ export const THEME_EXPLANATIONS: Record<string, ThemeExplanationConfig> = {
         cid: 'circle',
         themeIndex: 1,
         themeId: 1,
-        themeName: '二',
+        themeName: '翡翠境',
         explanationFile: 'circle_explanation.json',
         data: circleExplanationData,
     },
@@ -136,9 +136,19 @@ export function getThemeExplanationByConfig(config?: any): ThemeExplanationConfi
     const themeName = String(config.info?.name || '').toLowerCase();
     const themeId = config.info?.id;
 
-    // 按名称匹配
+    // 旧版 info.id 为数字，新版 normalizeCompassConfig 会把 info.id 规范成 cid 字符串；两者都要兼容。
+    const themeCid = String(themeId || '').toLowerCase();
+
+    // 按 cid 优先匹配，避免主题改名后落到默认 polygon。
+    if (themeCid === 'ancient-cinnabar' || themeCid === 'compass') return THEME_EXPLANATIONS.compass;
+    if (themeCid === 'jade-realm' || themeCid === 'circle') return THEME_EXPLANATIONS.circle;
+    if (themeCid === 'cyber-blueprint' || themeCid === 'dark') return THEME_EXPLANATIONS.dark;
+    if (themeCid === 'dark-gold' || themeCid === 'polygon') return THEME_EXPLANATIONS.polygon;
+    if (themeCid === 'minimalist' || themeCid === 'simple') return THEME_EXPLANATIONS.simple;
+
+    // 兼容历史名称与数字 id
     if (themeName.includes('地理')) return THEME_EXPLANATIONS.compass;
-    if (themeName === '二' || themeId === 1) return THEME_EXPLANATIONS.circle;
+    if (themeName === '二' || themeName.includes('翡翠') || themeId === 1) return THEME_EXPLANATIONS.circle;
     if (themeName === '三' || themeId === 3) return THEME_EXPLANATIONS.dark;
     if (themeName === '四' || themeId === 4) return THEME_EXPLANATIONS.polygon;
     if (themeName === '5' || themeId === 5) return THEME_EXPLANATIONS.simple;

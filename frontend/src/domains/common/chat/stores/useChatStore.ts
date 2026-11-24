@@ -61,7 +61,44 @@ export const useChatStore = defineStore('chat', () => {
     /** 最近一次工具调用的错误信息 */
     const lastError = ref<string>('');
 
+    /**
+     * 待发送的预置提问。
+     *
+     * 供罗盘宫位面板等「非聊天域」入口发起一次带上下文的提问：
+     * 写入后由 ChatPanelContent 消费并走正常对话链路；面板未挂载时消息保留
+     * 至就绪后自动消费（不会丢失）。
+     */
+    const pendingPrompt = ref<string>('');
+
+    /** 「展开聊天侧栏」请求计数。每次 +1，由 useHomePanels 监听后切到 chat 页签 */
+    const openChatSignal = ref<number>(0);
+
     // ========== 方法 ==========
+
+    /**
+     * 请求 AI 回答一个预置问题（写入待发送队列，不直接发请求）
+     * @param text 提问文本；空白字符串会被忽略
+     */
+    function requestPrompt(text: string) {
+        const normalized = String(text || '').trim();
+        if (!normalized) return;
+        pendingPrompt.value = normalized;
+    }
+
+    /**
+     * 取出并清空待发送提问
+     * @returns 待发送文本；无待发送内容时返回空串
+     */
+    function consumePrompt(): string {
+        const text = pendingPrompt.value;
+        pendingPrompt.value = '';
+        return text;
+    }
+
+    /** 请求展开侧栏并切到聊天页签（真正的展开动作由 useHomePanels 执行） */
+    function requestOpenChat() {
+        openChatSignal.value += 1;
+    }
 
     /**
      * 注入 AgentExecutor 实例
@@ -179,6 +216,8 @@ export const useChatStore = defineStore('chat', () => {
         executor,
         isCommanderReady,
         lastError,
+        pendingPrompt,
+        openChatSignal,
         // 方法
         setExecutor,
         startToolCall,
@@ -186,5 +225,8 @@ export const useChatStore = defineStore('chat', () => {
         failToolCall,
         clearHistory,
         getToolCallsForMessage,
+        requestPrompt,
+        consumePrompt,
+        requestOpenChat,
     };
 });

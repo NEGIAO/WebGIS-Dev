@@ -133,7 +133,7 @@ export function useManagedLayerRegistry({ emit, userDataLayers, drawSource, styl
      *
      * TOC 拖拽顺序覆写默认层级（TOC 顶部 = 带内最高 zIndex）：
      * - 几何层 → Z_BAND.DATA + offset
-     * - 标注层 → Z_BAND.DATA_LABEL + offset（同序，夹在瓦片标注之上）
+     * - 标注层 → Z_BAND.DATA_LABEL + offset（同序，高于数据几何与注记瓦片）
      */
     function refreshUserLayerZIndex() {
         const total = userDataLayers.length;

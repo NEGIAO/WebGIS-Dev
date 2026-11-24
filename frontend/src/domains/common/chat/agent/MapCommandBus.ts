@@ -23,16 +23,16 @@ const COMMAND_SPECS: Readonly<Record<string, MapCommandSpec>> = Object.freeze({
     // 搜索结果落图：把命中的 POI 交给各引擎既有的「导入 / 受管图层」通道，
     // 使其出现在 TOC 并沿用系统默认符号，不引入第二套点样式。
     addSearchResultLayer: { supportedViews: ['ol', 'cesium'] },
-    // 图层管理（V3.7.9）：显隐 / 透明度 / 定位 / 单独显示。
-    // 说明：soloLayer 仅 2D —— 3D 图层分组没有「单独显示」语义（cesiumLayerNodeBuilder
-    // 明确 draggable:false），在 3D 调用会返回 COMMAND_UNSUPPORTED_FOR_VIEW 而非静默降级。
+    // 图层管理（V3.7.9 引入，V3.7.10 补齐 3D）：显隐 / 透明度 / 定位 / 单独显示。
+    // 说明：soloLayer 双引擎可用 —— 3D 侧复用 cesiumLayers.solo 的
+    // 「纯元数据 + adapter 广播」语义，不要求引擎侧维护 solo 状态。
     setLayerVisibility: { supportedViews: ['ol', 'cesium'] },
     setLayerOpacity: { supportedViews: ['ol', 'cesium'] },
     zoomToLayer: { supportedViews: ['ol', 'cesium'] },
-    soloLayer: { supportedViews: ['ol'] },
+    soloLayer: { supportedViews: ['ol', 'cesium'] },
     // 图层导出：仅 2D —— 3D 侧 exportData 走浏览器下载（写文件），不适合作为 Agent 工具。
     exportLayerGeoJson: { supportedViews: ['ol'] },
-    // 图层删除（V3.7.13）：双引擎。不可撤销，提示词强制要求先 list_layers 确认目标。
+    // 图层删除（V3.7.10）：双引擎。不可撤销，提示词强制要求先 list_layers 确认目标。
     removeLayer: { supportedViews: ['ol', 'cesium'] },
 });
 

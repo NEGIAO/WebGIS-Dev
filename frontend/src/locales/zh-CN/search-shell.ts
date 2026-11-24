@@ -187,6 +187,7 @@ export default {
             switchBase: '切换到谷歌代理卫星底图',
             search: '切换为3D视图并搜索附近的餐馆',
             weather: '查询北京的天气和温度',
+            compassFengShui: '分析当前视图范围的风水条件',
         },
         heroSubtitle: '你可以让我定位地点、切换底图、检索兴趣点、查询天气，或直接提问。',
         configTitle: '接入凭据',

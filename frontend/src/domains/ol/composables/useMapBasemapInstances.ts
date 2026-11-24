@@ -1,5 +1,5 @@
 import { buildRasterBasemapSource, applyBasemapSourceToLayer } from '@ol/basemap/composables/basemapLayerFactory';
-import { Z_BAND } from '@ol/layer/zIndexBands';
+import { Z_BAND, allocateBasemapZIndex } from '@ol/layer/zIndexBands';
 
 /**
  * OpenLayers 底图图层实例管理（按需挂载数据源、刷新显隐/层级/透明度、切换底图并回收隐藏层队列）
@@ -61,7 +61,14 @@ export function useMapBasemapInstances(
     } = {}) {
         if (!Array.isArray(layerList) || !instanceMap) return;
 
-        layerList.forEach((item, index) => {
+        // 带内 zIndex 只按「可见层」编号：全量列表现有 110 项，标注瓦片带仅 50 槽位，
+        // 沿用全量索引（length-1-index）会溢出到数据几何带。语义不变：列表靠前 = 带内更高 z。
+        const zIndexById = allocateBasemapZIndex(
+            layerList,
+            (id: string) => configs.find((cfg: any) => cfg?.id === id)?.category,
+        );
+
+        layerList.forEach((item) => {
             let layer = instanceMap[item.id];
             if (!layer) return;
 
@@ -79,7 +86,7 @@ export function useMapBasemapInstances(
 
             const category = configs.find((cfg: any) => cfg?.id === item.id)?.category;
             const zBand = category === 'label' ? Z_BAND.LABEL : Z_BAND.BASEMAP;
-            const targetZIndex = zBand + (layerList.length - 1 - index);
+            const targetZIndex = zIndexById.get(String(item.id)) ?? zBand;
             if (layer.getZIndex() !== targetZIndex) {
                 layer.setZIndex(targetZIndex);
             }

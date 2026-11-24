@@ -434,4 +434,19 @@ Sprint 3（穿插）：P3-1 容器二轮（O1/O2 交替）→ P2-1 bundle 分析
   - [ ] (影响) 仅多 key 候选配置触发（completions 通道 `api_key_candidates` ≥2；default-proxy / personal proxy 单候选不受影响）：回复文本按候选数重复拼接（前端气泡内容成倍重复）+ 上游重复计费；NVIDIA 空输出排障场景（单候选）不受影响。
   - [ ] (建议) 内层 break 处置 `stream_locked = True`，内层循环结束后（外层 for 体内）`if stream_locked: break`；可与「零输出路径无日志」的诊断增强（本文件相邻条目 / 会话已提出待批）一并实施。
 
+- [ ] **在线服务带与卷帘对比带数值区间重叠（2D 底图层级）**（2026-11-24 · V3.7.10 改 `Z_BAND` 时发现，按 Force_command §2.5 只记不改）：
+  - [ ] (现象) `olRemoteServiceAdapter.ts:50` 的 `REMOTE_CAPACITY = 50` 使在线服务子带实际可用 `100~149`，而 `Z_BASEMAP_SWIPE_OFFSET = 120` 的卷帘对比层占 `120 + index`（index 为栈内序号，实测 ≤2）。两者在 `120~149` 区间重叠：卷帘开启且在线服务注册数较多时，对比层可能被在线服务层覆盖。
+  - [ ] (成因) 历史上在线服务带标称容量 20（`100~119`），后放宽到 50 但未同步卷帘偏移；`zIndexBands.ts` 旧注释仍写「100~119」，与代码不符（V3.7.10 已校正该注释为 `100~149`，数值未改）。
+  - [ ] (建议) 三选一：① 卷帘偏移改 `150`（但会与新的 `LABEL = 150` 冲突，需先重排带）；② `REMOTE_CAPACITY` 回落到 20（限制在线服务注册数）；③ 卷帘层不再走底图带，改为独立带（需评估 OL 卷帘 clip 实现是否依赖带内邻近）。倾向 ③，但需先确认 `useBasemapSwipe` 的 clip 逻辑是否假设对比层紧邻底图层。
+
+- [x] ~~**罗盘半径 UI 上限（20,000 km）远超 URL 编码上限（500 km）**~~（2026-11-24 · V3.7.10 加手动输入时发现，**同批已解决**）：
+  - [x] (解决) `codec/positions.ts` 半径位宽 23→28 bit、上限 500 km→20,000 km，新增 `r.` V2 短码前缀；无前缀旧码仍按 23 bit 解码，历史分享链接不失效。UI 与编码上限现已对齐。
+
+- [x] ~~**`setPhysicalRadiusMeters` 无上下限钳制**~~（2026-11-24 · V3.7.10 顺带发现，**本次 Code Review 已修**）：
+  - [x] (解决) `useCompassStore.ts` 统一 `clamp(Math.abs(numeric), 100, 20_000_000)`，与面板滑杆和 URL V2 短码同源。
+
+- [ ] **`writeCompassUrlState` 丢弃 `location.search`**（2026-11-24 · V3.7.10 发现）：
+  - [ ] (现象) `commitCompassUrl` 与旧实现均只拼 `${pathname}#${hash}`，`location.search` 被整体丢弃。当前应用所有参数都在 hash query 中，暂无实测影响；但若外链把 `ut`、`p` 等放在 search，罗盘任一同步都会将其清除。
+  - [ ] (建议) 若确认无需支持 search 形式，在 README/Guide 明确「参数一律走 hash」；否则改为 `${pathname}${search}#${hash}` 并在删除 `cs` 时同时清理 search 中的同名 key。
+
 

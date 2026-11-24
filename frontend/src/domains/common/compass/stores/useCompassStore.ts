@@ -3,6 +3,7 @@ import { defineStore } from 'pinia';
 //注意：此处仅仅引用了配置，实际的绘制实现和他们无关，绘制实现完全在CompassManager中，与Vue无关
 import type { FengShuiCompassConfig, Layer } from '@common/compass/svg/types';
 import localThemes from '@common/compass/svg/themes';
+import { getCompassThemeIndex } from '@common/url-state/compassThemeCode';
 
 export type CompassMode = 'vector' | 'hud';
 
@@ -32,20 +33,12 @@ type CompassThemeOption = {
 const DEFAULT_CID = 'ancient-cinnabar';
 
 const DEFAULT_THEME_OPTIONS: CompassThemeOption[] = [
-    { cid: 'ancient-cinnabar', name: 'Ancient Cinnabar' },
-    { cid: 'dark-gold', name: 'Dark Gold' },
-    { cid: 'jade-realm', name: 'Jade Realm' },
-    { cid: 'minimalist', name: 'Minimalist' },
-    { cid: 'cyber-blueprint', name: 'Cyber Blueprint' },
+    { cid: 'ancient-cinnabar', name: '古朱砂' },
+    { cid: 'dark-gold', name: '暗金' },
+    { cid: 'jade-realm', name: '翡翠境' },
+    { cid: 'minimalist', name: '极简' },
+    { cid: 'cyber-blueprint', name: '赛博蓝图' },
 ];
-
-const LOCAL_THEME_INDEX_BY_CID: Record<string, number> = {
-    'ancient-cinnabar': 0,
-    'dark-gold': 2,
-    'jade-realm': 1,
-    minimalist: 4,
-    'cyber-blueprint': 3,
-};
 
 const HUD_MIN_SIZE = 240;
 const HUD_MAX_SIZE = 560;
@@ -220,7 +213,7 @@ function resolveThemeNameByCid(cid: string): string {
 
 function createFallbackConfigByCid(cid: string): FengShuiCompassConfig {
     const safeCid = String(cid || DEFAULT_CID).trim() || DEFAULT_CID;
-    const index = LOCAL_THEME_INDEX_BY_CID[safeCid] ?? 0;
+    const index = getCompassThemeIndex(safeCid);
     const localTheme =
         Array.isArray(localThemes) && localThemes[index]
             ? deepClone(localThemes[index] as FengShuiCompassConfig)
@@ -371,7 +364,8 @@ export const useCompassStore = defineStore('compassStore', () => {
     function setPhysicalRadiusMeters(nextMeters: number): void {
         const numeric = Number(nextMeters);
         if (!Number.isFinite(numeric)) return;
-        physicalRadiusMeters.value = Math.abs(numeric);
+        // store 是不变量唯一真相源：100 m ~ 20,000 km 与面板滑杆、URL V2 短码上限一致
+        physicalRadiusMeters.value = clamp(Math.abs(numeric), 100, 20_000_000);
     }
 
     function setOpacity(nextOpacity: number): void {

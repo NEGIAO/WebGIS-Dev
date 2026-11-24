@@ -11,6 +11,7 @@ import {
     searchWithAmapAround,
     searchWithNominatim,
 } from '@/api/locationSearch';
+import { geocodeTool, reverseGeocodeTool } from '@common/chat/agent/agentGeocodingTools';
 import { DEFAULT_SEARCH_ZOOM, MAX_SEARCH_ZOOM } from '@common/utils/mapDefaults';
 
 /**
@@ -50,9 +51,20 @@ export interface GISCommanderDeps {
      * 2D 与 3D 均有落库，返回值带 `view` 说明来源引擎。
      */
     getMeasureResult?: () => Record<string, any>;
+    /**
+     * 罗盘控制（V3.7.10）：由宿主注入，因为罗盘属于独立 store 域。
+     * 缺失时 enable_compass 返回结构化不可用，而不是静默失败。
+     */
+    compassEnable?: (params?: any) => Promise<any>;
 }
 
-export function createGISCommander({ commandBus, getMapContext, getLayers, getMeasureResult }: GISCommanderDeps = {}) {
+export function createGISCommander({
+    commandBus,
+    getMapContext,
+    getLayers,
+    getMeasureResult,
+    compassEnable,
+}: GISCommanderDeps = {}) {
     /**
      * 当前视图中心所在城市（用于文本检索的 city 限定），按约 1km 网格缓存。
      *
@@ -766,6 +778,35 @@ export function createGISCommander({ commandBus, getMapContext, getLayers, getMe
         }
     }
 
+    /**
+     * 经纬度 → 具体地名（V3.7.10，只读）。
+     * 实现独立封装在 chat/agent/agentGeocodingTools.ts，门面只做转发，
+     * 与 getWeather 同属「读外部数据」类，不进 MapCommandBus。
+     */
+    function reverseGeocode(params: any = {}) {
+        return reverseGeocodeTool(params);
+    }
+
+    /** 地名/地址/POI → WGS-84 坐标（V3.7.10，只读，不定位） */
+    function geocode(params: any = {}) {
+        return geocodeTool(params);
+    }
+
+    /**
+     * 在当前地图中心启用罗盘（V3.7.10）。
+     * 实现由宿主注入，避免 command-bus 反向依赖 compass store。
+     */
+    function enableCompass(params: any = {}) {
+        if (typeof compassEnable !== 'function') {
+            return Promise.resolve({
+                success: false,
+                code: 'COMPASS_CONTROL_UNAVAILABLE',
+                message: '当前会话尚未挂载罗盘控制器，无法启用罗盘',
+            });
+        }
+        return compassEnable(params);
+    }
+
     function dispose() {}
 
     return {
@@ -777,6 +818,11 @@ export function createGISCommander({ commandBus, getMapContext, getLayers, getMe
         switchBasemap,
         addSearchResultLayer,
         getWeather,
+        // 双向地理编码（V3.7.10）：只读，不改画布
+        reverseGeocode,
+        geocode,
+        // 罗盘控制（V3.7.10）
+        enableCompass,
         // 只读图层与测量（V3.7.9）
         getMapState,
         listLayers,
@@ -803,6 +849,9 @@ export function createGISCommander({ commandBus, getMapContext, getLayers, getMe
  * @property {Function} switchBasemap
  * @property {Function} addSearchResultLayer
  * @property {Function} getWeather
+ * @property {Function} reverseGeocode
+ * @property {Function} geocode
+ * @property {Function} enableCompass
  * @property {Function} dispose
  */
 

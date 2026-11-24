@@ -1,4 +1,6 @@
 /** 位置 / 罗盘状态短码编解码（自定义 pack 方案，位宽见常量区） */
+import { DEFAULT_COMPASS_THEME_INDEX, getCompassThemeCid, getCompassThemeIndex } from '../compassThemeCode';
+
 export const COORD_SCALE = 1e6;
 export const LNG_OFFSET_SCALED = 180 * COORD_SCALE;
 export const LAT_OFFSET_SCALED = 90 * COORD_SCALE;
@@ -10,10 +12,26 @@ export const LAT_MASK = (1n << LAT_BITS) - 1n;
 const MAX_PACKED = (BigInt(LNG_MAX_SCALED) << LAT_BITS) | BigInt(LAT_MAX_SCALED);
 
 const RADIUS_SCALE = 10;
-const RADIUS_MAX_SCALED = 500000 * RADIUS_SCALE;
-const RADIUS_BITS = 23n;
+/** 历史短码（无前缀）：半径 23 bit，上限 500 km。保留解码以兼容旧分享链接。 */
+const LEGACY_RADIUS_MAX_SCALED = 500000 * RADIUS_SCALE;
+const LEGACY_RADIUS_BITS = 23n;
+const LEGACY_RADIUS_MASK = (1n << LEGACY_RADIUS_BITS) - 1n;
+const LEGACY_MAX_COMPASS_PACKED =
+    (MAX_PACKED << LEGACY_RADIUS_BITS) | BigInt(LEGACY_RADIUS_MAX_SCALED);
+
+/** V2 短码（r. 前缀）：半径 28 bit，上限 20000 km，与 UI 上限对齐。 */
+const RADIUS_MAX_SCALED = 20000000 * RADIUS_SCALE;
+const RADIUS_BITS = 28n;
 const RADIUS_MASK = (1n << RADIUS_BITS) - 1n;
 const MAX_COMPASS_PACKED = (MAX_PACKED << RADIUS_BITS) | BigInt(RADIUS_MAX_SCALED);
+const COMPASS_STATE_V2_PREFIX = 'r.';
+
+/** V3 短码（t. 前缀）：在 V2 基础上追加 3 bit 主题编号，五种罗盘样式 0~4。 */
+const THEME_BITS = 3n;
+const THEME_MASK = (1n << THEME_BITS) - 1n;
+const MAX_THEME_INDEX = 4;
+const COMPASS_STATE_V3_PREFIX = 't.';
+const MAX_COMPASS_PACKED_V3 = (MAX_COMPASS_PACKED << THEME_BITS) | THEME_MASK;
 
 export const CESIUM_HEIGHT_SCALE = 100;
 export const CESIUM_HEIGHT_MAX_SCALED = 50000000 * CESIUM_HEIGHT_SCALE;
@@ -202,17 +220,26 @@ export const decodePos = (code: any) => {
 };
 
 /**
- * 编码罗盘 URL 状态：经度 + 纬度 + 半径（米）。
+ * 编码罗盘 URL 状态：经度 + 纬度 + 半径（米）+ 主题编号。
+ *
+ * 主题可传 cid 字符串或 0~4 数字；旧调用只传前三项时默认古朱砂（0）。
  *
  * @param {number|string} lng
  * @param {number|string} lat
  * @param {number|string} radiusMeters
+ * @param {number|string} theme 主题 cid 或编号，默认古朱砂
  * @returns {string} 短字符串；异常时返回 '0'
  */
-export const encodeCompassState = (lng: number | string, lat: number | string, radiusMeters: number | string) => {
+export const encodeCompassState = (
+    lng: number | string,
+    lat: number | string,
+    radiusMeters: number | string,
+    theme: number | string = DEFAULT_COMPASS_THEME_INDEX,
+) => {
     const normalizedLng = Number(lng);
     const normalizedLat = Number(lat);
     const normalizedRadius = Number(radiusMeters);
+    const themeIndex = getCompassThemeIndex(theme);
 
     if (!Number.isFinite(normalizedLng) || !Number.isFinite(normalizedLat)) {
         return '0';
@@ -222,9 +249,11 @@ export const encodeCompassState = (lng: number | string, lat: number | string, r
         return '0';
     }
 
+    // 半径为 0 无业务意义（罗盘不可见），属脏值：编码为 '0' 而非合法短码，
+    // 否则会写出 (0,0,0) 这类「解码成功但不可用」的 cs（见 V3.7.10 日志）。
     if (
         !Number.isFinite(normalizedRadius) ||
-        normalizedRadius < 0 ||
+        normalizedRadius <= 0 ||
         normalizedRadius > RADIUS_MAX_SCALED / RADIUS_SCALE
     ) {
         return '0';
@@ -246,32 +275,59 @@ export const encodeCompassState = (lng: number | string, lat: number | string, r
     }
 
     const packedPos = (BigInt(lngScaled) << LAT_BITS) | BigInt(latScaled);
-    const packed = (packedPos << RADIUS_BITS) | BigInt(radiusScaled);
+    const packedV2 = (packedPos << RADIUS_BITS) | BigInt(radiusScaled);
+    const packed = (packedV2 << THEME_BITS) | BigInt(themeIndex);
 
     const encoded = encodeBase62(packed);
     if (!encoded) return '0';
 
-    if (encoded.length >= MIN_CODE_LENGTH) return encoded;
-    return encoded.padStart(MIN_CODE_LENGTH, BASE62_ALPHABET[0]);
+    const body =
+        encoded.length >= MIN_CODE_LENGTH
+            ? encoded
+            : encoded.padStart(MIN_CODE_LENGTH, BASE62_ALPHABET[0]);
+    return `${COMPASS_STATE_V3_PREFIX}${body}`;
 };
 
 /**
- * 解码罗盘 URL 状态：经度 + 纬度 + 半径（米）。
+ * 解码罗盘 URL 状态：经度 + 纬度 + 半径（米）+ 主题编号。
+ * 无前缀按历史 23 bit 半径解码，r. 前缀按 V2 28 bit 解码，t. 前缀按 V3 28 bit + 3 bit 主题解码。
+ * 历史短码主题回退为古朱砂（0）。
  *
  * @param {string} code
- * @returns {{lng:number,lat:number,radius:number}|null}
+ * @returns {{lng:number,lat:number,radius:number,themeIndex:number,themeCid:string}|null}
  */
 export const decodeCompassState = (code: any) => {
-    const text = String(code || '').trim();
+    let text = String(code || '').trim();
     if (!text || text === '0') return null;
 
+    const isV3 = text.startsWith(COMPASS_STATE_V3_PREFIX);
+    const isV2 = !isV3 && text.startsWith(COMPASS_STATE_V2_PREFIX);
+    if (isV3) text = text.slice(COMPASS_STATE_V3_PREFIX.length);
+    if (isV2) text = text.slice(COMPASS_STATE_V2_PREFIX.length);
+    if (!text) return null;
+
+    const radiusBits = isV3 || isV2 ? RADIUS_BITS : LEGACY_RADIUS_BITS;
+    const radiusMask = isV3 || isV2 ? RADIUS_MASK : LEGACY_RADIUS_MASK;
+    const radiusMaxScaled = isV3 || isV2 ? RADIUS_MAX_SCALED : LEGACY_RADIUS_MAX_SCALED;
+    const maxPacked = isV3 ? MAX_COMPASS_PACKED_V3 : isV2 ? MAX_COMPASS_PACKED : LEGACY_MAX_COMPASS_PACKED;
+
     const packed = decodeBase62(text);
-    if (packed === null || packed < 0n || packed > MAX_COMPASS_PACKED) {
+    if (packed === null || packed < 0n || packed > maxPacked) {
         return null;
     }
 
-    const packedPos = packed >> RADIUS_BITS;
-    const radiusScaled = Number(packed & RADIUS_MASK);
+    let themeIndex = DEFAULT_COMPASS_THEME_INDEX;
+    let packedCore = packed;
+    if (isV3) {
+        themeIndex = Number(packed & THEME_MASK);
+        if (!Number.isInteger(themeIndex) || themeIndex < 0 || themeIndex > MAX_THEME_INDEX) {
+            return null;
+        }
+        packedCore = packed >> THEME_BITS;
+    }
+
+    const packedPos = packedCore >> radiusBits;
+    const radiusScaled = Number(packedCore & radiusMask);
 
     const lngScaled = Number(packedPos >> LAT_BITS);
     const latScaled = Number(packedPos & LAT_MASK);
@@ -290,7 +346,7 @@ export const decodeCompassState = (code: any) => {
         latScaled < 0 ||
         latScaled > LAT_MAX_SCALED ||
         radiusScaled < 0 ||
-        radiusScaled > RADIUS_MAX_SCALED
+        radiusScaled > radiusMaxScaled
     ) {
         return null;
     }
@@ -303,6 +359,8 @@ export const decodeCompassState = (code: any) => {
         lng: Number(lng.toFixed(6)),
         lat: Number(lat.toFixed(6)),
         radius: Number(radius.toFixed(1)),
+        themeIndex,
+        themeCid: getCompassThemeCid(themeIndex),
     };
 };
 

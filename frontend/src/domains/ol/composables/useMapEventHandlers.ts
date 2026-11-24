@@ -34,6 +34,7 @@ import { unByKey } from 'ol/Observable';
 import { normalizeHtmlAttributes } from '@common/attribute/useLayerMetadataNormalization';
 import { getFeatureIdFromFeature } from '@common/data-protocol/featureKey';
 import { tileHDRendering } from '@ol/layer/composables/useTileHDRendering';
+import { shouldSkipIdentifyForCompass } from '@ol/layer/composables/useLayerControlHandlers';
 
 export interface MapEventHandlersDeps {
     mapInstanceRef: any;
@@ -184,6 +185,9 @@ export function createMapEventHandlers({
                 lat: Number(clickedLonLat[1].toFixed(6)),
                 source: 'map-singleclick',
             });
+
+            // 罗盘已消费的点击（放置罗盘 / 点选宫位 / 点 HUD 罗盘）不再触发要素属性查询
+            if (shouldSkipIdentifyForCompass(map, evt)) return;
 
             if (!isAttributeQueryEnabledRef?.value) return;
             const drawInteraction = getDrawInteraction?.();

@@ -118,9 +118,17 @@
                     </template>
                 </div>
 
-                <!-- 底部：风水要点 -->
+                <!-- 底部：问 AI + 风水要点 -->
                 <div class="panel-footer">
                     <div class="footer-divider"></div>
+                    <button
+                        type="button"
+                        class="btn-ask-agent"
+                        @click="handleAskAgent"
+                    >
+                        <span class="ask-icon">✦</span>
+                        <span>{{ t('compass.askAgent') }}</span>
+                    </button>
                     <div class="feng-shui-tips">
                         <span class="tip-icon">✦</span>
                         <span class="tip-text">{{ t('compass.tip') }}</span>
@@ -402,6 +410,50 @@ $feng-shui-green: #2d5016;
         margin-bottom: 12px;
     }
 
+    /* 问 AI 解释：主行动按钮，描边 + 极淡底色，与面板金色语言一致 */
+    .btn-ask-agent {
+        width: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        padding: 9px 14px;
+        margin-bottom: 10px;
+        font-family: 'SimSun', serif;
+        font-size: 13px;
+        font-weight: 600;
+        letter-spacing: 1px;
+        color: $feng-shui-gold;
+        background: linear-gradient(
+            135deg,
+            rgba($feng-shui-gold, 0.18) 0%,
+            rgba($feng-shui-gold, 0.06) 100%
+        );
+        border: 1px solid rgba($feng-shui-gold, 0.45);
+        border-radius: 6px;
+        cursor: pointer;
+        transition: all 0.3s ease;
+
+        .ask-icon {
+            font-size: 13px;
+        }
+
+        &:hover {
+            color: #ffd700;
+            border-color: rgba($feng-shui-gold, 0.85);
+            background: linear-gradient(
+                135deg,
+                rgba($feng-shui-gold, 0.28) 0%,
+                rgba($feng-shui-gold, 0.12) 100%
+            );
+            box-shadow: 0 0 16px rgba($feng-shui-gold, 0.25);
+        }
+
+        &:active {
+            transform: translateY(1px);
+        }
+    }
+
     .feng-shui-tips {
         display: flex;
         align-items: center;
@@ -445,6 +497,15 @@ $feng-shui-green: #2d5016;
 @media (max-width: 1024px) {
     .palace-panel-wrapper {
         width: 320px;
+    }
+}
+
+// 触屏：可点击目标 ≥40px（面板其余控件仍为桌面尺寸，此处仅覆盖新增按钮）
+@media (pointer: coarse) {
+    .panel-footer .btn-ask-agent {
+        min-height: 40px;
+        font-size: 14px;
+        padding: 10px 16px;
     }
 }
 

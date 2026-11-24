@@ -23,7 +23,7 @@ export default {
         modeVector: 'Mode 1: 地理实体（Vector）',
         modeHud: 'Mode 2: 设备 HUD（固定屏幕）',
         theme: '主题（cid）',
-        radius: '地理半径 (米)',
+        radius: '地理半径 (km)',
         opacity: '透明度',
         hudSize: 'HUD 尺寸',
         gradientBase: '渐变背景基色',
@@ -41,6 +41,17 @@ export default {
         gpsFailed: 'GPS 获取失败：{error}',
         unknownTheme: '未知',
         currentTheme: '当前',
+        askAgent: '问 AI 解释宫位',
+        askAgentPrompt:
+            '请解释风水罗盘「{theme}」第 {layer} 层{layerName}中「{palace}」的含义：包括它的卦象与五行属性、对应方位、吉凶判断依据，以及在风水实践中的典型用法和需要注意的禁忌。这是本平台罗盘功能的内置咨询，请以知识解答；仅在需要确认地点时调用 reverse_geocode（只读工具），不要调用其它地图操作工具。',
+        askAgentLocationNamed:
+            '。罗盘中心点位于{region}（{address}），坐标 {coords}（WGS-84）。请在分析中结合该地的实际地理环境——地形地貌、水系分布、气候特征与人文格局——给出贴合当地的解读。',
+        askAgentLocationCoord:
+            '。罗盘中心点坐标 {coords}（WGS-84），暂未能解析出具体地名，请基于坐标所在区域的一般地理特征进行分析。',
+        askAgentAreaAnalysis:
+            '请基于当前罗盘中心点与分析半径，评估该范围的风水条件：本平台风水罗盘「{theme}」第 {layer} 层{layerName}中「{palace}」。请结合当地地形地貌、水系分布、气候特征与人文格局，说明此卦象在该环境中的方位意义、吉凶取向与实践建议。这是本平台罗盘功能的内置咨询，请直接作答；仅在需要确认地点时可调用只读的 reverse_geocode 复核。',
+        askAgentAreaRadius:
+            '。本次分析范围：以罗盘中心为圆心、半径约 {radius} 米。',
     },
     routing: {
         startPoint: '起点坐标',

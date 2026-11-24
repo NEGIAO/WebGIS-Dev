@@ -104,6 +104,14 @@ function summarizeAction(entry: any) {
         // 否则 recentActions 会退化为 "[get_weather] get_weather" 的噪声。
         case 'get_weather':
             return `查询天气${params.city || params.adcode || ''}`;
+        // 双向地理编码为只读查询：不改变地图状态，但仍是用户本轮动作
+        case 'reverse_geocode':
+            return `解析坐标 (${params.lng}, ${params.lat}) 的地名`;
+        case 'geocode':
+            return `解析地名「${params.address || ''}」的坐标`;
+        // 罗盘启用（V3.7.10）：只改罗盘，不移动地图
+        case 'enable_compass':
+            return `在当前中心启用风水罗盘${params.radiusMeters ? `（半径 ${params.radiusMeters} 米）` : ''}`;
         default:
             return entry.command;
     }

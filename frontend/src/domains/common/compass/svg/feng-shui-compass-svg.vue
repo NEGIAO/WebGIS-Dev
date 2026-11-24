@@ -33,6 +33,9 @@
                     animationDelay: shouldEnableAnimation
                         ? `${layerIndex * (m.animation?.delay || 1)}ms`
                         : '0s',
+                    animationDuration: shouldEnableAnimation
+                        ? `${m.animation?.duration || 500}ms`
+                        : '0s',
                 }"
             >
                 <!-- 层边框 -->
@@ -148,6 +151,9 @@
                     animationDelay: shouldEnableAnimation
                         ? `${m.data.length * (m.animation?.delay || 1)}ms`
                         : '0s',
+                    animationDuration: shouldEnableAnimation
+                        ? `${m.animation?.duration || 500}ms`
+                        : '0s',
                 }"
             >
                 <g
@@ -233,11 +239,15 @@
     pointer-events: none;
 }
 
+/* 动画时长由模板内联 animationDuration 提供；此前 CSS v-bind 生成无效变量名，
+   导致整条 animation 简写失效、主体永久停留在 opacity:0。 */
 .layer-animate {
     opacity: 0;
     transform: scale(0.8);
     transform-origin: center center;
-    animation: layerFadeIn v-bind('(m.animation?.duration || 0) + "ms"') ease-out forwards;
+    animation-name: layerFadeIn;
+    animation-timing-function: ease-out;
+    animation-fill-mode: forwards;
 }
 
 @keyframes layerFadeIn {

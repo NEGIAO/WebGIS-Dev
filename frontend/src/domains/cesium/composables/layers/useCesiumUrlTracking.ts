@@ -9,9 +9,11 @@ import { MAP_VIEW_CESIUM, CAMERA_VIEW_PARAM_KEY, CAMERA_STATE_QUERY_KEYS } from 
 import {
     decodeCesiumCameraState,
     decodeCesiumPoseState,
+    decodePos,
     encodeCesiumPoseState,
 } from '@common/url-state/crypto';
 import { getCurrentQuerySnapshot, readQueryValue as readQueryFromSnapshot } from '@common/url-state/urlQueryReader';
+import { normalizeLocationFlag } from '@common/utils/normalize';
 import { URL_LAYER_OPTIONS } from '@common/basemap/basemapOptions';
 import { createBasemapUrlMappingFeature } from '@common/url-state/useBasemapUrlMapping';
 import { getLayerCategory, getLayerGroup } from '@common/basemap/catalogProjection';
@@ -42,6 +44,25 @@ const MIN_CAMERA_HEIGHT = 1;
 const MAX_CAMERA_HEIGHT = 50000000;
 
 /**
+ * 读取当前地址栏的真实 query 快照（hash 优先、search 补缺）。
+ * 罗盘 cs 等状态由 common 服务通过 history.replaceState 直接写入，Vue Router 的
+ * route.query 可能仍是旧值；URL 写回必须以真实地址为准，否则旧 cs 会被重新合并进去。
+ */
+function readLocationQuerySnapshot(): Record<string, any> {
+    const params = new URLSearchParams();
+    const search = String(window.location.search || '').replace(/^\?/, '');
+    new URLSearchParams(search).forEach((value, key) => params.set(key, value));
+
+    const hash = String(window.location.hash || '');
+    const queryIndex = hash.indexOf('?');
+    if (queryIndex >= 0) {
+        new URLSearchParams(hash.slice(queryIndex + 1)).forEach((value, key) => params.set(key, value));
+    }
+
+    return getCurrentQuerySnapshot(Object.fromEntries(params.entries()));
+}
+
+/**
  * 创建 Cesium URL 追踪器。
  * @param {Object} options - 配置项
  * @param {Function} options.getViewer - 获取 Cesium Viewer
@@ -70,9 +91,28 @@ export function useCesiumUrlTracking({ getViewer, getCesium, onCameraViewSync, o
      */
     function parseCameraStateFromUrl() {
         const encodedCameraView = String(readQueryValue(CAMERA_VIEW_PARAM_KEY) || '').trim();
-        const lng = parseFiniteNumber(readQueryValue('lng'));
-        const lat = parseFiniteNumber(readQueryValue('lat'));
-        const height = normalizeCameraHeight(readQueryValue('z'));
+        let lng = parseFiniteNumber(readQueryValue('lng'));
+        let lat = parseFiniteNumber(readQueryValue('lat'));
+        let height = normalizeCameraHeight(readQueryValue('z'));
+
+        // 2D 分享链接可能只带紧凑位置码 p；准入条件与 useMapState 保持一致。
+        // cv / 明文 lng-lat 仍优先，不改写已能恢复的链接。
+        const compactPosCode = String(readQueryValue('p') || '').trim();
+        const locationSource = normalizeLocationFlag(readQueryValue('loc'), '0');
+        if (
+            (lng === null || lat === null) &&
+            compactPosCode &&
+            compactPosCode !== '0' &&
+            (locationSource === 'gps' || locationSource === 'ip')
+        ) {
+            const decodedPos = decodePos(compactPosCode);
+            if (decodedPos && Number.isFinite(decodedPos.lng) && Number.isFinite(decodedPos.lat)) {
+                lng = decodedPos.lng;
+                lat = decodedPos.lat;
+                // 仅位置码、未带 z 的存量链接给一个合理的默认高度，否则仍会因高度缺失而放弃恢复。
+                if (height === null) height = DEFAULT_CESIUM_HEIGHT;
+            }
+        }
 
         const decodedPose = decodeCesiumPoseState(encodedCameraView);
         if (decodedPose && lng !== null && lat !== null && height !== null) {
@@ -252,7 +292,7 @@ export function useCesiumUrlTracking({ getViewer, getCesium, onCameraViewSync, o
      */
     function replaceUrlQuery(nextQuery: any) {
         const mergedQuery: Record<string, any> = {
-            ...getCurrentQuerySnapshot(route.query),
+            ...readLocationQuerySnapshot(),
             ...nextQuery,
         };
 
@@ -268,7 +308,7 @@ export function useCesiumUrlTracking({ getViewer, getCesium, onCameraViewSync, o
             else mergedQuery[key] = String(value);
         });
 
-        const currentSnapshot = getCurrentQuerySnapshot(route.query);
+        const currentSnapshot = readLocationQuerySnapshot();
         if (isSameQuerySnapshot(currentSnapshot, mergedQuery)) return;
 
         void router

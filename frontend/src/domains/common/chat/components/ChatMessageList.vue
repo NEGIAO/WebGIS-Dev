@@ -674,6 +674,14 @@
     transform: translateY(-1px);
 }
 
+/* 触屏基线：建议词也是可点击目标，pointer:coarse 下不小于 40px */
+@media (pointer: coarse) {
+    .suggestion-chip {
+        min-height: 40px;
+        padding: 10px 14px;
+    }
+}
+
 /* ========== 回到底部悬浮按钮 ========== */
 .scroll-fab {
     position: absolute;
@@ -816,9 +824,23 @@
     margin: 6px 0;
 }
 
+/* Markdown 元素样式已迁移到文件末尾的非 scoped <style> 块：
+   v-html 注入的节点不携带 data-v-xxx，放在这里不会被命中。 */
+</style>
+
+<style>
 /* ============================================================
-    Markdown 元素精细排版
-============================================================ */
+   代码块样式（非 scoped，供 v-html 注入的 .code-block-wrapper 使用）
+   scoped 选择器会给所有元素加 data-v-xxx，但 v-html 注入的内容
+   无法携带该属性，导致 :deep() 编译出的 [data-v-xxx] 前缀链断裂。
+   因此代码块相关 CSS 必须放在非 scoped 块中。
+   ============================================================ */
+
+/* ============================================================
+   Markdown 元素精细排版（非 scoped）
+   v-html 注入的表格/引用/列表节点不带 data-v-xxx，必须放在非 scoped 块，
+   并以 .markdown-body 根类限定，避免泄漏到其它组件。
+   ============================================================ */
 .markdown-body {
     white-space: normal !important;
 }
@@ -838,6 +860,7 @@
 .markdown-body p {
     margin: 0 0 10px 0;
     color: #2c3e50;
+    line-height: 1.65;
 }
 .markdown-body p:last-child {
     margin-bottom: 0;
@@ -861,6 +884,7 @@
 }
 .markdown-body li {
     margin-bottom: 4px;
+    line-height: 1.6;
 }
 .markdown-body li:last-child {
     margin-bottom: 0;
@@ -874,6 +898,7 @@
     font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
     font-size: 0.9em;
     font-weight: 500;
+    word-break: break-word;
 }
 
 /* highlight.js github-dark-dimmed 主题 token 颜色覆盖 */
@@ -941,15 +966,17 @@
 .markdown-body blockquote p {
     color: #4f6f5c;
     margin: 0;
+    line-height: 1.65;
 }
 
 .markdown-body table {
+    display: table;
     width: 100%;
+    max-width: 100%;
+    table-layout: auto;
     border-collapse: collapse;
     margin: 14px 0;
     font-size: 0.92em;
-    overflow-x: auto;
-    display: block;
 }
 
 .markdown-body th,
@@ -957,13 +984,18 @@
     border: 1px solid #e1e8e3;
     padding: 8px 12px;
     text-align: left;
-    line-height: 1.4;
+    line-height: 1.6;
+    vertical-align: top;
+    white-space: normal;
+    word-break: break-word;
+    overflow-wrap: anywhere;
 }
 
 .markdown-body thead th {
     background-color: #f5f8f6;
     color: #1a2a20;
     font-weight: 600;
+    white-space: normal;
 }
 
 .markdown-body tbody tr:nth-child(even) {
@@ -980,15 +1012,6 @@
     margin: 8px 0;
     box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
 }
-</style>
-
-<style>
-/* ============================================================
-   代码块样式（非 scoped，供 v-html 注入的 .code-block-wrapper 使用）
-   scoped 选择器会给所有元素加 data-v-xxx，但 v-html 注入的内容
-   无法携带该属性，导致 :deep() 编译出的 [data-v-xxx] 前缀链断裂。
-   因此代码块相关 CSS 必须放在非 scoped 块中。
-   ============================================================ */
 
 .markdown-body .code-block-wrapper {
     position: relative;

@@ -111,11 +111,29 @@
             </select>
         </div>
 
-        <!-- 半径 -->
+        <!-- 半径：滑杆精调 + 手动输入（km） -->
         <div class="field-block">
             <div class="slider-head">
                 <label>{{ t('compass.radius') }}</label>
-                <span class="slider-value">{{ formatMeters(compassStore.physicalRadiusMeters) }}</span>
+                <span class="radius-input-group">
+                    <input
+                        type="number"
+                        class="radius-number"
+                        :min="radiusMinKm"
+                        :max="radiusMaxKm"
+                        step="any"
+                        inputmode="decimal"
+                        :disabled="!compassStore.enabled"
+                        :title="formatMeters(compassStore.physicalRadiusMeters)"
+                        :value="radiusKmInput"
+                        @focus="handleRadiusKmFocus"
+                        @input="handleRadiusKmInput"
+                        @change="handleRadiusKmCommit"
+                        @blur="handleRadiusKmCommit"
+                        @keyup.enter="handleRadiusKmCommit"
+                    />
+                    <span class="radius-unit">km</span>
+                </span>
             </div>
             <input
                 type="range"
@@ -598,6 +616,79 @@
     border-radius: 999px;
     padding: 1px 8px;
     font-variant-numeric: tabular-nums;
+}
+
+/* ===== 半径手动输入（km）===== */
+.radius-input-group {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.radius-number {
+    width: 68px;
+    box-sizing: border-box;
+    padding: 1px 8px;
+    font-size: 10px;
+    font-weight: 600;
+    line-height: 15px;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+    font-family: inherit;
+    color: var(--toc-primary);
+    background: rgba(var(--brand-primary-rgb), 0.1);
+    border: 1px solid transparent;
+    border-radius: 999px;
+    outline: none;
+    transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.radius-number:hover:not(:disabled) {
+    border-color: rgba(var(--brand-primary-rgb), 0.28);
+}
+
+.radius-number:focus {
+    border-color: var(--brand-primary);
+    background: rgba(var(--brand-primary-rgb), 0.16);
+}
+
+.radius-number:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+/* 去掉原生数字步进箭头：窄胶囊内会挤压数值 */
+.radius-number::-webkit-outer-spin-button,
+.radius-number::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+
+.radius-number {
+    -moz-appearance: textfield;
+    appearance: textfield;
+}
+
+.radius-unit {
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--toc-primary);
+    opacity: 0.65;
+}
+
+/* 触屏：可点击目标 ≥40px，字号与 glyph 同步放大 */
+@media (pointer: coarse) {
+    .radius-number {
+        width: 86px;
+        min-height: 40px;
+        padding: 8px 10px;
+        font-size: 13px;
+        line-height: 1.3;
+    }
+
+    .radius-unit {
+        font-size: 12px;
+    }
 }
 
 .range-slider {

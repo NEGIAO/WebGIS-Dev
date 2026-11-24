@@ -17,6 +17,71 @@
 > 注：V3.7.2 号段已于同日重新启用，对应《修复 OpenLayers 加载 OSM 标准瓦片 403》条目，与本条无冲突。
 > 分主题的原始过程记录保留在 `Docs/LLM_record/26-11/2026-11-14/`，不迁移、不改写。
 
+### V3.7.10 (2026-11-24) — 罗盘全链路增强 · Agent 工具扩展 · 双引擎修复 · Code Review 收口
+
+> **版本归并（2026-11-24）**：本条对应同一批未提交工作，暂存时曾被逐次记为 V3.7.10 ~ V3.7.37。
+> 按用户「整合为一个统一的版本 V3.7.10」的明确指令（Force_command §0 优先级 1），28 个分段合并为单条 **V3.7.10**；
+> 中间版本号自本条起废弃，功能内容与结论不变。`Docs/LLM_record/26-11/2026-11-24/` 下的过程日志保留原编号不迁移、不改写，仅供追溯。
+
+**需求与背景**：3D 视图此前没有风水罗盘；2D 罗盘在主题形状、角度、宫位命中、URL 分享、宫位问答等方面存在多处缺陷；
+Agent 缺少地名解析与罗盘控制能力；3D 坐标/AOI 导入与 solo_layer 指令存在双引擎断点。
+
+**实现要点**：
+
+1. **3D 罗盘与双引擎共用内核**：新增 `useCesiumCompass.ts`（贴地 polygon + ImageMaterialProperty、点选定位、宫位拾取、`loadedDataSources` 登记）与 HUD wrapper；
+   抽出 `compassCanvasGeometry.ts` / `compassHitTest.ts` / `drawCompassTexture.ts`，2D Canvas、3D 贴地纹理与 SVG 共用同一套层带、边界与宫位命中规则；
+   3D 距离/方位用 `EllipsoidGeodesic.surfaceDistance/startHeading`，2D 用像素距离与屏幕方位角。
+2. **罗盘视觉与角度校正**：polygon 层边界、分隔线端点与宫格路径统一按真实边界半径求交；方位文字 `startAngle` 修正 337.5°；
+   五主题逐层核对先天卦数、八卦、九星、二十四山、二十四天星与透地六十龙；翡翠境（jade-realm）主题重做；五份宫位解释 JSON 同步校正。
+3. **罗盘交互与参数**：宫位命中不准与 3D 高亮缺失修复；半径支持 km 手动输入（滑杆保留，store 层钳制 100 m ~ 20,000 km，触屏目标 ≥40px）；
+   罗盘操作在 2D 与 3D 均让路于属性点查，避免宫位面板与 InfoBox 同时弹出。
+4. **罗盘 URL 短码**：`cs` 空值/脏值不再写成 `(0,0,0)` 假码，关闭后清理历史遗留 key；半径位宽 23→28 bit（上限 500 km→20,000 km，新增 `r.` V2 前缀）；
+   追加 3 bit 主题编号（`t.` V3 前缀，五主题 0~4），旧链接兼容；3D 侧补 `p` 位置码恢复并修复相机同步把已删 `cs` 写回的竞态。
+5. **Agent 能力扩展**：新增 `reverse_geocode` / `geocode` 双向地理编码只读工具（高德 → 天地图/Nominatim 降级，坐标统一 WGS-84）；
+   新增 `enable_compass` 工具与一次性区域分析会话（5 分钟过期、双面板实例只消费一次）；
+   空状态新增「分析当前范围的风水条件」建议词；调用罗盘后用户点卦象即自动回传带地名/坐标/半径的追问。
+6. **对话与图层指令**：宫位面板「问 AI 解释宫位」桥接聊天侧栏与待发送队列；系统提示明确罗盘内置问答属产品咨询，消除模型拒答；
+   3D `solo_layer` 补齐白名单/adapter sink/宿主注入；Markdown 表格与引用样式迁至非 scoped 块，`breaks: true` 修复分行被吞与表格溢出。
+7. **2D 图层显示带**：注记瓦片带 600→150，下沉到数据几何之下；新增 `allocateBasemapZIndex()`，只对可见项带内分配，避免全量列表偏移越带；相关注释同步。
+8. **双引擎数据导入**：抽出 `coordinateImportPayload.ts` 纯函数，3D 侧复用统一导入管线完成坐标落点与高德 AOI JSON 手绘面，并飞行定位；修正导入失败仍回报成功的假阳性。
+9. **本次 Code Review 修复**：预置提问在配额耗尽时不再被消费，恢复后自动补发；系统提示中 solo_layer 的「仅 2D」描述与 3D 支持对齐；
+   半径钳制下沉到 store；3D ArcGIS 点查加入罗盘让路守卫。
+
+**过程日志（按主题）**：
+
+- [add-compass-theme-to-cs-code](../LLM_record/26-11/2026-11-24/2026-11-24-add-compass-theme-to-cs-code.md)
+- [agent-accept-compass-questions](../LLM_record/26-11/2026-11-24/2026-11-24-agent-accept-compass-questions.md)
+- [agent-geocoding-tools](../LLM_record/26-11/2026-11-24/2026-11-24-agent-geocoding-tools.md)
+- [compass-area-analysis-flow](../LLM_record/26-11/2026-11-24/2026-11-24-compass-area-analysis-flow.md)
+- [compass-palace-agent-bridge](../LLM_record/26-11/2026-11-24/2026-11-24-compass-palace-agent-bridge.md)
+- [compass-prompt-geo-context](../LLM_record/26-11/2026-11-24/2026-11-24-compass-prompt-geo-context.md)
+- [compass-radius-km-input](../LLM_record/26-11/2026-11-24/2026-11-24-compass-radius-km-input.md)
+- [compass-theme-angle-audit](../LLM_record/26-11/2026-11-24/2026-11-24-compass-theme-angle-audit.md)
+- [feat-cesium-compass](../LLM_record/26-11/2026-11-24/2026-11-24-feat-cesium-compass.md)
+- [fix-3d-coordinate-aoi-import](../LLM_record/26-11/2026-11-24/2026-11-24-fix-3d-coordinate-aoi-import.md)
+- [fix-agent-solo-layer-3d](../LLM_record/26-11/2026-11-24/2026-11-24-fix-agent-solo-layer-3d.md)
+- [fix-cesium-url-position-code](../LLM_record/26-11/2026-11-24/2026-11-24-fix-cesium-url-position-code.md)
+- [fix-cesium-url-stale-query](../LLM_record/26-11/2026-11-24/2026-11-24-fix-cesium-url-stale-query.md)
+- [fix-chat-markdown-rendering](../LLM_record/26-11/2026-11-24/2026-11-24-fix-chat-markdown-rendering.md)
+- [fix-chat-table-overflow](../LLM_record/26-11/2026-11-24/2026-11-24-fix-chat-table-overflow.md)
+- [fix-compass-both-modes](../LLM_record/26-11/2026-11-24/2026-11-24-fix-compass-both-modes.md)
+- [fix-compass-cs-url-residue](../LLM_record/26-11/2026-11-24/2026-11-24-fix-compass-cs-url-residue.md)
+- [fix-compass-direction-startangle](../LLM_record/26-11/2026-11-24/2026-11-24-fix-compass-direction-startangle.md)
+- [fix-compass-explanations](../LLM_record/26-11/2026-11-24/2026-11-24-fix-compass-explanations.md)
+- [fix-compass-identify-popup](../LLM_record/26-11/2026-11-24/2026-11-24-fix-compass-identify-popup.md)
+- [fix-compass-palace-hit-highlight](../LLM_record/26-11/2026-11-24/2026-11-24-fix-compass-palace-hit-highlight.md)
+- [fix-compass-polygon-canvas-style](../LLM_record/26-11/2026-11-24/2026-11-24-fix-compass-polygon-canvas-style.md)
+- [fix-compass-polygon-divider-alignment](../LLM_record/26-11/2026-11-24/2026-11-24-fix-compass-polygon-divider-alignment.md)
+- [fix-compass-polygon-divider-radius](../LLM_record/26-11/2026-11-24/2026-11-24-fix-compass-polygon-divider-radius.md)
+- [fix-compass-theme-layer-angles](../LLM_record/26-11/2026-11-24/2026-11-24-fix-compass-theme-layer-angles.md)
+- [fix-compass-url-radius-range](../LLM_record/26-11/2026-11-24/2026-11-24-fix-compass-url-radius-range.md)
+- [ol-label-band-below-data](../LLM_record/26-11/2026-11-24/2026-11-24-ol-label-band-below-data.md)
+- [redesign-jade-realm-theme](../LLM_record/26-11/2026-11-24/2026-11-24-redesign-jade-realm-theme.md)
+- [v3710-staged-code-review-consolidation](../LLM_record/26-11/2026-11-24/2026-11-24-v3710-staged-code-review-consolidation.md)
+- [v3710-staged-code-review-consolidation](../LLM_record/26-11/2026-11-24/2026-11-24-v3710-staged-code-review-consolidation.md)
+
+**验证**：各主题日志记录了类型检查、ESLint、构建、门禁与实机步骤；本次收口的门禁与类型检查结果见新增 Code Review 日志。
+
 ### V3.7.9 (2026-11-23) — Agent 工具能力扩展（7 → 17）+ 多轮编排 + 全链路修复
 
 > 方案 [2026-11-23-agent-tool-expansion-plan](../TODO/2026-11-23-agent-tool-expansion-plan.md)（L3，含架构 Mermaid）

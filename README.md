@@ -131,7 +131,7 @@
 
 ## 🎯 项目简介
 
-**NEGIAO's WebGIS** 是一个功能完整、架构清晰的前后端分离 WebGIS 平台（当前版本 V3.7.9），前端托管于 GitHub Pages（正式域名 webgis.negiao.cn），后端以 Docker 部署在 Hugging Face Spaces，通过 RESTful API 通信，支持独立扩展。
+**NEGIAO's WebGIS** 是一个功能完整、架构清晰的前后端分离 WebGIS 平台（当前版本 V3.7.10），前端托管于 GitHub Pages（正式域名 webgis.negiao.cn），后端以 Docker 部署在 Hugging Face Spaces，通过 RESTful API 通信，支持独立扩展。
 
 > 📚 本 README 仅保留核心概览与导航。完整文档已模块化至 [`Docs/Guide/`](Docs/Guide/)，详见下方「文档导航」。
 >
@@ -618,7 +618,9 @@ tiles.negiao.cc.cd"]
 
 | 版本 | 日期 | 概要 |
 |------|------|------|
-| **V3.7.9** | 2026-11-23 | **Agent 工具能力扩展 7 → 17 + 多轮编排 + 全链路修复**。① 底座：图层 5 个操作由 `void` 静默失败改为 `LayerActionResult` 结构化返回（`LAYER_NOT_FOUND` / `OPACITY_UNSUPPORTED` / `ADAPTER_NOT_READY`），`zoomToUserLayer` 改 async；② 新增 10 工具：只读四（`get_map_state` / `list_layers` / `get_layer_info` / `get_measure_result`，经运行时桥聚合、零画布副作用）、变更四（显隐/透明度/缩放/单独显示）、导出（默认真下载 .geojson，inline 返回截断文本）、删除（`remove_layer` 双引擎，回带图层名与要素数）；③ 命令白名单 6 → 12 条，3D 不支持项返回 `COMMAND_UNSUPPORTED_FOR_VIEW`；④ 多轮编排：两轮改 `while` 循环（≤4 轮）+ 轮次上限/重复调用/异常降级三道护栏，修复「列完图层就停」；⑤ 默认通道补 `system_prompt` 字段（原被 Pydantic 静默丢弃）、第二轮提示词不再为空；⑥ 2D 测量结果落库、导出真实产文件、正则兜底不再抢图层意图。详见[完整更新日志](Docs/Guide/CHANGELOG.md) |
+| **V3.7.10** | 2026-11-24 | **罗盘全链路增强 · Agent 工具扩展 · 双引擎修复 · Code Review 收口**。新增 3D 贴地罗盘与 HUD，共用 2D/3D 几何、命中与纹理内核；五主题角度/解释/视觉校正，宫位问答与 km 半径输入落地；`cs` 短码扩展至 28 bit 半径 + 3 bit 主题并保持旧链接兼容；Agent 新增双向地理编码与 `enable_compass`（工具 17→20），3D 坐标/AOI 导入与 `solo_layer` 补齐；本次 Code Review 修复预置提问丢失、假成功回报、3D 点查冲突等 5 处缺陷。详见[完整更新日志](Docs/Guide/CHANGELOG.md) |
+| **V3.7.9** | 2026-11-23 | **Agent 工具能力扩展 7 → 17 + 多轮编排 + 全链路修复**。图层操作改为结构化返回，新增只读/变更/导出/删除 10 个工具，命令白名单 6 → 12；多轮编排与提示词修复，2D 测量结果落库。详见[完整更新日志](Docs/Guide/CHANGELOG.md) |
+| **V3.7.8** | 2026-11-22 | **AI 对话三通道全量流式 · 思考过程展示 · 数据库撕裂防线四层 · 展示与配置修缮**。详见[完整更新日志](Docs/Guide/CHANGELOG.md) |
 
 
 ---
@@ -641,6 +643,6 @@ tiles.negiao.cc.cd"]
 |:------:|:--------:|:--------:|
 | [GitHub](https://github.com/NEGIAO/WebGIS-Dev) | [webgis.negiao.cn](https://webgis.negiao.cn)（正式域名，GitHub Pages 托管） | [Hugging Face](https://NEGIAO-WebGIS.hf.space) |
 
-<sub>V3.7.9 · 开发中 · 最后更新 2026-11-23</sub>
+<sub>V3.7.10 · 开发中 · 最后更新 2026-11-24</sub>
 
 </div>

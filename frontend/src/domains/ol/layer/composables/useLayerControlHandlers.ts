@@ -16,7 +16,45 @@ import {
     useRemoteServices,
     renderOrderedIds,
 } from '@common/basemap/remoteServices';
-import { transformExtent, toLonLat } from 'ol/proj';
+import { useCompassStore } from '@common/compass/stores/useCompassStore';
+import { samplePixelRadius } from '@common/compass/services/compassCanvasStyle';
+import { fromLonLat, transformExtent, toLonLat } from 'ol/proj';
+
+/**
+ * 判定本次地图点击是否已由罗盘消费，避免「点罗盘宫位 / 放置罗盘」同时触发地图属性查询。
+ * - 放置模式：任意点击都用于罗盘定位，全部让路
+ * - Vector：仅点击落在罗盘圆周内时让路，圆外仍可正常点查
+ * - HUD：仅点击落在屏幕中央 HUD 占位内时让路
+ */
+export function shouldSkipIdentifyForCompass(map: any, evt: any): boolean {
+    const compass = useCompassStore();
+    if (!compass.enabled) return false;
+
+    if (compass.placementMode) return true;
+
+    if (compass.mode === 'hud') {
+        const size = map?.getSize?.();
+        const pixel = evt?.pixel;
+        if (!Array.isArray(size) || size.length < 2 || !Array.isArray(pixel)) return true;
+        const half = Number(compass.hudSizePx || 340) / 2 + 16;
+        return Math.hypot(pixel[0] - size[0] / 2, pixel[1] - size[1] / 2) <= half;
+    }
+
+    if (compass.mode !== 'vector' || !compass.hasValidPosition) return false;
+
+    const pixel = evt?.pixel;
+    if (!Array.isArray(pixel)) return false;
+    const projection = map?.getView?.()?.getProjection?.();
+    const centerCoord = fromLonLat(
+        [Number(compass.position.lng), Number(compass.position.lat)],
+        projection,
+    ) as [number, number];
+    const centerPixel = map?.getPixelFromCoordinate?.(centerCoord);
+    if (!Array.isArray(centerPixel)) return false;
+    const radiusPx = samplePixelRadius(map, centerCoord, Number(compass.physicalRadiusMeters));
+    if (!Number.isFinite(radiusPx)) return false;
+    return Math.hypot(pixel[0] - centerPixel[0], pixel[1] - centerPixel[1]) <= radiusPx;
+}
 
 /** 图层控制处理器装配依赖（由 HomeView/图层树宿主注入） */
 export interface LayerControlHandlersOptions {
@@ -119,6 +157,7 @@ export function createLayerControlHandlers({
     let identifySeq = 0;
 
     async function handleMapIdentify(evt: any) {
+        if (shouldSkipIdentifyForCompass(mapInstanceRef?.value, evt)) return;
         const candidates = collectIdentifyCandidates();
         if (!candidates.length) return;
         const map = mapInstanceRef?.value;

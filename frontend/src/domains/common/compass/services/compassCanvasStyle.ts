@@ -13,6 +13,7 @@ import { fromLonLat, toLonLat } from 'ol/proj';
 import { offset as offsetLonLat } from 'ol/sphere';
 import type { useCompassStore } from '@common/compass/stores/useCompassStore';
 import { BASE_CONFIG_SIZE, clamp, drawRadialText, hexToRgba, normalizeAngle, resolvePoint, resolveTextColor, toLayerArray, VectorLayerWithTogetherStyle } from './compassDrawUtils';
+import { getBoundaryRadiusAtAngle, traceLattice, traceLayerBorder } from './compassCanvasGeometry';
 
 type CompassStore = ReturnType<typeof useCompassStore>;
 
@@ -102,9 +103,14 @@ export function isCompassVisibleInView(map: Map, centerPixel: [number, number], 
  *
  * 所有元素都根据指南针半径自动缩放，以保持正确的视觉比例
  *
+ * @param deps.getFeature - 惰性读取当前罗盘要素的回调；不能在构造时快照，因为要素在 init 阶段才创建
  * @returns 自定义 Canvas 渲染样式
  */
-export function createCompassCanvasStyle(deps: { map: Map; store: CompassStore; feature: Feature<Point> | null }): Style {
+export function createCompassCanvasStyle(deps: {
+    map: Map;
+    store: CompassStore;
+    getFeature: () => Feature<Point> | null;
+}): Style {
     return new Style({
         renderer: (pixelCoordinates: unknown, renderState: any) => {
             if (!deps.store.enabled || deps.store.mode !== 'vector') return;
@@ -115,7 +121,7 @@ export function createCompassCanvasStyle(deps: { map: Map; store: CompassStore; 
             const pointPixel = resolvePoint(pixelCoordinates);
             if (!pointPixel) return;
 
-            const geometry = deps.feature?.getGeometry?.() as Point | undefined;
+            const geometry = deps.getFeature()?.getGeometry?.() as Point | undefined;
             const centerCoordRaw = geometry?.getCoordinates?.();
             if (!Array.isArray(centerCoordRaw) || centerCoordRaw.length < 2) return;
 
@@ -207,20 +213,26 @@ export function createCompassCanvasStyle(deps: { map: Map; store: CompassStore; 
                 const countRaw = Array.isArray(layer?.data) ? layer.data.length : 0;
                 const segmentCount = Math.max(1, countRaw);
                 const startOffset = (Number(layer?.startAngle || 0) * Math.PI) / 180;
+                const innerBoundaryLayer = layers[layerIndex - 1];
 
-                // Ring boundary.
-                context.beginPath();
-                context.arc(0, 0, outerR, 0, Math.PI * 2);
+                // Ring boundary: circle or polygon according to layer.shape.
+                traceLayerBorder(context, layer, outerR, startOffset);
                 context.stroke();
 
                 // Segment dividers and highlight.
                 const selected = deps.store.selectedPalace;
                 for (let i = 0; i < segmentCount; i += 1) {
                     const angle = -Math.PI / 2 + startOffset + (i * Math.PI * 2) / segmentCount;
-                    const sx = Math.cos(angle) * innerR;
-                    const sy = Math.sin(angle) * innerR;
-                    const ex = Math.cos(angle) * outerR;
-                    const ey = Math.sin(angle) * outerR;
+                    const startRadius = getBoundaryRadiusAtAngle(
+                        innerBoundaryLayer,
+                        innerR,
+                        angle,
+                    );
+                    const endRadius = getBoundaryRadiusAtAngle(layer, outerR, angle);
+                    const sx = Math.cos(angle) * startRadius;
+                    const sy = Math.sin(angle) * startRadius;
+                    const ex = Math.cos(angle) * endRadius;
+                    const ey = Math.sin(angle) * endRadius;
 
                     if (
                         selected &&
@@ -229,17 +241,16 @@ export function createCompassCanvasStyle(deps: { map: Map; store: CompassStore; 
                     ) {
                         context.save();
                         context.fillStyle = 'rgba(255, 215, 0, 0.4)';
-                        context.beginPath();
-                        context.arc(0, 0, outerR, angle, angle + (Math.PI * 2) / segmentCount);
-                        context.arc(
-                            0,
-                            0,
+                        traceLattice(
+                            context,
+                            layer,
+                            innerBoundaryLayer,
                             innerR,
-                            angle + (Math.PI * 2) / segmentCount,
-                            angle,
-                            true,
+                            outerR,
+                            i,
+                            segmentCount,
+                            startOffset,
                         );
-                        context.closePath();
                         context.fill();
                         context.restore();
                     }

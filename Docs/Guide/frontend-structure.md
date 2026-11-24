@@ -115,6 +115,8 @@ frontend/src/
 │   │   │   │   ├── useCesiumAttrViewExtentSync.ts  # 相机视域→属性表视图筛选范围（B4）
 │   │   │   │   ├── useCesiumCameraEnhanced.ts  # 相机增强
 │   │   │   │   └── useCesiumSceneActions.ts  # 场景动作
+│   │   │   ├── compass/
+│   │   │   │   └── useCesiumCompass.ts  # 3D 风水罗盘（贴地 polygon 材质、点选定位、宫位拾取与数据源登记）
 │   │   │   ├── core/
 │   │   │   │   ├── cesiumRuntime.ts  # Cesium 运行时加载（await ensureCesiumLoaded()）
 │   │   │   │   ├── useCesiumBootstrap.ts  # Cesium Viewer 创建、地形底图挂载与销毁生命周期
@@ -451,6 +453,9 @@ frontend/src/
 │   │   ├── chat/
 │   │   │   ├── agent/
 │   │   │   │   ├── AgentExecutor.ts  # Agent 响应拦截与工具调用
+│   │   │   │   ├── agentCompassTool.ts  # Agent 罗盘控制工具（按当前地图中心启用 + 武装卦象选择会话）
+│   │   │   │   ├── agentGeocodingTools.ts  # Agent 双向地理编码只读工具（坐标↔地名，高德/天地图/Nominatim）
+│   │   │   │   ├── compassAnalysisSession.ts  # 罗盘区域分析一次性会话标志（5 分钟过期）
 │   │   │   │   ├── agentMapPresets.ts  # Agent 安全底图白名单（排除 custom/local，Agent 仅提交 presetId）
 │   │   │   │   ├── mapCommandAdapters.ts  # Agent 地图指令适配器入口（维持既有导入路径的 re-export）
 │   │   │   │   ├── mapCommand/  # 地图命令适配分层
@@ -496,7 +501,10 @@ frontend/src/
 │   │   │   ├── services/
 │   │   │   │   ├── CompassManager.ts  # 罗盘管理器（生命周期/事件/URL 同步薄壳）
 │   │   │   │   ├── compassCanvasStyle.ts  # 罗盘原生 Canvas 渲染样式（像素量测/视口判定/分层绘制）
+│   │   │   │   ├── compassCanvasGeometry.ts  # Canvas 层边界/宫格几何（circle 弧线与 polygon 直线共用）
 │   │   │   │   ├── compassDrawUtils.ts  # 罗盘绘制纯工具（颜色/角度/径向文字/共享常量）
+│   │   │   │   ├── compassHitTest.ts  # 宫位极坐标命中判定（2D 像素 / 3D 测地共用单一算法）
+│   │   │   │   ├── drawCompassTexture.ts  # 罗盘通用 Canvas 纹理绘制（含选中扇区高亮，供 2D/3D 共用）
 │   │   │   │   ├── index.ts  # 路由与守卫
 │   │   │   │   └── urlState.ts  # 罗盘 URL 状态编解码
 │   │   │   ├── stores/
@@ -668,6 +676,7 @@ frontend/src/
 │   │   │   │   └── useStyleEditor.ts  # 样式模板目录 + 表单态 + 载荷构建（引擎无关，TOC 与 OL/Cesium 双侧消费）
 │   │   ├── map-view/
 │   │   │   ├── coordinateFormatter.ts  # 坐标格式化
+│   │   │   ├── coordinateImportPayload.ts  # 坐标/AOI payload→GeoJSON 纯函数（2D/3D 共用导入载荷）
 │   │   │   ├── units.ts  # 单位制工具（距离/面积公英制格式化）
 │   │   │   ├── useUserLocation.ts  # 用户定位 composable（GPS+IP 双通道编排）
 │   │   │   ├── userLocationMath.ts  # 定位纯工具（几何估算/URL 标记/开发者开关）
@@ -710,6 +719,7 @@ frontend/src/
 │   │   │   ├── codec/  # 短码编解码分片
 │   │   │   │   ├── cesiumPose.ts  # Cesium 相机位姿编解码
 │   │   │   │   └── positions.ts  # 经纬度/罗盘状态编解码（含共享位宽常量）
+│   │   │   ├── compassThemeCode.ts  # 五种罗盘主题 cid ↔ cs 主题编号共享映射
 │   │   │   ├── crypto.ts  # URL 状态短码编解码入口（re-export codec/*）
 │   │   │   ├── index.ts  # 路由与守卫
 │   │   │   ├── urlConstants.ts  # URL 常量
@@ -887,7 +897,7 @@ frontend/src/
 │       │   └── registry/
 │       │       └── drawingToolRegistry.ts  # 绘制工具注册表
 │       ├── layer/
-│       │   ├── zIndexBands.ts  # zIndex 显示带 SSOT（夹心：数据几何 DATA < 瓦片标注 LABEL < 数据标注 DATA_LABEL；托管层 geometry+label 双层）
+│       │   ├── zIndexBands.ts  # zIndex 显示带 SSOT（层序：注记瓦片 LABEL 150 < 数据几何 DATA 200 < 数据标注 DATA_LABEL 700；含 allocateBasemapZIndex 按可见底图项做带内分配；托管层 geometry+label 双层）
 │       │   ├── components/
 │       │   │   ├── AttributeTable.vue  # 属性表（引擎无关，挂在 HomeView 唯一实例；排序/字段配置/统计/导出/列宽拖拽；readonly 供 3D 无回写通道时禁改值删要素）
 │       │   │   ├── AttributeTable.ts  # 属性表实例层（虚拟滚动/面板拖拽八向缩放/单元格编辑/多选高亮）

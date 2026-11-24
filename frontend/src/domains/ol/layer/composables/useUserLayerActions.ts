@@ -300,7 +300,7 @@ export function useUserLayerActions({
             target.labelLayer.setVisible?.(!!target.visible && target.labelVisible);
         }
         applyManagedLayerStyle(target);
-        // 重新钳制 zIndex：几何恒 < 瓦片标注 < 数据标注，避免开关标注后层级错乱
+        // 重新钳制 zIndex：注记瓦片 < 几何 < 数据标注，避免开关标注后层级错乱
         try {
             refreshUserLayerZIndex?.();
         } catch {

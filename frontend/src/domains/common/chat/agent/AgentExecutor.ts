@@ -95,6 +95,11 @@ const TOOL_REGISTRY: Record<string, string> = {
     switch_basemap: 'switchBasemap',
     // 只读数据查询，不经过 MapCommandBus（见 GISCommander.getWeather 注释）
     get_weather: 'getWeather',
+    // V3.7.10 双向地理编码：只读查询，不移动地图、不建图层
+    reverse_geocode: 'reverseGeocode',
+    geocode: 'geocode',
+    // V3.7.10 罗盘控制：经宿主注入的罗盘工具，不改地图视图
+    enable_compass: 'enableCompass',
     // V3.7.9 图层管理：只读四个直连门面，变更四个与导出经门面内部走 commandBus
     get_map_state: 'getMapState',
     list_layers: 'listLayers',

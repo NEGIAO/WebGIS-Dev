@@ -357,7 +357,7 @@ async function ensureMarkdownLibs() {
             if (lib && typeof lib.use === 'function') {
                 lib.use({
                     gfm: true,           // GitHub Flavored Markdown（表格、删除线、任务列表）
-                    breaks: false,       // 不将单 \n 转 <br>（标准 markdown 行为）
+                    breaks: true,        // 聊天场景：单 \n 转 <br>，避免 Agent 分行被吞
                     renderer: buildCustomRenderer(),
                 });
             }

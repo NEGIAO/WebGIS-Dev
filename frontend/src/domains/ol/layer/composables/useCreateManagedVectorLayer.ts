@@ -168,7 +168,7 @@ export function useCreateManagedVectorLayer({
 
         managedLayerState.originalFeatureStyles = originalFeatureStyles;
 
-        // 5. 创建双层：几何层（DATA）+ 标注层（DATA_LABEL）——夹心：数据几何 < 瓦片标注 < 数据标注
+        // 5. 创建双层：几何层（DATA）+ 标注层（DATA_LABEL）——层序：注记瓦片 < 数据几何 < 数据标注
         // 绘制顺序：OL VectorSource 迭代是 RBush 空间序（getFeatures 注明 random order），
         // 数组顺序对 Canvas 渲染无效；KML 导入会在要素上写 _drawRank（对象自有属性，
         // 不进 getProperties），此处经 renderOrder 生效（序号小先画垫底）。无序号图层

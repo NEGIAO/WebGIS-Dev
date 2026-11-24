@@ -13,6 +13,7 @@ import {
 } from '@common/basemap/identifyPresentation';
 import { queryCandidateAtPoint } from '@common/basemap/wmsService';
 import { renderOrderedIds, useRemoteServices } from '@common/basemap/remoteServices';
+import { useCompassStore } from '@common/compass/stores/useCompassStore';
 
 export interface ArcgisIdentifyCtx {
     /** 宿主 Viewer 获取器 */
@@ -36,6 +37,40 @@ export function createArcgisIdentify({ getViewer, getCesium, message }: ArcgisId
     /** 外部注入/清除候选信息（自定义底图流程提交时调用） */
     function setIdentifyInfo(info: any) {
         cesiumIdentifyInfo = info;
+    }
+
+    /**
+     * 3D 罗盘点选期间让路给罗盘：placement 模式全让；vector 模式落在罗盘半径内让路；
+     * HUD 模式落在屏幕中央占位内让路。与 2D shouldSkipIdentifyForCompass 语义一致。
+     */
+    function shouldSkipForCompass(position: any, cartesian: any): boolean {
+        const compass = useCompassStore();
+        if (!compass.enabled) return false;
+        if (compass.placementMode) return true;
+
+        if (compass.mode === 'hud') {
+            const canvas = getViewer?.()?.scene?.canvas;
+            if (!canvas) return true;
+            const half = Number(compass.hudSizePx || 340) / 2 + 16;
+            const x = Number(position?.x);
+            const y = Number(position?.y);
+            if (!Number.isFinite(x) || !Number.isFinite(y)) return true;
+            return (
+                Math.abs(x - canvas.clientWidth / 2) <= half &&
+                Math.abs(y - canvas.clientHeight / 2) <= half
+            );
+        }
+
+        if (compass.mode !== 'vector' || !compass.hasValidPosition) return false;
+        const Cesium = getCesium?.();
+        if (!cartesian || !Cesium) return false;
+        const carto = Cesium.Cartographic.fromCartesian(cartesian);
+        const center = Cesium.Cartographic.fromDegrees(
+            Number(compass.position.lng),
+            Number(compass.position.lat),
+        );
+        const distance = new Cesium.EllipsoidGeodesic(center, carto).surfaceDistance;
+        return distance <= Number(compass.physicalRadiusMeters || 0);
     }
 
     /** InfoBox 描述 HTML：统一由共享渲染器产出（转义/截断/空态文案与 OL 完全一致） */
@@ -83,6 +118,7 @@ export function createArcgisIdentify({ getViewer, getCesium, message }: ArcgisId
             const cartesian = viewer.camera.pickEllipsoid(position, viewer.scene.globe.ellipsoid);
             const rect = viewer.camera.computeViewRectangle(viewer.scene.globe.ellipsoid);
             if (!cartesian || !rect) return;
+            if (shouldSkipForCompass(position, cartesian)) return;
 
             const carto = Cesium.Cartographic.fromCartesian(cartesian);
             const lon = Cesium.Math.toDegrees(carto.longitude);

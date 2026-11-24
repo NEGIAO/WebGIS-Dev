@@ -7,7 +7,13 @@ import { nextTick, ref, type Ref } from 'vue';
 import { getUrlLayerNumberByBasemapId } from '@common/basemap/basemapOptions';
 import { TOC_LAYER_DRAG_MIME } from '@common/layer-tree/protocol';
 import { getCesiumGroundResolution } from '@common/utils/viewScale/browserAdapter';
+import { olZoomToCesiumHeight } from '@common/utils/viewScale';
 import { useTimerRegistry } from '@common/composables/useTimerRegistry';
+import {
+    buildAmapAoiImport,
+    buildCoordinatePointImport,
+    isPack,
+} from '@common/map-view/coordinateImportPayload';
 
 export interface UseCesiumSceneFacadeDeps {
     getCesium: () => any;
@@ -411,6 +417,47 @@ export function useCesiumSceneFacade(deps: UseCesiumSceneFacadeDeps) {
         return dataImport.loadedDataSources.value.find((item: any) => !beforeIds.has(item.id)) || null;
     }
 
+    /**
+     * 3D 坐标输入落点：复用 common 的 GeoJSON 构造与统一导入管线，随后飞行到目标。
+     * @param payload 与 2D drawPointByCoordinatesInput 相同的输入结构
+     * @returns 成功时回带图层名；失败时回带可读错误，由宿主决定如何提示
+     */
+    async function importCoordinatePoint(payload: any = {}) {
+        const outcome = buildCoordinatePointImport(payload);
+        if (!isPack(outcome)) return { success: false, error: outcome.error };
+        const imported = await importUserData({ resources: [outcome.file], silent: true });
+        // importUserData 返回 null 表示统一导入管线未产生新数据源；旧实现无条件报成功，
+        // 会让宿主提示「已绘制」但场景里什么都没有。
+        if (!imported) return { success: false, error: '坐标落点导入失败，请检查三维场景是否已就绪' };
+        const height =
+            olZoomToCesiumHeight({
+                zoom: outcome.focus.zoom,
+                centerLat: outcome.focus.lat,
+                clamp: true,
+            }) || 2000;
+        jumpTo(outcome.focus.lng, outcome.focus.lat, height);
+        return { success: true, layerName: outcome.layerName };
+    }
+
+    /**
+     * 3D 高德 AOI JSON 手绘面：解析与坐标归一在 common 完成，3D 侧只负责导入与聚焦。
+     * @param payload 含 jsonText（高德详情 JSON），与 2D 手绘入口一致
+     * @returns 成功时回带图层名；失败时回带可读错误
+     */
+    async function importAmapAoiJson(payload: any = {}) {
+        const outcome = buildAmapAoiImport(payload);
+        if (!isPack(outcome)) return { success: false, error: outcome.error };
+        await importUserData({ resources: [outcome.file], silent: true });
+        const height =
+            olZoomToCesiumHeight({
+                zoom: outcome.focus.zoom,
+                centerLat: outcome.focus.lat,
+                clamp: true,
+            }) || 3000;
+        jumpTo(outcome.focus.lng, outcome.focus.lat, height);
+        return { success: true, layerName: outcome.layerName };
+    }
+
     // ────────────────────────── 拖拽文件/图层导入 ──────────────────────────
     const isDragOver = ref(false);
 
@@ -511,6 +558,8 @@ export function useCesiumSceneFacade(deps: UseCesiumSceneFacadeDeps) {
         toggleReverseGeocodePick,
         cleanupReverseGeocodePick,
         importUserData,
+        importCoordinatePoint,
+        importAmapAoiJson,
         isDragOver,
         onDragOver,
         onDragLeave,

@@ -24,6 +24,10 @@ import { CesiumAdapter } from '@cesium-domain/adapter';
 import { useMessage } from '@common/shell/useMessage';
 import { translate as t } from '@common/app/useLocale';
 import { getRuntimeMapTokensSync } from '@common/services/runtimeMapTokens';
+import { useCompassStore } from '@common/compass/stores/useCompassStore';
+import { compassBgVars } from '@common/compass/utils/compassStyleUtils';
+import FengShuiCompassSvg from '@common/compass/svg/feng-shui-compass-svg.vue';
+import PalaceExplanationPanel from '@common/compass/components/PalaceExplanationPanel.vue';
 
 import CesiumAdvancedEffects from './CesiumAdvancedEffects.vue';
 import CesiumToolPanel from './CesiumToolPanel.vue';
@@ -59,6 +63,7 @@ import { useCesiumAtmosphereAndHud } from '../composables/scene/useCesiumAtmosph
 import { useCesiumBootstrap } from '../composables/core/useCesiumBootstrap';
 import { useCesiumWind } from '@cesium-domain/modules/wind/useCesiumWind';
 import { usePlayerController } from '@cesium-domain/modules/player-controller/usePlayerController';
+import { useCesiumCompass } from '../composables/compass/useCesiumCompass';
 
 const ShallowWaterOverlay = defineResilientAsync(
     () => import('@cesium-domain/modules/shallow-water/ShallowWaterOverlay.vue'),
@@ -89,6 +94,8 @@ export default defineComponent({
         NavGuideHUD,
         NavTargetPicker,
         CesiumDataImportDialog,
+        FengShuiCompassSvg,
+        PalaceExplanationPanel,
         Upload,
         Eye,
         EyeOff,
@@ -119,6 +126,10 @@ export class Instance {
     public isDragOver!: Ref<boolean>;
     public isTouch!: Ref<boolean>;
     public hudVisible!: Ref<boolean>;
+
+    // ── 风水罗盘（3D HUD + 贴地实体） ──
+    public compassStore = useCompassStore();
+    public compassBgVars = compassBgVars;
 
     // ── 图层、地形、面板配置 ──
     public activeBasemap!: Ref<string>;
@@ -182,6 +193,8 @@ export class Instance {
     public toggleReverseGeocodePick!: () => Promise<void>;
     public zoomToRemoteService!: (serviceId: string) => any;
     public importUserData!: (data: any) => Promise<any>;
+    public importCoordinatePoint!: (payload: any) => Promise<any>;
+    public importAmapAoiJson!: (payload: any) => Promise<any>;
     public focusAttributeFeature!: (entityId: string) => void;
     public redeclareLayerCrs!: (payload?: { layerId?: string; crs?: string }) => Promise<boolean>;
     public activateCesiumInteraction!: (type: string) => any;
@@ -231,8 +244,10 @@ export class Instance {
         });
         registerMapEngineAdapter(cesiumAdapter);
 
+        let disposeCesiumCompass: (() => void) | null = null;
         onUnmounted(() => {
             unregisterMapEngineAdapter('cesium');
+            disposeCesiumCompass?.();
         });
 
         const heightSampler = useCesiumHeightSampler({ getViewer, getCesium });
@@ -244,6 +259,16 @@ export class Instance {
             message,
             heightSampler,
         });
+
+        const cesiumCompass = useCesiumCompass({
+            getCesium,
+            getViewer,
+            compassStore: this.compassStore,
+            cesiumReady: this.cesiumReady,
+            loadedDataSources: dataImport.loadedDataSources as Ref<any[]>,
+            sourceName: String(t('compass.title')),
+        });
+        disposeCesiumCompass = cesiumCompass.dispose;
 
         const layers = useCesiumLayers({
             getViewer,
@@ -523,6 +548,8 @@ export class Instance {
         this.isReverseGeocodePickMode = sceneFacade.isReverseGeocodePickMode;
         this.toggleReverseGeocodePick = sceneFacade.toggleReverseGeocodePick;
         this.importUserData = sceneFacade.importUserData;
+        this.importCoordinatePoint = sceneFacade.importCoordinatePoint;
+        this.importAmapAoiJson = sceneFacade.importAmapAoiJson;
         this.isDragOver = sceneFacade.isDragOver;
         this.onDragOver = sceneFacade.onDragOver;
         this.onDragLeave = sceneFacade.onDragLeave;

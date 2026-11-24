@@ -39,6 +39,8 @@ import { createChatSession } from '@common/chat/composables/useChatSession';
 import { detectGISIntent, getToolDisplayName } from '@common/chat/composables/chatIntentFallback';
 import { createGISCommander } from '@common/command-bus/GISCommander';
 import { AgentExecutor } from '@common/chat/agent/AgentExecutor';
+import { createCompassAgentTool } from '@common/chat/agent/agentCompassTool';
+import { useCompassStore } from '@/stores';
 import { readUserPositionFromCache } from '@common/map-view/services/userPositionCache';
 import { getGlobalUserLocationContext } from '@common/map-view/services/userLocationContext';
 import { AGENT_TOOLS, buildSystemPromptWithTools } from '@common/chat/constants/agentToolsSchema';
@@ -48,7 +50,7 @@ import { useChatStore } from '@common/chat/stores/useChatStore';
 type EmitsType = ['close-chat'];
 
 /**
- * 工具调用的稳定签名（V3.7.15）：键按字典序排序后序列化。
+ * 工具调用的稳定签名（V3.7.10）：键按字典序排序后序列化。
  *
  * 用于多轮编排的「重复调用」检测。直接 `JSON.stringify(args)` 对键顺序敏感，
  * 模型把 `{layerId, visible}` 写成 `{visible, layerId}` 就会被判为不同调用，
@@ -200,6 +202,24 @@ export class Instance {
 	//#region 生命周期
 
 	private init() {
+		/**
+		 * 消费其他面板投递的预置提问（如罗盘宫位面板的「问 AI 解释」）。
+		 *
+		 * 三个前置条件缺一不可，否则消息会被静默丢弃，故任一不满足时**不消费**、保留在队列：
+		 * 1. 当前无在途请求（dispatchSend 遇 isLoading 会直接 return）
+		 * 2. 服务已就绪（后端代理模式下 serviceReady=false 时同样 return）
+		 * 3. 存在待发送文本
+		 */
+		const flushPendingPrompt = () => {
+			if (this.isLoading.value) return;
+			// 与 dispatchSend 的前置守卫保持一致：配额耗尽时不能被消费，否则提问静默丢失
+			if (!this.config.isDefaultAIMode && !this.config.isPersonalMode && !this.config.serviceReady) return;
+			if (!this.config.isDefaultAIMode && !this.config.isPersonalMode && this.config.quotaExhausted) return;
+			const text = this.chatStore.consumePrompt();
+			if (!text) return;
+			void this.dispatchSend(text);
+		};
+
 		onMounted(async () => {
 			this.mapContextApi.resetMapContextSession();
 			await this.config.loadDefaultAIConfig();
@@ -214,7 +234,30 @@ export class Instance {
 			}
 
 			this.initGISCommander();
+
+			// 面板挂载前投递的提问在此消费（配置已就绪）
+			flushPendingPrompt();
 		});
+
+		// 面板已挂载时：新投递的提问立即消费
+		watch(() => this.chatStore.pendingPrompt, flushPendingPrompt);
+		// 请求结束 / 服务就绪后补消费此前被条件拦下的提问
+		watch(this.isLoading, (loading) => {
+			if (!loading) flushPendingPrompt();
+		});
+		watch(
+			() => this.config.serviceReady,
+			(ready) => {
+				if (ready) flushPendingPrompt();
+			},
+		);
+		// 配额耗尽时保留队列，恢复后补发（与 dispatchSend 守卫对称）
+		watch(
+			() => this.config.quotaExhausted,
+			(exhausted) => {
+				if (!exhausted) flushPendingPrompt();
+			},
+		);
 
 		onBeforeUnmount(() => {
 			if (this.clearConfirmTimer) {
@@ -255,8 +298,15 @@ export class Instance {
 	public initGISCommander = () => {
 		if (!this.agentMapCommandBus) return;
 		try {
+			// 罗盘工具由 chat 域装配：工具实现不反向依赖 compass store，
+			// 这里注入 store 与无副作用地图快照即可（V3.7.10）
+			const compassTool = createCompassAgentTool({
+				compassStore: useCompassStore(),
+				getMapContext: this.mapContextApi.captureMapContext,
+			});
 			this.gisCommander.value = createGISCommander({
 				commandBus: this.agentMapCommandBus,
+				compassEnable: compassTool.enableCompass,
 				// 「附近的餐馆」需要当前视图中心做周边检索；这里传无副作用快照，避免推进 changesSinceLastTurn 基准
 				getMapContext: this.mapContextApi.captureMapContext,
 				// V3.7.9 只读能力：图层清单与 3D 测量结果由运行时桥聚合，
@@ -567,7 +617,7 @@ export class Instance {
 					},
 				];
 
-				// V3.7.14：由「一轮工具 + 一轮总结」改为多轮编排。
+				// V3.7.10：由「一轮工具 + 一轮总结」改为多轮编排。
 				// 原实现只把第二轮当最终回复：模型若在第二轮继续请求工具（典型的
 				// list_layers → remove_layer），其 tool_calls 会被 stripToolCallBlocks
 				// 清掉，表现为「列完图层就停」。现循环执行，直到模型不再请求工具。

@@ -1,4 +1,4 @@
-import { BASE_CONFIG_SIZE, clamp, normalizeAngle, toLayerArray } from './compassDrawUtils';
+import { resolveCompassPalaceByPolar } from './compassHitTest';
 import { createCompassCanvasStyle, samplePixelRadius } from './compassCanvasStyle';
 
 /**
@@ -26,7 +26,8 @@ import { fromLonLat, toLonLat } from 'ol/proj';
 import { unByKey } from 'ol/Observable';
 import type { EventsKey } from 'ol/events';
 import type { useCompassStore } from '@common/compass/stores/useCompassStore';
-import { readCompassUrlState, writeCompassUrlState } from './urlState';
+import { clearCompassUrlState, readCompassUrlState, writeCompassUrlState } from './urlState';
+import { getCompassThemeCid } from '@common/url-state/compassThemeCode';
 
 type CompassStore = ReturnType<typeof useCompassStore>;
 
@@ -323,6 +324,8 @@ export class CompassManager {
                 (active) => {
                     if (active) {
                         this.ensureVectorLayer();
+                        // 用户直接启用（无 cs URL 状态）时 position 仍为 NaN，需按地图中心补一次几何
+                        this.syncFeatureGeometry();
                     }
                 },
                 { immediate: true },
@@ -521,14 +524,12 @@ export class CompassManager {
                     lng: Number(this.store.position?.lng),
                     lat: Number(this.store.position?.lat),
                     radius: Number(this.store.physicalRadiusMeters || 10000),
+                    theme: this.store.cid,
                 });
             } else {
-                // 罗盘未启用时，删除 URL 中的 cs 参数
-                writeCompassUrlState({
-                    lng: null,
-                    lat: null,
-                    radius: null,
-                });
+                // 罗盘未启用：显式清理 cs。不能依赖 writeCompassUrlState({null,...}) ——
+                // 历史实现对 null 的处理缺陷会把 (0,0,0) 编码成假 cs 写回（V3.7.10 修复）。
+                clearCompassUrlState();
             }
         }, 120);
     }
@@ -555,8 +556,15 @@ export class CompassManager {
 
         if (!hasValidCompassUrlState) {
             this.store.setEnabled(false);
+            // 无效/残缺的 cs（历史版本曾写入 (0,0,0) 编码的假值）必须在这里主动清除：
+            // 此刻 enabled 本就是 false，watch 不会回调 scheduleUrlSync，脏参数会永久残留。
+            clearCompassUrlState();
             return;
         }
+
+        // V3 短码带主题编号；历史短码 themeCid 为空，按编号 0 回退古朱砂。
+        const themeCid = urlState.themeCid || getCompassThemeCid(urlState.themeIndex ?? 0);
+        await this.store.setCidAndLoad(themeCid);
 
         this.store.setPosition(lng, lat);
         this.store.setPhysicalRadiusMeters(radius);
@@ -593,57 +601,33 @@ export class CompassManager {
 
         const dx = pixel[0] - centerPixel[0];
         const dy = pixel[1] - centerPixel[1];
-        const distance = Math.hypot(dx, dy);
-
         const radiusMeters = Number(this.store.physicalRadiusMeters || 10000);
         const radiusPx = this.samplePixelRadius(centerCoord as [number, number], radiusMeters);
-        const config = this.store.vectorRenderConfig;
-        const layers = toLayerArray(config?.data);
-        if (!layers.length || !Number.isFinite(radiusPx)) return;
+        if (!Number.isFinite(radiusPx)) return;
 
-        const configWidth = Number(config?.compassSize?.width || BASE_CONFIG_SIZE);
-        const tianChiRatio = clamp(
-            Number(config?.compassSize?.tianChiRadius || configWidth * 0.1) / configWidth,
-            0.06,
-            0.22,
-        );
-        const tianChiRadius = radiusPx * tianChiRatio;
-        const contentOuterRadius =
-            config?.isShowScale !== false ? radiusPx * 0.82 : radiusPx * 0.95;
-        const layerBand = (contentOuterRadius - tianChiRadius) / Math.max(1, layers.length);
-
-        if (distance < tianChiRadius || distance > contentOuterRadius) {
-            this.store.setSelectedPalace(null);
-            return;
-        }
-
-        const layerIndex = Math.floor((distance - tianChiRadius) / layerBand);
-        const targetLayer = layers[layerIndex];
-        if (!targetLayer) return;
-
-        const rotationRad = (normalizeAngle(Number(this.store.rotation || 0)) * Math.PI) / 180;
-        let angle = Math.atan2(dy, dx) - rotationRad;
-
-        const startOffset = (Number(targetLayer.startAngle || 0) * Math.PI) / 180;
-        angle = (angle + Math.PI / 2 - startOffset) % (Math.PI * 2);
-        if (angle < 0) angle += Math.PI * 2;
-
-        const segmentCount = Array.isArray(targetLayer.data) ? targetLayer.data.length : 1;
-        const segmentIndex = Math.floor((angle / (Math.PI * 2)) * segmentCount);
-
-        const palaceData = Array.isArray(targetLayer.data)
-            ? (targetLayer.data[segmentIndex] ?? '')
-            : (targetLayer.data ?? '');
+        // 屏幕正北为 -Y，atan2(dy, dx) + π/2 即“从正北顺时针”的方位角
+        const hit = resolveCompassPalaceByPolar({
+            distance: Math.hypot(dx, dy),
+            bearingRad: Math.atan2(dy, dx) + Math.PI / 2,
+            radius: radiusPx,
+            config: this.store.vectorRenderConfig,
+            rotationDeg: Number(this.store.rotation || 0),
+        });
 
         // 把 coord 规范为经纬度（lon, lat），便于弹窗定位与外部使用
         const clickedCoord = this.map.getCoordinateFromPixel(pixel);
         const lonLat =
             Array.isArray(clickedCoord) && clickedCoord.length >= 2 ? toLonLat(clickedCoord) : null;
 
+        if (!hit) {
+            this.store.setSelectedPalace(null);
+            return;
+        }
+
         this.store.setSelectedPalace({
-            layerIndex,
-            segmentIndex,
-            data: palaceData,
+            layerIndex: hit.layerIndex,
+            segmentIndex: hit.segmentIndex,
+            data: hit.data,
             coord: lonLat || [],
         });
     };
@@ -653,8 +637,15 @@ export class CompassManager {
         return samplePixelRadius(this.map, centerCoord, radiusMeters);
     }
 
-    /** 原生 Canvas 矢量渲染样式（构建逻辑见 ./compassCanvasStyle） */
+    /**
+     * 创建原生 Canvas 矢量渲染样式
+     * 通过 getter 传入要素，避免构造阶段捕获 null 快照：feature 在 ensureVectorLayer() 中才创建
+     */
     private createNativeCanvasStyle(): Style {
-        return createCompassCanvasStyle({ map: this.map, store: this.store, feature: this.feature });
+        return createCompassCanvasStyle({
+            map: this.map,
+            store: this.store,
+            getFeature: () => this.feature,
+        });
     }
 }

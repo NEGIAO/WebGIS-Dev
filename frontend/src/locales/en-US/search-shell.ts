@@ -145,6 +145,7 @@ export default {
             switchBase: 'Switch to Google satellite basemap (proxied)',
             search: 'Switch to 3D view and search nearby restaurants',
             weather: 'Check the weather and temperature in Beijing',
+            compassFengShui: 'Analyze the feng shui conditions of the current mapview area',
         },
         heroSubtitle: 'You can ask me to locate places, switch basemaps, search POIs, query weather, or just ask directly.',
         configTitle: 'Access Credentials', personalKeyEnabled: 'Personal Key enabled',

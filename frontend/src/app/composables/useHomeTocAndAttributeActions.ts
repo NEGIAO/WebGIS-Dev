@@ -331,10 +331,50 @@ export function useHomeTocAndAttributeActions({
     }
 
     function handleDrawPointByCoordinates(payload: any): void {
+        if (is3DMode.value) {
+            void (async () => {
+                try {
+                    const result = await cesiumContainerRef.value?.importCoordinatePoint?.(payload);
+                    if (!result) {
+                        message.warning?.('三维场景尚未就绪，请稍后重试');
+                        return;
+                    }
+                    if (result.error) {
+                        message.warning?.(result.error);
+                        return;
+                    }
+                    if (result.success) message.success?.(`已绘制点位：${result.layerName}`);
+                } catch (error) {
+                    const detail = error instanceof Error ? error.message : '坐标落点失败';
+                    message.warning?.(detail);
+                }
+            })();
+            return;
+        }
         mapContainerRef.value?.drawPointByCoordinatesInput(payload);
     }
 
     function handleDrawAmapAoiFromJson(payload: any): void {
+        if (is3DMode.value) {
+            void (async () => {
+                try {
+                    const result = await cesiumContainerRef.value?.importAmapAoiJson?.(payload);
+                    if (!result) {
+                        message.warning?.('三维场景尚未就绪，请稍后重试');
+                        return;
+                    }
+                    if (result.error) {
+                        message.warning?.(t('home.aoiParseFailedDetail', { detail: result.error }));
+                        return;
+                    }
+                    if (result.success) message.success?.('解析成功！属性已同步至属性表');
+                } catch (error) {
+                    const detail = error instanceof Error ? error.message : t('home.aoiParseFailed');
+                    message.warning?.(t('home.aoiParseFailedDetail', { detail }));
+                }
+            })();
+            return;
+        }
         try {
             mapContainerRef.value?.drawAmapAoiByDetailJsonInput?.(payload);
         } catch (error) {

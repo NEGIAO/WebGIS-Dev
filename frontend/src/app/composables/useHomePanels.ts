@@ -3,8 +3,8 @@
  * 说    明：集中管理 SidePanel 展开/收起（含 useTimerRegistry 扫光动画定时器）、拖拽调宽、
  *           工具箱子标签二次点击切换、天气看板 2D 联动、账号中心浮窗与属性查询结果浮窗。
  */
-import { nextTick, provide, reactive, ref, type Ref } from 'vue';
-import { useCompassStore, useWeatherStore } from '@/stores';
+import { nextTick, provide, reactive, ref, watch, type Ref } from 'vue';
+import { useChatStore, useCompassStore, useWeatherStore } from '@/stores';
 import { useLocale } from '@common/app/useLocale';
 import { useMessage } from '@common/shell/useMessage';
 import { useTimerRegistry } from '@common/composables/useTimerRegistry';
@@ -26,6 +26,7 @@ export function useHomePanels(deps: UseHomePanelsDeps) {
     const { t } = useLocale();
     const weatherStore = useWeatherStore();
     const compassStore = useCompassStore();
+    const chatStore = useChatStore();
     const { later, cancel } = useTimerRegistry();
 
     const locationInfo = reactive({
@@ -128,6 +129,15 @@ export function useHomePanels(deps: UseHomePanelsDeps) {
     function openChat(): void {
         openSidePanelTab('chat');
     }
+
+    // 非聊天域的入口（如罗盘宫位面板的「问 AI 解释」）通过 store 请求展开聊天侧栏。
+    // 用请求计数而非布尔量，保证连续点击同一宫位时每次都能触发展开动作。
+    watch(
+        () => chatStore.openChatSignal,
+        () => {
+            openChat();
+        },
+    );
 
     function openToolbox(): void {
         openSidePanelTab('toolbox');

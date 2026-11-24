@@ -4,3 +4,10 @@
  */
 
 export { encodePos, decodePos, encodeCompassState, decodeCompassState } from './crypto';
+export {
+    COMPASS_THEME_CODES,
+    COMPASS_THEME_INDEX_BY_CID,
+    DEFAULT_COMPASS_THEME_INDEX,
+    getCompassThemeCid,
+    getCompassThemeIndex,
+} from './compassThemeCode';

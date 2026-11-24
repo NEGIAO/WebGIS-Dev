@@ -1,7 +1,7 @@
 import { prioritizeTileSourceRequest } from '@ol/tile-source';
 import { createBasemapLayerFromSource, createVectorTileBasemapLayer } from './basemapLayerFactory';
 import { resolvePresetLayerIds } from '../constants/basemapResolver';
-import { Z_BAND } from '@ol/layer/zIndexBands';
+import { Z_BAND, allocateBasemapZIndex } from '@ol/layer/zIndexBands';
 
 /**
  * Basemap layer bootstrap feature
@@ -47,24 +47,33 @@ export function createBasemapLayerBootstrap({
         // 解析默认预设包含的具体图层 ID 集合，这些图层不做容灾监控
         const defaultPresetLayerIds = new Set(resolvePresetLayerIds(actualDefaultLayerId));
 
-        list.forEach((item, index) => {
+        // 带内 zIndex 只按「可见层」编号（见 allocateBasemapZIndex）：
+        // 全量列表现有 110 项，而标注瓦片带仅 50 槽位，用全量索引会溢出到数据几何带。
+        // 语义不变：列表顶部（index 0）= 面板"置顶"目标 → 带内最高 z。
+        const zIndexById = allocateBasemapZIndex(
+            list,
+            (id: string) => layerConfigs.find((cfg: any) => cfg.id === id)?.category,
+        );
+
+        list.forEach((item) => {
             const config = layerConfigs.find((cfg: any) => cfg.id === item.id);
             const rawSource = config && item.visible ? config.createSource() : null;
             const source = rawSource ? prioritizeTileSourceRequest(rawSource) : null;
-            // zIndex 按显示带分配（与 refreshLayerInstances 同构）：标注类底图归标注带，其余归底图带
-            // 带内顺序与面板 UI 对齐：列表顶部（index 0）= 面板"置顶"目标 → 反向映射拿带内最高 z
+            // 显示带：标注类底图归标注带（150~199），其余归底图带（0~99）；
+            // 不可见层不参与编号，回落至带基准值（不渲染，无视觉影响）
             const zBand = config?.category === 'label' ? Z_BAND.LABEL : Z_BAND.BASEMAP;
+            const zIndex = zIndexById.get(String(item.id)) ?? zBand;
             const isVectorTile = config?.serviceType === 'vector-tile';
             const layer = isVectorTile
                 ? createVectorTileBasemapLayer(source, {
                       visible: item.visible,
-                      zIndex: zBand + (list.length - 1 - index),
+                      zIndex,
                       opacity: typeof item.opacity === 'number' ? item.opacity : 1,
                       styleUrl: config?.styleUrl,
                   })
                 : createBasemapLayerFromSource(source, {
                       visible: item.visible,
-                      zIndex: zBand + (list.length - 1 - index),
+                      zIndex,
                       opacity: typeof item.opacity === 'number' ? item.opacity : 1,
                   });
 

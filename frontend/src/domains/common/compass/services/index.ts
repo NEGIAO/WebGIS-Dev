@@ -4,4 +4,4 @@
  */
 
 export { CompassManager } from './CompassManager';
-export { readCompassUrlState, writeCompassUrlState } from './urlState';
+export { clearCompassUrlState, readCompassUrlState, writeCompassUrlState } from './urlState';

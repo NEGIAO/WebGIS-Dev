@@ -673,6 +673,7 @@ export function useHomeEngineSwitch(deps: UseHomeEngineSwitchDeps) {
         setLayerVisibility: (id: string, visible: boolean) => cesiumLayersStore.setVisible(id, visible),
         setLayerOpacity: (id: string, opacity: number) => cesiumLayersStore.setOpacity(id, opacity),
         zoomToLayer: (id: string) => cesiumLayersStore.flyTo(id),
+        soloLayer: (id: string) => cesiumLayersStore.solo(id),
         removeLayer: (id: string) => cesiumLayersStore.remove(id),
     });
 

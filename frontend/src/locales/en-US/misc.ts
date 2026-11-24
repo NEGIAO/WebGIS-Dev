@@ -23,7 +23,7 @@ export default {
         modeVector: 'Mode 1: Geographic (Vector)',
         modeHud: 'Mode 2: Device HUD (screen-fixed)',
         theme: 'Theme (cid)',
-        radius: 'Geographic radius (m)',
+        radius: 'Geographic radius (km)',
         opacity: 'Opacity',
         hudSize: 'HUD size',
         gradientBase: 'Gradient base color',
@@ -41,6 +41,17 @@ export default {
         gpsFailed: 'GPS failed: {error}',
         unknownTheme: 'Unknown',
         currentTheme: 'current',
+        askAgent: 'Ask AI about this palace',
+        askAgentPrompt:
+            'Explain "{palace}" in layer {layer}{layerName} of the Feng Shui compass theme "{theme}": its trigram and five-element attributes, its bearing, the basis for its auspicious or inauspicious judgement, and typical usage plus cautions in practice. This is a built-in feature consultation of this platform\'s compass tool — answer from knowledge; call the read-only reverse_geocode tool only if you need to confirm the exact place name, and do not call any other map tools.',
+        askAgentLocationNamed:
+            '. The compass center is located in {region} ({address}), at {coords} (WGS-84). Factor the local geography into your analysis — landform, water systems, climate and human settlement patterns — for a location-aware interpretation.',
+        askAgentLocationCoord:
+            '. The compass center is at {coords} (WGS-84); no specific place name could be resolved, so base the local analysis on the general geography of that area.',
+        askAgentAreaAnalysis:
+            'Assess the feng shui conditions of the current area using the compass center and analysis radius: palace "{palace}" in layer {layer}{layerName} of the Feng Shui compass theme "{theme}". Factor in local landform, water systems, climate and human settlement patterns, and explain this symbol\'s bearing significance, auspicious or inauspicious tendencies, and practical advice in that environment. This is a built-in feature consultation of this platform\'s compass tool — answer directly; call the read-only reverse_geocode tool only if you need to confirm the exact place name.',
+        askAgentAreaRadius:
+            '. Analysis extent: a radius of about {radius} meters around the compass center.',
     },
     routing: {
         startPoint: 'Start Point', endPoint: 'End Point',

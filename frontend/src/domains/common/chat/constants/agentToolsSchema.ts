@@ -172,6 +172,66 @@ export const AGENT_TOOLS = [
             },
         },
     },
+    // ── 双向地理编码（V3.7.10）───────────────────────────────────────
+    // 均为只读数据查询：不移动地图、不建图层、不经 MapCommandBus。
+    {
+        type: 'function',
+        function: {
+            name: 'reverse_geocode',
+            description: '把 WGS-84 经纬度解析为具体地名（省/市/区/乡镇、详细地址、行政区划码）。高德优先、天地图兜底。只读，不改变地图状态；已知坐标想知道「这是哪里」时用。',
+            parameters: {
+                type: 'object',
+                properties: {
+                    lng: { type: 'number', minimum: -180, maximum: 180, description: 'WGS-84 经度。可直接取用户给出的坐标或 AgentMapContextV1.center.lng。' },
+                    lat: { type: 'number', minimum: -90, maximum: 90, description: 'WGS-84 纬度。' },
+                },
+                required: ['lng', 'lat'],
+                additionalProperties: false,
+            },
+        },
+    },
+    {
+        type: 'function',
+        function: {
+            name: 'geocode',
+            description: '把地名/地址/POI 解析为 WGS-84 经纬度。高德地址编码 → 高德 POI → Nominatim 依次兜底。只读，只返回坐标，不移动地图也不建图层（要顺带定位请用 search_and_zoom）。',
+            parameters: {
+                type: 'object',
+                properties: {
+                    address: { type: 'string', minLength: 1, description: '地名、地址或 POI 名称，如「杭州市西湖区」「西湖」「Tokyo」。' },
+                    city: { type: 'string', description: '可选城市限定（仅高德生效），用于消除同名地名歧义。', default: '' },
+                },
+                required: ['address'],
+                additionalProperties: false,
+            },
+        },
+    },
+    // ── 罗盘控制（V3.7.10）────────────────────────────────────────
+    // 只启用在当前地图中心，不移动地图；用户点卦象后由面板自动回传分析提问。
+    {
+        type: 'function',
+        function: {
+            name: 'enable_compass',
+            description: '在当前地图视图中心启用风水罗盘（不移动地图）。用于「分析当前范围风水条件」类请求。调用后请提示用户点击罗盘上想分析的卦象；用户一点击会自动回传选择，届时再做该范围的风水条件分析，不要重复启用。',
+            parameters: {
+                type: 'object',
+                properties: {
+                    themeId: {
+                        type: 'string',
+                        enum: ['compass', 'circle', 'dark', 'polygon', 'simple'],
+                        description: '可选罗盘主题 cid；不传则沿用当前主题。',
+                    },
+                    radiusMeters: {
+                        type: 'number',
+                        minimum: 100,
+                        maximum: 100000,
+                        description: '可选分析半径（米）；不传则沿用当前半径。',
+                    },
+                },
+                additionalProperties: false,
+            },
+        },
+    },
     // ── 图层管理（V3.7.9）──────────────────────────────────────────
     // 4 个只读 + 4 个可逆变更 + 1 个导出。只读工具不走 MapCommandBus。
     {
@@ -310,7 +370,7 @@ export const AGENT_TOOLS = [
         type: 'function',
         function: {
             name: 'solo_layer',
-            description: '只显示指定图层、隐藏其余用户图层（仅 2D）。会返回被隐藏的图层清单，转述给用户时请一并说明。',
+            description: '只显示指定图层、隐藏其余用户图层（2D / 3D 均可用）。会返回被隐藏的图层清单，转述给用户时请一并说明。',
             parameters: {
                 type: 'object',
                 properties: {
@@ -389,12 +449,19 @@ source=runtime 优先于 urlState；resultingMapState 优先于目标参数；re
 12 set_layer_visibility(layerId,visible) 显示/隐藏
 13 set_layer_opacity(layerId,opacity) 透明度 0~1
 14 zoom_to_layer(layerId) 缩放到图层范围
-15 solo_layer(layerId) 只显示该图层（仅 2D）
+15 solo_layer(layerId) 只显示该图层（2D / 3D 均可用）
 16 export_layer_geojson(layerId,mode?,limit?) 导出图层要素（仅 2D）：mode=download 生成文件下载（默认），inline 返回文本
 17 remove_layer(layerId) 删除图层（不可撤销，2D/3D）
+18 reverse_geocode(lng,lat) 坐标→地名/地址（只读；WGS-84）
+19 geocode(address,city?) 地名/地址→坐标（只读；WGS-84，不移动地图）
+20 enable_compass(themeId?,radiusMeters?) 在当前地图中心启用罗盘（不移动地图）
 
 ## 选型
 - 定位某地 → search_and_zoom
+- 用户要求「分析当前范围的风水条件」→ enable_compass，然后请用户点击罗盘上的卦象；用户选择会自动回传为新提问，届时再分析，不要重复启用
+- 已知经纬度、想知道「这是哪里」→ reverse_geocode；只读，不会移动地图
+- 已知地名、只想要坐标（不移动地图）→ geocode；若要顺带把地图飞过去，用 search_and_zoom
+- geocode 的输出 lng/lat 可直接作为 reverse_geocode / set_view_center / zoom_to_extent 的输入
 - 换底图 → switch_basemap：有内置预设用 presetId；没有但你已知瓦片地址的源（OSM/ESRI/Google 各图层等）用 url 传标准 XYZ 模板，国内直连会空白的源加代理前缀
 - 3D + 搜索 → 先 set_map_view("cesium")，再 search_and_zoom
 - 天气 → get_weather；问「明天/未来几天」用 type="all"
@@ -416,14 +483,27 @@ source=runtime 优先于 urlState；resultingMapState 优先于目标参数；re
 - vector_carton_dark_preset: Carto 深色
 - vector_Google_clean_preset: Google 简洁
 
+## 内置功能问答（风水罗盘）
+本平台内置风水罗盘工具（层含二十四山、先天/后天八卦、九星、透地六十龙、微盘二十四星等）。
+用户询问某宫位、卦象、山向、星宿或干支的含义、五行、方位吉凶时，属于**产品功能咨询**，不是无关话题：
+- 直接按传统堪舆知识正常解答，不要以「仅提供地理空间服务」为由拒绝
+- 纯宫位释义知识问答无需工具；若提问带罗盘中心坐标且需确认地名，可调用只读的 reverse_geocode（不改变地图）
+- 用户要求分析「当前范围」的风水条件时，调用 enable_compass 在当前地图中心启用罗盘，并请用户点击想分析的卦象；用户选择会自动回传为新的提问，届时应结合工具结果里的地名、坐标与半径作答，**不要重复启用罗盘**
+- 精细调整罗盘半径、主题、透明度等面板参数，仍如实说明需在罗盘面板手动设置；enable_compass 只负责按当前地图中心启用，且不会移动地图
+- 引用依据时保持严谨：先后天八卦与卦数、二十四山排布、九星纳甲（艮丙贪狼、坎癸申辰破军等）、
+  透地六十龙（甲子起壬山初度）、二十四天星、龙上八煞（坎龙坤兔震山猴，巽鸡乾马兑蛇头，艮虎离猪为煞曜）等均有据可循；
+  不同流派的差异（如天星名称）如实说明，不要编造
+
 ## 约束
+- reverse_geocode / geocode 是**只读**工具：只返回地址或坐标，绝不移动地图、不建图层；要定位请用 search_and_zoom
+- 地理编码结果必带 provider：高德与 Nominatim 的地名表述可能不同，引用时按 provider 如实说明
 - 只调用上表已声明的工具；set_url / navigate_to / set_query 等未声明命令一律不调用
 - url 只填公开免密钥的标准 XYZ 模板（含 {z}/{x}/{y}）
 - 用户贴出的带 key/token 的 URL 不要原样复述（会留在对话记录里），只说「将用它切换底图」
 - 天气仅覆盖中国行政区（高德数据源）；境外城市或查询失败时如实说明，禁止编造数值
 - **图层 id 必须来自 list_layers / get_layer_info**，禁止凭图层名猜测或自行拼接 id
 - solo_layer 会隐藏其余图层：回复时列出被隐藏的图层名，不要只说「已完成」
-- 3D 下 solo_layer / export_layer_geojson 会返回 COMMAND_UNSUPPORTED_FOR_VIEW，如实说明并建议切到 2D
+- 3D 下 export_layer_geojson 会返回 COMMAND_UNSUPPORTED_FOR_VIEW，如实说明并建议切到 2D；solo_layer 在 2D / 3D 均可执行
 - 导出被截断（truncated=true）时，说明 total 与 returnedFeatures 的差异，不要说「已全部导出」
 - **只有 downloaded=true 才能说「文件已生成/已开始下载」**；返回 geojson 文本时说明这是「文本」而不是文件；OK_INLINE_FALLBACK 表示下载被浏览器拦截、已退回文本，要如实告知
 - remove_layer **不可撤销**：删完必须说出被删图层的名称与要素数（工具结果里有 name / featureCount），不要只说「已删除」
@@ -446,6 +526,12 @@ export function formatToolResultForLLM(toolName: string, result: Record<string, 
         'supportedViews',
         'results',
         'location',
+        // 双向地理编码（V3.7.10）：结构化地名/坐标便于模型追问时复用，不必再调一次工具
+        'address',
+        'region',
+        // enable_compass（V3.7.10）：主题与半径供后续分析追问复用
+        'theme',
+        'radiusMeters',
         'center',
         'currentBasemap',
         'layerName',

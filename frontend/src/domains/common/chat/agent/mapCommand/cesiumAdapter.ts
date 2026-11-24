@@ -46,6 +46,8 @@ export interface CesiumMapCommandAdapterOptions {
     setLayerOpacity?: (layerId: string, opacity: number) => any;
     /** 3D 图层定位 sink（相机飞行到图层） */
     zoomToLayer?: (layerId: string) => any;
+    /** 3D 图层单独显示 sink（仅目标图层可见，由 cesiumLayers store 注入） */
+    soloLayer?: (layerId: string) => any;
     /** 3D 图层删除 sink（不可撤销） */
     removeLayer?: (layerId: string) => any;
 }
@@ -59,6 +61,7 @@ export function createCesiumMapCommandAdapter({
     setLayerVisibility: setLayerVisibilitySink,
     setLayerOpacity: setLayerOpacitySink,
     zoomToLayer: zoomToLayerSink,
+    soloLayer: soloLayerSink,
     removeLayer: removeLayerSink,
 } = {} as CesiumMapCommandAdapterOptions) {
     const captureState = () => getRuntimeState?.() || null;
@@ -421,6 +424,33 @@ export function createCesiumMapCommandAdapter({
     }
 
     /**
+     * 单独显示指定 3D 图层（其余图层隐藏）。
+     * @param params.layerId 目标图层 id，允许带 cesium: 前缀
+     * @returns MapCommandResult，带回规范化后的 layerId 与状态快照
+     * @remarks 复用 cesiumLayers.solo 的元数据广播语义，不新增引擎侧 solo 状态。
+     */
+    async function soloLayer({ layerId } = {} as { layerId?: unknown }): Promise<MapCommandResult> {
+        const id = normalizeLayerIdArg(layerId).replace(/^cesium:/, '');
+        if (!id) {
+            return { success: false, code: 'INVALID_ARGUMENT', message: 'layerId is required' };
+        }
+        if (typeof soloLayerSink !== 'function') {
+            return { success: false, code: 'MAP_RUNTIME_NOT_READY', message: '3D layer controls are not ready' };
+        }
+        const raw = await soloLayerSink(id);
+        // 3D store 的 solo() 返回 boolean，而 toMapCommandResult 只识别结构化结果；
+        // 这里统一归一，避免成功操作被误报为 LAYER_ACTION_NO_RESULT。
+        const structured = typeof raw === 'boolean'
+            ? { success: raw, code: raw ? 'OK' : 'LAYER_ACTION_FAILED' }
+            : raw;
+        const result = toMapCommandResult(structured, { layerId: id });
+        if (result.success) {
+            result.resultingMapState = captureState();
+        }
+        return result;
+    }
+
+    /**
      * 删除 3D 图层（不可撤销）。
      */
     async function removeLayer({ layerId } = {} as { layerId?: unknown }): Promise<MapCommandResult> {
@@ -449,6 +479,7 @@ export function createCesiumMapCommandAdapter({
         setLayerVisibility,
         setLayerOpacity,
         zoomToLayer,
+        soloLayer,
         removeLayer,
     };
 }

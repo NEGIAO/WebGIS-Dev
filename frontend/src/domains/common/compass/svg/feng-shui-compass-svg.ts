@@ -6,6 +6,7 @@
  */
 import { computed, defineComponent, onMounted, onUnmounted, watch, type ExtractPropTypes, type PropType, type SetupContext } from 'vue';
 import type { FengShuiCompassConfig, Layer } from './types';
+import { getBoundaryRadiusAtAngle } from '../services/compassCanvasGeometry';
 
 // 一、Emits
 type EmitsType = ['latticeClick'];
@@ -126,21 +127,16 @@ export class Instance {
 		onMounted(() => this.cachedResults.clear());
 		onUnmounted(() => this.cachedResults.clear());
 
-		// 数据变化时清缓存，并纠正多边形层的 startAngle（多边形不支持起始角）
+		// 数据变化时清缓存。
+		// 注意：此处曾把 shape='polygon' 层的 startAngle 强制写 0（历史包袱）。
+		// 但 getBoundaryRadiusAtAngle 已支持按 layer.startAngle 旋转多边形顶点，
+		// 强制归零会让多边形层文字整体偏移半格，主题只能用 rotate 全局补偿，
+		// 进而把同盘的 circle 层一并转歪。故改为仅清缓存，不再改写配置。
 		watch(
 			() => this.props.config?.data,
 			(newData) => {
 				if (!newData) return;
 				this.cachedResults.clear();
-				void (
-					Array.isArray(newData) &&
-					newData.forEach((layer: any, index: number) => {
-						if (layer.shape === 'polygon' && layer.startAngle) {
-							console.warn(`警告: 第${index + 1}层使用了多边形模式，多边形模式不支持startAngle设置。`);
-							layer.startAngle = 0;
-						}
-					})
-				);
 			},
 			{ deep: true }
 		);
@@ -173,52 +169,35 @@ export class Instance {
 		return fill ? fill[2] : 'none';
 	};
 
-	/** 宫格扇形路径（圆形层用 A 弧，多边形层用直线） */
+	/** 宫格路径：内外边界都按各自层的真实形状求交，避免 polygon 层端点悬空 */
 	public getLatticePath = (latticeIndex: number, layerIndex: number) => {
 		const layer = this.m.value.data[layerIndex];
+		const innerLayer = layerIndex > 0 ? this.m.value.data[layerIndex - 1] : undefined;
 		const count = layer.data.length;
-		const startAngle = this.rads((360 / count) * latticeIndex);
-		const endAngle = this.rads((360 / count) * (latticeIndex + 1));
+		const layerStartAngle = Number(layer.startAngle || 0);
+		const startAngle = this.rads((360 / count) * latticeIndex + layerStartAngle);
+		const endAngle = this.rads((360 / count) * (latticeIndex + 1) + layerStartAngle);
 		const innerRadius = this.getLayerRadius(layerIndex);
 		const outerRadius = this.getLayerRadius(layerIndex + 1);
-		const layerShape = layer.shape || 'circle';
+		const center = this.centerPoint.value;
 
-		if (layerShape === 'circle') {
-			const x1 = this.centerPoint.value.x + innerRadius * Math.cos(startAngle);
-			const y1 = this.centerPoint.value.y + innerRadius * Math.sin(startAngle);
-			const x2 = this.centerPoint.value.x + outerRadius * Math.cos(startAngle);
-			const y2 = this.centerPoint.value.y + outerRadius * Math.sin(startAngle);
-			const x3 = this.centerPoint.value.x + outerRadius * Math.cos(endAngle);
-			const y3 = this.centerPoint.value.y + outerRadius * Math.sin(endAngle);
-			const x4 = this.centerPoint.value.x + innerRadius * Math.cos(endAngle);
-			const y4 = this.centerPoint.value.y + innerRadius * Math.sin(endAngle);
+		const sampleBoundary = (boundaryLayer: Layer | undefined, circumRadius: number, from: number, to: number) => {
+			const sides = boundaryLayer?.shape === 'polygon' && Array.isArray(boundaryLayer.data)
+				? boundaryLayer.data.length
+				: 0;
+			const steps = sides >= 3
+				? Math.max(2, Math.ceil(Math.abs(to - from) / ((Math.PI * 2) / sides)) * 2)
+				: Math.max(4, Math.ceil(Math.abs(to - from) / 0.12));
+			return Array.from({ length: steps + 1 }, (_, i) => {
+				const angle = from + ((to - from) * i) / steps;
+				const r = getBoundaryRadiusAtAngle(boundaryLayer, circumRadius, angle);
+				return `${center.x + r * Math.cos(angle)} ${center.y + r * Math.sin(angle)}`;
+			});
+		};
 
-			return `
-      M ${x1} ${y1}
-      L ${x2} ${y2}
-      A ${outerRadius} ${outerRadius} 0 0 1 ${x3} ${y3}
-      L ${x4} ${y4}
-      A ${innerRadius} ${innerRadius} 0 0 0 ${x1} ${y1}
-      Z
-    `.trim();
-		}
-
-		const path: string[] = [];
-		const ox1 = this.centerPoint.value.x + outerRadius * Math.cos(startAngle);
-		const oy1 = this.centerPoint.value.y + outerRadius * Math.sin(startAngle);
-		const ox2 = this.centerPoint.value.x + outerRadius * Math.cos(endAngle);
-		const oy2 = this.centerPoint.value.y + outerRadius * Math.sin(endAngle);
-		path.push(`M ${ox1} ${oy1}`);
-		path.push(`L ${ox2} ${oy2}`);
-
-		const ix3 = this.centerPoint.value.x + innerRadius * Math.cos(endAngle);
-		const iy3 = this.centerPoint.value.y + innerRadius * Math.sin(endAngle);
-		const ix4 = this.centerPoint.value.x + innerRadius * Math.cos(startAngle);
-		const iy4 = this.centerPoint.value.y + innerRadius * Math.sin(startAngle);
-		path.push(`L ${ix3} ${iy3}`);
-		path.push(`L ${ix4} ${iy4}`);
-		path.push('Z');
-		return path.join(' ');
+		const outerPoints = sampleBoundary(layer, outerRadius, startAngle, endAngle);
+		const innerPoints = sampleBoundary(innerLayer, innerRadius, endAngle, startAngle);
+		return [`M ${outerPoints[0]}`, ...outerPoints.slice(1).map((p) => `L ${p}`), ...innerPoints.map((p) => `L ${p}`), 'Z'].join(' ');
 	};
 
 	//#endregion
@@ -301,8 +280,9 @@ export class Instance {
 				layerIndex > 0 &&
 				(this.m.value.data[layerIndex - 1].shape === 'circle' || !this.m.value.data[layerIndex - 1].shape);
 
+			const layerStartAngle = Number(layer.startAngle || 0);
 			for (let i = 0; i <= sides; i++) {
-				const angle = (i * 2 * Math.PI) / sides;
+				const angle = this.rads((360 / sides) * i + layerStartAngle);
 				const x = this.centerPoint.value.x + radius * Math.cos(angle);
 				const y = this.centerPoint.value.y + radius * Math.sin(angle);
 				path.push(i === 0 ? `M ${x} ${y}` : `L ${x} ${y}`);
@@ -336,18 +316,21 @@ export class Instance {
 
 	public getDividerPosition = (layerIndex: number, index: number) => {
 		const layer = this.m.value.data[layerIndex];
+		const innerLayer = layerIndex > 0 ? this.m.value.data[layerIndex - 1] : undefined;
 		const count = layer.data.length;
 		const angle = this.rads((360 / count) * index + (layer.startAngle || 0));
-		const innerRadius = this.getLayerRadius(layerIndex);
-		const outerRadius = this.getLayerRadius(layerIndex + 1);
+		const innerCircumRadius = this.getLayerRadius(layerIndex);
+		const outerCircumRadius = this.getLayerRadius(layerIndex + 1);
+		const startRadius = getBoundaryRadiusAtAngle(innerLayer, innerCircumRadius, angle);
+		const endRadius = getBoundaryRadiusAtAngle(layer, outerCircumRadius, angle);
 		return {
 			start: {
-				x: this.centerPoint.value.x + innerRadius * Math.cos(angle),
-				y: this.centerPoint.value.y + innerRadius * Math.sin(angle),
+				x: this.centerPoint.value.x + startRadius * Math.cos(angle),
+				y: this.centerPoint.value.y + startRadius * Math.sin(angle),
 			},
 			end: {
-				x: this.centerPoint.value.x + outerRadius * Math.cos(angle),
-				y: this.centerPoint.value.y + outerRadius * Math.sin(angle),
+				x: this.centerPoint.value.x + endRadius * Math.cos(angle),
+				y: this.centerPoint.value.y + endRadius * Math.sin(angle),
 			},
 		};
 	};
