@@ -144,6 +144,14 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.error("认证存储初始化失败: %s", str(e), exc_info=True)
         app.state.startup_error = f"数据库初始化失败: {str(e)}"
+        # 重建可能由另一个启动任务或并发请求抢先完成。等待恢复锁后再做一次
+        # 幂等确认，避免数据库已恢复但启动日志和降级状态仍永久停留。
+        try:
+            await init_auth_storage()
+            app.state.startup_error = None
+            logger.info("认证存储并发恢复完成，已退出降级启动状态")
+        except Exception as retry_error:
+            logger.error("认证存储启动后重试仍失败: %s", str(retry_error), exc_info=True)
 
     # 游客身份保留期清理（V3.7.6）：启动即清一次超期记录，此后每 24h 一轮
     app.state.guest_retention_task = asyncio.create_task(guest_identity_retention_task())

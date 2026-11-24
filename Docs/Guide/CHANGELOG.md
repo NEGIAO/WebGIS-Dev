@@ -17,6 +17,88 @@
 > 注：V3.7.2 号段已于同日重新启用，对应《修复 OpenLayers 加载 OSM 标准瓦片 403》条目，与本条无冲突。
 > 分主题的原始过程记录保留在 `Docs/LLM_record/26-11/2026-11-14/`，不迁移、不改写。
 
+### V3.7.18 (2026-11-24) — 增加 Supabase 访客同步 payload 单测
+
+> 维护日志：[supabase-visit-payload-tests](../LLM_record/26-11/2026-11-24/2026-11-24-supabase-visit-payload-tests.md)
+
+**问题**：Supabase 访客同步的字段映射行为无测试锁定；核对代码发现同步 payload 用 `event_id`（取自本地 SQLite 行 id）而非 `id`，若按直觉建表会同步失败。
+
+**修复**：新增 `backend/tests/test_statistics_supabase.py`，5 例单测覆盖 `event_id` 映射、空记录默认值、经纬度透传与 `quota_subject` 回退。
+
+**验证**：本地 `python -m unittest tests.test_statistics_supabase` 5 例通过；门禁见维护日志。
+
+### V3.7.17 (2026-11-24) — 向 Agent 明示单轮 10 次工具调用预算
+
+> 维护日志：[agent-tool-round-budget-prompt](../LLM_record/26-11/2026-11-24/2026-11-24-agent-tool-round-budget-prompt.md)
+
+**问题**：运行时已有 10 步上限，但提示词未解释其含义，模型可能在接近上限时继续尝试无效调用。
+
+**修复**：系统提示词明确 10 次是用户体验与防循环的产品策略；Agent 应在预算内完成任务，接近上限时总结而非重试，达到上限后说明未完成原因与已完成内容。
+
+**验证**：类型检查、ESLint、构建与门禁见维护日志。
+
+### V3.7.16 (2026-11-24) — 明确额度耗尽指 WebGIS 平台 API 额度
+
+> 维护日志：[clarify-webgis-quota-semantics](../LLM_record/26-11/2026-11-24/2026-11-24-clarify-webgis-quota-semantics.md)
+
+**问题**：额度提示语义模糊，容易被理解成模型供应商额度。
+
+**澄清与修复**：系统提示词与中英文文案明确为 WebGIS 平台 API 额度：guest 默认 100/日，注册用户默认 1000/日（管理员可调），API 工具调用会消耗该额度；耗尽后停止工具调用并建议登录/注册。
+
+**验证**：类型检查、ESLint、构建与门禁见维护日志。
+
+### V3.7.15 (2026-11-24) — Agent 单次对话工具调用上限提升到 10
+
+> 维护日志：[raise-agent-tool-round-limit](../LLM_record/26-11/2026-11-24/2026-11-24-raise-agent-tool-round-limit.md)
+
+**问题**：复杂 GIS 任务在第 6 步工具调用后被提前中止，提示“已达单次对话最多 6 步工具调用”。
+
+**调整**：`MAX_TOOL_ROUNDS` 6 → 10。保留重复调用检测与配额耗尽终止护栏，避免失控循环。
+
+**验证**：类型检查、ESLint、构建与门禁见维护日志。
+
+### V3.7.14 (2026-11-24) — 调大 Agent 罗盘半径默认档位
+
+> 维护日志：[scale-up-agent-compass-radius](../LLM_record/26-11/2026-11-24/2026-11-24-scale-up-agent-compass-radius.md)
+
+**问题**：V3.7.13 的半径档位偏保守，100 km 上限使小比例尺罗盘仍不够醒目。
+
+**调整**：Agent 工具上限 100 km → 2,000 km；全档位上调（z≤5 / 高相机高度 2,000 km，z≈13 50 km，z≥16 2 km）；前端映射、工具 schema、后端严格模型与提示词说明同步。
+
+**验证**：类型检查、ESLint、后端单测、构建与门禁见维护日志。
+
+### V3.7.13 (2026-11-24) — Agent 按视图缩放级别决定罗盘半径
+
+> 维护日志：[agent-compass-radius-by-zoom](../LLM_record/26-11/2026-11-24/2026-11-24-agent-compass-radius-by-zoom.md)
+
+**问题**：OL 的 z 与 Cesium 的相机高度语义不同，`enable_compass` 不传半径时沿用固定默认半径，小比例尺下罗盘过小、用户看不到。
+
+**修复**：AgentMapContextV1 新增 `compassRadiusHintMeters`，按 OL zoom / Cesium cameraHeight 映射 100m~100km；后端严格模型与 prompt 摘要同步接纳该字段；提示词强制 `enable_compass` 显式传 `radiusMeters`，优先取提示值，缺失时按映射表估算。
+
+**验证**：类型检查、ESLint、后端单测、构建与门禁见维护日志。
+
+### V3.7.12 (2026-11-24) — 额度耗尽时 Agent 主动提示并停止工具调用
+
+> 维护日志：[agent-quota-exhausted-notice](../LLM_record/26-11/2026-11-24/2026-11-24-agent-quota-exhausted-notice.md)
+
+**问题**：访客用户额度耗尽后，Agent 可能静默丢弃提问或在工具调用失败后继续重试，用户看不到明确说明。
+
+**修复**：系统提示词把额度耗尽列为终止条件；发送前守卫、多轮工具异常、首轮请求异常三处统一写入可见错误提示，明确说明无法继续调用工具，并建议登录或切换更高权限账号。新增中英文 `chat.quotaToolUnavailable` 文案。
+
+**验证**：类型检查、ESLint、构建与门禁见维护日志。
+
+### V3.7.11 (2026-11-24) — 修复 Agent「分析某地风水」提前停止
+
+> 维护日志：[fix-agent-fengshui-task-completion](../LLM_record/26-11/2026-11-24/2026-11-24-fix-agent-fengshui-task-completion.md)
+
+**问题**：用户问「分析汕头市澄海区峰下村的风水」，Agent 只解析坐标并显示工具已执行就停止，没有定位地图、启用罗盘。
+
+**根因**：提示词缺少「指定地点风水分析」串行工作流；后续轮指令鼓励“执行成功就总结”；双视图定位超过 4 轮上限；重复签名不区分视图。
+
+**修复**：系统提示词新增任务完成契约（定位→启用罗盘→提示用户点击卦象）；后续轮强制对照原始任务，未完成继续调用工具；`MAX_TOOL_ROUNDS` 4→6；重复检测加入当前视图维度。
+
+**验证**：类型检查、ESLint、构建与门禁见维护日志。
+
 ### V3.7.10 (2026-11-24) — 罗盘全链路增强 · Agent 工具扩展 · 双引擎修复 · Code Review 收口
 
 > **版本归并（2026-11-24）**：本条对应同一批未提交工作，暂存时曾被逐次记为 V3.7.10 ~ V3.7.37。

@@ -63,6 +63,8 @@ export interface AgentMapContextV1 {
     center: AgentMapCenter | null;
     basemap: AgentBasemapContext;
     urlState: AgentMapUrlState;
+    /** 根据当前视图缩放强度给出的罗盘半径建议（米），供 Agent 调用 enable_compass 使用。 */
+    compassRadiusHintMeters?: number | null;
     cesium?: AgentCesiumContext | null;
     ol?: AgentOlContext | null;
 }
@@ -102,6 +104,32 @@ interface UrlFallbackContext {
 const DEFAULT_SNAPSHOT_OPTIONS: BuildAgentMapContextOptions = Object.freeze({});
 const DEFAULT_ROUTE_QUERY: Record<string, unknown> = Object.freeze({});
 
+/**
+ * 根据当前视图的缩放强度估算罗盘半径，避免小比例尺下罗盘过小。
+ * 仅提供建议值，最终由 Agent 调用 enable_compass 时决定，仍受工具 2,000 km 上限约束。
+ */
+export function suggestCompassRadiusMeters(view: string, zoomOrHeight: number | null | undefined): number | null {
+    if (!Number.isFinite(zoomOrHeight as number)) return null;
+    const value = Number(zoomOrHeight);
+
+    if (view === MAP_VIEW_CESIUM) {
+        if (value >= 2_000_000) return 2_000_000;
+        if (value >= 500_000) return 800_000;
+        if (value >= 100_000) return 200_000;
+        if (value >= 20_000) return 50_000;
+        if (value >= 5_000) return 10_000;
+        return 2_000;
+    }
+
+    if (value <= 5) return 2_000_000;
+    if (value <= 7) return 1_000_000;
+    if (value <= 9) return 400_000;
+    if (value <= 11) return 150_000;
+    if (value <= 13) return 50_000;
+    if (value <= 15) return 10_000;
+    return 2_000;
+}
+
 /** Build AgentMapContextV1 at send time. Runtime state wins; URL state is a safe fallback. */
 export function buildAgentMapContextSnapshot(
     options: BuildAgentMapContextOptions = DEFAULT_SNAPSHOT_OPTIONS,
@@ -135,6 +163,12 @@ export function buildAgentMapContextSnapshot(
         const ol = runtimeContext.ol || urlContext.ol;
         if (ol) context.ol = ol;
     }
+
+    const scaleValue = view === MAP_VIEW_CESIUM
+        ? context.cesium?.cameraHeight ?? urlState.z
+        : context.ol?.zoom ?? urlState.z;
+    const radiusHint = suggestCompassRadiusMeters(view, scaleValue);
+    if (radiusHint !== null) context.compassRadiusHintMeters = radiusHint;
 
     return context;
 }

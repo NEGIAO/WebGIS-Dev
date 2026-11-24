@@ -240,6 +240,10 @@ def _format_map_context_summary(map_context: Any) -> str:
                 parts.append(f"{key}={cesium[key]} degrees")
         parts.append("z semantics=Cesium camera height in meters")
 
+    radius_hint = context.get("compassRadiusHintMeters")
+    if radius_hint is not None:
+        parts.append(f"compassRadiusHintMeters={radius_hint}m (use for enable_compass radiusMeters)")
+
     basemap = context.get("basemap") or {}
     if basemap.get("index") is not None:
         parts.append(f"basemap.index={basemap['index']}")

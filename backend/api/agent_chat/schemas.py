@@ -87,6 +87,13 @@ class AgentMapContextV1(_StrictMapContextModel):
     cesium: Optional[AgentMapCesiumContext] = None
     basemap: AgentMapBasemapContext
     url_state: AgentMapUrlState = Field(alias="urlState")
+    compass_radius_hint_meters: Optional[int] = Field(
+        default=None,
+        alias="compassRadiusHintMeters",
+        ge=100,
+        le=2_000_000,
+        description="Suggested compass radius from current zoom/camera height",
+    )
     changes_since_last_turn: Optional[List[AgentMapContextChange]] = Field(
         default=None, alias="changesSinceLastTurn",
         description="Field-level changes since the previous turn (for LLM state awareness)",

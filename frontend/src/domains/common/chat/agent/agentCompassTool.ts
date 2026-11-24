@@ -27,7 +27,7 @@ export interface CompassAgentToolDeps {
     getMapContext: () => any;
 }
 
-const MAX_RADIUS_METERS = 100_000;
+const MAX_RADIUS_METERS = 2_000_000;
 
 export function createCompassAgentTool({ compassStore, getMapContext }: CompassAgentToolDeps) {
     /**
