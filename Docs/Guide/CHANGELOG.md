@@ -17,6 +17,16 @@
 > 注：V3.7.2 号段已于同日重新启用，对应《修复 OpenLayers 加载 OSM 标准瓦片 403》条目，与本条无冲突。
 > 分主题的原始过程记录保留在 `Docs/LLM_record/26-11/2026-11-14/`，不迁移、不改写。
 
+### V3.7.18 (2026-11-24) — 增加 Supabase 访客同步 payload 单测
+
+> 维护日志：[supabase-visit-payload-tests](../LLM_record/26-11/2026-11-24/2026-11-24-supabase-visit-payload-tests.md)
+
+**问题**：Supabase 访客同步的字段映射行为无测试锁定；核对代码发现同步 payload 用 `event_id`（取自本地 SQLite 行 id）而非 `id`，若按直觉建表会同步失败。
+
+**修复**：新增 `backend/tests/test_statistics_supabase.py`，5 例单测覆盖 `event_id` 映射、空记录默认值、经纬度透传与 `quota_subject` 回退。
+
+**验证**：本地 `python -m unittest tests.test_statistics_supabase` 5 例通过；门禁见维护日志。
+
 ### V3.7.17 (2026-11-24) — 向 Agent 明示单轮 10 次工具调用预算
 
 > 维护日志：[agent-tool-round-budget-prompt](../LLM_record/26-11/2026-11-24/2026-11-24-agent-tool-round-budget-prompt.md)
