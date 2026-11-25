@@ -4,6 +4,7 @@
 
 import asyncio
 import logging
+import sqlite3
 
 from .db import _db_connection, _iso, _safe_execute, _utc_now, AUTH_DB_PATH, backup_auth_db_for_migration
 from core.sqlite_maintenance import ensure_maintenance_event_table, sync_recovery_manifests
@@ -109,6 +110,11 @@ def init_auth_tables_sync(conn) -> None:
 
     注意：此函数不负责 commit/close，由调用方管理事务。
     """
+    # 迁移逻辑会使用 sqlite3.Row 的具名字段；空库兜底及部分外部调用方传入的
+    # 连接可能尚未设置 row_factory，因此在这里统一设置，避免 tuple 转 dict 失败。
+    if getattr(conn, "row_factory", None) is None:
+        conn.row_factory = sqlite3.Row
+
     now_iso = _iso(_utc_now())
     default_contact = "管理员联系方式：请联系系统管理员"
     migration_backup_reason = None

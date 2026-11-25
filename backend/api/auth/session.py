@@ -146,7 +146,13 @@ def _get_session_sync(
         data = dict(row)
         now = _utc_now()
         expires_at = _safe_parse_iso(str(data.get("expires_at") or ""))
-        if expires_at is None or expires_at <= now:
+        # 旧版本签发的 token 可能带 72h expires_at。无论库里写的是多久，
+        # 以 created_at 起算超过 4 小时一律强制作废并删除，三类身份同口径。
+        created_at = _safe_parse_iso(str(data.get("created_at") or ""))
+        hard_deadline = (
+            created_at + timedelta(hours=SESSION_EXPIRE_HOURS) if created_at is not None else None
+        )
+        if expires_at is None or expires_at <= now or (hard_deadline is not None and hard_deadline <= now):
             _apply_logout_duration_sync(
                 conn,
                 str(data.get("username") or ""),

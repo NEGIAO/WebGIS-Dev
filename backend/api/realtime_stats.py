@@ -550,6 +550,11 @@ class OnlineUserTracker:
             "sse_connections": conns,
             "sse_conn_count_total": sum(conns.values()),
             "sse_conn_age_seconds": conn_age,
+            # 身份去重排查：每条 SSE 连接实际携带的 device_presence_id
+            "sse_device_presence_ids": {
+                cid: rec.get("device_presence_id", "")
+                for cid, rec in self._connections.items()
+            },
             "fallback_heartbeat_age_seconds": beats,
             "window_seconds": self._active_window,
             "conn_ttl_seconds": SSE_CONNECTION_TTL_SECONDS,
@@ -564,15 +569,42 @@ class OnlineUserTracker:
         # 同一浏览器同时开登录页签（u:）与未登录访客页签（g:）时，两者共享同一 device_presence_id，
         # 现实中属同一人的不同标签页，只保留已登录账号口径避免 +1 虚高。
         suppressed_guests = set()
+        logged_in_clients = set()
         for rec in self._connections.values():
-            if rec["presence_id"].startswith("u:") and rec.get("device_presence_id"):
+            if not rec["presence_id"].startswith("u:"):
+                continue
+            if rec.get("device_presence_id"):
                 suppressed_guests.add(rec["device_presence_id"])
+            if rec.get("client_id"):
+                logged_in_clients.add(rec["client_id"])
         for pid, clients in self._beat_clients.items():
             if not pid.startswith("u:"):
                 continue
-            for meta in clients.values():
-                if now - float(meta["ts"]) <= self._active_window and meta.get("device_presence_id"):
+            for client_id, meta in clients.items():
+                if now - float(meta["ts"]) > self._active_window:
+                    continue
+                if meta.get("device_presence_id"):
                     suppressed_guests.add(meta["device_presence_id"])
+                if client_id and client_id != "_default":
+                    logged_in_clients.add(client_id)
+
+        # 同一标签页从游客切到登录时，设备 ID 可能缺失/变更导致 g: 与 u: 无法
+        # 通过 device_presence_id 对齐。client_id 是单页签实例 ID，既然该页签
+        # 已出现已登录身份，其遗留游客信号必然是同一人的旧状态，不应再计 1 人。
+        if logged_in_clients:
+            for pid in raw:
+                if not pid.startswith("g:"):
+                    continue
+                guest_clients = {
+                    rec.get("client_id")
+                    for rec in self._connections.values()
+                    if rec.get("presence_id") == pid and rec.get("client_id")
+                }
+                guest_clients.update(
+                    cid for cid in self._beat_clients.get(pid, {}) if cid != "_default"
+                )
+                if guest_clients & logged_in_clients:
+                    suppressed_guests.add(pid)
 
         countable = {
             pid for pid in raw if _is_countable_presence(pid) and pid not in suppressed_guests
@@ -588,7 +620,13 @@ class OnlineUserTracker:
         return self._online_names_locked(_time.monotonic())
 
     def get_online_count(self) -> int:
-        """返回当前在线独立用户数。"""
+        """返回当前在线独立用户数。
+
+        读路径先剔除超过 TTL 的 SSE 幽灵连接——后台扫描协程在 HF 网络盘
+        高负载时可能被延迟，若只依赖它，在线数会长期卡着多出来的旧身份。
+        这里只清 tracker 计数，广播队列的 evict 仍由后台扫描负责。
+        """
+        self.prune_stale_connections_with_ids()
         with self._lock:
             return len(self._online_names())
 

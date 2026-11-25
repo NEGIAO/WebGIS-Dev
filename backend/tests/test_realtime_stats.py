@@ -123,6 +123,19 @@ def test_login_after_guest_does_not_double_count_same_person_identity_shape(monk
     assert tracker.get_online_users() == ["u:alice"]
 
 
+def test_get_online_count_prunes_stale_connections_on_read(monkeypatch):
+    """后台扫描延迟时，读计数自身也必须剔除过期 SSE 幽灵连接。"""
+    import time as _time
+
+    tracker = _tracker(monkeypatch)
+    tracker.mark_connection("u:ghost")
+    with tracker._lock:
+        tracker._conn_seen["u:ghost"] = _time.monotonic() - 9999
+
+    assert tracker.get_online_count() == 0
+    assert tracker.get_online_users() == []
+
+
 def test_stale_connection_ttl_removes_ghosts(monkeypatch):
     """超过 TTL 无活动的 SSE 连接应被剔除，避免在线数卡死。"""
     import time as _time

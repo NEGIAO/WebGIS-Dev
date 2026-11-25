@@ -68,9 +68,10 @@ def sign_guest_token(guest_uid: str, ttl_hours: Optional[int] = None) -> Optiona
         return None
 
     ttl = int(ttl_hours) if ttl_hours is not None else get_int(
-        "GUEST_TOKEN_TTL_HOURS", 24, minimum=1, maximum=24 * 90
+        "GUEST_TOKEN_TTL_HOURS", 4, minimum=1, maximum=4
     )
-    ttl = max(1, min(int(ttl), 24 * 90))  # 双保险：硬上限 90 天
+    # 会话/身份 token 统一硬上限 4 小时；这里再钳一次防止调用方显式传大值。
+    ttl = max(1, min(int(ttl), 4))
     exp = int(time.time()) + ttl * 3600
 
     payload = f"{guest_uid}|{exp}".encode("utf-8")
@@ -78,12 +79,8 @@ def sign_guest_token(guest_uid: str, ttl_hours: Optional[int] = None) -> Optiona
     return f"{GUEST_TOKEN_PREFIX}{_b64url_encode(payload)}.{_b64url_encode(signature)}"
 
 
-def verify_guest_token(token: str) -> Optional[str]:
-    """验签并返回游客 uid；任何失败（格式/签名/过期）一律返回 None，不抛异常。
-
-    验签失败属于正常业务路径（token 过期/客户端伪造），依赖方应静默回落
-    确定性派生桶，而非将请求拒之门外。
-    """
+def _decode_guest_token(token: str, *, ignore_expiry: bool = False) -> Optional[str]:
+    """验签并返回游客 uid；任何失败（格式/签名，默认含过期）返回 None。"""
     raw = str(token or "").strip()
     if not raw.startswith(GUEST_TOKEN_PREFIX) or len(raw) > _MAX_TOKEN_LENGTH:
         return None
@@ -115,9 +112,23 @@ def verify_guest_token(token: str) -> Optional[str]:
 
     if not guest_uid.startswith("guest_") or len(guest_uid) > 128:
         return None
-    if exp < int(time.time()):
+    if not ignore_expiry and exp < int(time.time()):
         return None
     return guest_uid
+
+
+def verify_guest_token(token: str) -> Optional[str]:
+    """验签并返回未过期游客 uid；过期/伪造一律返回 None。"""
+    return _decode_guest_token(token)
+
+
+def peek_guest_token_uid(token: str) -> Optional[str]:
+    """仅验签、忽略过期时间，取回原游客 uid。
+
+    用途：token 过期续期时必须复用原身份，只重签 token，不能给同一浏览器
+    分配新的 guest_uid（否则配额桶、历史统计和在线 presence 全部断裂）。
+    """
+    return _decode_guest_token(token, ignore_expiry=True)
 
 
 def guest_token_expiry_seconds(token: str) -> Optional[int]:

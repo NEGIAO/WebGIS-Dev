@@ -132,6 +132,38 @@ class ConnReuseTests(unittest.TestCase):
         finally:
             db._drop_thread_conn()
 
+    def test_full_validation_failure_forces_recovery(self):
+        """快速损坏探测漏报时，完整校验失败必须绕过探测强制恢复，而不能永久降级。"""
+        good = FakeConn("good")
+        invalid = SimpleNamespace(
+            valid=False,
+            tables=[],
+            total_rows=0,
+            error="integrity_check 未返回 ok",
+        )
+        valid = SimpleNamespace(valid=True, tables=["users"], total_rows=1)
+        db._auth_storage_ready = False
+        calls = []
+
+        with mock.patch.object(db, "_db_file_is_corrupted", return_value=False), \
+                mock.patch.object(db, "_ensure_schema", return_value=None), \
+                mock.patch.object(
+                    db,
+                    "validate_sqlite_database",
+                    side_effect=[invalid, valid],
+                ), \
+                mock.patch.object(
+                    db,
+                    "_attempt_db_recovery",
+                    side_effect=lambda path, *, force=False: calls.append((path, force)) or True,
+                ), \
+                mock.patch.object(db, "_try_connect", return_value=good):
+            conn = db._db_connection()
+
+        self.assertIs(conn, good)
+        self.assertEqual(calls, [(db.AUTH_DB_PATH, True)])
+        self.assertTrue(db._auth_storage_ready)
+
     def test_not_a_database_routes_to_recovery(self):
         """V3.7.7：'file is not a database'（不含 malformed/corrupt 字样）必须同样
         转入恢复分支——HF 2026-11-22 10:04:51 瞬态 500 的直接根因。"""

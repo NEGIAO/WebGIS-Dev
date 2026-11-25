@@ -23,6 +23,7 @@ class AgentMapContextTests(unittest.TestCase):
             "ol": {"zoom": 12.5, "viewportWidth": 1280, "viewportHeight": 720},
             "basemap": {"index": 0, "id": "local_tiles_preset", "label": "Local tiles"},
             "urlState": {"view": "ol", "lng": 116.39, "lat": 39.9, "z": 12, "l": 0},
+            "compassRadiusHintMeters": 5000,
         }
         context.update(overrides)
         return context
@@ -36,6 +37,8 @@ class AgentMapContextTests(unittest.TestCase):
         prompt = _build_agent_system_prompt("base", request.location_context, request.map_context)
 
         self.assertEqual(request.map_context.schema_version, 1)
+        self.assertEqual(request.map_context.compass_radius_hint_meters, 5000)
+        self.assertIn("compassRadiusHintMeters=5000m", prompt)
         self.assertIn("user-location", prompt)
         self.assertIn("view=OpenLayers 2D", prompt)
         self.assertIn("not the user's physical location", prompt)

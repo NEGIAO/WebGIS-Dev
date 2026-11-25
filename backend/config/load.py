@@ -389,7 +389,7 @@ def _build_settings() -> BackendSettings:
         backend_public_url=_normalize_base_url(get_str("BACKEND_PUBLIC_URL", ""), default_backend_url),
         frontend_public_url=_normalize_base_url(get_str("FRONTEND_PUBLIC_URL", ""), default_frontend_url),
         auth_db_path=get_str("AUTH_DB_PATH", ""),
-        session_expire_hours=get_int("AUTH_SESSION_EXPIRE_HOURS", 72, minimum=1, maximum=24 * 30),
+        session_expire_hours=get_int("AUTH_SESSION_EXPIRE_HOURS", 4, minimum=1, maximum=4),
         password_hash_iterations=get_int("AUTH_PASSWORD_HASH_ITERATIONS", 120000, minimum=60000),
         oauth_state_ttl_seconds=get_int("OAUTH_STATE_TTL_SECONDS", 600, minimum=60, maximum=3600),
         oauth_ticket_ttl_seconds=get_int("OAUTH_TICKET_TTL_SECONDS", 120, minimum=30, maximum=600),

@@ -158,7 +158,7 @@ _AUTH_REQUIRED_COLUMNS = {
 }
 
 
-def _attempt_db_recovery(db_path: Path) -> bool:
+def _attempt_db_recovery(db_path: Path, *, force: bool = False) -> bool:
     """
     Recover from an immutable snapshot. If logical recovery fails after the
     corrupt bundle is safely archived, activate a verified empty schema so auth
@@ -169,7 +169,7 @@ def _attempt_db_recovery(db_path: Path) -> bool:
     with _recovery_lock:
         if not db_path.exists():
             return False
-        if not _db_file_is_corrupted(db_path):
+        if not force and not _db_file_is_corrupted(db_path):
             return False
 
         logger.error("Corrupt auth database detected; starting conservative rebuild: %s", db_path)
@@ -180,6 +180,14 @@ def _attempt_db_recovery(db_path: Path) -> bool:
             """Create the full auth schema in a container-local fallback candidate."""
             init_auth_tables_sync(conn)
 
+        # V3.7.16：生产默认禁止空库降级。历史恢复备份存在时必须先恢复备份；
+        # 只有在运维显式设置 AUTH_DB_ALLOW_EMPTY_FALLBACK=true 时才允许空库。
+        allow_empty = get_str("AUTH_DB_ALLOW_EMPTY_FALLBACK", "false").strip().lower() in {
+            "1",
+            "true",
+            "yes",
+            "on",
+        }
         try:
             result = recover_sqlite_database(
                 db_path,
@@ -190,6 +198,7 @@ def _attempt_db_recovery(db_path: Path) -> bool:
                 activate=True,
                 empty_fallback_initializer=initialize_empty_fallback,
                 allowed_base_dir=db_path.parent,
+                allow_empty_fallback=allow_empty,
             )
         except SQLiteRecoveryError:
             _auth_storage_ready = False
@@ -473,7 +482,9 @@ def _db_connection() -> sqlite3.Connection:
                 return conn
             return _get_thread_conn()
 
+        recovery_attempted = False
         if _db_file_is_corrupted(AUTH_DB_PATH):
+            recovery_attempted = True
             _attempt_db_recovery(AUTH_DB_PATH)
 
         # Missing first-deploy DB, successfully recovered DB, or a deliberately
@@ -488,6 +499,25 @@ def _db_connection() -> sqlite3.Connection:
             minimum_total_rows=0,
             require_foreign_key_clean=False,
         )
+        if not validation.valid and not recovery_attempted:
+            # V3.7.11: 快速检测与完整校验结论不一致时（典型为索引级损坏，
+            # quick_check 漏报），必须强制进入恢复分支。否则每个请求都会
+            # 重建 schema → 校验失败 → 503，应用永久停留在降级模式。
+            _auth_storage_ready = False
+            _drop_thread_conn()
+            logger.error(
+                "Auth DB full validation failed after initialization: %s",
+                validation.error or "unknown error",
+            )
+            _attempt_db_recovery(AUTH_DB_PATH, force=True)
+            _ensure_schema()
+            validation = validate_sqlite_database(
+                AUTH_DB_PATH,
+                required_tables=_AUTH_REQUIRED_TABLES,
+                required_columns=_AUTH_REQUIRED_COLUMNS,
+                minimum_total_rows=0,
+                require_foreign_key_clean=False,
+            )
         if not validation.valid:
             _auth_storage_ready = False
             raise SQLiteRecoveryError(

@@ -53,7 +53,9 @@ SUPPORTED_UNIT_SYSTEMS = {
 
 # ─── 会话/安全配置 ───
 # 默认值登记于根 .env.example / config.catalog，可经 L1 env 调整。
-SESSION_EXPIRE_HOURS = get_settings().session_expire_hours
+# 签发会话硬上限 4 小时（游客/注册/管理员同一口径）。
+# config 层已把上限钳到 4，这里再兜一次底，防止其它配置入口绕过。
+SESSION_EXPIRE_HOURS = min(4, max(1, int(get_settings().session_expire_hours)))
 PASSWORD_HASH_ITERATIONS = get_settings().password_hash_iterations
 
 # ─── 在线判定（普通常量非配置 key）───

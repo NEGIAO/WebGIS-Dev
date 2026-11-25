@@ -144,7 +144,7 @@ sequenceDiagram
 ### 4.4 会话机制
 
 - **存储**：`sessions` 表，token 为 `secrets.token_urlsafe(32)`。
-- **有效期**：`SESSION_EXPIRE_HOURS = 72`（环境变量 `AUTH_SESSION_EXPIRE_HOURS` 可覆盖）。
+- **有效期**：`SESSION_EXPIRE_HOURS = 4`（环境变量 `AUTH_SESSION_EXPIRE_HOURS` 可覆盖，硬上限 4 小时）。
 - **读取时自动维护**：`_get_session_sync` 在每次读取时执行 `normalize_role` 修正 role、同步 `requires_email_binding` 状态、过期自动删除并记录在线时长到 `user_metrics`。
 - **无 token 游客降级**：`require_login` 在请求携带 `X-Share-Mode: 1` 或 `?s=1` 时，自动创建 2 小时临时 guest session（`is_temporary=True`），不返回 401。
 

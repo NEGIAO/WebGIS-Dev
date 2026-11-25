@@ -211,7 +211,14 @@ def validate_sqlite_database(
 
 
 def is_sqlite_database_corrupted(db_path: Path) -> bool:
-    """Return True for SQLite corruption; propagate unrelated filesystem errors."""
+    """Return True for SQLite corruption; propagate unrelated filesystem errors.
+
+    V3.7.11: 使用完整 integrity_check 而非 quick_check(1)。quick_check 不校验
+    索引与表的一致性，索引级损坏时返回 ok，导致恢复分支永远不触发；而启动后的
+    validate_sqlite_database() 完整校验失败，应用进入永久降级并逐请求重试。
+    integrity_check(N) 的 N 只限制返回的错误条数，仍会扫描整个库，因此用 1
+    即可在发现首个问题时立即返回，避免损坏库输出大量错误行。
+    """
     db_path = Path(db_path)
     if not db_path.exists():
         return False
@@ -219,8 +226,8 @@ def is_sqlite_database_corrupted(db_path: Path) -> bool:
     try:
         conn = sqlite3.connect(_read_only_uri(db_path), uri=True, timeout=5)
         try:
-            result = conn.execute("PRAGMA quick_check(1)").fetchone()
-            return result is None or str(result[0]).lower() != "ok"
+            rows = conn.execute("PRAGMA integrity_check(1)").fetchall()
+            return not rows or any(str(row[0]).lower() != "ok" for row in rows)
         finally:
             conn.close()
     except sqlite3.DatabaseError:
@@ -497,7 +504,17 @@ def _activate_candidate(
             staging,
         )
 
-        if _bundle_fingerprints(db_path) != source_bundle:
+        # Recovery work may overlap with read/write activity that updates SQLite
+        # WAL/SHM sidecars or another connection. Only replacement of the live
+        # main file must cancel activation; moving sidecars below is intentional.
+        live_bundle = _bundle_fingerprints(db_path)
+        live_main = live_bundle.get("main")
+        source_main = source_bundle.get("main")
+        if (
+            live_main is None
+            or source_main is None
+            or live_main["sha256"] != source_main["sha256"]
+        ):
             raise SQLiteRecoveryError(
                 "live database changed during recovery; activation cancelled"
             )
@@ -742,6 +759,133 @@ def _create_and_activate_empty_fallback(
         )
 
 
+def _restore_from_previous_verified_backup(
+    db_path: Path,
+    *,
+    event_id: str,
+    recovery_dir: Path,
+    snapshot_path: Path,
+    manifest_path: Path,
+    manifest: Dict[str, object],
+    source_bundle: Dict[str, Dict[str, object]],
+    required_tables: Optional[Sequence[str]],
+    required_columns: Optional[Dict[str, Sequence[str]]],
+    minimum_total_rows: int,
+    require_foreign_key_clean: bool,
+) -> Optional[SQLiteRecoveryResult]:
+    """激活最近一份历史验证备份，避免逻辑重建失败时把主库降级成空库。
+
+    历史 recovery_backups/*/*.recovered.*.backup.db 都是此前通过
+    integrity_check 与最小行数校验后落地的备份。当前损坏库无法重建时，
+    优先恢复其中最新且再次校验通过的一份；只有完全没有可用备份时才允许
+    调用方决定是否需要空库降级。
+    """
+    backup_root = db_path.parent / "recovery_backups"
+    if not backup_root.is_dir():
+        return None
+
+    candidates = sorted(
+        (
+            p
+            for p in backup_root.rglob("*.recovered.*.backup.db")
+            if p.is_file() and p.stat().st_size > 0
+        ),
+        key=lambda p: p.stat().st_mtime,
+        reverse=True,
+    )[:10]
+    if not candidates:
+        logger.warning("[DB-RECOVERY:%s] no previous verified backup available", event_id[:8])
+        return None
+
+    # 空库备份不得作为恢复源：一个只有 schema 的库会让用户数据再次“消失”。
+    min_rows = max(1, minimum_total_rows)
+    for candidate in candidates:
+        try:
+            validation = validate_sqlite_database(
+                candidate,
+                required_tables=required_tables,
+                required_columns=required_columns,
+                minimum_total_rows=min_rows,
+                require_foreign_key_clean=require_foreign_key_clean,
+            )
+            if not validation.valid:
+                logger.warning(
+                    "[DB-RECOVERY:%s] previous backup rejected: %s (%s)",
+                    event_id[:8],
+                    candidate,
+                    validation.error,
+                )
+                continue
+
+            logger.warning(
+                "[DB-RECOVERY:%s] previous verified backup accepted: %s rows=%d",
+                event_id[:8],
+                candidate,
+                validation.total_rows,
+            )
+            active_validation = _activate_candidate(
+                db_path,
+                candidate,
+                snapshot_path,
+                recovery_dir,
+                event_id,
+                source_bundle,
+                required_tables,
+                required_columns,
+                min_rows,
+                require_foreign_key_clean,
+            )
+            sql_backup = candidate.with_name(
+                candidate.name.replace(".backup.db", ".backup.sql")
+            )
+            manifest.update(
+                {
+                    "status": "recovery_succeeded",
+                    "recovery_method": "previous_verified_backup",
+                    "source_backup_path": str(candidate),
+                    "source_backup_sha256": _sha256(candidate),
+                    "recovery_completed_at_utc": _utc_iso(),
+                    "validation": asdict(active_validation),
+                    "active_path": str(db_path),
+                    "activated": True,
+                    "maintenance_record_sync_required": True,
+                }
+            )
+            attempts = manifest.get("attempts")
+            if isinstance(attempts, list):
+                attempts.append(
+                    {
+                        "method": "previous_verified_backup",
+                        "status": "success",
+                        "path": str(candidate),
+                        "rows": validation.total_rows,
+                    }
+                )
+            _write_manifest(manifest_path, manifest)
+            return SQLiteRecoveryResult(
+                success=True,
+                event_id=event_id,
+                method="previous_verified_backup",
+                source_path=db_path,
+                recovery_dir=recovery_dir,
+                snapshot_path=snapshot_path,
+                active_path=db_path,
+                binary_backup_path=candidate,
+                sql_backup_path=sql_backup if sql_backup.is_file() else candidate,
+                validation=active_validation,
+                rollback_replacements=0,
+                manifest_path=manifest_path,
+            )
+        except Exception as exc:
+            logger.warning(
+                "[DB-RECOVERY:%s] previous backup activation failed: %s (%s)",
+                event_id[:8],
+                candidate,
+                exc,
+            )
+    return None
+
+
 def recover_sqlite_database(
     db_path: Path,
     *,
@@ -753,6 +897,7 @@ def recover_sqlite_database(
     activate: bool = True,
     empty_fallback_initializer: Optional[EmptyFallbackInitializer] = None,
     allowed_base_dir: Optional[Path] = None,
+    allow_empty_fallback: bool = True,
 ) -> SQLiteRecoveryResult:
     """Recover from a timestamped backup; all rebuild work runs in local temp storage."""
     db_path = Path(db_path).resolve()
@@ -1131,7 +1276,38 @@ def recover_sqlite_database(
                 manifest_path=manifest_path,
             )
     except Exception as exc:
-        if empty_fallback_initializer is not None and corrupt_backup_ready:
+        # V3.7.16：当前损坏库无法重建时，绝不直接降级为空库。优先激活历史
+        # 验证备份；只有调用方显式允许且确实没有可用备份时才走空库降级。
+        if corrupt_backup_ready:
+            try:
+                restored = _restore_from_previous_verified_backup(
+                    db_path,
+                    event_id=event_id,
+                    recovery_dir=recovery_dir,
+                    snapshot_path=snapshot_path,
+                    manifest_path=manifest_path,
+                    manifest=manifest,
+                    source_bundle=source_bundle,
+                    required_tables=required_tables,
+                    required_columns=required_columns,
+                    minimum_total_rows=minimum_total_rows,
+                    require_foreign_key_clean=require_foreign_key_clean,
+                )
+                if restored is not None:
+                    logger.warning(
+                        "[DB-RECOVERY:%s] recovered from previous verified backup; "
+                        "empty fallback avoided",
+                        short_id,
+                    )
+                    return restored
+            except Exception as backup_restore_error:
+                logger.error(
+                    "[DB-RECOVERY:%s] previous backup restore failed: %s",
+                    short_id,
+                    backup_restore_error,
+                )
+
+        if allow_empty_fallback and empty_fallback_initializer is not None and corrupt_backup_ready:
             logger.error(
                 "[DB-RECOVERY:%s] automatic logical recovery failed; attempting "
                 "verified empty auth DB fallback: %s",

@@ -293,7 +293,7 @@ curl -X POST "http://localhost:7860/api/log-visit" \
 
 认证与登录可选配置：
 - AUTH_DB_PATH=/data/webgis_auth.db
-- AUTH_SESSION_EXPIRE_HOURS=72
+- AUTH_SESSION_EXPIRE_HOURS=4
 - AUTH_PASSWORD_HASH_ITERATIONS=120000
 
 Google/GitHub OAuth 一键登录（回调地址自动推导，无需单独配置 REDIRECT_URI）：

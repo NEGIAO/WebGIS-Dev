@@ -48,11 +48,17 @@ CONFIG_CATALOG: Dict[str, ConfigMeta] = {
         "secret": False,
         "description": "认证库日志模式；HF 网络挂载建议 DELETE，避免 WAL/SHM 锁与同步风险",
     },
+    "AUTH_DB_ALLOW_EMPTY_FALLBACK": {
+        "layer": "L1",
+        "default": "false",
+        "secret": False,
+        "description": "认证库恢复失败时是否允许空库降级；默认禁止，避免用户数据被清空",
+    },
     "AUTH_SESSION_EXPIRE_HOURS": {
         "layer": "L1",
-        "default": 72,
+        "default": 4,
         "secret": False,
-        "description": "会话有效小时",
+        "description": "会话有效小时；硬上限 4 小时，超时强制下线",
     },
     "AUTH_PASSWORD_HASH_ITERATIONS": {
         "layer": "L1",
@@ -345,9 +351,9 @@ CONFIG_CATALOG: Dict[str, ConfigMeta] = {
     },
     "GUEST_TOKEN_TTL_HOURS": {
         "layer": "L2",
-        "default": 24,
+        "default": 4,
         "secret": False,
-        "description": "游客身份签名 token 有效期小时数（游客身份治理 V3.7.6）",
+        "description": "游客身份签名 token 有效期小时数；硬上限 4 小时，过期仅重签 token，不更换游客 uid",
     },
     "GUEST_ISSUE_RATE_PER_HOUR": {
         "layer": "L2",

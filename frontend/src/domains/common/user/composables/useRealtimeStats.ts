@@ -311,12 +311,12 @@ async function _syncAuthStateAndReconnectIfChanged() {
     try {
         // 先等待旧身份 offline 上送完成，再重建新身份 SSE：消除同 client_id 下的并发竞态，
         // 避免滞后到达的旧 offline 误杀刚建连的新连接，或旧 session 心跳滞留。
-        if (prevToken) {
-            await _sendPresenceBeacon(PRESENCE_OFFLINE_ENDPOINT, {
-                tokenOverride: prevToken,
-                force: true,
-            });
-        }
+        // V3.7.17：即使 prevToken 为空（登录前游客态），也必须上送旧身份 offline。
+        // 否则游客 SSE 会跨登录存活，登录后再多出 1~2 个游客 presence。
+        await _sendPresenceBeacon(PRESENCE_OFFLINE_ENDPOINT, {
+            tokenOverride: prevToken || '',
+            force: true,
+        });
         if (_dead) return;
         reconnect();
         // 异步窗口内若再次切换了 token，由下一轮继续对齐

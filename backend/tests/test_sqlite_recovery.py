@@ -22,6 +22,7 @@ from core.sqlite_recovery import (
     recover_sqlite_database,
     validate_sqlite_database,
 )
+from api.auth.schema import init_auth_tables_sync
 
 
 def _sha256(path: Path) -> str:
@@ -161,6 +162,27 @@ class MaintenanceManifestTests(unittest.TestCase):
 
 
 @unittest.skipUnless(shutil.which("sqlite3"), "sqlite3 CLI is required")
+class AuthEmptyFallbackTests(unittest.TestCase):
+    def test_init_auth_tables_accepts_plain_tuple_row_connection(self):
+        conn = sqlite3.connect(":memory:")
+        try:
+            self.assertIsNone(conn.row_factory)
+            init_auth_tables_sync(conn)
+            conn.commit()
+            self.assertIs(conn.row_factory, sqlite3.Row)
+            tables = {
+                str(row[0])
+                for row in conn.execute(
+                    "SELECT name FROM sqlite_master WHERE type='table'"
+                ).fetchall()
+            }
+            self.assertIn("users", tables)
+            self.assertIn("sessions", tables)
+            self.assertIn("system_config", tables)
+        finally:
+            conn.close()
+
+
 class SQLiteRecoveryIntegrationTests(unittest.TestCase):
     required_tables = ("users", "sessions", "system_config")
     required_columns = {
@@ -326,6 +348,60 @@ class SQLiteRecoveryIntegrationTests(unittest.TestCase):
             self.assertEqual(payload["status"], "recovery_failed")
             self.assertEqual(payload["error_message"], "synthetic backup failure")
 
+    def test_logical_failure_restores_previous_backup_instead_of_empty_db(self):
+        """历史验证备份存在时，逻辑恢复失败必须先恢复备份，不能降级为空库。"""
+        with tempfile.TemporaryDirectory() as temp_name:
+            db_path = Path(temp_name) / "auth.db"
+            _create_auth_fixture(db_path)
+            old_dir = db_path.parent / "recovery_backups" / "previous_event"
+            old_dir.mkdir(parents=True)
+            previous_backup = old_dir / "webgis_auth.recovered.previous.backup.db"
+            _create_auth_fixture(previous_backup)
+            previous_hash = _sha256(previous_backup)
+
+            with mock.patch.object(recovery_module, "_run_export", return_value=1):
+                result = recover_sqlite_database(
+                    db_path,
+                    required_tables=self.required_tables,
+                    required_columns=self.required_columns,
+                    minimum_total_rows=3,
+                    activate=True,
+                    empty_fallback_initializer=_initialize_empty_auth_schema,
+                )
+
+            self.assertTrue(result.success)
+            self.assertEqual(result.method, "previous_verified_backup")
+            self.assertEqual(_sha256(result.binary_backup_path), previous_hash)
+            validation = validate_sqlite_database(
+                db_path,
+                required_tables=self.required_tables,
+                required_columns=self.required_columns,
+                minimum_total_rows=3,
+            )
+            self.assertTrue(validation.valid, validation.error)
+            self.assertEqual(validation.row_counts["users"], 1)
+
+    def test_empty_fallback_can_be_disabled(self):
+        """显式禁用后，恢复失败必须抛错而不是静默清空主库。"""
+        with tempfile.TemporaryDirectory() as temp_name:
+            db_path = Path(temp_name) / "auth.db"
+            _create_auth_fixture(db_path)
+            original_bytes = db_path.read_bytes()
+
+            with mock.patch.object(recovery_module, "_run_export", return_value=1):
+                with self.assertRaises(SQLiteRecoveryError):
+                    recover_sqlite_database(
+                        db_path,
+                        required_tables=self.required_tables,
+                        required_columns=self.required_columns,
+                        minimum_total_rows=3,
+                        activate=True,
+                        empty_fallback_initializer=_initialize_empty_auth_schema,
+                        allow_empty_fallback=False,
+                    )
+
+            self.assertEqual(db_path.read_bytes(), original_bytes)
+
     def test_failed_recovery_keeps_source_bytes_unchanged(self):
         with tempfile.TemporaryDirectory() as temp_name:
             db_path = Path(temp_name) / "auth.db"
@@ -346,6 +422,48 @@ class SQLiteRecoveryIntegrationTests(unittest.TestCase):
             payload = json.loads(manifests[0].read_text(encoding="utf-8"))
             self.assertEqual(payload["status"], "recovery_failed")
             self.assertTrue(Path(payload["corrupt_backup_path"]).is_file())
+
+
+class CorruptionDetectionTests(unittest.TestCase):
+    def test_healthy_database_is_not_reported_corrupt(self):
+        with tempfile.TemporaryDirectory() as temp_name:
+            db_path = Path(temp_name) / "auth.db"
+            _create_auth_fixture(db_path)
+            self.assertFalse(recovery_module.is_sqlite_database_corrupted(db_path))
+
+    def test_integrity_only_failure_is_reported_corrupt(self):
+        """quick_check 通过但 integrity_check 失败时必须判定为损坏（索引级损坏）。"""
+        with tempfile.TemporaryDirectory() as temp_name:
+            db_path = Path(temp_name) / "auth.db"
+            _create_auth_fixture(db_path)
+
+            class _Rows(list):
+                def fetchall(self):
+                    return self
+
+            class _ProbeConnection:
+                def __init__(self):
+                    self.statements = []
+
+                def execute(self, sql, *args, **kwargs):
+                    self.statements.append(sql)
+                    if "integrity_check" in sql:
+                        return _Rows([("wrong # of entries in index idx_users_email_unique",)])
+                    if "quick_check" in sql:
+                        return _Rows([("ok",)])
+                    raise AssertionError(f"unexpected PRAGMA: {sql}")
+
+                def close(self):
+                    pass
+
+            probe = _ProbeConnection()
+            with mock.patch.object(recovery_module.sqlite3, "connect", return_value=probe):
+                self.assertTrue(recovery_module.is_sqlite_database_corrupted(db_path))
+
+            self.assertTrue(
+                any("integrity_check" in sql for sql in probe.statements),
+                "完整性检测必须调用 PRAGMA integrity_check，不能只依赖 quick_check",
+            )
 
 
 if __name__ == "__main__":

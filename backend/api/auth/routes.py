@@ -47,6 +47,7 @@ from .guest_token import (
     GUEST_TOKEN_COOKIE_NAME,
     guest_token_issuance_enabled,
     issue_limit_key,
+    peek_guest_token_uid,
     sign_guest_token,
     verify_guest_token,
 )
@@ -752,6 +753,10 @@ async def create_guest_session(request: Request, payload: Optional[GuestSessionR
 
     presented_token = _extract_guest_token(request)
     existing_uid = verify_guest_token(presented_token) if presented_token else None
+    if not existing_uid and presented_token:
+        # token 过期但签名有效：复用原 guest_uid，只重签新 token。
+        # 绝不因为过期就按设备/IP 重新分配身份，否则配额与在线统计会断裂。
+        existing_uid = peek_guest_token_uid(presented_token)
 
     if existing_uid:
         # 续期：同一身份原样重签，不消耗签发限频额度
@@ -774,7 +779,7 @@ async def create_guest_session(request: Request, payload: Optional[GuestSessionR
             else _derive_uid_from_ip_ua(identity_ip, request_user_agent)
         )
 
-    ttl_hours = get_int("GUEST_TOKEN_TTL_HOURS", 24, minimum=1, maximum=24 * 90)
+    ttl_hours = get_int("GUEST_TOKEN_TTL_HOURS", 4, minimum=1, maximum=4)
     guest_token = sign_guest_token(guest_uid, ttl_hours)
     if not guest_token:
         raise HTTPException(

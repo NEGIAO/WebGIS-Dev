@@ -17,6 +17,20 @@
 > 注：V3.7.2 号段已于同日重新启用，对应《修复 OpenLayers 加载 OSM 标准瓦片 403》条目，与本条无冲突。
 > 分主题的原始过程记录保留在 `Docs/LLM_record/26-11/2026-11-14/`，不迁移、不改写。
 
+### V3.7.11 (2026-11-24) — Agent 任务闭环 · 配额提示 · 工具预算 · 罗盘半径自适应
+
+> **版本归并（2026-11-25）**：按用户明确指令，将暂存区的 V3.7.11 ~ V3.7.18 合并为单条 **V3.7.11**；中间版本号自本条起废弃，过程日志保留不迁移、不改写。
+
+**问题与修复**：
+
+1. **指定地点风水分析提前停止**：新增“定位 → 启用罗盘 → 提示用户点击卦象”的完成契约；工具结果不再复用 `[工具调用已执行]` 占位文案；重复签名加入 view 维度。日志：[fix-agent-fengshui-task-completion](../LLM_record/26-11/2026-11-24/2026-11-24-fix-agent-fengshui-task-completion.md)
+2. **额度耗尽提示不清晰**：明确为 WebGIS 平台 API 额度（guest 100/日、注册 1000/日，管理员可调），耗尽后停止调用工具并建议登录/注册。日志：[agent-quota-exhausted-notice](../LLM_record/26-11/2026-11-24/2026-11-24-agent-quota-exhausted-notice.md)、[clarify-webgis-quota-semantics](../LLM_record/26-11/2026-11-24/2026-11-24-clarify-webgis-quota-semantics.md)
+3. **工具调用预算**：单轮最多 10 次工具，作为用户体验与防循环的产品策略；运行时上限同步为 10。日志：[raise-agent-tool-round-limit](../LLM_record/26-11/2026-11-24/2026-11-24-raise-agent-tool-round-limit.md)、[agent-tool-round-budget-prompt](../LLM_record/26-11/2026-11-24/2026-11-24-agent-tool-round-budget-prompt.md)
+4. **罗盘半径自适应**：AgentMapContextV1 新增 `compassRadiusHintMeters`，按 OL zoom / Cesium cameraHeight 推荐半径；工具上限 100 km → 2,000 km，全档位上调。日志：[agent-compass-radius-by-zoom](../LLM_record/26-11/2026-11-24/2026-11-24-agent-compass-radius-by-zoom.md)、[scale-up-agent-compass-radius](../LLM_record/26-11/2026-11-24/2026-11-24-scale-up-agent-compass-radius.md)
+5. **其他同批改动**：Supabase 访客同步 payload 单测、SQLite 恢复增强、会话/游客 token 4h 上限、在线 presence 去重、导出下载失败语义修正、traffic workflow 补记漏算日期。日志：[supabase-visit-payload-tests](../LLM_record/26-11/2026-11-24/2026-11-24-supabase-visit-payload-tests.md)
+
+**验证**：vue-tsc 0、ESLint 0、后端相关单测 44/44、结构树 749/749、生产构建成功；平台红线仅命中已知 `maxRayDistance` 假阳性，生产基线通过。
+
 ### V3.7.10 (2026-11-24) — 罗盘全链路增强 · Agent 工具扩展 · 双引擎修复 · Code Review 收口
 
 > **版本归并（2026-11-24）**：本条对应同一批未提交工作，暂存时曾被逐次记为 V3.7.10 ~ V3.7.37。
