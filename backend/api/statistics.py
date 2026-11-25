@@ -3,6 +3,7 @@
 """
 
 import asyncio
+import ipaddress
 import json
 import logging
 import sqlite3
@@ -261,6 +262,33 @@ def encode_pos(lng: Any, lat: Any) -> str:
 
 def extract_client_ip(request: Request) -> str:
     return _extract_client_ip(request)
+
+
+def _public_ip_for_display(ip: Any) -> str:
+    """展示层 IP 过滤：私有/回环/链路本地/保留/组播地址一律显示 unknown。
+
+    容器环境（HF Space / Docker）下 request.client.host 是网关内网 IP
+    （如 10.16.x.x / 172.19.0.1），真实公网 IP 需由反代注入 XFF；
+    在拿不到公网 IP 时宁可显示 unknown，也不把网关 IP 误标为访客 IP。
+    仅用于 admin_online_presence 展示，不影响鉴权/身份派生/IP 定位。
+    """
+    text = str(ip or "").strip()
+    if not text:
+        return "unknown"
+    try:
+        parsed = ipaddress.ip_address(text)
+    except ValueError:
+        return "unknown"
+    if (
+        parsed.is_private
+        or parsed.is_loopback
+        or parsed.is_link_local
+        or parsed.is_reserved
+        or parsed.is_multicast
+        or parsed.is_unspecified
+    ):
+        return "unknown"
+    return text
 
 
 async def fetch_geolocation(ip: str) -> Optional[dict]:
@@ -1200,7 +1228,7 @@ def _refresh_admin_online_mirror_sync() -> int:
                     json.dumps(item.get("client_ids") or []),
                     int(item.get("session_count") or 0),
                     int(item.get("sse_connections") or 0),
-                    info["ip"],
+                    _public_ip_for_display(info["ip"]),
                     info["ip_city"],
                     info["ip_region"],
                     info["ip_country"],

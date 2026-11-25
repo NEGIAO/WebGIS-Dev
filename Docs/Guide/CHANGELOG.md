@@ -17,6 +17,18 @@
 > 注：V3.7.2 号段已于同日重新启用，对应《修复 OpenLayers 加载 OSM 标准瓦片 403》条目，与本条无冲突。
 > 分主题的原始过程记录保留在 `Docs/LLM_record/26-11/2026-11-14/`，不迁移、不改写。
 
+### V3.7.14 (2026-11-25) — 会话签发架构收敛（L3）
+
+**问题与修复**：应用入口无条件签发 guest token，导致自动化脚本访问 landing 首页即获得有效身份、
+经 presence ping 标活后长期虚报在线人数。L3 方案文档：[auth-issuance-architecture-plan](../TODO/2026-11-25-auth-issuance-architecture-plan.md)。
+
+1. **签发入口下沉**：删除 `main.ts` 顶层 `ensureGuestSession()`；游客身份匿名签发只发生在 `/home` 守卫内的分享模式与应急游客模式两条合法路径，普通游客访问 /home 仍按既有 requiresAuth 语义重定向 register。
+2. **landing 零鉴权**：根目录为纯展示页，不签发、不验证、不产生 presence 心跳（LandingView 不挂载账户面板，已核实）。
+3. **保留合法匿名能力**：register 仍是 admin/register token 唯一签发页；分享链接 `s=1` 与应急游客模式行为不变。
+4. **不误伤**：后端鉴权/限频/配额/签发端点语义零改动；仅迁移前端签发时机。
+
+**验证**：`vue-tsc --noEmit` 0 错误、门禁全绿、生产构建成功。日志：[auth-issuance-architecture](../LLM_record/26-11/2026-11-25/2026-11-25-auth-issuance-architecture.md)
+
 ### V3.7.13 (2026-11-25) — URL 参数治理 · 版本注入 · 定位标记 · 分享文本化
 
 > **版本归并（2026-11-25）**：按用户明确指令，将暂存区中 URL 参数清理、版本参数重复、自动定位标记、分享文本化等过程日志统一整合为单一版本 **V3.7.13**；过程日志保留不迁移、不改写，本条为唯一版本入口。
@@ -32,6 +44,8 @@
 7. **分享按钮改为复制说明文本 + URL**：移除不兼容的 `navigator.share` 分支；点击后从分享 URL 的 `lng/lat` 复用高德逆地理编码（`apiReverseGeocode`）解析具体地名，生成"我在 NEGIAO's WebGIS 中分享了一处地点：{place}…{url}"文本并复制，弹 message 提醒。地名 API 失败按"定位上下文 → 经纬度文本 → 兜底词"三级降级，不阻断分享。日志：[share-copy-text](../LLM_record/26-11/2026-11-25/2026-11-25-share-copy-text.md)
 8. **修复落地页被写入 loc=ip**：入口自动定位原在 `main.ts` 顶层无条件触发，落地页（`/`）也被写入 `#/?loc=ip`。改为 `router.afterEach` 仅在进入 `/home` 时触发，`markIpLocationFromBackend` 与 `markLocationSuccessFlagInUrl` 均增加非 `/home` 短路防御。日志：[loc-mark-on-landing-page](../LLM_record/26-11/2026-11-25/2026-11-25-loc-mark-on-landing-page.md)
 9. **修复在线镜像 display_name 与用户中心不一致**：注册/管理员分支原取 `sessions.username`（登录名），用户中心取 `users.display_name`（昵称）——改为联查 `users` 取昵称、空值回退 username；游客分支原取可能残留旧值的 `guest_identity_records.username`（如 `user_1133`），改为复用 `_guest_visible_username(id)` 生成 `guest_<id>`（如 `guest_1134`），与用户中心 `getUserDisplayName` 及 URL `ut=guest_<id>` 同口径。补单测断言，真实库双分支实测通过。日志：[online-mirror-display-name](../LLM_record/26-11/2026-11-25/2026-11-25-online-mirror-display-name.md)
+10. **在线表私有网关 IP 展示层过滤**：HF/Docker 容器未注入公网 XFF 时，`_extract_client_ip` 回落到容器网关 IP（10.16.x.x / 172.19.0.1），在线表误显示为访客 IP。按用户选定方案，只在 `admin_online_presence` 展示写入时过滤私有/回环/保留 IP 为 `unknown`，不改鉴权/身份派生/限频核心逻辑。日志：[online-ip-private-gateway](../LLM_record/26-11/2026-11-25/2026-11-25-online-ip-private-gateway.md)
+11. **修复在线人数长期虚报（Plan B）**：根因是容器网关私网 IP + 测试残留的非标准 device_id（`vt-test-device` / `guest_<hex>`）被当作真实游客计入在线，并靠 25s 心跳长期挂在线表。新增组合判据——私网网关 IP 且 device_id 非标准 `gd_` 格式时归入不可数 `e:`；标准 `gd_`（前端真实浏览器生成，含 clone 项目连线上库的用户）与公网用户一律保留。不按 IP 一刀切，不误伤任何真实用户；注册/管理员不受影响。日志：[online-count-inflation-fix](../LLM_record/26-11/2026-11-25/2026-11-25-online-count-inflation-fix.md)
 
 **为何不用日期**：同日多次发版日期相同、缓存破坏失效，且无法与 CHANGELOG 对应；版本号随 L2/L3 每次发版 +1，天然满足缓存刷新与追溯。
 

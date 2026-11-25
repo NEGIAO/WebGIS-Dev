@@ -107,6 +107,11 @@ REGISTERED_DAILY_API_QUOTA = 1000
 USERNAME_PATTERN = re.compile(r"^[A-Za-z0-9_]{3,24}$")
 PASSWORD_PATTERN = re.compile(r"^(?=.*[A-Za-z])(?=.*\d).{6,64}$")
 GUEST_DEVICE_ID_PATTERN = re.compile(r"^[A-Za-z0-9_.:-]{6,128}$")
+# V3.7.13：前端游客设备 ID 格式（gd_ 前缀 + 至少 6 位字母数字）。
+# 现代前端生成 gd_ + 32 位随机 hex（auth.ts::randomGuestDeviceSeed），
+# 但历史版本可能生成更短的 gd_ 值——为兼容真实老用户，只要带 gd_ 前缀即视为标准。
+# 仅用于在线 presence 的"真实浏览器"判定；不是鉴权凭证，不用于限流/配额。
+STANDARD_GUEST_DEVICE_ID_PATTERN = re.compile(r"^gd_[A-Za-z0-9_.:-]{6,}$")
 DISPLAY_NAME_CONTROL_PATTERN = re.compile(r"[\x00-\x1f\x7f]")
 
 # ─── 保留名 ───
@@ -134,6 +139,35 @@ def _normalize_guest_device_id(raw_value: Optional[str]) -> str:
         return ""
 
     return compact[:128]
+
+
+def is_private_client_ip(raw_value: Optional[str]) -> bool:
+    """是否为私网/回环/链路本地/保留地址（容器网关 IP 属此类）。
+
+    仅用于在线 presence 的组合过滤，不作为鉴权依据。
+    非法 IP 文本返回 False（交给其它判据处理）。
+    """
+    try:
+        parsed = ipaddress.ip_address(str(raw_value or "").strip())
+    except ValueError:
+        return False
+    return bool(
+        parsed.is_private
+        or parsed.is_loopback
+        or parsed.is_link_local
+        or parsed.is_reserved
+        or parsed.is_multicast
+        or parsed.is_unspecified
+    )
+
+
+def is_standard_guest_device_id(raw_value: Optional[str]) -> bool:
+    """是否为前端标准生成的游客设备 ID（gd_ + 32 位 hex）。
+
+    用于在线 presence 过滤：测试脚本常见的 `vt-test-device` / `guest_<hex>`
+    等非标准值不计为真实浏览器。仅此判定，不作为鉴权或限流依据。
+    """
+    return bool(STANDARD_GUEST_DEVICE_ID_PATTERN.fullmatch(str(raw_value or "").strip()))
 
 
 # ─── 游客 UID 构建 ───
