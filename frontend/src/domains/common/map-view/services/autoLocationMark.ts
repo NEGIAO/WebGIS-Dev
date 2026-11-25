@@ -76,9 +76,20 @@ export async function fetchIpLocationCandidate(
 /**
  * 进入系统自动 IP 定位并标记 loc=ip（整页只执行一次，失败静默）。
  *
+ * @param routePath 当前路由路径（由调用方传入，避免依赖 location.hash 的写入时序；
+ *                  省略时从 location.hash 推断）
  * @returns 是否成功标记（失败/已有 GPS/已执行过均返回 false）
  */
-export function markIpLocationFromBackend(): Promise<boolean> {
+export function markIpLocationFromBackend(routePath?: string): Promise<boolean> {
+    // 仅地图主页 /home 标记：根路径 / 是落地页、/register 等页面不需要定位信息。
+    // 在占用一次性 Promise 之前判断，确保后续进入 /home 仍可触发。
+    let path = String(routePath || '').trim();
+    if (!path) {
+        const hashText = typeof window === 'undefined' ? '' : String(window.location.hash || '');
+        path = (hashText.startsWith('#') ? hashText.slice(1) : hashText).split('?')[0] || '/';
+    }
+    if (path !== '/home') return Promise.resolve(false);
+
     if (autoMarkPromise) return autoMarkPromise;
 
     autoMarkPromise = (async (): Promise<boolean> => {

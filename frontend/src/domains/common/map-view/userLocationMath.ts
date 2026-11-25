@@ -137,6 +137,9 @@ export function markLocationSuccessFlagInUrl(source = 'unknown'): void {
         const hashWithoutSharp = hash.startsWith('#') ? hash.slice(1) : hash;
         const [hashPathRaw, hashQueryRaw = ''] = hashWithoutSharp.split('?');
         const hashPath = hashPathRaw || '/home';
+        // V3.7.13：定位标记只属于地图主页；落地页 / 等非地图路由不得写入 loc，
+        // 避免产生 `#/?loc=ip` 这类无效标记。
+        if (hashPath !== '/home') return;
         const params = new URLSearchParams(hashQueryRaw);
 
         // V3.7.13：非分享不再写 s=0 占位；已有 s=1 保留，s=0 由清洗函数移除

@@ -66,9 +66,12 @@ void userPreferencesStore.bootstrap();
 // 签发失败静默（后端派生桶兜底），首几个请求可能先走派生身份，token 到位后自动切换。
 void ensureGuestSession();
 
-// 进入系统自动定位标记（V3.7.13）：后端 IP 定位成功即写 loc=ip；
-// GPS 授权仍由现有定位流程覆盖为 loc=gps（优先级更高）；失败静默不写 loc。
-void markIpLocationFromBackend();
+// 进入地图主页后自动定位标记（V3.7.13）：后端 IP 定位成功即写 loc=ip；
+// 仅 /home 触发（落地页 / 不需要定位标记），GPS 授权仍由既有流程覆盖为 loc=gps。
+// 失败静默不写 loc；markIpLocationFromBackend 内部保证整页只执行一次。
+router.afterEach((to) => {
+    if (to.path === '/home') void markIpLocationFromBackend(to.path);
+});
 
 // Mount immediately so RouterView and GlobalLoading can render during async guards.
 app.mount('#app');

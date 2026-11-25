@@ -32,6 +32,7 @@ from api.auth import (
     require_api_access_or_guest_readonly,
     resolve_quota_subject,
 )
+from api.auth.user import _guest_visible_username
 from api.realtime_stats import get_online_tracker
 from services import ip_geo_service
 
@@ -1035,9 +1036,22 @@ def _mirror_identity_from_db_sync(conn: sqlite3.Connection, presence_id: str) ->
         if row:
             r = dict(row)
             role = normalize_role(r.get("role"), r.get("username") or username)
+            # V3.7.13：display_name 与用户中心口径对齐——优先 users.display_name（昵称），
+            # 空值回退 username（与 auth/session.py 会话装配一致），不再显示登录名。
+            display_name = ""
+            try:
+                user_row = conn.execute(
+                    "SELECT display_name FROM users WHERE username = ? LIMIT 1",
+                    (username,),
+                ).fetchone()
+                if user_row is not None:
+                    display_name = str((dict(user_row)).get("display_name") or "").strip()
+            except sqlite3.OperationalError:
+                # 测试内存库/旧库可能无 users 表：回退 username，不阻断镜像刷新
+                pass
             info.update(
                 {
-                    "display_name": r.get("username") or username,
+                    "display_name": display_name or r.get("username") or username,
                     "role": role,
                     "identity_type": "admin" if role == ROLE_ADMIN else "registered",
                     "guest_uid": str(r.get("guest_uid") or ""),
@@ -1054,7 +1068,7 @@ def _mirror_identity_from_db_sync(conn: sqlite3.Connection, presence_id: str) ->
         guest_uid = presence_id[2:]
         row = conn.execute(
             """
-            SELECT guest_uid, username, role, guest_device_id, ip, user_agent,
+            SELECT id, guest_uid, username, role, guest_device_id, ip, user_agent,
                    first_seen_at, last_seen_at
             FROM guest_identity_records
             WHERE guest_uid = ? OR username = ?
@@ -1065,9 +1079,12 @@ def _mirror_identity_from_db_sync(conn: sqlite3.Connection, presence_id: str) ->
         ).fetchone()
         if row:
             r = dict(row)
+            # V3.7.13：游客展示名与用户中心同口径——guest_<guest_identity_records.id>，
+            # 不再用可能残留旧值（user_N / guest_<hex16>）的 username 列。
+            display_name = _guest_visible_username(int(r.get("id") or 0))
             info.update(
                 {
-                    "display_name": str(r.get("username") or guest_uid),
+                    "display_name": display_name,
                     "role": "guest",
                     "identity_type": "guest",
                     "guest_uid": str(r.get("guest_uid") or guest_uid),

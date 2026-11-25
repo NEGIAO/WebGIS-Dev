@@ -649,12 +649,15 @@ def test_admin_online_mirror_only_keeps_current_identities(monkeypatch):
             ip TEXT, user_agent TEXT, created_at TEXT, last_seen_at TEXT
         );
         CREATE TABLE guest_identity_records (
-            guest_uid TEXT, username TEXT, role TEXT, guest_device_id TEXT,
+            id INTEGER, guest_uid TEXT, username TEXT, role TEXT, guest_device_id TEXT,
             ip TEXT, user_agent TEXT, first_seen_at TEXT, last_seen_at TEXT
         );
         CREATE TABLE visit_tracking_events (
             username TEXT, ip_city TEXT, ip_region TEXT, ip_country TEXT,
             latitude REAL, longitude REAL, coord_source TEXT, created_at TEXT
+        );
+        CREATE TABLE users (
+            username TEXT, display_name TEXT
         );
         CREATE TABLE admin_online_presence (
             presence_id TEXT PRIMARY KEY, display_name TEXT, role TEXT,
@@ -669,14 +672,16 @@ def test_admin_online_mirror_only_keeps_current_identities(monkeypatch):
             'admin', 'admin', '', '', '9.9.9.9', 'UA-ADMIN',
             '2026-11-25 10:00:00', '2026-11-25 12:00:00'
         );
+        -- id=2055、username 残留旧值 user_1988：验证镜像用 id 而非 username
         INSERT INTO guest_identity_records VALUES (
-            'guest_mirror1', 'guest_mirror1', 'guest', 'gd_mirror1',
+            2055, 'guest_mirror1', 'user_1988', 'guest', 'gd_mirror1',
             '1.2.3.4', 'UA-GUEST', '2026-11-25 11:00:00', '2026-11-25 12:00:00'
         );
         INSERT INTO visit_tracking_events VALUES (
             'guest_mirror1', 'Nanjing', 'Jiangsu', 'China', 32.06, 118.79,
             'gps', '2026-11-25 12:00:00'
         );
+        INSERT INTO users VALUES ('admin', 'Admin Nick');
         """
     )
 
@@ -699,7 +704,11 @@ def test_admin_online_mirror_only_keeps_current_identities(monkeypatch):
     admin = next(row for row in rows if row["presence_id"] == "u:admin")
     guest = next(row for row in rows if row["presence_id"] == "g:guest_mirror1")
     assert admin["identity_type"] == "admin" and admin["ip"] == "9.9.9.9"
+    # V3.7.13：在线镜像 display_name 与用户中心口径一致（users.display_name 优先）
+    assert admin["display_name"] == "Admin Nick"
     assert guest["ip"] == "1.2.3.4" and guest["ip_city"] == "Nanjing"
+    # V3.7.13：游客 display_name 用 guest_<id>，与用户中心一致（不受 username 旧值影响）
+    assert guest["display_name"] == "guest_2055"
     assert guest["client_ids"] == ["c_guest_mirror"]
 
     tracker.drop_presence("u:admin", client_id="c_admin_mirror")
