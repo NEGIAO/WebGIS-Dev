@@ -8,7 +8,11 @@
  *   后端对无 token 请求按确定性派生桶 H(末跳IP|UA) 识别身份，浏览不受影响。
  */
 import { apiAuthGuestSession } from '@/api/backend/auth';
-import { getOrCreateGuestDeviceId, setGuestUserSnapshot } from '@common/user/services/auth';
+import {
+    getOrCreateGuestDeviceId,
+    setGuestUserSnapshot,
+    syncUserRoleToUrl,
+} from '@common/user/services/auth';
 import { clearGuestToken, getGuestToken, setGuestToken } from '@common/user/services/guestTokenStore';
 
 export interface GuestSessionResult {
@@ -30,8 +34,10 @@ export async function ensureGuestSession(options: { force?: boolean } = {}): Pro
     const force = options.force === true;
     const existing = getGuestToken();
     if (!force && existing) {
-        // 已持有 token：直接复用（过期由后端验签兜底——请求静默回落派生桶，
-        // 之后 /auth/me 等响应不会再刷新游客快照时可调 force 重签）
+        // 已持有 token 直接复用。有效期与撤销由后端判定：签名有效但已过期/被删除时
+        // 返回 401 SESSION_EXPIRED，前端统一清游客身份并强制跳 /register。
+        // 本项目明确**不做静默续签**（否则被撤销的身份可借续签绕回），
+        // 只有显式 force（分享模式首次注入）才重新签发。
         return { token: existing, user: null };
     }
 
@@ -46,6 +52,8 @@ export async function ensureGuestSession(options: { force?: boolean } = {}): Pro
                 if (!token || !user) return null;
                 setGuestToken(token);
                 setGuestUserSnapshot(user);
+                // V3.7.12：游客签发也同步 URL 身份标签，使访问统计按 guest_<id> 分组
+                syncUserRoleToUrl(user);
                 return { token, user, expires_in_hours: Number(result?.expires_in_hours) || undefined };
             } catch {
                 // 401/429/503/网络失败均静默：游客身份属增强而非阻塞项

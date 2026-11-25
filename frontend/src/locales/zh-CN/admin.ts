@@ -81,6 +81,7 @@ export default {
         insertToTable: '新增到当前表',
         // 数据库分页与导出
         pageSizeAll: '全部',
+        pageSizeLabel: '每页条数',
         prevPage: '上一页',
         nextPage: '下一页',
         pageInfo: '第 {current} / {total} 页',

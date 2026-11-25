@@ -72,7 +72,7 @@ const QUICK_LOCATION_COORDS = Object.freeze([
 
 /**
  * 分享链接剥离清单：用户私有信息，分享时一律清空。
- * ut  = 用户类型标签（guest/admin/registered）
+ * ut  = 身份标签（admin / guest_<序号> / registered_<用户名>）
  * loc = 定位授权来源（gps/ip）
  * p   = 编码后的 GPS 精准位置
  * 其余参数（lng、lat、z、l、view、cv、cs 等）全部保留，用于还原分享者的视图与位置状态。

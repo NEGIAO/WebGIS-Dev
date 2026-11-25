@@ -7,7 +7,8 @@
 
 import axios from 'axios';
 import {
-    clearAuthSession,
+    markSessionExpired,
+    getAuthToken,
     getBackendBearerToken,
     getOrCreateGuestDeviceId,
     getPresenceClientId,
@@ -76,11 +77,9 @@ backendAPI.interceptors.request.use(
         // 游客身份签名 token（V3.7.6 游客身份治理）：无登录态时经 X-Guest-Token 头
         // 携带后端签发的 HMAC 身份（稳定配额桶）；无 token 时后端按确定性派生桶兜底。
         // guest token 与登录 token 完全隔离，永不进入 Authorization 头。
-        if (!token) {
-            const guestToken = getGuestToken();
-            if (guestToken) {
-                config.headers['X-Guest-Token'] = guestToken;
-            }
+        const guestToken = !token ? (getGuestToken() || '') : '';
+        if (guestToken) {
+            config.headers['X-Guest-Token'] = guestToken;
         }
         const clientId = getPresenceClientId();
         if (clientId && !config.headers['X-Presence-Client-Id']) {
@@ -93,6 +92,10 @@ backendAPI.interceptors.request.use(
 
         // V3.7.6：不再发送 X-Client-IP（自报值可伪造且依赖第三方 ipify 服务）；
         // 后端 _extract_client_ip 回落 XFF 末跳取真实公网 IP。
+        // V3.7.12 Code Review：快照请求实际使用的身份凭证。响应 401 若是过期请求迟到到达，
+        // 当前凭证可能已被重新登录替换，此时不得清掉新会话——否则用户刚登录即被踢回注册页。
+        (config as any)._issuedAuthToken = token || '';
+        (config as any)._issuedGuestToken = (!token ? guestToken : '') || '';
         return config;
     },
     (error: any) => {
@@ -175,12 +178,32 @@ backendAPI.interceptors.response.use(
 
             if (status === 401) {
                 // 区分会话过期 vs 游客/未登录权限不足
-                // SESSION_EXPIRED / SESSION_ERROR → 清除会话，跳转登录
-                // GUEST_NO_TOKEN（历史码） / LOGIN_REQUIRED（V3.7.6 require_login
-                // fail-closed 后的新码） → 仅提示，不清除会话，用 warning 而非 error
+                // SESSION_EXPIRED / SESSION_ERROR / 其它非游客 401 → 统一走 markSessionExpired：
+                // 清本地会话 + 派发事件，由 main.ts 弹「会话过期，请重新登陆」并跳 /register。
+                // 此处提前 reject，避免下方通用 toast 再弹一次「401，登录状态已失效...」。
+                // GUEST_NO_TOKEN（历史码） / LOGIN_REQUIRED（未带 token 的 require_login）
+                // → 仅提示，不清会话，不跳注册页。
                 const isGuestInsufficient = detailCode === 'GUEST_NO_TOKEN' || detailCode === 'LOGIN_REQUIRED';
+                // V3.7.12 Code Review：仅当触发 401 的凭证仍是当前凭证时才清理。
+                // 迟到的旧请求若携带已被替换的 token，清会话会误伤刚重建的登录态。
+                const issuedAuth = String((config as any)?._issuedAuthToken || '');
+                const issuedGuest = String((config as any)?._issuedGuestToken || '');
+                const currentAuth = getAuthToken() || '';
+                const currentGuest = getGuestToken() || '';
+                const credentialStillCurrent = issuedAuth
+                    ? issuedAuth === currentAuth
+                    : issuedGuest === currentGuest;
                 if (!isGuestInsufficient) {
-                    clearAuthSession();
+                    if (credentialStillCurrent) {
+                        markSessionExpired();
+                    }
+                    const apiError = new Error(message);
+                    (apiError as any).status = status;
+                    (apiError as any).detailCode = detailCode;
+                    (apiError as any).statusText = getHttpStatusMessage(status);
+                    (apiError as any).isSessionExpired = true;
+                    (apiError as any).originalError = error;
+                    return Promise.reject(apiError);
                 } else {
                     // 游客权限不足：以 warning 提示，不作为 error 抛出
                     showError(message, { duration: 4000 });

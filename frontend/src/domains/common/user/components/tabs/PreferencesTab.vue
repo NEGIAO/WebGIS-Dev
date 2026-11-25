@@ -24,27 +24,12 @@
                         </span>
                         <span class="pref-desc">{{ t('preferences.defaultBasemapDesc') }}</span>
                     </span>
-                    <select
-                        class="pref-select"
-                        :value="draftPreferences.default_basemap"
+                    <ThemedSelect
+                        :model-value="draftPreferences.default_basemap"
+                        :options="themedBasemapOptions"
                         :disabled="preferenceSaving || preferenceLoading"
-                        @change="handleSelectChange('default_basemap', $event)"
-                    >
-                        <option value="">{{ t('preferences.followSystem') }}</option>
-                        <option
-                            v-if="selectedBasemapUnavailable"
-                            :value="draftPreferences.default_basemap"
-                        >
-                            {{ t('preferences.outsideList', { value: draftPreferences.default_basemap }) }}
-                        </option>
-                        <option
-                            v-for="option in basemapOptions"
-                            :key="option.value"
-                            :value="option.value"
-                        >
-                            {{ option.label }}
-                        </option>
-                    </select>
+                        @change="handleThemedSelectChange('default_basemap', $event)"
+                    />
                 </label>
 
                 <label class="pref-row">
@@ -56,20 +41,12 @@
                         </span>
                         <span class="pref-desc">{{ t('preferences.languageDesc') }}</span>
                     </span>
-                    <select
-                        class="pref-select"
-                        :value="draftPreferences.language"
+                    <ThemedSelect
+                        :model-value="draftPreferences.language"
+                        :options="themedLanguageOptions"
                         :disabled="preferenceSaving || preferenceLoading"
-                        @change="handleSelectChange('language', $event)"
-                    >
-                        <option
-                            v-for="option in LANGUAGE_OPTIONS"
-                            :key="option.value"
-                            :value="option.value"
-                        >
-                            {{ t(option.labelKey) }}
-                        </option>
-                    </select>
+                        @change="handleThemedSelectChange('language', $event)"
+                    />
                 </label>
 
                 <label class="pref-row">
@@ -81,20 +58,12 @@
                         </span>
                         <span class="pref-desc">{{ t('preferences.unitSystemDesc') }}</span>
                     </span>
-                    <select
-                        class="pref-select"
-                        :value="draftPreferences.unit_system"
+                    <ThemedSelect
+                        :model-value="draftPreferences.unit_system"
+                        :options="themedUnitOptions"
                         :disabled="preferenceSaving || preferenceLoading"
-                        @change="handleSelectChange('unit_system', $event)"
-                    >
-                        <option
-                            v-for="option in UNIT_OPTIONS"
-                            :key="option.value"
-                            :value="option.value"
-                        >
-                            {{ t(option.labelKey) }}
-                        </option>
-                    </select>
+                        @change="handleThemedSelectChange('unit_system', $event)"
+                    />
                 </label>
 
                 <label class="pref-row">
@@ -106,27 +75,12 @@
                         </span>
                         <span class="pref-desc">{{ t('preferences.agentModelDesc') }}</span>
                     </span>
-                    <select
-                        class="pref-select"
-                        :value="draftPreferences.preferred_agent_model"
+                    <ThemedSelect
+                        :model-value="draftPreferences.preferred_agent_model"
+                        :options="themedModelOptions"
                         :disabled="preferenceSaving || preferenceLoading"
-                        @change="handleSelectChange('preferred_agent_model', $event)"
-                    >
-                        <option value="">{{ t('preferences.autoDispatch') }}</option>
-                        <option
-                            v-if="selectedModelUnavailable"
-                            :value="draftPreferences.preferred_agent_model"
-                        >
-                            {{ t('preferences.outsideList', { value: draftPreferences.preferred_agent_model }) }}
-                        </option>
-                        <option
-                            v-for="modelId in modelOptions"
-                            :key="modelId"
-                            :value="modelId"
-                        >
-                            {{ modelId }}
-                        </option>
-                    </select>
+                        @change="handleThemedSelectChange('preferred_agent_model', $event)"
+                    />
                 </label>
             </div>
 

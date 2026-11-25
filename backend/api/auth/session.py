@@ -2,6 +2,7 @@
 会话管理：创建、读取、删除会话，用户密码/头像更新。
 """
 
+import logging
 import secrets
 from datetime import timedelta
 from typing import Any, Dict, Optional
@@ -15,7 +16,15 @@ from .constants import (
 )
 from .db import _db_connection, _iso, _safe_parse_iso, _utc_now
 from .password import _hash_password
+from .session_archive import (
+    ARCHIVE_REASON_EXPIRED,
+    ARCHIVE_REASON_REVOKED,
+    archive_and_delete_tokens_locked,
+    supersede_sessions_locked,
+)
 from .user import _ensure_user_metric_row_sync
+
+logger = logging.getLogger(__name__)
 
 
 def _apply_logout_duration_sync(
@@ -59,6 +68,25 @@ def _create_session_sync(
     resolved_role = normalize_role(role, username)
 
     with _db_connection() as conn:
+        # V3.7.12：同一设备重复登录只保留最新一枚 token；旧 token 先归档再删除，
+        # 便于回源排查，同时避免 sessions 表被历史 token 无限堆积。
+        try:
+            supersede_sessions_locked(
+                conn,
+                keep_token=token,
+                guest_uid=str(guest_uid or "").strip() if resolved_role == "guest" else "",
+                username=username,
+                ip=ip,
+                user_agent=user_agent,
+                duration_recorder=lambda row: _apply_logout_duration_sync(
+                    conn,
+                    str(row.get("username") or ""),
+                    str(row.get("created_at") or ""),
+                    now,
+                ),
+            )
+        except Exception:
+            logger.warning("清理同设备旧会话失败，继续签发新 token", exc_info=True)
         conn.execute(
             """
             INSERT INTO sessions (
@@ -159,7 +187,8 @@ def _get_session_sync(
                 str(data.get("created_at") or ""),
                 now,
             )
-            conn.execute("DELETE FROM sessions WHERE token = ?", (token,))
+            # V3.7.12：过期会话先写入 expired_sessions 再删除，保留回源依据
+            archive_and_delete_tokens_locked(conn, [token], ARCHIVE_REASON_EXPIRED)
             conn.commit()
             return None
 
@@ -280,7 +309,8 @@ def _delete_session_sync(token: str) -> None:
             str(data.get("created_at") or ""),
             now,
         )
-        conn.execute("DELETE FROM sessions WHERE token = ?", (token,))
+        # V3.7.12：注销的 token 同样归档，便于排查「会话为何失效」
+        archive_and_delete_tokens_locked(conn, [token], ARCHIVE_REASON_REVOKED)
         conn.commit()
 
     try:
@@ -310,7 +340,12 @@ def _delete_sessions_by_username_sync(username: str) -> None:
                 now,
             )
 
-        conn.execute("DELETE FROM sessions WHERE username = ?", (username,))
+        # V3.7.12：整账号注销前先归档全部 token（含游客 uid 命中的行）
+        archive_and_delete_tokens_locked(
+            conn,
+            [str(dict(row).get("token") or "") for row in rows],
+            ARCHIVE_REASON_REVOKED,
+        )
         conn.commit()
 
     _drop_presence_on_session_delete(username=username)

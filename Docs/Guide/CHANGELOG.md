@@ -17,6 +17,34 @@
 > 注：V3.7.2 号段已于同日重新启用，对应《修复 OpenLayers 加载 OSM 标准瓦片 403》条目，与本条无冲突。
 > 分主题的原始过程记录保留在 `Docs/LLM_record/26-11/2026-11-14/`，不迁移、不改写。
 
+### V3.7.12 (2026-11-25) — 三类身份会话统一 · 会话归档 · 在线统计治理 · URL 身份标签细化 · 管理端控件主题化
+
+> **版本归并（2026-11-25）**：按用户明确指令，将暂存区中多次不规范提交对应的过程日志（含原 V3.7.13 会话归档批次、URL 身份标签批次）统一整合为单一版本 **V3.7.12**；过程日志保留不迁移、不改写，本条为唯一版本入口。
+
+> **升级影响（务必阅读）**：旧版本签发的游客 token 没有 `sessions` 行，部署后首次请求会返回 401 `SESSION_EXPIRED` 并强制回 `/register` 一次，重新进入即自动签发新身份。该行为是「4h 到期不静默续签」设计的既定结果，非故障。
+
+**问题与修复**：
+
+1. **SSE 幽灵连接与在线人数震荡**：在线口径收敛为“带 client_id 的显式心跳/API 活跃”：取消 `_default` liveness、SSE 写出不再刷新存活、迟到 SSE 清理按 `conn_id` 精准撤销、心跳窗口 90s→150s 容纳后台标签页节流；只读统计端点不再反向标活，前端加 generation/时序守卫、30s 对账、即时 ping 与静默重连；新增 `admin_online_presence` 镜像表与管理员在线明细接口（每 10s 动态维护，仅保留当前在线身份及 IP/设备/身份信息）。日志：[fix-sse-ghost-presence](../LLM_record/26-11/2026-11-25/2026-11-25-fix-sse-ghost-presence.md)
+2. **管理员接口返回真实敏感值**：按用户明确指令，管理员 DB 行与 API key 状态/详情不再掩码，便于直接管理密钥；`reveal` 保留为兼容别名。日志：[restore-admin-plaintext-values](../LLM_record/26-11/2026-11-25/2026-11-25-restore-admin-plaintext-values.md)
+3. **三类身份会话过期统一提示与跳转**：admin / registered / guest 一律签发并检测 session，过期/被删统一弹「会话过期，请重新登陆」并强制回 `/register`；过期登录 token 不再静默降级游客，前端 60s 周期体检兜底长期停留场景；并发 401 做 3s 合并。日志：[fix-session-expired-unified-redirect](../LLM_record/26-11/2026-11-25/2026-11-25-fix-session-expired-unified-redirect.md)
+4. **三类身份会话统一到 sessions 表**：游客 token 签发即写入 `sessions`（role=guest），验签按 token 查表；管理员在同一张表删行即让 admin / registered / guest 会话失效并返回 401，前端同步清游客 token，避免续签绕过。日志：[fix-guest-session-admin-revoke](../LLM_record/26-11/2026-11-25/2026-11-25-fix-guest-session-admin-revoke.md)
+5. **用户中心管理控件去浏览器原生化**：删除确认（数据库行、API 密钥/备份）改系统主题弹窗；数据表/分页/底图/统计天数/偏好设置等原生 `<select>` 全量替换为自绘 `ThemedSelect`，样式与主题统一。日志：[fix-admin-native-controls](../LLM_record/26-11/2026-11-25/2026-11-25-fix-admin-native-controls.md)
+6. **Code Review 修复**：DB 查询异常不再被误判为 token 过期而集体踢下线；游客 session 登记写入 `guest_device_id`，管理员删除游客记录时按设备派生 presence_id 精确撤销在线；游客在线镜像在缺少 `guest_identity_records` 时回查 `sessions` 补全 IP/设备/UA。日志：[code-review-version-v3.7.12](../LLM_record/26-11/2026-11-25/2026-11-25-code-review-version-v3.7.12.md)
+7. **会话只增不减**：新增 `expired_sessions` 归档表；签发新 token 时按身份取代旧 token（游客按 `guest_uid`、账号按 `username + IP + UA` 同设备），过期/注销/被撤销的会话先归档再删除；`app.py` 新增每 30 分钟一轮的清理任务（单轮上限 1000 行）。`sessions` 表因此稳定在「当前有效会话」规模，历史可按 `archive_reason` 回源。日志：[session-archive-online-roles](../LLM_record/26-11/2026-11-25/2026-11-25-session-archive-online-roles.md)
+8. **游客在线靠隐式搭车**：`presence/ping` 新增已验签游客 token（`X-Guest-Token`）解析，三类身份同口径计入在线，与是否游客无关；前端 presence 请求在无 Bearer 时附带游客 token，不再依赖 `/auth/me` 轮询保活。
+9. **在线角色靠字符串猜**：tracker 记录身份真实 role，`online_by_role` 按 admin / registered / guest 真实分类（废除 `pid == "u:admin"` 判断）；`online_sessions` 恢复 sessions 表原义，实时在线数另开 `online_sessions_presence`。
+10. **游客 token 可穿账号级端点**：新增 `require_account`（`require_login` + 拒绝 guest，403 `ACCOUNT_REQUIRED`），覆盖 OAuth 绑定/解绑、改密、改头像、改昵称、绑邮箱、偏好、个人 Agent 配置；注销仍允许游客清理身份。
+11. **确认弹窗 Promise 挂起**：管理面板与 API Key 面板在组件卸载时释放未决确认，Esc 视为取消；分页选项改 computed，切语言即时生效。
+12. **两套下拉实现**：`ThemedSelect` 升级为可访问组件（combobox/listbox ARIA、↑↓/Home/End/Enter/Space/Esc、高亮滚动跟随、触屏 ≥40px），管理面板三处内联 `.custom-select` 改用该组件并删除约 80 行重复样式；移除重复的 `idx_sessions_guest_uid` 索引、修正 legacy heartbeat 过期 docstring。
+13. **游客 username 统一为可读序号**：数据库 `guest_identity_records.username` / `sessions.username` 由 `guest_<hex16>` 改为 `guest_<id>`，与用户中心 `guest_no` 展示同口径；采用懒迁移逐行改写，不做全表 UPDATE；`guest_uid` 作为 token 验签 / presence / 配额稳定主键保持不变。
+14. **URL 身份标签细化**：URL hash 的 `ut` 参数由三类角色名改为可区分标识——`admin`（全局唯一、不附加）、`guest_<guest_no>`（缺失回退 username 数字 id）、`registered_<username>`；新增纯函数 `buildUserTypeTag` 统一构造。日志：[url-ut-identity-labels](../LLM_record/26-11/2026-11-25/2026-11-25-url-ut-identity-labels.md)
+15. **游客签发补齐 URL 同步**：`ensureGuestSession` 此前只写本地身份快照、不更新 `ut`，签发成功后补调 `syncUserRoleToUrl`，使游客访问也能按 `guest_<id>` 分组统计；分享链接排除名单保持不变（`ut` 不进入分享 URL）。
+
+> `ut` 位于 URL hash，不上送服务器、不参与鉴权，取值变化无权限风险。
+
+**验证**：后端 `test_session_expiry` + `test_guest_identity` + `test_realtime_stats` + 隔离 SQLite 迁移验证全通过；全量 pytest 171 passed / 1 个既有异步标记失败（与本版本无关）；vue-tsc 0、ESLint 0、结构树 751/751、Vue 范式与配置登记通过、生产构建成功；URL 标签构造纯函数 7/7 通过。
+
 ### V3.7.11 (2026-11-24) — Agent 任务闭环 · 配额提示 · 工具预算 · 罗盘半径自适应
 
 > **版本归并（2026-11-25）**：按用户明确指令，将暂存区的 V3.7.11 ~ V3.7.18 合并为单条 **V3.7.11**；中间版本号自本条起废弃，过程日志保留不迁移、不改写。

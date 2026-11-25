@@ -48,6 +48,7 @@ backend/
 │   │   ├── routes.py                              # 认证路由（邮箱注册/登录/绑定/重置/OAuth/游客身份签发）
 │   │   ├── schema.py                              # DDL、邮箱账号迁移与数据库维护事件同步
 │   │   ├── session.py                             # 会话管理、邮箱与受限绑定 session
+│   │   ├── session_archive.py                     # 过期/被取代/被撤销会话归档到 expired_sessions + 30min 清理任务（V3.7.12）
 │   │   ├── system_config.py                       # 系统配置
 │   │   ├── throttle.py                            # 登录失败节流（进程内滑动窗口，账号维度优先）
 │   │   ├── user.py                                # 用户 CRUD + 游客名由 guest_uid 派生（防撞名）

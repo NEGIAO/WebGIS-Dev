@@ -11,9 +11,9 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 
 from api.auth import (
     normalize_role,
+    require_account,
     require_admin,
     require_api_access_or_guest_noconsume,
-    require_login,
     resolve_quota_subject,
 )
 from api.auth.quota import (
@@ -979,9 +979,9 @@ async def get_agent_user_config(
 @router.post("/user-config")
 async def update_agent_user_config(
     payload: AgentUserConfigUpdateRequest,
-    session: Dict[str, Any] = Depends(require_login),
+    session: Dict[str, Any] = Depends(require_account),
 ) -> Dict[str, Any]:
-    """更新当前用户的个人 Agent 配置。"""
+    """更新当前用户的个人 Agent 配置（账号级：游客 403）。"""
     username = str(session.get("username") or "")
     updates = _model_dump_compat(payload, exclude_unset=True)
 

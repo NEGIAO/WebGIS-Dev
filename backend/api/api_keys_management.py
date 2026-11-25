@@ -23,7 +23,6 @@ from pydantic import BaseModel, Field
 
 from api.auth import auth_db_generation, get_auth_db_connection, require_admin, require_api_access_or_guest
 from config import get_str
-from core.secret_masking import mask_secret
 
 logger = logging.getLogger(__name__)
 
@@ -360,7 +359,7 @@ def _list_api_keys_sync() -> Dict[str, Any]:
         public_backups = [_backup_public_item(item) for item in backups]
         result[key_name] = {
             "is_set": bool(data.get("is_set", False)),
-            "key_value": mask_secret(data.get("key_value")),
+            "key_value": str(data.get("key_value") or ""),
             "updated_at": str(data.get("updated_at") or ""),
             "backup_count": len(public_backups),
             "backups": public_backups,
@@ -669,7 +668,7 @@ async def get_api_key(
         "status": "success",
         "data": {
             "key_name": safe_key_name,
-            "key_value": mask_secret(key_value),
+            "key_value": key_value,
             "is_set": len(key_value) > 0
         }
     }
@@ -680,11 +679,10 @@ async def reveal_api_key(
     key_name: str,
     _session: Dict[str, Any] = Depends(require_admin),
 ) -> Dict[str, Any]:
-    """显式拉取密钥明文（仅管理员，V3.7.6）。
+    """拉取密钥明文（仅管理员）。
 
-    /status 与 GET /{key_name} 默认只回掩码值，缩小常态暴露面（代理日志、
-    DevTools、截屏）；明文改为逐 key 显式请求，本次请求本身即审计信号。
-    管理面板的「查看/复制」按钮据此按需拉取。
+    V3.7.11：按用户明确指令，/status 与 GET /{key_name} 也直接返回真实值；
+    本端点保留作为兼容别名，便于管理面板既有「查看/复制」按钮继续工作。
     """
     safe_key_name = str(key_name or "").strip().lower()
 

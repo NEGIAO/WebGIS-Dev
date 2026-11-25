@@ -146,6 +146,126 @@ def guest_token_expiry_seconds(token: str) -> Optional[int]:
     return exp - int(time.time())
 
 
+# ─── 游客会话统一落在 sessions 表 ───
+# 三类身份（admin / registered / guest）共用 sessions 作为唯一会话真值：
+# 游客 HMAC token 签发时同时写一行 role='guest' 的 sessions 记录；
+# 管理员删行即失效，验签路径按 token 查表，不再维护第二张撤销表/内存集合。
+
+
+def _guest_session_expiry_iso(token: str) -> str:
+    """把 token 内的 exp 转成与 sessions.expires_at 同格式的本地 ISO 字符串。"""
+    from datetime import datetime
+
+    from .db import _iso
+
+    remaining = guest_token_expiry_seconds(token)
+    if remaining is None:
+        remaining = 0
+    exp_ts = int(time.time()) + max(0, int(remaining))
+    return _iso(datetime.fromtimestamp(exp_ts).astimezone())
+
+
+def register_guest_session(
+    token: str,
+    guest_uid: str,
+    ip: str = "",
+    user_agent: str = "",
+    guest_device_id: str = "",
+) -> None:
+    """游客 token 签发后同步登记 sessions 行（管理员可在一张表里维护/删除）。
+
+    V3.7.12：登记新 token 前先归档并删除同一 `guest_uid` 的旧 token，
+    sessions 表只保留该游客当前唯一有效 token（历史回源见 expired_sessions）。
+    """
+    from .db import _iso, _utc_now, get_auth_db_connection
+    from .session_archive import supersede_sessions_locked
+
+    uid = str(guest_uid or "").strip()
+    if not token or not uid:
+        return
+    now_iso = _iso(_utc_now())
+    try:
+        with get_auth_db_connection() as conn:
+            supersede_sessions_locked(conn, keep_token=token, guest_uid=uid)
+            conn.execute(
+                """
+                INSERT OR REPLACE INTO sessions (
+                    token, username, role, guest_uid, guest_device_id, ip,
+                    user_agent, requires_email_binding, created_at, expires_at, last_seen_at
+                ) VALUES (?, ?, 'guest', ?, ?, ?, ?, 0, ?, ?, ?)
+                """,
+                (
+                    token,
+                    uid,
+                    uid,
+                    str(guest_device_id or "")[:128],
+                    str(ip or "")[:128],
+                    str(user_agent or "")[:512],
+                    now_iso,
+                    _guest_session_expiry_iso(token),
+                    now_iso,
+                ),
+            )
+            conn.commit()
+    except Exception as exc:
+        logger.warning("登记游客 session 失败: %s", exc)
+
+
+def revoke_guest_uid(guest_uid: str, reason: str = "") -> None:
+    """撤销游客身份：归档并删除该 uid 的全部 sessions 行（含续签产生的多条 token）。"""
+    from .db import get_auth_db_connection
+    from .session_archive import (
+        ARCHIVE_REASON_REVOKED,
+        _row_to_session_dict,
+    )
+
+    uid = str(guest_uid or "").strip()
+    if not uid:
+        return
+    try:
+        with get_auth_db_connection() as conn:
+            rows = conn.execute(
+                "SELECT token, username, role, guest_uid, guest_device_id, ip, user_agent, "
+                "requires_email_binding, created_at, expires_at, last_seen_at "
+                "FROM sessions WHERE role = 'guest' AND (guest_uid = ? OR username = ?)",
+                (uid, uid),
+            ).fetchall()
+            archived_rows = [_row_to_session_dict(row) for row in rows]
+            if archived_rows:
+                from .session_archive import archive_session_rows_locked
+
+                archive_session_rows_locked(conn, archived_rows, ARCHIVE_REASON_REVOKED)
+                conn.executemany(
+                    "DELETE FROM sessions WHERE token = ?",
+                    [(str(row.get("token") or ""),) for row in archived_rows],
+                )
+            conn.commit()
+    except Exception as exc:
+        logger.warning("撤销游客 session 失败: %s", exc)
+
+
+def verify_guest_token_active(token: str) -> Optional[str]:
+    """验签 + 有效期 + sessions 表存在性；删行即失效，无第二套状态。"""
+    uid = verify_guest_token(token)
+    if not uid:
+        return None
+    try:
+        from .db import _iso, _utc_now, get_auth_db_connection
+
+        with get_auth_db_connection() as conn:
+            row = conn.execute(
+                "SELECT 1 FROM sessions WHERE token = ? AND role = 'guest' "
+                "AND expires_at > ? LIMIT 1",
+                (token, _iso(_utc_now())),
+            ).fetchone()
+    except Exception as exc:
+        # DB 暂时不可用时 fail-open 到签名有效身份，避免全体游客被误踢；
+        # 管理员删行后的失效在 DB 恢复的下一次请求即生效。
+        logger.warning("校验游客 session 失败: %s", exc)
+        return uid
+    return uid if row else None
+
+
 class GuestIssueLimiter:
     """进程内滑动窗口限频器（游客身份新签发专用）。
 

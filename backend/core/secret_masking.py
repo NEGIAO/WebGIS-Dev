@@ -1,5 +1,5 @@
 """
-敏感值掩码工具（V3.7.6 管理面脱敏）。
+敏感值掩码工具（V3.7.6 引入；V3.7.11 起管理员 API 不再调用，保留供未来非管理面使用）。
 
 背景（bugfix-optimization-plan P1-4 [P2] 项）：管理员 GET /api/admin/api-keys/{name}
 曾回显密钥明文、/api/admin/db/table/{t}/rows 曾裸 dump token / password_hash /

@@ -90,10 +90,12 @@ from .quota import _consume_api_quota_sync, get_user_quota_snapshot_sync
 # ─── 邮件服务 ───
 from .email_service import check_smtp_configured
 from .dependencies import (
+    require_account,
     require_admin,
     require_api_access,
     require_api_access_or_guest,
     require_api_access_or_guest_noconsume,
+    require_api_access_or_guest_readonly,
     require_login,
     resolve_optional_session,
 )
@@ -160,9 +162,11 @@ __all__ = [
     "get_user_quota_snapshot_sync",
     # 依赖
     "require_login",
+    "require_account",
     "require_api_access",
     "require_api_access_or_guest",
     "require_api_access_or_guest_noconsume",
+    "require_api_access_or_guest_readonly",
     "require_admin",
     "resolve_optional_session",
     # 路由

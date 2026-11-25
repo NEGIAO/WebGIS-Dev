@@ -714,7 +714,9 @@ frontend/src/
 │   │   │   └── runtimeMapTokens.ts  # 运行时地图 token 池（纯基础设施，仅依赖 @/api/backend，自 ol 域迁入）
 │   │   ├── ui/
 │   │   │   ├── index.ts  # 路由与守卫
-│   │   │   └── loading.ts  # 全局 loading 控制（文案由调用方 t('loading.*')）
+│   │   │   ├── loading.ts  # 全局 loading 控制（文案由调用方 t('loading.*')）
+│   │   │   ├── ThemedSelect.ts  # 系统主题下拉控件逻辑（替代原生 select）
+│   │   │   └── ThemedSelect.vue  # 系统主题下拉控件视图
 │   │   ├── url-state/
 │   │   │   ├── codec/  # 短码编解码分片
 │   │   │   │   ├── cesiumPose.ts  # Cesium 相机位姿编解码

@@ -449,15 +449,13 @@
                     <div v-if="!loadingBasemap" class="form-inline-action">
                         <div class="form-group flex-1">
                             <label class="field-label">{{ t('admin.defaultBasemapPreset') }}</label>
-                            <select v-model.number="defaultBasemapIndex" class="form-select">
-                                <option
-                                    v-for="opt in basemapOptions"
-                                    :key="opt.index"
-                                    :value="opt.index"
-                                >
-                                    {{ t('admin.basemapOptionLabel', { label: opt.label, index: opt.index }) }}
-                                </option>
-                            </select>
+                            <ThemedSelect
+                                class="basemap-select"
+                                :model-value="defaultBasemapIndex"
+                                :options="basemapSelectOptions"
+                                :aria-label="t('admin.defaultBasemapPreset')"
+                                @change="selectBasemap(Number($event))"
+                            />
                         </div>
                         <div class="inline-buttons">
                             <button
@@ -512,12 +510,14 @@
                     <div class="db-toolbar">
                         <div class="select-wrapper">
                             <label class="toolbar-label">切换当前操作表：</label>
-                            <select v-model="selectedTable" class="form-select inline-select">
-                                <option value="" disabled>{{ t('admin.selectTable') }}</option>
-                                <option v-for="item in tables" :key="item.name" :value="item.name">
-                                    {{ item.name }}
-                                </option>
-                            </select>
+                            <ThemedSelect
+                                class="table-select"
+                                :model-value="selectedTable"
+                                :options="tableSelectOptions"
+                                :placeholder="t('admin.selectTable')"
+                                :aria-label="t('admin.selectTable')"
+                                @change="selectTable(String($event))"
+                            />
                         </div>
 
                         <div class="toolbar-stats">
@@ -542,12 +542,13 @@
                         </div>
 
                         <div class="toolbar-pager">
-                            <select v-model.number="tablePageSize" class="form-select inline-select page-size-select">
-                                <option :value="30">30</option>
-                                <option :value="100">100</option>
-                                <option :value="200">200</option>
-                                <option :value="0">{{ t('admin.pageSizeAll') }}</option>
-                            </select>
+                            <ThemedSelect
+                                compact
+                                :model-value="tablePageSize"
+                                :options="pageSizeOptions"
+                                :aria-label="t('admin.pageSizeLabel')"
+                                @change="selectPageSize(Number($event))"
+                            />
                             <button
                                 class="btn btn-secondary btn-sm"
                                 type="button"
@@ -766,6 +767,23 @@
                 </div>
             </div>
         </main>
+
+        <!-- 系统主题删除确认弹窗：替代浏览器原生 confirm -->
+        <div v-if="deleteConfirmVisible" class="system-modal-mask" @click.self="resolveDeleteConfirm(false)">
+            <div class="system-modal" role="dialog" aria-modal="true">
+                <div class="system-modal-icon"><Database :size="20" /></div>
+                <h3 class="system-modal-title">{{ t('admin.delete') }}</h3>
+                <p class="system-modal-message">{{ deleteConfirmMessage }}</p>
+                <div class="system-modal-actions">
+                    <button class="btn btn-secondary btn-sm" type="button" @click="resolveDeleteConfirm(false)">
+                        {{ t('admin.cancel') }}
+                    </button>
+                    <button class="btn btn-danger btn-sm" type="button" @click="resolveDeleteConfirm(true)">
+                        {{ t('admin.delete') }}
+                    </button>
+                </div>
+            </div>
+        </div>
     </div>
 </template>
 
@@ -1642,6 +1660,72 @@
     .rows-container {
         max-height: min(340px, 40vh);
     }
+}
+
+/* ── 系统自绘下拉（替代浏览器原生 select） ── */
+/* ── 主题下拉尺寸（组件外观由 ThemedSelect 自带，此处只覆盖宽度） ── */
+.basemap-select {
+    min-width: 220px;
+    width: 100%;
+}
+.table-select {
+    min-width: 180px;
+}
+
+/* ── 系统主题确认弹窗（替代 window.confirm） ── */
+.system-modal-mask {
+    position: fixed;
+    inset: 0;
+    z-index: 1000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    background: rgba(0, 0, 0, 0.48);
+}
+.system-modal {
+    width: min(360px, 92vw);
+    padding: 22px;
+    border: 1px solid var(--border-light);
+    border-radius: var(--radius-lg);
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+    box-shadow: 0 24px 60px rgba(0, 0, 0, 0.32);
+}
+.system-modal-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    margin-bottom: 10px;
+    border-radius: var(--radius-md);
+    background: rgba(var(--brand-primary-rgb), 0.12);
+    color: var(--brand-primary);
+}
+.system-modal-title {
+    margin: 0 0 8px;
+    font-size: 16px;
+    font-weight: 600;
+}
+.system-modal-message {
+    margin: 0 0 20px;
+    font-size: 13px;
+    line-height: 1.6;
+    color: var(--text-secondary);
+}
+.system-modal-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+}
+.btn-danger {
+    border: 1px solid rgba(220, 53, 69, 0.5);
+    background: rgba(220, 53, 69, 0.16);
+    color: #ff8b95;
+}
+.btn-danger:hover {
+    background: rgba(220, 53, 69, 0.26);
 }
 
 </style>

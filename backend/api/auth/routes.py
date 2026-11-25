@@ -37,9 +37,9 @@ from .constants import (
 from .dependencies import (
     _auth_error_detail,
     _extract_guest_token,
-    require_api_access_or_guest_noconsume,
+    require_account,
     require_admin,
-    require_login,
+    require_api_access_or_guest_noconsume,
     require_login_for_logout,
 )
 from .guest_token import (
@@ -48,8 +48,9 @@ from .guest_token import (
     guest_token_issuance_enabled,
     issue_limit_key,
     peek_guest_token_uid,
+    register_guest_session,
     sign_guest_token,
-    verify_guest_token,
+    verify_guest_token_active,
 )
 from .models import (
     BindEmailRequest,
@@ -288,7 +289,7 @@ async def start_oauth_login(provider: str) -> RedirectResponse:
 @router.get("/oauth/{provider}/bind/start")
 async def start_oauth_bind(
     provider: str,
-    session: Dict[str, Any] = Depends(require_login),
+    session: Dict[str, Any] = Depends(require_account),
 ) -> Dict[str, Any]:
     """功能：为已登录邮箱注册用户生成 Google/GitHub/Hugging Face 账号绑定授权 URL。"""
     _reject_binding_required(session)
@@ -428,7 +429,7 @@ async def exchange_oauth_login_ticket(payload: OAuthTicketRequest, request: Requ
 async def complete_oauth_bind(
     provider: str,
     payload: OAuthTicketRequest,
-    session: Dict[str, Any] = Depends(require_login),
+    session: Dict[str, Any] = Depends(require_account),
 ) -> Dict[str, Any]:
     """功能：当前登录用户使用一次性 ticket 完成 Google/GitHub 绑定。"""
     _reject_binding_required(session)
@@ -444,7 +445,7 @@ async def complete_oauth_bind(
 
 
 @router.delete("/oauth/{provider}/bind")
-async def unlink_oauth_account(provider: str, session: Dict[str, Any] = Depends(require_login)) -> Dict[str, Any]:
+async def unlink_oauth_account(provider: str, session: Dict[str, Any] = Depends(require_account)) -> Dict[str, Any]:
     """功能：解绑当前用户的 Google/GitHub/Hugging Face 第三方账号。"""
     _reject_binding_required(session)
     await asyncio.to_thread(unlink_oauth_account_sync, str(session.get("username") or ""), provider)
@@ -752,11 +753,14 @@ async def create_guest_session(request: Request, payload: Optional[GuestSessionR
     device_id = _normalize_guest_device_id(raw_device_id)
 
     presented_token = _extract_guest_token(request)
-    existing_uid = verify_guest_token(presented_token) if presented_token else None
-    if not existing_uid and presented_token:
-        # token 过期但签名有效：复用原 guest_uid，只重签新 token。
-        # 绝不因为过期就按设备/IP 重新分配身份，否则配额与在线统计会断裂。
-        existing_uid = peek_guest_token_uid(presented_token)
+    existing_uid = verify_guest_token_active(presented_token) if presented_token else None
+    if not existing_uid and presented_token and peek_guest_token_uid(presented_token):
+        # 签名有效但过期/被撤销：不再静默续签同一身份（撤销必须生效），
+        # 返回结构化 401 让前端走统一“会话过期”流程。
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=_auth_error_detail("SESSION_EXPIRED", "会话过期，请重新登陆"),
+        )
 
     if existing_uid:
         # 续期：同一身份原样重签，不消耗签发限频额度
@@ -786,6 +790,15 @@ async def create_guest_session(request: Request, payload: Optional[GuestSessionR
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail=_auth_error_detail("GUEST_ISSUANCE_DISABLED", "游客身份签发未启用"),
         )
+    # 三类身份统一：游客 token 也登记进 sessions 表，管理员一张表即可维护/删除。
+    await asyncio.to_thread(
+        register_guest_session,
+        guest_token,
+        guest_uid,
+        identity_ip,
+        request_user_agent,
+        device_id,
+    )
 
     guest_record = await asyncio.to_thread(_get_or_create_guest_username_sync, guest_uid)
     username = str(guest_record.get("username") or "") if isinstance(guest_record, dict) else ""
@@ -872,7 +885,12 @@ async def login_user(payload: LoginRequest, request: Request) -> Dict[str, Any]:
         # 否则确定性 H(末跳IP|UA)」——轮换 device_id 不再铸造新桶；
         # device_id 仅随会话保留用于在线去重。
         presented_token = _extract_guest_token(request)
-        guest_uid = verify_guest_token(presented_token) if presented_token else None
+        guest_uid = verify_guest_token_active(presented_token) if presented_token else None
+        if not guest_uid and presented_token and peek_guest_token_uid(presented_token):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail=_auth_error_detail("SESSION_EXPIRED", "会话过期，请重新登陆"),
+            )
         if not guest_uid:
             guest_uid = _derive_uid_from_ip_ua(_extract_identity_ip(request), request_user_agent)
 
@@ -974,7 +992,7 @@ async def get_current_user(session: Dict[str, Any] = Depends(require_api_access_
     （V3.7.6：游客可达——未登录访客面板挂载即调，返回游客身份，不扣配额。）
 
     参数：
-    - session: 当前会话（由 `require_login` 注入）。
+    - session: 当前会话（由 `require_api_access_or_guest_noconsume` 注入，游客可达）。
 
     返回：
     - user: 用户名、角色、头像、会话时间信息。
@@ -1061,7 +1079,7 @@ async def logout_user(
 @router.post("/change-password")
 async def change_password(
     payload: ChangePasswordRequest,
-    session: Dict[str, Any] = Depends(require_login),
+    session: Dict[str, Any] = Depends(require_account),
 ) -> Dict[str, Any]:
     """
     功能：修改当前注册用户密码。
@@ -1147,7 +1165,7 @@ async def change_password(
 @router.post("/change-avatar")
 async def change_avatar(
     payload: ChangeAvatarRequest,
-    session: Dict[str, Any] = Depends(require_login),
+    session: Dict[str, Any] = Depends(require_account),
 ) -> Dict[str, Any]:
     """
     功能：修改当前账号头像索引（注册用户 + 管理员）。
@@ -1215,7 +1233,7 @@ async def change_avatar(
 @router.post("/change-display-name")
 async def change_display_name(
     payload: ChangeDisplayNameRequest,
-    session: Dict[str, Any] = Depends(require_login),
+    session: Dict[str, Any] = Depends(require_account),
 ) -> Dict[str, Any]:
     """修改当前注册用户昵称。昵称仅用于展示，允许重复。"""
     username = str(session.get("username") or "").strip()
@@ -1260,7 +1278,7 @@ async def change_display_name(
 async def bind_email(
     payload: BindEmailRequest,
     request: Request,
-    session: Dict[str, Any] = Depends(require_login),
+    session: Dict[str, Any] = Depends(require_account),
 ) -> Dict[str, Any]:
     """为旧账号绑定邮箱。成功后注销旧 session 并签发完整 session。"""
     username = str(session.get("username") or "").strip()
@@ -1421,7 +1439,7 @@ async def get_user_preferences(
 @router.post("/preferences")
 async def update_user_preferences(
     payload: UpdatePreferencesRequest,
-    session: Dict[str, Any] = Depends(require_login),
+    session: Dict[str, Any] = Depends(require_account),
 ) -> Dict[str, Any]:
     """功能：更新当前用户偏好设置并持久化。"""
     username = str(session.get("username") or "").strip()

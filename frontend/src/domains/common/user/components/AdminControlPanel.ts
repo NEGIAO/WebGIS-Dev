@@ -4,10 +4,12 @@
  * 说    明：视图层逻辑入口。表格数据、系统配置分别由 useAdminTable / useAdminSettings
  *          承担，本类只保留页签导航、横向拖拽滚动与生命周期编排。
  */
-import { defineComponent, onMounted, ref, type ExtractPropTypes, type SetupContext } from 'vue';
+import { computed, defineComponent, onMounted, ref, type ExtractPropTypes, type SetupContext } from 'vue';
 import { Bot, Check, Database, Globe, LayoutDashboard, Megaphone, MonitorDot, NotebookPen, Plus, Settings, X } from '@lucide/vue';
 import { useMessage } from '@common/shell/useMessage';
 import { useLocale } from '@common/app/useLocale';
+import { BASEMAP_OPTIONS } from '@common/basemap/basemapOptions';
+import ThemedSelect from '@common/ui/ThemedSelect.vue';
 import { useAdminTable } from '../composables/useAdminTable';
 import { useAdminSettings } from '../composables/useAdminSettings';
 import { getRowKey } from '../composables/adminTableFormat';
@@ -35,7 +37,7 @@ type AdminPanelBindings = Instance
 export default defineComponent({
 	name: 'AdminControlPanel',
 	// 模板中直接以标签形式使用的图标组件，必须在此注册（<script src> 下无编译期自动注入）
-	components: { Bot, Check, Database, Globe, LayoutDashboard, Megaphone, MonitorDot, NotebookPen, Plus, Settings, X },
+	components: { Bot, Check, Database, Globe, LayoutDashboard, Megaphone, MonitorDot, NotebookPen, Plus, Settings, ThemedSelect, X },
 	props: propDefine,
 	emits: [],
 	setup(props, ctx): AdminPanelBindings {
@@ -50,6 +52,14 @@ export class Instance {
 
 	/** 模板用于 v-for key 与单元格编辑键，直接复用表格纯函数 */
 	public getRowKey = getRowKey;
+
+	/** 默认底图下拉选项（ThemedSelect 用）：标签随语言实时求值，避免切换语言后不刷新 */
+	public basemapSelectOptions = computed(() =>
+		BASEMAP_OPTIONS.map((opt: any, i: number) => ({
+			value: i,
+			label: this.t('admin.basemapOptionLabel', { label: opt.label, index: i }),
+		}))
+	);
 
 	// ── 页签导航 ──
 	public activeTab = ref('overview');

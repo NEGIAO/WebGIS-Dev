@@ -645,6 +645,23 @@
                 </ul>
             </div>
         </div>
+
+        <!-- 系统主题确认弹窗：替代浏览器原生 confirm -->
+        <div v-if="confirmVisible" class="key-confirm-mask" @click.self="resolveConfirm(false)">
+            <div class="key-confirm-dialog" role="dialog" aria-modal="true">
+                <div class="key-confirm-icon"><AlertTriangle :size="20" /></div>
+                <h3 class="key-confirm-title">{{ t('admin.delete') }}</h3>
+                <p class="key-confirm-message">{{ confirmMessage }}</p>
+                <div class="key-confirm-actions">
+                    <button class="btn btn-secondary btn-sm" type="button" @click="resolveConfirm(false)">
+                        {{ t('admin.cancel') }}
+                    </button>
+                    <button class="btn btn-danger btn-sm" type="button" @click="resolveConfirm(true)">
+                        {{ t('admin.delete') }}
+                    </button>
+                </div>
+            </div>
+        </div>
     </div>
 </template>
 
@@ -1354,5 +1371,61 @@ textarea.key-input {
     .backup-card > .btn {
         align-self: stretch;
     }
+}
+
+/* ── 系统主题确认弹窗（替代 window.confirm） ── */
+.key-confirm-mask {
+    position: fixed;
+    inset: 0;
+    z-index: 1000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    background: rgba(0, 0, 0, 0.48);
+}
+.key-confirm-dialog {
+    width: min(360px, 92vw);
+    padding: 22px;
+    border: 1px solid var(--border-light);
+    border-radius: var(--radius-lg);
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+    box-shadow: 0 24px 60px rgba(0, 0, 0, 0.32);
+}
+.key-confirm-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    margin-bottom: 10px;
+    border-radius: var(--radius-md);
+    background: rgba(220, 53, 69, 0.14);
+    color: #ff8b95;
+}
+.key-confirm-title {
+    margin: 0 0 8px;
+    font-size: 16px;
+    font-weight: 600;
+}
+.key-confirm-message {
+    margin: 0 0 20px;
+    font-size: 13px;
+    line-height: 1.6;
+    color: var(--text-secondary);
+}
+.key-confirm-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+}
+.btn-danger {
+    border: 1px solid rgba(220, 53, 69, 0.5);
+    background: rgba(220, 53, 69, 0.16);
+    color: #ff8b95;
+}
+.btn-danger:hover {
+    background: rgba(220, 53, 69, 0.26);
 }
 </style>

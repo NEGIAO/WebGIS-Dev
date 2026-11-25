@@ -34,6 +34,7 @@ export default {
             prefsSaved: 'Preferences saved',
             prefsSaveFailed: 'Failed to save preferences',
             loggedOut: 'Signed out',
+            sessionExpired: 'Session expired. Please sign in again.',
             passwordRequired: 'Please fill in all password fields',
             passwordChanged: 'Password changed. Please sign in again',
             passwordChangeFailed: 'Failed to change password. Please try again later',

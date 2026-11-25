@@ -131,7 +131,7 @@
 
 ## 🎯 项目简介
 
-**NEGIAO's WebGIS** 是一个功能完整、架构清晰的前后端分离 WebGIS 平台（当前版本 V3.7.11），前端托管于 GitHub Pages（正式域名 webgis.negiao.cn），后端以 Docker 部署在 Hugging Face Spaces，通过 RESTful API 通信，支持独立扩展。
+**NEGIAO's WebGIS** 是一个功能完整、架构清晰的前后端分离 WebGIS 平台（当前版本 V3.7.12），前端托管于 GitHub Pages（正式域名 webgis.negiao.cn），后端以 Docker 部署在 Hugging Face Spaces，通过 RESTful API 通信，支持独立扩展。
 
 > 📚 本 README 仅保留核心概览与导航。完整文档已模块化至 [`Docs/Guide/`](Docs/Guide/)，详见下方「文档导航」。
 >
@@ -618,9 +618,8 @@ tiles.negiao.cc.cd"]
 
 | 版本 | 日期 | 概要 |
 |------|------|------|
-| **V3.7.11** | 2026-11-24 | **Agent 任务闭环 · 配额提示 · 工具预算 · 罗盘半径自适应**。统一修复指定地点风水分析提前停止、额度耗尽提示、10 步工具预算、罗盘半径按视图缩放自适应；合并会话/游客 token 4h、SQLite 恢复增强与 Supabase payload 单测。详见[完整更新日志](Docs/Guide/CHANGELOG.md) |
-| **V3.7.10** | 2026-11-24 | **罗盘全链路增强 · Agent 工具扩展 · 双引擎修复 · Code Review 收口**。3D 贴地罗盘与 HUD、五主题校正、`cs` 短码扩展、Agent 工具 17→20。 |
-| **V3.7.9** | 2026-11-23 | **Agent 工具能力扩展 7 → 17 + 多轮编排 + 全链路修复**。图层操作结构化返回，命令白名单 6 → 12。 |
+| **V3.7.12** | 2026-11-25 | **三类身份会话统一 · 会话归档 · 在线统计治理 · URL 身份标签细化 · 管理端控件主题化**。admin/registered/guest 统一签发检测 session、过期强制回 `/register`；新增 `expired_sessions` 归档与 30min 清理；URL `ut` 细化为 `admin` / `guest_<序号>` / `registered_<用户名>`；游客 username 统一为 `guest_<id>`；管理端原生控件替换为可访问 `ThemedSelect`。详见[完整更新日志](Docs/Guide/CHANGELOG.md) |
+| **V3.7.11** | 2026-11-24 | **Agent 任务闭环 · 配额提示 · 工具预算 · 罗盘半径自适应**。统一修复风水分析提前停止、额度提示、10 步工具预算与罗盘半径自适应。 |
 
 
 ---
@@ -643,6 +642,6 @@ tiles.negiao.cc.cd"]
 |:------:|:--------:|:--------:|
 | [GitHub](https://github.com/NEGIAO/WebGIS-Dev) | [webgis.negiao.cn](https://webgis.negiao.cn)（正式域名，GitHub Pages 托管） | [Hugging Face](https://NEGIAO-WebGIS.hf.space) |
 
-<sub>V3.7.11 · 开发中 · 最后更新 2026-11-25</sub>
+<sub>V3.7.12 · 开发中 · 最后更新 2026-11-25</sub>
 
 </div>

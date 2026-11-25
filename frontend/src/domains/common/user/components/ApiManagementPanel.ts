@@ -5,6 +5,7 @@
  */
 import { computed, defineComponent, markRaw, onMounted, ref, type Ref } from 'vue';
 import { BarChart3, Info, KeyRound, Link2, ScrollText, Settings } from '@lucide/vue';
+import ThemedSelect from '@common/ui/ThemedSelect.vue';
 import {
     apiAdminApiLogs,
     apiAdminApiUsageByModel,
@@ -61,6 +62,7 @@ export default defineComponent({
     components: {
         Info,
         ApiKeysManagementPanel,
+        ThemedSelect,
     },
     setup() {
         return new Instance();
@@ -68,6 +70,12 @@ export default defineComponent({
 });
 
 export class Instance {
+    /** 统计天数筛选项（系统主题下拉，不使用浏览器原生 select） */
+    public dayFilterOptions = [
+        { value: 7, label: '最近 7 天' },
+        { value: 30, label: '最近 30 天' },
+        { value: 90, label: '最近 90 天' },
+    ];
     public activeTab = ref('by-user');
     public tabs = [
         { id: 'by-user', icon: markRaw(BarChart3), label: '配额消耗', desc: '统一配额池用量' },

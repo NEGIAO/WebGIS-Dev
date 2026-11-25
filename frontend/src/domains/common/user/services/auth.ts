@@ -3,11 +3,15 @@ const AUTH_USER_KEY = 'webgis_auth_user';
 const GUEST_DEVICE_ID_KEY = 'webgis_guest_device_id';
 const PENDING_POSITION_CODE_KEY = 'webgis_pending_position_code';
 export const AUTH_CHANGED_EVENT = 'webgis:auth-changed';
+/** 会话过期统一事件：任意 API 检测到 token 失效后派发，由 main.ts 统一提示并跳 /register */
+export const SESSION_EXPIRED_EVENT = 'webgis:session-expired';
 
 let _memoryGuestDeviceId = '';
+let _lastSessionExpiredAt = 0;
 let _presenceClientId = '';
 
 import { normalizeBinaryFlag } from '@common/utils/normalize';
+import { clearGuestToken } from './guestTokenStore';
 
 function readUrlParams() {
     if (typeof window === 'undefined') {
@@ -77,6 +81,8 @@ export function setAuthSession(payload: any = {}) {
 
     storage.setItem(AUTH_TOKEN_KEY, token);
     storage.setItem(AUTH_USER_KEY, JSON.stringify(user));
+    // 重新登录后允许再次触发会话过期提醒（跨过上一次的合并窗口）
+    _lastSessionExpiredAt = 0;
     emitAuthChanged();
 }
 
@@ -87,6 +93,29 @@ export function clearAuthSession() {
     storage.removeItem(AUTH_TOKEN_KEY);
     storage.removeItem(AUTH_USER_KEY);
     emitAuthChanged();
+}
+
+/**
+ * 统一处理“会话过期 / token 失效”：清本地会话 + 派发全局事件。
+ *
+ * 多个并发请求同时拿到 401 时会重复进入，这里做 3s 合并，保证只弹一次提示、
+ * 只跳一次 /register；真正跳转到哪由 main.ts 的全局监听器决定，
+ * 避免 api 层直接依赖 router 造成循环引用。
+ */
+export function markSessionExpired(): void {
+    clearAuthSession();
+    // 游客 token 独立于登录会话存放；被管理员撤销/过期时必须一并清掉，
+    // 否则刷新后仍带旧 token，会再次 401 形成循环。
+    clearGuestToken();
+    const now = Date.now();
+    if (now - _lastSessionExpiredAt < 3000) return;
+    _lastSessionExpiredAt = now;
+    if (typeof window === 'undefined' || typeof window.dispatchEvent !== 'function') return;
+    try {
+        window.dispatchEvent(new CustomEvent(SESSION_EXPIRED_EVENT));
+    } catch {
+        /* ignore */
+    }
 }
 
 /**
@@ -341,21 +370,50 @@ export function getGuestSessionMetadata() {
 }
 
 /**
- * 将用户角色同步到 URL hash 参数中（ut=userType）
+ * 由用户对象构造 URL `ut` 身份标签（V3.7.12）。
+ *
+ * 规则：
+ * - admin → `admin`（管理员全局唯一，不附加标识）
+ * - guest → `guest_<guest_no>`，缺失时回退 `guest_<username 中的数字 id>`
+ * - registered → `registered_<username>`
+ *
+ * 纯函数，无副作用，便于单测与排查；username 受注册校验约束
+ * （`[A-Za-z0-9_]{3,24}`），写入 URLSearchParams 时自动编码。
+ *
+ * @param user 用户对象（含 role / guest_no / username）
+ * @returns ut 参数值
+ */
+export function buildUserTypeTag(user: any): string {
+    const roleRaw = String(user?.role || '')
+        .trim()
+        .toLowerCase();
+    if (roleRaw === 'admin') return 'admin';
+
+    if (roleRaw === 'guest') {
+        const no = Number(user?.guest_no);
+        if (Number.isFinite(no) && no > 0) return `guest_${no}`;
+        // 兜底：username 已是 guest_<id>（上一轮统一后的形态），提取数字部分
+        const matched = /^guest_(\d+)$/.exec(String(user?.username || '').trim());
+        return matched ? `guest_${matched[1]}` : 'guest';
+    }
+
+    const username = String(user?.username || '').trim();
+    return username ? `registered_${username}` : 'registered';
+}
+
+/**
+ * 将用户身份标签同步到 URL hash 参数中（ut=userTypeTag）
  *
  * 该参数仅用于访问统计与人工排查（按身份分组看访问），
  * **不参与任何权限判断**：它在地址栏里，任何人手工改写都能伪造，
  * 因此不能作为「管理员登录过」的证据；鉴权只认 Authorization / X-Auth-Token 的会话令牌。
  *
- * @param {Object} user - 用户对象，包含 role 字段
+ * @param {Object} user - 用户对象，包含 role / guest_no / username 字段
  */
 export function syncUserRoleToUrl(user: any) {
     if (typeof window === 'undefined') return;
 
-    const roleRaw = String(user?.role || '')
-        .trim()
-        .toLowerCase();
-    const role = roleRaw === 'admin' ? 'admin' : roleRaw === 'guest' ? 'guest' : 'registered';
+    const ut = buildUserTypeTag(user);
 
     try {
         const hash = String(window.location.hash || '#/home');
@@ -365,7 +423,7 @@ export function syncUserRoleToUrl(user: any) {
         const normalizedHashPath = hashPath.startsWith('/') ? hashPath : `/${hashPath}`;
         const params = new URLSearchParams(hashQueryRaw);
 
-        params.set('ut', role);
+        params.set('ut', ut);
 
         const nextHashQuery = params.toString();
         const nextHash = nextHashQuery

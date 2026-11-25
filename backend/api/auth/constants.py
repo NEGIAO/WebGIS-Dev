@@ -330,6 +330,15 @@ def _validate_register_payload(username: str, password: str) -> None:
             detail="该用户名为保留账号，请更换用户名",
         )
 
+    # V3.7.12 Code Review：游客 username 统一为 guest_<id>；若允许注册同形名字，
+    # 注销/改密按 username 删会话会连带撤销真实游客会话，且 admin 在线判定按
+    # guest_ 前缀识别身份也会混淆。前缀整体保留，避免撞名与角色串味。
+    if lowered.startswith("guest_"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="该用户名前缀为系统保留，请更换用户名",
+        )
+
     if not USERNAME_PATTERN.fullmatch(username):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

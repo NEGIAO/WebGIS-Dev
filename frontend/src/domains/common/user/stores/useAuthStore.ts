@@ -4,7 +4,12 @@ import { defineStore } from 'pinia';
 // 该路径是 `export *` 聚合桶（13 个 API 模块 + axios 实例 + 拦截器副作用），
 // 静态导入无法被 tree-shake，会把整个 API 层拖进入口 chunk（实测 +37.6 kB gzip）。
 // 改为在 ensureValidSession 内部按需 import（见该函数），无 token 时根本不会触发。
-import { clearAuthSession, getAuthToken, isGuestSession } from '@common/user/services/auth';
+import {
+    clearAuthSession,
+    getAuthToken,
+    isGuestSession,
+    markSessionExpired,
+} from '@common/user/services/auth';
 import { EMERGENCY_GUEST_MODE } from '@/config/publicRuntime';
 
 type AuthUser = {
@@ -88,8 +93,20 @@ export const useAuthStore = defineStore('authStore', () => {
             user.value = nextUser && typeof nextUser === 'object' ? (nextUser as AuthUser) : null;
             validatedToken.value = token;
             return true;
-        } catch {
-            clearAuthSession();
+        } catch (error: any) {
+            // 会话过期 / token 失效走统一出口（提示 + 跳 /register 由 main.ts 事件监听负责）。
+            // 网络超时、后端不可用等其它错误仍按原逻辑只清本地会话，不弹“会话过期”。
+            const detailCode = String(error?.detailCode || '');
+            const status = Number(error?.status || 0);
+            const isSessionExpired =
+                status === 401 &&
+                detailCode !== 'LOGIN_REQUIRED' &&
+                detailCode !== 'GUEST_NO_TOKEN';
+            if (isSessionExpired) {
+                markSessionExpired();
+            } else {
+                clearAuthSession();
+            }
             resetValidation();
             return false;
         }

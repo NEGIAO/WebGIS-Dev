@@ -1,6 +1,7 @@
 """Regression tests for the hard 4-hour session token lifetime."""
 
 import sys
+import sqlite3
 import unittest
 from datetime import timedelta
 from pathlib import Path
@@ -10,6 +11,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from api.auth import guest_token as guest_token_module
 from api.auth import session as session_module
+from api.auth import session_archive as session_archive_module
 from api.auth.constants import SESSION_EXPIRE_HOURS
 from api.auth.db import _iso, _utc_now
 
@@ -29,14 +31,24 @@ class _FakeConn:
     def __init__(self, row):
         self.row = row
         self.deleted = []
+        self.archived = []
 
     def execute(self, sql, params=()):
         if "DELETE FROM sessions" in sql:
             self.deleted.append(params)
         return self
 
+    def executemany(self, sql, payload):
+        if "expired_sessions" in sql:
+            self.archived.extend(list(payload))
+        return self
+
     def fetchone(self):
         return self.row
+
+    def fetchall(self):
+        # 归档前按条件回查 sessions；假连接返回注入的会话行
+        return [self.row] if self.row else []
 
     def commit(self):
         pass
@@ -71,6 +83,9 @@ class SessionExpiryTests(unittest.TestCase):
 
         self.assertIsNone(result)
         self.assertEqual(conn.deleted, [("legacy-token",)])
+        # V3.7.12：过期会话必须先归档再删除，保留回源依据
+        self.assertEqual(len(conn.archived), 1)
+        self.assertEqual(conn.archived[0][0], "legacy-token")
 
     def test_fresh_token_still_valid(self):
         now = _utc_now()
@@ -114,6 +129,91 @@ class GuestTokenRenewalTests(unittest.TestCase):
                 token = guest_token_module.sign_guest_token("guest_abc123", ttl_hours=72)
             with mock.patch.object(guest_token_module.time, "time", return_value=1000 + 4 * 3600 + 60):
                 self.assertIsNone(guest_token_module.verify_guest_token(token))
+
+
+class SessionArchiveTests(unittest.TestCase):
+    """V3.7.12：过期会话归档到 expired_sessions，签发新 token 时归档旧 token。"""
+
+    def _new_db(self):
+        conn = sqlite3.connect(":memory:")
+        conn.row_factory = sqlite3.Row
+        conn.execute(
+            "CREATE TABLE sessions (token TEXT PRIMARY KEY, username TEXT, role TEXT, "
+            "guest_uid TEXT, guest_device_id TEXT, ip TEXT, user_agent TEXT, "
+            "requires_email_binding INTEGER, created_at TEXT, expires_at TEXT, last_seen_at TEXT)"
+        )
+        conn.execute(
+            "CREATE TABLE expired_sessions (token TEXT PRIMARY KEY, username TEXT, role TEXT, "
+            "guest_uid TEXT, guest_device_id TEXT, ip TEXT, user_agent TEXT, "
+            "requires_email_binding INTEGER, created_at TEXT, expires_at TEXT, "
+            "last_seen_at TEXT, archived_at TEXT, archive_reason TEXT)"
+        )
+        return conn
+
+    def _insert(self, conn, token, role="guest", guest_uid="", created_at="", expires_at=""):
+        now = _utc_now()
+        created_at = created_at or _iso(now)
+        expires_at = expires_at or _iso(now + timedelta(hours=3))
+        conn.execute(
+            "INSERT INTO sessions (token, username, role, guest_uid, guest_device_id, ip, "
+            "user_agent, requires_email_binding, created_at, expires_at, last_seen_at) "
+            "VALUES (?, ?, ?, ?, '', '', '', 0, ?, ?, '')",
+            (token, guest_uid or token, role, guest_uid, created_at, expires_at),
+        )
+        conn.commit()
+
+    def test_expired_sessions_are_archived_then_deleted(self):
+        now = _utc_now()
+        conn = self._new_db()
+        self._insert(
+            conn,
+            "old-token",
+            created_at=_iso(now - timedelta(hours=5)),
+            expires_at=_iso(now - timedelta(minutes=1)),
+        )
+        self._insert(
+            conn,
+            "fresh-token",
+            created_at=_iso(now - timedelta(minutes=10)),
+            expires_at=_iso(now + timedelta(hours=3)),
+        )
+
+        with mock.patch.object(
+            session_archive_module, "_db_connection", return_value=_FakeContext(conn)
+        ):
+            archived = session_archive_module.archive_expired_sessions_sync(now)
+
+        self.assertEqual(archived, 1)
+        archived_rows = [dict(r) for r in conn.execute("SELECT * FROM expired_sessions")]
+        self.assertEqual([r["token"] for r in archived_rows], ["old-token"])
+        self.assertEqual(archived_rows[0]["archive_reason"], "expired")
+        remaining = [dict(r)["token"] for r in conn.execute("SELECT token FROM sessions")]
+        self.assertEqual(remaining, ["fresh-token"])
+
+    def test_supersede_guest_session_keeps_only_latest_token(self):
+        conn = self._new_db()
+        self._insert(conn, "guest-old", guest_uid="guest_uid_01")
+        conn.execute(
+            "UPDATE sessions SET last_seen_at = '' WHERE token = 'guest-old'"
+        )
+        conn.commit()
+
+        with mock.patch.object(
+            session_archive_module, "_db_connection", return_value=_FakeContext(conn)
+        ):
+            archived = session_archive_module.archive_expired_sessions_sync(_utc_now())
+        self.assertEqual(archived, 0)
+
+        # 模拟签发：同一 guest_uid 再次登记新 token（不经过 HTTP 层）
+        superseded = session_archive_module.supersede_sessions_locked(
+            conn, keep_token="guest-new", guest_uid="guest_uid_01"
+        )
+        conn.commit()
+        self.assertEqual(superseded, 1)
+        remaining = [dict(r)["token"] for r in conn.execute("SELECT token FROM sessions")]
+        self.assertEqual(remaining, [])
+        reasons = [dict(r)["archive_reason"] for r in conn.execute("SELECT * FROM expired_sessions")]
+        self.assertIn("superseded", reasons)
 
 
 if __name__ == "__main__":

@@ -41,14 +41,12 @@
                             placeholder="搜索用户名..."
                         />
                         <label>统计天数：</label>
-                        <select
-                            v-model.number="userStatsFilter.days"
+                        <ThemedSelect
+                            v-model="userStatsFilter.days"
+                            :options="dayFilterOptions"
+                            compact
                             @change="loadUserStats"
-                        >
-                            <option :value="7">最近 7 天</option>
-                            <option :value="30">最近 30 天</option>
-                            <option :value="90">最近 90 天</option>
-                        </select>
+                        />
                     </div>
                 </div>
 
@@ -126,14 +124,12 @@
                     <h2>模型调用统计</h2>
                     <div class="filter-controls">
                         <label>统计天数：</label>
-                        <select
-                            v-model.number="endpointStatsFilter.days"
+                        <ThemedSelect
+                            v-model="endpointStatsFilter.days"
+                            :options="dayFilterOptions"
+                            compact
                             @change="loadEndpointStats"
-                        >
-                            <option :value="7">最近 7 天</option>
-                            <option :value="30">最近 30 天</option>
-                            <option :value="90">最近 90 天</option>
-                        </select>
+                        />
                     </div>
                 </div>
 
@@ -223,14 +219,12 @@
                             placeholder="按 API 端点过滤..."
                             @change="loadLogs"
                         />
-                        <select
-                            v-model.number="logsFilter.days"
+                        <ThemedSelect
+                            v-model="logsFilter.days"
+                            :options="dayFilterOptions"
+                            compact
                             @change="loadLogs"
-                        >
-                            <option :value="7">最近 7 天</option>
-                            <option :value="30">最近 30 天</option>
-                            <option :value="90">最近 90 天</option>
-                        </select>
+                        />
                         <button
                             class="btn-refresh"
                             @click="loadLogs"
