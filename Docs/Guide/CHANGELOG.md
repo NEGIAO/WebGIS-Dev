@@ -26,6 +26,7 @@
 2. **landing 零鉴权**：根目录为纯展示页，不签发、不验证、不产生 presence 心跳（LandingView 不挂载账户面板，已核实）。
 3. **保留合法匿名能力**：register 仍是 admin/register token 唯一签发页；分享链接 `s=1` 与应急游客模式行为不变。
 4. **不误伤**：后端鉴权/限频/配额/签发端点语义零改动；仅迁移前端签发时机。
+5. **URL ut 标签改用展示名**：`buildUserTypeTag` 的 registered 分支原取 `username`，OAuth 账号带唯一性 hash（如 `negiao_033f72`）不适合展示；改为优先 `display_name`（如 `（NEGIAO）`）、空值回退 username。全仓确认 ut 无消费方（仅展示标签），不影响鉴权与统计。日志：[ut-display-name](../LLM_record/26-11/2026-11-25/2026-11-25-ut-display-name.md)
 
 **验证**：`vue-tsc --noEmit` 0 错误、门禁全绿、生产构建成功。日志：[auth-issuance-architecture](../LLM_record/26-11/2026-11-25/2026-11-25-auth-issuance-architecture.md)
 
