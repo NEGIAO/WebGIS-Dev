@@ -97,6 +97,46 @@ def test_guest_device_ids_map_to_stable_presence_ids():
     assert b.startswith("g:guest_")
 
 
+def test_private_gateway_ip_with_nonstandard_device_is_not_countable():
+    """V3.7.13 Plan B：私网网关 IP + 非标准 device_id（测试残留）不可数；
+    标准 gd_ device_id（含 clone 用户私网直连）与公网用户一律保持可数。"""
+    from api.auth.constants import is_private_client_ip, is_standard_guest_device_id
+
+    # 判据本身
+    assert is_private_client_ip("10.16.26.165")
+    assert is_private_client_ip("172.19.0.1")
+    assert not is_private_client_ip("8.8.8.8")
+    assert is_standard_guest_device_id("gd_6f1a7aee6a74ff25327d42d98fa6896b")
+    assert is_standard_guest_device_id("gd_device_aaaa")  # 历史短值兼容
+    assert not is_standard_guest_device_id("vt-test-device")
+    assert not is_standard_guest_device_id("guest_4dabd01a794dc19c")
+
+    # 测试残留：私网 + 非标准 → 不可数 e:
+    residual = realtime_stats.presence_id_from_fields(
+        role="guest", guest_device_id="vt-test-device", client_ip="10.16.26.165"
+    )
+    assert residual.startswith("e:")
+
+    # clone 用户本地直连：私网 + 标准 gd_ → 仍可数 g:
+    clone = realtime_stats.presence_id_from_fields(
+        role="guest",
+        guest_device_id="gd_6f1a7aee6a74ff25327d42d98fa6896b",
+        client_ip="10.16.26.165",
+    )
+    assert clone.startswith("g:")
+
+    # 历史真实用户公网 IP + 非标准 device_id → 仍可数 g:（不误伤）
+    legacy = realtime_stats.presence_id_from_fields(
+        role="guest", guest_device_id="vt-test-device", client_ip="8.8.8.8"
+    )
+    assert legacy.startswith("g:")
+
+    # 注册用户不受影响
+    assert realtime_stats.presence_id_from_fields(
+        username="alice", role="registered", client_ip="10.16.26.165"
+    ) == "u:alice"
+
+
 def test_registered_presence_uses_username():
     """登录用户 presence_id 以账号为准。"""
     pid = realtime_stats.presence_id_from_fields(username="alice", role="registered")
@@ -649,12 +689,15 @@ def test_admin_online_mirror_only_keeps_current_identities(monkeypatch):
             ip TEXT, user_agent TEXT, created_at TEXT, last_seen_at TEXT
         );
         CREATE TABLE guest_identity_records (
-            guest_uid TEXT, username TEXT, role TEXT, guest_device_id TEXT,
+            id INTEGER, guest_uid TEXT, username TEXT, role TEXT, guest_device_id TEXT,
             ip TEXT, user_agent TEXT, first_seen_at TEXT, last_seen_at TEXT
         );
         CREATE TABLE visit_tracking_events (
             username TEXT, ip_city TEXT, ip_region TEXT, ip_country TEXT,
             latitude REAL, longitude REAL, coord_source TEXT, created_at TEXT
+        );
+        CREATE TABLE users (
+            username TEXT, display_name TEXT
         );
         CREATE TABLE admin_online_presence (
             presence_id TEXT PRIMARY KEY, display_name TEXT, role TEXT,
@@ -669,14 +712,16 @@ def test_admin_online_mirror_only_keeps_current_identities(monkeypatch):
             'admin', 'admin', '', '', '9.9.9.9', 'UA-ADMIN',
             '2026-11-25 10:00:00', '2026-11-25 12:00:00'
         );
+        -- id=2055、username 残留旧值 user_1988：验证镜像用 id 而非 username
         INSERT INTO guest_identity_records VALUES (
-            'guest_mirror1', 'guest_mirror1', 'guest', 'gd_mirror1',
-            '1.2.3.4', 'UA-GUEST', '2026-11-25 11:00:00', '2026-11-25 12:00:00'
+            2055, 'guest_mirror1', 'user_1988', 'guest', 'gd_mirror1',
+            '10.16.26.165', 'UA-GUEST', '2026-11-25 11:00:00', '2026-11-25 12:00:00'
         );
         INSERT INTO visit_tracking_events VALUES (
             'guest_mirror1', 'Nanjing', 'Jiangsu', 'China', 32.06, 118.79,
             'gps', '2026-11-25 12:00:00'
         );
+        INSERT INTO users VALUES ('admin', 'Admin Nick');
         """
     )
 
@@ -699,10 +744,36 @@ def test_admin_online_mirror_only_keeps_current_identities(monkeypatch):
     admin = next(row for row in rows if row["presence_id"] == "u:admin")
     guest = next(row for row in rows if row["presence_id"] == "g:guest_mirror1")
     assert admin["identity_type"] == "admin" and admin["ip"] == "9.9.9.9"
-    assert guest["ip"] == "1.2.3.4" and guest["ip_city"] == "Nanjing"
+    # V3.7.13：在线镜像 display_name 与用户中心口径一致（users.display_name 优先）
+    assert admin["display_name"] == "Admin Nick"
+    # V3.7.13：容器网关内网 IP 在展示层过滤为 unknown；公网 IP 保持原样
+    assert guest["ip"] == "unknown" and guest["ip_city"] == "Nanjing"
+    assert admin["ip"] == "9.9.9.9"
+    # V3.7.13：游客 display_name 用 guest_<id>，与用户中心一致（不受 username 旧值影响）
+    assert guest["display_name"] == "guest_2055"
     assert guest["client_ids"] == ["c_guest_mirror"]
 
     tracker.drop_presence("u:admin", client_id="c_admin_mirror")
     assert statistics._refresh_admin_online_mirror_sync() == 1
     rows = statistics._load_admin_online_mirror_sync()
     assert [row["presence_id"] for row in rows] == ["g:guest_mirror1"]
+
+
+def test_public_ip_for_display_filters_private_gateway_ips():
+    """V3.7.13：在线表展示层 IP 过滤——私网/回环/保留显示 unknown，公网原样。"""
+    from api import statistics
+
+    cases = {
+        "10.16.26.165": "unknown",   # HF 容器网关
+        "172.19.0.1": "unknown",     # 本地 Docker 网关
+        "127.0.0.1": "unknown",
+        "192.168.1.1": "unknown",
+        "169.254.1.1": "unknown",
+        "224.0.0.1": "unknown",
+        "8.8.8.8": "8.8.8.8",
+        "1.2.3.4": "1.2.3.4",
+        "": "unknown",
+        "not-an-ip": "unknown",
+    }
+    for raw, expected in cases.items():
+        assert statistics._public_ip_for_display(raw) == expected, raw

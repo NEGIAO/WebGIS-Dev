@@ -5,8 +5,9 @@
 - 有效会话只保存在 `sessions` 表；`expired_sessions` 只存历史副本，任何鉴权路径都
   不读取它，删不改鉴权语义。
 - 三类身份（admin / registered / guest）同口径：
-  1) 签发新 token 时，同一身份（游客按 guest_uid，账号按同设备指纹）的旧 token
-     先归档再删除，`sessions` 表只保留最新一枚有效 token；
+  1) 签发新 token 时，同一身份（游客按 guest_uid，账号 admin/registered 按 username）
+     的旧 token 先归档再删除，`sessions` 表只保留最新一枚有效 token；
+     V3.7.13 起账号不再按设备指纹区分——全局单端登录，新签发必作废旧 token；
   2) 过期（expires_at 到期或 created_at + SESSION_EXPIRE_HOURS 硬上限）会话由后台
      定时任务搬运到 `expired_sessions` 后删除；
   3) 主动注销 / 被撤销的会话同样归档，保留回源与排查依据。
@@ -148,10 +149,12 @@ def supersede_sessions_locked(
 ) -> int:
     """签发新 token 时归档并删除同一身份的旧 token（须由调用方提交事务）。
 
-    匹配口径：
-    - 游客：同一 `guest_uid` 的全部旧行（同一浏览器重复签发只保留最新 token）；
-    - 账号：同一 `username` + 同一 IP + 同一 UA（同一设备重复登录只保留最新 token，
-      不同设备的多端登录互不影响）。
+    匹配口径（V3.7.13 三类身份统一：一个身份同一时间只有一枚有效 token）：
+    - 游客：同一 `guest_uid` 的全部旧行（`guest_uid` 或等价 `username`）；
+    - 账号（admin / registered）：同一 `username` 的全部旧行，**不再按 IP/UA 区分设备**——
+      新设备/浏览器登录会作废旧登录（单端登录语义，用户明确要求）。
+
+    `ip` / `user_agent` 参数保留兼容旧调用方，但不再参与匹配判定。
 
     `duration_recorder(row)` 可选：在归档前为每行回写在线时长指标，避免被取代的
     会话漏记 `user_metrics.total_login_seconds`。
@@ -164,11 +167,10 @@ def supersede_sessions_locked(
         where_sql = "role = 'guest' AND (guest_uid = ? OR username = ?)"
         params: tuple = (normalized_uid, normalized_uid)
     elif normalized_name:
-        if not str(ip or "").strip() or not str(user_agent or "").strip():
-            # 缺少设备指纹时不做跨会话清理，避免把用户其他设备的登录一并踢掉
-            return 0
-        where_sql = "username = ? AND ip = ? AND user_agent = ?"
-        params = (normalized_name, str(ip or ""), str(user_agent or ""))
+        # V3.7.13：账号按 username 全局去重（去掉原 IP/UA 设备条件），
+        # 同一 admin/registered 在多设备、多浏览器、多网络签发新 token 时旧 token 全部作废。
+        where_sql = "role IN ('admin', 'registered') AND username = ?"
+        params = (normalized_name,)
     else:
         return 0
 

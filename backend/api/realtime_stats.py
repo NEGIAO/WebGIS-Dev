@@ -48,6 +48,8 @@ from api.auth.constants import (
     ROLE_REGISTERED,
     _build_guest_uid,
     _normalize_guest_device_id,
+    is_private_client_ip,
+    is_standard_guest_device_id,
     normalize_role,
 )
 from api.auth.dependencies import (
@@ -1239,6 +1241,12 @@ def presence_id_from_fields(
         return f"u:{name}"
 
     if device_id:
+        # V3.7.13 在线人数虚报修复（Plan B）：容器网关私网 IP + 非标准 device_id
+        # （测试脚本常见的 vt-test-device / guest_<hex>）判为不可数 e:，
+        # 避免测试残留长期挂在在线表。标准 gd_<hex>（前端真实浏览器生成）不受影响，
+        # clone 项目连线上库的真实用户即使走私网出口也正常计入。
+        if is_private_client_ip(client_ip) and not is_standard_guest_device_id(device_id):
+            return f"e:{hashlib.sha256(device_id.encode('utf-8')).hexdigest()[:16]}"
         # 游客存在稳定设备 ID 时一律归并到设备派生主键（与 device_presence_id 完全一致），
         # 避免历史/缺省会话的随机 guest_uid 与请求头 X-Guest-Device-Id 裂成两个 g: 并逃脱 u: 压制。
         return f"g:{_build_guest_uid('', '', device_id)}"

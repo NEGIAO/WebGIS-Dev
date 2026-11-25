@@ -166,15 +166,10 @@ export function useGoogleOneTapAuth(options: UseGoogleOneTapAuthOptions) {
         });
 
         // 在页面右上角展示 One Tap 提示
-        google.accounts.id.prompt((notification: any) => {
-            if (notification.isNotDisplayed() || notification.isSkippedMoment()) {
-                console.warn(
-                    '[Google One Tap] 提示未展示:',
-                    notification.getNotDisplayedReason?.() || notification.getSkippedReason?.(),
-                );
-            }
-            // 用户关闭/取消 One Tap 提示属于正常行为
-        });
+        // V3.7.13：FedCM 下 isNotDisplayed/isSkippedMoment/getNotDisplayedReason/getSkippedReason
+        // 均已失效（Google 官方 JS API reference），继续调用会刷 GSI 迁移警告。
+        // 用户关闭/取消 One Tap 属正常行为，无需日志；注册页已有显式 Google 登录按钮兜底。
+        google.accounts.id.prompt(() => {});
     };
 
     return {

@@ -13,6 +13,7 @@ import {
     encodeCesiumPoseState,
 } from '@common/url-state/crypto';
 import { getCurrentQuerySnapshot, readQueryValue as readQueryFromSnapshot } from '@common/url-state/urlQueryReader';
+import { isSearchOnlyQueryKey } from '@common/url-state/urlParamSanitizer';
 import { normalizeLocationFlag } from '@common/utils/normalize';
 import { URL_LAYER_OPTIONS } from '@common/basemap/basemapOptions';
 import { createBasemapUrlMappingFeature } from '@common/url-state/useBasemapUrlMapping';
@@ -51,7 +52,11 @@ const MAX_CAMERA_HEIGHT = 50000000;
 function readLocationQuerySnapshot(): Record<string, any> {
     const params = new URLSearchParams();
     const search = String(window.location.search || '').replace(/^\?/, '');
-    new URLSearchParams(search).forEach((value, key) => params.set(key, value));
+    new URLSearchParams(search).forEach((value, key) => {
+        // V3.7.13：v 等仅 search 参数不得并入快照，否则 router.replace 会把它写进 hash
+        if (isSearchOnlyQueryKey(key)) return;
+        params.set(key, value);
+    });
 
     const hash = String(window.location.hash || '');
     const queryIndex = hash.indexOf('?');

@@ -216,5 +216,45 @@ class SessionArchiveTests(unittest.TestCase):
         self.assertIn("superseded", reasons)
 
 
+    def test_account_token_superseded_globally_across_devices(self):
+        """V3.7.13：同一账号跨 IP/UA 签发新 token 时，旧 token 全部归档删除（单端登录）。"""
+        conn = self._new_db()
+        now = _utc_now()
+        # 同一 admin，三条不同设备/IP/UA 的旧 session
+        for i, (ip, ua) in enumerate(
+            [("10.0.0.1", "UA-A"), ("10.0.0.2", "UA-B"), ("10.0.0.3", "UA-C")]
+        ):
+            conn.execute(
+                "INSERT INTO sessions (token, username, role, guest_uid, guest_device_id, ip, "
+                "user_agent, requires_email_binding, created_at, expires_at, last_seen_at) "
+                "VALUES (?, 'admin', 'admin', '', '', ?, ?, 0, ?, ?, '')",
+                (f"old-admin-{i}", ip, ua, _iso(now), _iso(now + timedelta(hours=3))),
+            )
+        # 另一身份不受影响
+        conn.execute(
+            "INSERT INTO sessions (token, username, role, guest_uid, guest_device_id, ip, "
+            "user_agent, requires_email_binding, created_at, expires_at, last_seen_at) "
+            "VALUES ('other-user', 'alice', 'registered', '', '', '10.0.0.9', 'UA-X', 0, ?, ?, '')",
+            (_iso(now), _iso(now + timedelta(hours=3))),
+        )
+        conn.commit()
+
+        with mock.patch.object(
+            session_archive_module, "_db_connection", return_value=_FakeContext(conn)
+        ):
+            archived = session_archive_module.supersede_sessions_locked(
+                conn, keep_token="new-admin", username="admin",
+                ip="10.0.0.4", user_agent="UA-D",
+            )
+        conn.commit()
+
+        self.assertEqual(archived, 3)
+        remaining = {dict(r)["token"] for r in conn.execute("SELECT token FROM sessions")}
+        # 注意：keep_token 并未被本函数插入，这里只验证旧 token 全清、其它身份保留
+        self.assertEqual(remaining, {"other-user"})
+        reasons = [dict(r)["archive_reason"] for r in conn.execute("SELECT * FROM expired_sessions")]
+        self.assertEqual(reasons, ["superseded"] * 3)
+
+
 if __name__ == "__main__":
     unittest.main()

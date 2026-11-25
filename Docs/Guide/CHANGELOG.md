@@ -17,6 +17,33 @@
 > 注：V3.7.2 号段已于同日重新启用，对应《修复 OpenLayers 加载 OSM 标准瓦片 403》条目，与本条无冲突。
 > 分主题的原始过程记录保留在 `Docs/LLM_record/26-11/2026-11-14/`，不迁移、不改写。
 
+### V3.7.13 (2026-11-25) — URL 参数治理 · 会话签发收敛 · 在线统计治理 · 身份唯一性
+
+> **版本归并（2026-11-25）**：按用户明确指令，将暂存区全部过程日志（URL 参数清理、版本注入、定位标记、分享文本化、会话签发架构收敛、在线人数治理、身份唯一性等）统一整合为单一版本 **V3.7.13**；过程日志保留不迁移、不改写，本条为唯一版本入口。L3 方案文档：[auth-issuance-architecture-plan](../TODO/2026-11-25-auth-issuance-architecture-plan.md)。
+
+**问题与修复**：访问首页时地址栏不携带版本信息，缓存标识与人工排查缺乏直接可见的版本线索；URL 中还常出现 `s=0&loc=0&p=0` 占位值与重复 `v` 参数。
+
+1. **复用构建期版本注入**：新增 `@common/url-state/appVersionQuery`，从 `__APP_VERSION__`（`vite.config.ts` 由 README「当前版本」正则提取）解析纯数字版本（`V3.7.13` → `3.7.13`），以 `history.replaceState` 写入 URL search 的 `v` 参数：`webgis.negiao.cn` → `webgis.negiao.cn/?v=3.7.13#/`。日志：[url-version-query](../LLM_record/26-11/2026-11-25/2026-11-25-url-version-query.md)
+2. **幂等与兼容**：版本一致时不改 URL；保留其余 search 参数与 hash 全部内容，不影响 hash 内的 s/p/loc/ut 分享与鉴权参数。
+3. **不污染历史与路由**：用 `replaceState` 而非 `router.replace`，不新增历史记录条目、不触发路由守卫重建。
+4. **URL 占位参数清理**：新增 `@common/url-state/urlParamSanitizer`，按参数语义剔除占位值：`s` 仅 `'1'` 保留、`loc` 仅 `'gps'`/`'ip'` 保留、`p`/`cs` 仅非空且非 `'0'` 保留；数值参数 `lng`/`lat`/`z`/`l` 的合法 `0` 保留。覆盖 `useMapState`（移除 s/loc/p 必填门槛）、首页 TOC 定位动作、`userLocationMath`、`auth.ts`、分享链接 `TopBar` 全部写入出口；读取端仍兼容旧链接占位值。日志：[url-placeholder-params](../LLM_record/26-11/2026-11-25/2026-11-25-url-placeholder-params.md)
+5. **修复版本参数 v 被复制进 hash**：切换 Cesium 后 `?v=…#/home?v=…` 重复出现——`useCesiumUrlTracking` 与罗盘 `urlState` 的"search 补缺"把 `v` 并入快照后经 `router.replace` 写回 hash。新增 `SEARCH_ONLY_QUERY_KEYS`（仅根 search 参数）在两处补缺时跳过，并在入口注入时顺带清理 hash 内残留旧 `v`。日志：[url-version-duplicate-in-hash](../LLM_record/26-11/2026-11-25/2026-11-25-url-version-duplicate-in-hash.md)
+6. **实现进入系统自动定位标记 loc=ip**：此前 IP 定位标记只在用户手动触发且 `extent` 存在时发生，而后端 `ip-locate` 成功返回 `latitude`/`longitude`、`extent` 为 null，导致 `loc=ip` 实际不可达。将 `useUserLocation` 中既有的 IP 请求/坐标转换/精度估算迁移为共享函数 `fetchIpLocationCandidate`（三路业务同源，全仓仅一处直接调 `apiLocationIpLocate`），入口非阻塞调用，成功即复用既有 `markLocationSuccessFlagInUrl('ip')` 标记（无 p 编码）；GPS 授权仍由既有流程覆盖为 `loc=gps`，GPS 优先逻辑不变，两者失败则不写 loc。日志：[loc-ip-auto-mark](../LLM_record/26-11/2026-11-25/2026-11-25-loc-ip-auto-mark.md)
+7. **分享按钮改为复制说明文本 + URL**：移除不兼容的 `navigator.share` 分支；点击后从分享 URL 的 `lng/lat` 复用高德逆地理编码（`apiReverseGeocode`）解析具体地名，生成"我在 NEGIAO's WebGIS 中分享了一处地点：{place}…{url}"文本并复制，弹 message 提醒。地名 API 失败按"定位上下文 → 经纬度文本 → 兜底词"三级降级，不阻断分享。日志：[share-copy-text](../LLM_record/26-11/2026-11-25/2026-11-25-share-copy-text.md)
+8. **修复落地页被写入 loc=ip**：入口自动定位原在 `main.ts` 顶层无条件触发，落地页（`/`）也被写入 `#/?loc=ip`。改为 `router.afterEach` 仅在进入 `/home` 时触发，`markIpLocationFromBackend` 与 `markLocationSuccessFlagInUrl` 均增加非 `/home` 短路防御。日志：[loc-mark-on-landing-page](../LLM_record/26-11/2026-11-25/2026-11-25-loc-mark-on-landing-page.md)
+9. **修复在线镜像 display_name 与用户中心不一致**：注册/管理员分支原取 `sessions.username`（登录名），用户中心取 `users.display_name`（昵称）——改为联查 `users` 取昵称、空值回退 username；游客分支原取可能残留旧值的 `guest_identity_records.username`（如 `user_1133`），改为复用 `_guest_visible_username(id)` 生成 `guest_<id>`（如 `guest_1134`），与用户中心 `getUserDisplayName` 及 URL `ut=guest_<id>` 同口径。补单测断言，真实库双分支实测通过。日志：[online-mirror-display-name](../LLM_record/26-11/2026-11-25/2026-11-25-online-mirror-display-name.md)
+10. **在线表私有网关 IP 展示层过滤**：HF/Docker 容器未注入公网 XFF 时，`_extract_client_ip` 回落到容器网关 IP（10.16.x.x / 172.19.0.1），在线表误显示为访客 IP。按用户选定方案，只在 `admin_online_presence` 展示写入时过滤私有/回环/保留 IP 为 `unknown`，不改鉴权/身份派生/限频核心逻辑。日志：[online-ip-private-gateway](../LLM_record/26-11/2026-11-25/2026-11-25-online-ip-private-gateway.md)
+11. **修复在线人数长期虚报（Plan B）**：根因是容器网关私网 IP + 测试残留的非标准 device_id（`vt-test-device` / `guest_<hex>`）被当作真实游客计入在线，并靠 25s 心跳长期挂在线表。新增组合判据——私网网关 IP 且 device_id 非标准 `gd_` 格式时归入不可数 `e:`；标准 `gd_`（前端真实浏览器生成，含 clone 项目连线上库的用户）与公网用户一律保留。不按 IP 一刀切，不误伤任何真实用户；注册/管理员不受影响。日志：[online-count-inflation-fix](../LLM_record/26-11/2026-11-25/2026-11-25-online-count-inflation-fix.md)
+12. **会话签发架构收敛（L3）**：删除 `main.ts` 顶层 `ensureGuestSession()`；游客身份匿名签发只发生在 `/home` 守卫内的分享模式与应急游客模式两条合法路径，普通游客访问 /home 仍按既有 requiresAuth 语义重定向 register。landing 根目录纯展示，零签发零验证零心跳（已核实 LandingView 不挂载账户面板）；后端鉴权/限频/配额/签发端点语义零改动。日志：[auth-issuance-architecture](../LLM_record/26-11/2026-11-25/2026-11-25-auth-issuance-architecture.md)
+13. **URL ut 标签改用展示名**：`buildUserTypeTag` 的 registered 分支原取 `username`，OAuth 账号带唯一性 hash（如 `negiao_033f72`）不适合展示；改为优先经温和清洗（去控制字符/压缩空白/限长 32）的 `display_name`、空值回退 username。全仓确认 ut 无消费方（仅展示标签），不影响鉴权与统计。日志：[ut-display-name](../LLM_record/26-11/2026-11-25/2026-11-25-ut-display-name.md)
+14. **Google One Tap FedCM 兼容**：核查确认 `?v=` 前缀非根因（origin 校验不涉及 path/query/hash），真正问题是 `prompt()` 回调用了 FedCM 下失效的 `isNotDisplayed/isSkippedMoment/getSkippedReason`（GSI 迁移警告源头）；移除失效 status API 调用改为空回调（用户关闭/取消属正常行为，注册页已有显式登录兜底）。`use_fedcm_for_prompt` 经官方 reference 确认已 Deprecated 被忽略，未采用。日志：[google-onetap-fedcm](../LLM_record/26-11/2026-11-25/2026-11-25-google-onetap-fedcm.md)
+15. **同一身份全局唯一 token（单端登录）**：`supersede_sessions_locked` 账号分支原按 `username+IP+UA`（同设备）去重，导致同一 admin 在不同浏览器/网络各留一枚 token。改为按 `username` 全局去重（admin/registered 新签发必作废旧 token）；游客按 `guest_uid` 口径不变，三类身份统一。旧 token 归档到 `expired_sessions` 保留排查依据。日志：[single-session-per-identity](../LLM_record/26-11/2026-11-25/2026-11-25-single-session-per-identity.md)
+16. **暂存区 code review 与版本合并**：解决 CHANGELOG 中未解决的 Git 合并冲突标记；将 V3.7.14 条目合并进 V3.7.13（本条为单一版本入口），README 三处版本与代码注释、日志版本统一为 3.7.13。日志：[code-review-version-merge](../LLM_record/26-11/2026-11-25/2026-11-25-code-review-version-merge.md)
+
+**为何不用日期**：同日多次发版日期相同、缓存破坏失效，且无法与 CHANGELOG 对应；版本号随 L2/L3 每次发版 +1，天然满足缓存刷新与追溯。
+
+**验证**：版本提取纯函数 6/6、清洗规则 8/8、v 剔除与 search 合并过滤 5/5、`vue-tsc --noEmit` 0 错误、门禁 4 项全绿、生产构建成功。
+
 ### V3.7.12 (2026-11-25) — 三类身份会话统一 · 会话归档 · 在线统计治理 · URL 身份标签细化 · 管理端控件主题化
 
 > **版本归并（2026-11-25）**：按用户明确指令，将暂存区中多次不规范提交对应的过程日志（含原 V3.7.13 会话归档批次、URL 身份标签批次）统一整合为单一版本 **V3.7.12**；过程日志保留不迁移、不改写，本条为唯一版本入口。

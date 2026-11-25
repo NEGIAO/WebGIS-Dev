@@ -3,6 +3,7 @@
 """
 
 import asyncio
+import ipaddress
 import json
 import logging
 import sqlite3
@@ -32,6 +33,7 @@ from api.auth import (
     require_api_access_or_guest_readonly,
     resolve_quota_subject,
 )
+from api.auth.user import _guest_visible_username
 from api.realtime_stats import get_online_tracker
 from services import ip_geo_service
 
@@ -260,6 +262,33 @@ def encode_pos(lng: Any, lat: Any) -> str:
 
 def extract_client_ip(request: Request) -> str:
     return _extract_client_ip(request)
+
+
+def _public_ip_for_display(ip: Any) -> str:
+    """展示层 IP 过滤：私有/回环/链路本地/保留/组播地址一律显示 unknown。
+
+    容器环境（HF Space / Docker）下 request.client.host 是网关内网 IP
+    （如 10.16.x.x / 172.19.0.1），真实公网 IP 需由反代注入 XFF；
+    在拿不到公网 IP 时宁可显示 unknown，也不把网关 IP 误标为访客 IP。
+    仅用于 admin_online_presence 展示，不影响鉴权/身份派生/IP 定位。
+    """
+    text = str(ip or "").strip()
+    if not text:
+        return "unknown"
+    try:
+        parsed = ipaddress.ip_address(text)
+    except ValueError:
+        return "unknown"
+    if (
+        parsed.is_private
+        or parsed.is_loopback
+        or parsed.is_link_local
+        or parsed.is_reserved
+        or parsed.is_multicast
+        or parsed.is_unspecified
+    ):
+        return "unknown"
+    return text
 
 
 async def fetch_geolocation(ip: str) -> Optional[dict]:
@@ -1035,9 +1064,22 @@ def _mirror_identity_from_db_sync(conn: sqlite3.Connection, presence_id: str) ->
         if row:
             r = dict(row)
             role = normalize_role(r.get("role"), r.get("username") or username)
+            # V3.7.13：display_name 与用户中心口径对齐——优先 users.display_name（昵称），
+            # 空值回退 username（与 auth/session.py 会话装配一致），不再显示登录名。
+            display_name = ""
+            try:
+                user_row = conn.execute(
+                    "SELECT display_name FROM users WHERE username = ? LIMIT 1",
+                    (username,),
+                ).fetchone()
+                if user_row is not None:
+                    display_name = str((dict(user_row)).get("display_name") or "").strip()
+            except sqlite3.OperationalError:
+                # 测试内存库/旧库可能无 users 表：回退 username，不阻断镜像刷新
+                pass
             info.update(
                 {
-                    "display_name": r.get("username") or username,
+                    "display_name": display_name or r.get("username") or username,
                     "role": role,
                     "identity_type": "admin" if role == ROLE_ADMIN else "registered",
                     "guest_uid": str(r.get("guest_uid") or ""),
@@ -1054,7 +1096,7 @@ def _mirror_identity_from_db_sync(conn: sqlite3.Connection, presence_id: str) ->
         guest_uid = presence_id[2:]
         row = conn.execute(
             """
-            SELECT guest_uid, username, role, guest_device_id, ip, user_agent,
+            SELECT id, guest_uid, username, role, guest_device_id, ip, user_agent,
                    first_seen_at, last_seen_at
             FROM guest_identity_records
             WHERE guest_uid = ? OR username = ?
@@ -1065,9 +1107,12 @@ def _mirror_identity_from_db_sync(conn: sqlite3.Connection, presence_id: str) ->
         ).fetchone()
         if row:
             r = dict(row)
+            # V3.7.13：游客展示名与用户中心同口径——guest_<guest_identity_records.id>，
+            # 不再用可能残留旧值（user_N / guest_<hex16>）的 username 列。
+            display_name = _guest_visible_username(int(r.get("id") or 0))
             info.update(
                 {
-                    "display_name": str(r.get("username") or guest_uid),
+                    "display_name": display_name,
                     "role": "guest",
                     "identity_type": "guest",
                     "guest_uid": str(r.get("guest_uid") or guest_uid),
@@ -1183,7 +1228,7 @@ def _refresh_admin_online_mirror_sync() -> int:
                     json.dumps(item.get("client_ids") or []),
                     int(item.get("session_count") or 0),
                     int(item.get("sse_connections") or 0),
-                    info["ip"],
+                    _public_ip_for_display(info["ip"]),
                     info["ip_city"],
                     info["ip_region"],
                     info["ip_country"],

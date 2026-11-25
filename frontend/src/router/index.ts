@@ -225,6 +225,8 @@ router.beforeEach(async (to: RouteLocationNormalized, from: RouteLocationNormali
         }
 
         if (isHomeRoute) {
+            // V3.7.13：能到达这里的游客身份均已在上方注入（分享模式 / 应急游客模式），
+            // 已登录用户走 /auth/me 验证。landing / register 一律不签发 guest token。
             showLoading(t('loading.mapEngine'), {
                 hideDelayMs: MAP_ENGINE_LOADING_HIDE_DELAY_MS,
             });

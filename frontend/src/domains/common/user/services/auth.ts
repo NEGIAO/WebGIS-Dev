@@ -11,6 +11,7 @@ let _lastSessionExpiredAt = 0;
 let _presenceClientId = '';
 
 import { normalizeBinaryFlag } from '@common/utils/normalize';
+import { sanitizeUrlParams } from '@common/url-state/urlParamSanitizer';
 import { clearGuestToken } from './guestTokenStore';
 
 function readUrlParams() {
@@ -324,13 +325,13 @@ export function injectPositionCodeToPath(path = '/home', code = '') {
     const params = new URLSearchParams(queryRaw);
 
     const normalizedCode = String(code || '').trim();
-    if (normalizedCode && !String(params.get('p') || '').trim()) {
+    // V3.7.13：仅有效编码（非空且非 '0'）才注入 p；未编码不写占位值。
+    // 定位来源统一用 gps/ip（不再写 loc=1），由调用方或定位链路设置。
+    if (normalizedCode && normalizedCode !== '0' && !String(params.get('p') || '').trim()) {
         params.set('p', normalizedCode);
-        if (normalizedCode !== '0' && !String(params.get('loc') || '').trim()) {
-            params.set('loc', '1');
-        }
     }
 
+    sanitizeUrlParams(params);
     const query = params.toString();
     return query ? `${pathname}?${query}` : pathname;
 }
@@ -370,17 +371,41 @@ export function getGuestSessionMetadata() {
 }
 
 /**
+ * ut 标签专用展示名清洗（V3.7.13）：trim → 去控制字符 → 压缩空白 → 限长 32。
+ * 不复用 composables/useAuthIdentity::normalizeDisplayName——那是昵称校验用
+ * （限长 40、不去控制字符），且 service 层不应依赖 composable。
+ * @param raw 原始展示名
+ * @returns 可安全写入 URL 的展示名；空串表示不可用
+ */
+function sanitizeDisplayNameForUrlTag(raw: unknown): string {
+    const cleaned = Array.from(String(raw ?? ''))
+        .filter((char) => {
+            const code = char.charCodeAt(0);
+            return code > 31 && code !== 127;
+        })
+        .join('')
+        .trim()
+        .replace(/\s+/g, ' ')
+        .slice(0, 32)
+        .trim();
+    return cleaned;
+}
+
+/**
  * 由用户对象构造 URL `ut` 身份标签（V3.7.12）。
  *
  * 规则：
  * - admin → `admin`（管理员全局唯一，不附加标识）
  * - guest → `guest_<guest_no>`，缺失时回退 `guest_<username 中的数字 id>`
- * - registered → `registered_<username>`
+ * - registered → `registered_<清洗后的 display_name>`，空值回退 `registered_<username>`
  *
- * 纯函数，无副作用，便于单测与排查；username 受注册校验约束
- * （`[A-Za-z0-9_]{3,24}`），写入 URLSearchParams 时自动编码。
+ * V3.7.13：registered 原取 username，但 OAuth 账号的 username 带唯一性 hash
+ * （如 negiao_033f72，用于避免撞名），不适合展示；改用 display_name 并做温和清洗
+ * （去控制字符、压缩空白、限长 32），避免展示名的不确定性污染 URL 标签。
  *
- * @param user 用户对象（含 role / guest_no / username）
+ * 纯函数，无副作用，便于单测与排查；含中文/特殊字符的展示名由 URLSearchParams 自动编码。
+ *
+ * @param user 用户对象（含 role / guest_no / display_name / username）
  * @returns ut 参数值
  */
 export function buildUserTypeTag(user: any): string {
@@ -397,6 +422,9 @@ export function buildUserTypeTag(user: any): string {
         return matched ? `guest_${matched[1]}` : 'guest';
     }
 
+    // V3.7.13：优先展示名；OAuth 用户的 username 带唯一性 hash，不适合出现在 URL 标签。
+    const displayName = sanitizeDisplayNameForUrlTag(user?.display_name);
+    if (displayName) return `registered_${displayName}`;
     const username = String(user?.username || '').trim();
     return username ? `registered_${username}` : 'registered';
 }
