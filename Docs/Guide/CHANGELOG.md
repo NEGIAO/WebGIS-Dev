@@ -17,6 +17,24 @@
 > 注：V3.7.2 号段已于同日重新启用，对应《修复 OpenLayers 加载 OSM 标准瓦片 403》条目，与本条无冲突。
 > 分主题的原始过程记录保留在 `Docs/LLM_record/26-11/2026-11-14/`，不迁移、不改写。
 
+### V3.7.13 (2026-11-25) — URL 参数治理 · 版本注入 · 定位标记 · 分享文本化
+
+> **版本归并（2026-11-25）**：按用户明确指令，将暂存区中 URL 参数清理、版本参数重复、自动定位标记、分享文本化等过程日志统一整合为单一版本 **V3.7.13**；过程日志保留不迁移、不改写，本条为唯一版本入口。
+
+**问题与修复**：访问首页时地址栏不携带版本信息，缓存标识与人工排查缺乏直接可见的版本线索；URL 中还常出现 `s=0&loc=0&p=0` 占位值与重复 `v` 参数。
+
+1. **复用构建期版本注入**：新增 `@common/url-state/appVersionQuery`，从 `__APP_VERSION__`（`vite.config.ts` 由 README「当前版本」正则提取）解析纯数字版本（`V3.7.13` → `3.7.13`），以 `history.replaceState` 写入 URL search 的 `v` 参数：`webgis.negiao.cn` → `webgis.negiao.cn/?v=3.7.13#/`。日志：[url-version-query](../LLM_record/26-11/2026-11-25/2026-11-25-url-version-query.md)
+2. **幂等与兼容**：版本一致时不改 URL；保留其余 search 参数与 hash 全部内容，不影响 hash 内的 s/p/loc/ut 分享与鉴权参数。
+3. **不污染历史与路由**：用 `replaceState` 而非 `router.replace`，不新增历史记录条目、不触发路由守卫重建。
+4. **URL 占位参数清理**：新增 `@common/url-state/urlParamSanitizer`，按参数语义剔除占位值：`s` 仅 `'1'` 保留、`loc` 仅 `'gps'`/`'ip'` 保留、`p`/`cs` 仅非空且非 `'0'` 保留；数值参数 `lng`/`lat`/`z`/`l` 的合法 `0` 保留。覆盖 `useMapState`（移除 s/loc/p 必填门槛）、首页 TOC 定位动作、`userLocationMath`、`auth.ts`、分享链接 `TopBar` 全部写入出口；读取端仍兼容旧链接占位值。日志：[url-placeholder-params](../LLM_record/26-11/2026-11-25/2026-11-25-url-placeholder-params.md)
+5. **修复版本参数 v 被复制进 hash**：切换 Cesium 后 `?v=…#/home?v=…` 重复出现——`useCesiumUrlTracking` 与罗盘 `urlState` 的"search 补缺"把 `v` 并入快照后经 `router.replace` 写回 hash。新增 `SEARCH_ONLY_QUERY_KEYS`（仅根 search 参数）在两处补缺时跳过，并在入口注入时顺带清理 hash 内残留旧 `v`。日志：[url-version-duplicate-in-hash](../LLM_record/26-11/2026-11-25/2026-11-25-url-version-duplicate-in-hash.md)
+6. **实现进入系统自动定位标记 loc=ip**：此前 IP 定位标记只在用户手动触发且 `extent` 存在时发生，而后端 `ip-locate` 成功返回 `latitude`/`longitude`、`extent` 为 null，导致 `loc=ip` 实际不可达。将 `useUserLocation` 中既有的 IP 请求/坐标转换/精度估算迁移为共享函数 `fetchIpLocationCandidate`（三路业务同源，全仓仅一处直接调 `apiLocationIpLocate`），入口非阻塞调用，成功即复用既有 `markLocationSuccessFlagInUrl('ip')` 标记（无 p 编码）；GPS 授权仍由既有流程覆盖为 `loc=gps`，GPS 优先逻辑不变，两者失败则不写 loc。日志：[loc-ip-auto-mark](../LLM_record/26-11/2026-11-25/2026-11-25-loc-ip-auto-mark.md)
+7. **分享按钮改为复制说明文本 + URL**：移除不兼容的 `navigator.share` 分支；点击后从分享 URL 的 `lng/lat` 复用高德逆地理编码（`apiReverseGeocode`）解析具体地名，生成"我在 NEGIAO's WebGIS 中分享了一处地点：{place}…{url}"文本并复制，弹 message 提醒。地名 API 失败按"定位上下文 → 经纬度文本 → 兜底词"三级降级，不阻断分享。日志：[share-copy-text](../LLM_record/26-11/2026-11-25/2026-11-25-share-copy-text.md)
+
+**为何不用日期**：同日多次发版日期相同、缓存破坏失效，且无法与 CHANGELOG 对应；版本号随 L2/L3 每次发版 +1，天然满足缓存刷新与追溯。
+
+**验证**：版本提取纯函数 6/6、清洗规则 8/8、v 剔除与 search 合并过滤 5/5、`vue-tsc --noEmit` 0 错误、门禁 4 项全绿、生产构建成功。
+
 ### V3.7.12 (2026-11-25) — 三类身份会话统一 · 会话归档 · 在线统计治理 · URL 身份标签细化 · 管理端控件主题化
 
 > **版本归并（2026-11-25）**：按用户明确指令，将暂存区中多次不规范提交对应的过程日志（含原 V3.7.13 会话归档批次、URL 身份标签批次）统一整合为单一版本 **V3.7.12**；过程日志保留不迁移、不改写，本条为唯一版本入口。

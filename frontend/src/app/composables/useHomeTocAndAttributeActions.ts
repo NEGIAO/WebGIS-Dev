@@ -5,6 +5,7 @@
  */
 import { ref, type Ref } from 'vue';
 import { apiLogVisit } from '@/api/backend';
+import { sanitizeUrlParams } from '@common/url-state/urlParamSanitizer';
 import { showLoading, hideLoading } from '@common/ui/loading';
 import {
     dispatchLayerAction,
@@ -548,10 +549,13 @@ export function useHomeTocAndAttributeActions({
                 params.set('p', normalizedCode);
                 params.set('loc', 'gps');
             } else {
-                params.set('p', '0');
-                params.set('loc', '0');
+                // V3.7.13：定位失败/未授权不写占位值，直接移除（读取端仍兼容旧链接的 p=0/loc=0）
+                params.delete('p');
+                params.delete('loc');
             }
 
+            // 统一剔除其它占位参数（s=0 等），避免地址栏噪声
+            sanitizeUrlParams(params);
             const nextHashQuery = params.toString();
             const nextHash = nextHashQuery
                 ? `#${normalizedHashPath}?${nextHashQuery}`

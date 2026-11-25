@@ -6,6 +6,7 @@
  * 供定位 composable 与其它模块复用。
  */
 import { normalizeBinaryFlag, normalizeLocationFlag } from '@common/utils/normalize';
+import { sanitizeUrlParams } from '@common/url-state/urlParamSanitizer';
 
 /** 角度 → 弧度 */
 export function toRad(value: unknown): number {
@@ -138,16 +139,14 @@ export function markLocationSuccessFlagInUrl(source = 'unknown'): void {
         const hashPath = hashPathRaw || '/home';
         const params = new URLSearchParams(hashQueryRaw);
 
-        if (normalizeBinaryFlag(params.get('s'), '0') !== '1') {
-            params.set('s', '0');
-        }
-
+        // V3.7.13：非分享不再写 s=0 占位；已有 s=1 保留，s=0 由清洗函数移除
         const currentLoc = normalizeLocationFlag(params.get('loc') || '0', '0');
         if (currentLoc === source) return;
         // GPS 优先级最高：已标记为 gps 时，后续 IP 回退不得降级覆盖
         if (currentLoc === 'gps' && source !== 'gps') return;
 
         params.set('loc', source);
+        sanitizeUrlParams(params);
         const nextHashQuery = params.toString();
         const normalizedHashPath = hashPath.startsWith('/') ? hashPath : `/${hashPath}`;
         const nextHash = nextHashQuery

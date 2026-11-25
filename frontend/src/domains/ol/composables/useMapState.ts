@@ -16,6 +16,7 @@ import {
 import { normalizeBinaryFlag, normalizeLocationFlag, normalizeText } from '@common/utils/normalize';
 import { DEFAULT_SEARCH_ZOOM } from '@common/utils/mapDefaults';
 import { getCurrentQuerySnapshot as getSnapshot, readQueryValue as readQueryFromSnapshot } from '@common/url-state/urlQueryReader';
+import { sanitizeUrlParams } from '@common/url-state/urlParamSanitizer';
 import { debounce, formatNumber, formatZParam, isSameQuerySnapshot, parseInteger, parseNumber, resolvePreferredDefaultLayerIndex } from './useMapStateHelpers';
 import { useMapDecorations } from './useMapDecorations';
 import { useMapBasemapInstances } from './useMapBasemapInstances';
@@ -202,16 +203,9 @@ export function useMapState(mapInstance: any, options: UseMapStateOptions = {} a
     }
 
     function replaceUrlQuery(nextQuery: any) {
-        if (
-            !nextQuery?.lng ||
-            !nextQuery?.lat ||
-            !nextQuery?.z ||
-            !nextQuery?.l ||
-            !nextQuery?.s ||
-            !nextQuery?.loc ||
-            !nextQuery?.p
-        )
-            return;
+        // V3.7.13：只校验地图核心字段；s/loc/p 的占位值（'0'）不再作为必填门槛，
+        // 改由 sanitizeUrlParams 统一剔除——未分享、未定位、未编码时不写入 URL。
+        if (!nextQuery?.lng || !nextQuery?.lat || !nextQuery?.z || !nextQuery?.l) return;
 
         const mergedQuery: Record<string, any> = {
             ...getCurrentQuerySnapshot(),
@@ -233,15 +227,18 @@ export function useMapState(mapInstance: any, options: UseMapStateOptions = {} a
             }
             mergedQuery[key] = String(value);
         });
+        // V3.7.13：统一剔除 s=0 / loc=0 / p=0 等占位值（分享/定位/编码未生效时不写）
+        const sanitizedParams = sanitizeUrlParams(new URLSearchParams(mergedQuery as Record<string, string>));
+        const cleanQuery = Object.fromEntries(sanitizedParams.entries());
 
         const currentSnapshot = getCurrentQuerySnapshot();
-        if (isSameQuerySnapshot(currentSnapshot, mergedQuery)) return;
+        if (isSameQuerySnapshot(currentSnapshot, cleanQuery)) return;
 
         if (router && route) {
             void router
                 .replace({
                     path: route.path || '/home',
-                    query: mergedQuery,
+                    query: cleanQuery,
                 })
                 .catch(() => {});
             return;
@@ -250,7 +247,7 @@ export function useMapState(mapInstance: any, options: UseMapStateOptions = {} a
         if (typeof window === 'undefined') return;
 
         const hashPath = String(window.location.hash || '#/home').split('?')[0] || '#/home';
-        const params = new URLSearchParams(mergedQuery);
+        const params = new URLSearchParams(cleanQuery);
         const nextUrl = `${window.location.pathname}${window.location.search}${hashPath}?${params.toString()}`;
         window.location.replace(nextUrl);
     }

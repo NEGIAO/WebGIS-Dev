@@ -11,6 +11,7 @@ let _lastSessionExpiredAt = 0;
 let _presenceClientId = '';
 
 import { normalizeBinaryFlag } from '@common/utils/normalize';
+import { sanitizeUrlParams } from '@common/url-state/urlParamSanitizer';
 import { clearGuestToken } from './guestTokenStore';
 
 function readUrlParams() {
@@ -324,13 +325,13 @@ export function injectPositionCodeToPath(path = '/home', code = '') {
     const params = new URLSearchParams(queryRaw);
 
     const normalizedCode = String(code || '').trim();
-    if (normalizedCode && !String(params.get('p') || '').trim()) {
+    // V3.7.13：仅有效编码（非空且非 '0'）才注入 p；未编码不写占位值。
+    // 定位来源统一用 gps/ip（不再写 loc=1），由调用方或定位链路设置。
+    if (normalizedCode && normalizedCode !== '0' && !String(params.get('p') || '').trim()) {
         params.set('p', normalizedCode);
-        if (normalizedCode !== '0' && !String(params.get('loc') || '').trim()) {
-            params.set('loc', '1');
-        }
     }
 
+    sanitizeUrlParams(params);
     const query = params.toString();
     return query ? `${pathname}?${query}` : pathname;
 }

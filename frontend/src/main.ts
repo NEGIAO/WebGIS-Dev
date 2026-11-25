@@ -14,6 +14,12 @@ import { getGuestToken } from '@common/user/services/guestTokenStore';
 // `export *` 对含副作用的模块无法被 tree-shake，会把整张 store 图拖进入口 chunk。
 import { useUserPreferencesStore } from '@common/user/stores/useUserPreferencesStore';
 import { ensureGuestSession } from '@common/user/services/guestIdentity';
+import { markIpLocationFromBackend } from '@common/map-view/services/autoLocationMark';
+import { injectAppVersionToUrl } from '@common/url-state/appVersionQuery';
+
+// V3.7.12：首页加载即把构建版本写入 URL search（?v=3.7.12），
+// 供缓存标识与人工排查；replaceState 不新增历史记录、不触发路由重建。
+injectAppVersionToUrl();
 
 const app = createApp(App);
 const pinia = createPinia();
@@ -59,6 +65,10 @@ void userPreferencesStore.bootstrap();
 // 游客身份预签发（V3.7.6）：非阻塞后台执行，未登录访客尽早获得稳定签名身份；
 // 签发失败静默（后端派生桶兜底），首几个请求可能先走派生身份，token 到位后自动切换。
 void ensureGuestSession();
+
+// 进入系统自动定位标记（V3.7.13）：后端 IP 定位成功即写 loc=ip；
+// GPS 授权仍由现有定位流程覆盖为 loc=gps（优先级更高）；失败静默不写 loc。
+void markIpLocationFromBackend();
 
 // Mount immediately so RouterView and GlobalLoading can render during async guards.
 app.mount('#app');
