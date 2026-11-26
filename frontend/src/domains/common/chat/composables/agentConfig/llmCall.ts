@@ -55,15 +55,10 @@ export function createLlmCallMethod(config: any) {
             let quotaData: any = null;
             let callCost = 0;
 
-            const enhancedHistory = systemPrompt
-                ? [
-                      {
-                          role: 'user',
-                          content: `[系统指令] 以下是你可以使用的工具说明，请严格按照此格式调用工具：\n\n${systemPrompt}`,
-                      },
-                      ...history,
-                  ]
-                : history;
+            // System Prompt 只走专用 system_prompt 字段。
+            // 旧实现把它伪装成 history[0] 的 user 消息，提示词扩展后触发
+            // history.content 8000 字符校验失败，并污染对话历史。
+            const requestHistory = history;
 
             if (config.isDefaultAIMode) {
                 const dc = config.directConfig;
@@ -72,9 +67,10 @@ export function createLlmCallMethod(config: any) {
                 const finalModel = config.defaultAIModel || dc.model;
                 const streamPayload = {
                     message: userMsg,
-                    history: enhancedHistory,
+                    history: requestHistory,
                     location_context: locationContext,
                     map_context: mapContext,
+                    system_prompt: systemPrompt,
                     override_model: finalModel || undefined,
                     override_top_p: dc.top_p,
                     override_extra_body: dc.extra_body,
@@ -101,7 +97,7 @@ export function createLlmCallMethod(config: any) {
 
                 const streamPayload = {
                     message: userMsg,
-                    history: enhancedHistory,
+                    history: requestHistory,
                     location_context: locationContext,
                     map_context: mapContext,
                     api_key: dc.api_key,
@@ -127,9 +123,10 @@ export function createLlmCallMethod(config: any) {
             } else {
                 const chatPayload: any = {
                     message: userMsg,
-                    history: enhancedHistory,
+                    history: requestHistory,
                     location_context: locationContext,
                     map_context: mapContext,
+                    system_prompt: systemPrompt,
                     tools,
                     tool_choice: 'auto',
                 };

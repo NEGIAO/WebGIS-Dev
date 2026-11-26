@@ -6,6 +6,18 @@
 
 ## 版本记录
 
+### V3.7.17 (2026-11-26) — Agent 提示词瘦身 · intent 本地解析（L2）
+
+System Prompt 从 9,779 字符 / 17,767 字节压缩到 962 字符 / 1,840 字节（字符降幅 90.16%）。移除前置的 20 条工具签名、18 条瓦片规则和长篇风水规则，改为在 `switch_basemap(intent=用户原话)` 调用时由本地规则表解析 presetId/URL。OL/Cesium 共用 `validateBasemapArg`，保留明确的服务商边界：高德水系/湖泊请求不会被静默改判成 Google。详见 [prompt-slimming](../LLM_record/26-11/2026-11-26/2026-11-26-agent-prompt-slimming.md)。
+
+### V3.7.16 (2026-11-26) — Agent System Prompt 传输修复 · 瓦片语义预设（L2）
+
+修复 Agent 请求的 422 错误：前端 `llmCall.ts` 曾把完整 System Prompt 伪装成 `history[0]` 的 user 消息，瓦片语义规则扩展后达到 9,779 字符，触发后端 `history.content` 8000 上限。现三个通道统一使用专用 `system_prompt` 字段，history 只保留真实对话轮次；后端 `system_prompt` 上限提升到 16,000，`/chat/completions` 与 `/chat/completions/stream` 改为优先使用前端提交的提示词。history 单条 8000 上限保持不变。详见 [history-8000-fix](../LLM_record/26-11/2026-11-26/2026-11-26-agent-history-8000-fix.md)。
+
+### V3.7.15 (2026-11-26) — Agent 瓦片语义预设（L2）
+
+新增 [瓦片语义规则表](../LLM_record/26-11/2026-11-26/2026-11-26-agent-tile-intent-presets.md)，把高德 `style/ltype/scl` 与 Google `lyrs/apistyle` 的文档结论压缩为 18 条自然语言映射。`agentToolsSchema.ts` 的 System Prompt 现在强制 Agent 从规则表选择已登记 `presetId` 或精确 URL，禁止自行发明参数；明确高德无法单独拆分水系/湖泊/土地利用，Google `apistyle` 属于非稳定服务参数。不新增工具，不触碰 MapCommandBus，复用既有 `switch_basemap` 执行链。
+
 > **版本号归并（2026-11-07）**：按用户「所有冲突的文档记录合并修改为 V3.6.42」的指令，
 > 将 V3.6.38 / V3.6.39 两个整合条目中记述的**曾用中间版本号**（11-01 / 11-02 两次整合前
 > 零散升号、整合后即废弃，号段均高于当前版本）统一归并为 **V3.6.42**。

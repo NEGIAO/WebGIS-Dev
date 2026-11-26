@@ -487,7 +487,8 @@ frontend/src/
 │   │   │   │   ├── useChatAgentConfig.ts  # 工厂入口（装配四组方法到同一 reactive）
 │   │   │   │   └── useChatSession.ts
 │   │   │   ├── constants/
-│   │   │   │   └── agentToolsSchema.ts  # Agent Function Calling 工具声明
+│   │   │   │   ├── agentToolsSchema.ts  # Agent Function Calling 工具声明与 System Prompt
+│   │   │   │   └── tileIntentPresets.ts  # 瓦片语义预设表（自然语言→presetId/URL，禁模型拼参数）
 │   │   │   └── stores/
 │   │   │       └── useChatStore.ts  # Chat 状态
 │   │   ├── command-bus/
