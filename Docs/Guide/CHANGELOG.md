@@ -17,6 +17,29 @@
 > 注：V3.7.2 号段已于同日重新启用，对应《修复 OpenLayers 加载 OSM 标准瓦片 403》条目，与本条无冲突。
 > 分主题的原始过程记录保留在 `Docs/LLM_record/26-11/2026-11-14/`，不迁移、不改写。
 
+### V3.7.14 (2026-11-26) — 统一 IP 地理中枢 · 会话持久化城市 · 暂存区 Code Review 修复 · 架构文档核查（L3）
+
+> **版本归并（2026-11-26）**：按用户明确指令，将同一批暂存区工作（L3 统一中枢 · 会话持久化城市 + L2 暂存区代码审查修复）统一整合为单一版本 **V3.7.14**；过程日志保留不迁移、不改写，本条为唯一版本入口。L3 方案文档：[ip-city-persistence-plan](../TODO/2026-11-26-ip-city-persistence-plan.md)。同日架构文档全量核查更新（原拟 V3.7.15）亦按用户明确指令并入本条，不单独升号；核查与 Code Review 日志：[architecture-docs-audit](../LLM_record/26-11/2026-11-26/2026-11-26-architecture-docs-audit.md)。
+
+**问题与修复**：含 IP 的表（sessions、expired_sessions）没有城市字段，IP 解析逻辑分散在多处各自调用；随后对暂存区做代码审查，发现 2 项 High 与多项 Medium 问题，本条一并修复。
+
+1. **统一中枢**：新增 `services/request_geo.py`，提供 `get_request_geo(request)`（请求级缓存挂 request.state）与 `resolve_ip_geo(ip)`（无 request 版本）；私网 IP 在中枢层直接跳过，零外部请求；解析失败静默留空。
+2. **业务端点惰性取用**：不挂全局中间件——`app.py` 中间件不再 `await` IP 地理服务（CORS / 健康检查 / OPTIONS 白名单跳过）；由 `ip-locate` / `track-visit` / 签发路径按需取用，进程级 TTL 缓存保证一个 IP 只解析一次。
+3. **会话落库**：`sessions` / `expired_sessions` 增加 `ip_city/ip_region/ip_country`（幂等 ALTER）；账号与游客签发时复用中枢结果写入；归档搬运同步新列。
+4. **多处复用**：在线表镜像优先读 sessions 城市（回退 `visit_tracking_events`，保留经纬度）；`fetch_geolocation` 改经中枢；注册页与 proxy 无 request 上下文时用中枢的 IP 版本。
+5. **IP 服务说明**：四级降级——高德（需 key，中国 IP）→ ipwho.is → ip-api.com → ipapi.co，自带 TTL 缓存与私网跳过。
+6. **位置统计架构文档**：新增 [user-location-statistics](../Architecture/user-location-statistics.md)，梳理 GPS/IP 采集、`p` 短码（前后端同算法）、两套访问追踪端点与七张地理字段表的完整链路。
+7. **修复架构文档标注的 3 处不一致**：① `/location/ip-locate` 与 `/location/track-visit` 改走 `request_geo` 中枢（全仓 IP 解析单一入口）；② `track-visit` 改写 `visit_tracking_events`，旧只写不读的 `visit_tracking` 表停写保留；③ `gps_timestamp` 统一服务端 UTC+8，忽略前端上报值。日志：[location-inconsistencies-fix](../LLM_record/26-11/2026-11-26/2026-11-26-location-inconsistencies-fix.md)
+8. **删除死表 + 修复 5 个 bug**：删除无读取方的 `visit_tracking` 表（1282 行，已备份）；修复 ① `Number(null)=0` 导致 IP 坐标变 (0,0) ② IP 坐标被误标 `loc=gps` ③ visit log 擦除 `loc=ip` ④ `prefer_free_service` 开关失效 ⑤ 用昵称查登录名导致改昵称后城市为空。日志：[location-bugs-fix](../LLM_record/26-11/2026-11-26/2026-11-26-location-bugs-fix.md)
+9. **空结果显式状态**：`RequestGeo` 新增 `resolved`；私网/非法/失败为 `False` 但保留 `ip` 供审计，`ip-locate` / `fetch_geolocation` 不再误报成功。
+10. **IP 同源与缓存分维**：`track-visit` 落库 IP 统一用中枢校验后的 `geo.ip`；`ip_geo` 缓存键加入 `amap/free` 维度，`prefer_amap=False` 不再拿到高德预热结果。
+11. **来源标注与测试**：在线表 `coord_source` 跟随访问事件实际坐标来源，无事件时回退 IP；源码字符串断言替换为行为回归测试；debug 日志 IP 脱敏。日志：[staged-code-review-fixes](../LLM_record/26-11/2026-11-26/2026-11-26-staged-code-review-fixes.md)
+12. **架构文档全量核查（以代码为准）**：`Docs/Architecture/` 25 份逐份核实、24 份修订（1 份核实准确未改）。核心双引擎视角同步改归 canonical resolution + 射线实测 + Precision 校正；坐标规范 §28–30 模块树改为 10 个 `.ts`、5 个函数改名、任务书改为实现现状；底图门面拆分 / `l` 1-based / 94 预设 / 删除 FallbackManager 降级；配置权威 `deploy/.env.example`（146 key）+ `catalog.py`（139 key）；token 4 池 + 批量拉取。日志：[architecture-docs-audit](../LLM_record/26-11/2026-11-26/2026-11-26-architecture-docs-audit.md)
+13. **Cesium / 数据 / 身份文档对齐**：风场改为 vendored `WindLayer` + GFS U/V，云三档 + `sampler3D` + `ShadowResolvePass`，图层模型/能力矩阵/端口注册/清档策略按代码重写；路径规划双面板合并为单一 `RoutePlannerPanel`；身份口径更新为 sessionStorage、fail-closed `LOGIN_REQUIRED`、XFF 末跳 + 签名 guest token、4h、18 接口；3 份 `decisions/` 保留历史正文并加落地状态注记。
+14. **版本 SSOT 与 Code Review**：硬编码版本基线改为链接 README，外部仓事实标 ⚠️ 未核验；复核修正 6 处事实偏差（臆造的 `CloudManager` 初始化流程、env 覆盖方向、guest token 存储媒介、云参数映射归属、球面迭代次数、容灾提示文案）。
+
+**验证**：中枢单测 4/4、行为回归 10/10、全量 pytest 184 passed / 1 既有失败（`test_shutdown_webhook_watches_noop_when_idle`，async 插件配置问题，与本次无关）、`vue-tsc`/`eslint src/` 0 错误、门禁全绿、生产构建成功（前序会话执行）。架构文档部分：25 份 Markdown 围栏配对全通过、结构树/配置门禁双绿、平台红线扫描通过（纯文档任务无需实机验证）。日志：[ip-city-persistence](../LLM_record/26-11/2026-11-26/2026-11-26-ip-city-persistence.md)
+
 ### V3.7.13 (2026-11-25) — URL 参数治理 · 会话签发收敛 · 在线统计治理 · 身份唯一性
 
 > **版本归并（2026-11-25）**：按用户明确指令，将暂存区全部过程日志（URL 参数清理、版本注入、定位标记、分享文本化、会话签发架构收敛、在线人数治理、身份唯一性等）统一整合为单一版本 **V3.7.13**；过程日志保留不迁移、不改写，本条为唯一版本入口。L3 方案文档：[auth-issuance-architecture-plan](../TODO/2026-11-25-auth-issuance-architecture-plan.md)。

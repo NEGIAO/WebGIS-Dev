@@ -248,7 +248,8 @@ class GuestTokenRevocationTests(unittest.TestCase):
         conn.execute(
             "CREATE TABLE sessions (token TEXT PRIMARY KEY, username TEXT, role TEXT, "
             "guest_uid TEXT, guest_device_id TEXT, ip TEXT, user_agent TEXT, "
-            "requires_email_binding INTEGER, created_at TEXT, expires_at TEXT, last_seen_at TEXT)"
+            "requires_email_binding INTEGER, created_at TEXT, expires_at TEXT, last_seen_at TEXT, "
+            "ip_city TEXT, ip_region TEXT, ip_country TEXT)"
         )
         with mock.patch("api.auth.db.get_auth_db_connection", return_value=_MemoryDbContext(conn)):
             with mock.patch("api.auth.guest_token.get_str", return_value="secret"):

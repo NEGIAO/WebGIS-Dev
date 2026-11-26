@@ -1,12 +1,12 @@
 # Cesium 面状航线模块架构
 
-日期：2026-08-22（并入 V3.5.27：浮层整页方案 → toolPanel 模块卡片直驱 + 统一图层管理接入）
+日期：2026-08-22（并入版本详见[根 README](../../README.md)：浮层整页方案 → toolPanel 模块卡片直驱 + 统一图层管理接入）
 
 ## 模块关系
 
 ```mermaid
 flowchart LR
-    CARD["ToolPanel 模块卡片<br/>(planarRouteModule.js 声明式控件)"] -- "module-action" --> UCM["useCesiumToolModules.js"]
+    CARD["ToolPanel 模块卡片<br/>(planarRouteModule.ts 声明式控件)"] -- "module-action" --> UCM["useCesiumToolModules.ts"]
     UCM -- "control-change / action" --> CTRL["planarRouteController.ts<br/>(无头运行时,懒加载 chunk)"]
     CTRL -- "bind(getViewer())" --> HOST["宿主 Cesium Viewer(唯一实例)"]
     CTRL -- "onStateChange 快照" --> STATE["planarRouteState ref"]
@@ -27,7 +27,7 @@ flowchart LR
 
 ## 2. 关键约束（踩坑记录）
 
-- **启动期禁触 Cesium**：`planarRouteModule.js` 被 `useCesiumToolModules.js` 静态引用 → `planarConfig.ts` 属启动加载链。其顶层禁止 `import Cesium from 'cesium'` 及任何 `Cesium.*` 求值（CDN 未就绪时 cesium-shim 抛错导致整个 3D 页打不开）。类型用 `import type { Cartesian3 }`；兜底位置经纬度常量在点击回调中惰性转换。`utils/comm.ts` 同理。
+- **启动期禁触 Cesium**：`composables/toolModules/planarRouteModule.ts` 被 `composables/toolModules/useCesiumToolModules.ts` 静态引用 → `planarConfig.ts` 属启动加载链。其顶层禁止 `import Cesium from 'cesium'` 及任何 `Cesium.*` 求值（CDN 未就绪时 cesium-shim 抛错导致整个 3D 页打不开）。类型用 `import type { Cartesian3 }`；兜底位置经纬度常量在点击回调中惰性转换。`utils/comm.ts` 同理。
 - **共享 Viewer 事件隔离**：起飞点拾取使用模块自有的 `ScreenSpaceEventHandler`（planarLine.ts），禁止 `viewer.screenSpaceEventHandler.removeInputAction` 清宿主左键逻辑。
 - **UI 自管理 DOM**：测区删除浮层按钮、自相交警告条、起飞点拾取提示均由控制器/工具层创建于 `viewer.container` 内并自带内联样式，不依赖宿主模板。
 
@@ -35,11 +35,11 @@ flowchart LR
 
 测区绘制（drawPolygon/turf）进入 wayLineCalc（弓字形）、obliqueRoute（五向）、planarTerrain（仿地采样），计算结果由 useCesiumRenderer 写入宿主 Viewer 实体；planarKmzExport 编码 WPMZ/KMZ，planarKmzImport 解析回填。参数变更统一走 `controller.setParam(id, value)` → 写回 globeConfig → 重规划；状态经 `emitState()` 快照上报驱动卡片徽标/下拉选项。
 
-**统一图层管理**：首次生成有效航线（含 KMZ 导入）时，控制器经 `onWorkingSetChange` 把托管数据源 drawDataSource 以固定 id `planar_route_working`、类型 `wayline` 注册进 loadedDataSources → 元数据店自动建档，数据页签/TOC 可 显隐·透明度·重命名·定位·移除；外部移除时 adapter.remove 先调 `detachForExternalRemoval()` 复位控制器再销毁句柄。起飞点实体同样收敛在 drawDataSource 内，随数据源整体显隐。
+**统一图层管理**：首次生成有效航线（含 KMZ 导入）时，控制器经 `onWorkingSetChange` 把托管数据源 drawDataSource 以固定 id `planar_route_working`（`useCesiumLayerAdapter.ts:29` 的 `PLANAR_SOURCE_ID`）、类型 `wayline` 注册进 loadedDataSources → 元数据店自动建档，数据页签/TOC 可 显隐·透明度·重命名·定位·移除；外部移除时 `useCesiumLayerAdapter.ts:278-285` 的 `remove` 按 id 命中该数据源，经 `getDetachCallbacks().detachPlanarWorkingSet()`（由 `advancedControllers.ts:372` 转发）**间接**调用 `planarRouteController.detachForExternalRemoval()`（`planarRouteController.ts:246`）复位控制器，随后再销毁句柄。起飞点实体同样收敛在 drawDataSource 内，随数据源整体显隐。
 
 ## 4. 分包与维护约束
 
 - `planarRouteController` 动态 import（独立懒加载 chunk）；`vendor-planar-route` 收纳 turf/@cesium-extends，不入入口预加载。
 - Element Plus 已整体移除：消息用项目自有 `useMessage`，确认弹窗用 `window.confirm`，文件选择用动态 `<input type=file>`，保存命名用面板 text 控件。
 - wpml/actionCodec 的中文是写入 KMZ 的文件格式载荷（司空生态约定），**不属于 UI 文案，不做 i18n**。
-- 新增控件/动作必须同步四处：planarRouteModule.js（声明）、useCesiumToolModules.js（分发）、控制器 setParam/dispatch、locales 两语言包。
+- 新增控件/动作必须同步四处：`composables/toolModules/planarRouteModule.ts`（声明）、`composables/toolModules/useCesiumToolModules.ts`（分发）、控制器 setParam/dispatch、locales 两语言包。

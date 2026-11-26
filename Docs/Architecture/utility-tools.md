@@ -8,7 +8,7 @@
 > - 本仓 `location` 仅用 `core/coord_transform.py` 做点坐标 GCJ
 > - 详见 [tile-rectify-system.md](tile-rectify-system.md)
 
-适用范围：前端 `frontend/src/domains/ol/drawing/composables/useDrawMeasure.js`、`frontend/src/domains/ol/components/MapControlsBar.vue`、`frontend/src/domains/common/map-view/coordinateFormatter.js`、`frontend/src/domains/ol/utils/coordTransform.js`、`frontend/src/domains/common/compass/services/CompassManager.ts`、`frontend/src/domains/common/compass/stores/useCompassStore.ts`、`frontend/src/domains/common/shell/TopBar.vue`。
+适用范围：前端 `frontend/src/domains/ol/drawing/composables/useDrawMeasure.ts`、`frontend/src/domains/ol/components/MapControlsBar.vue`、`frontend/src/domains/common/map-view/coordinateFormatter.ts`、`frontend/src/domains/common/data-import/crs/coordTransform.ts`、`frontend/src/domains/common/compass/services/CompassManager.ts`、`frontend/src/domains/common/compass/stores/useCompassStore.ts`、`frontend/src/domains/common/shell/TopBar.ts`（模板见 `TopBar.vue`）。
 
 本文是长期参考文档，说明 WebGIS 3.0 中"实用工具"功能集合的算法原理、数据结构、前后端交互机制与实现细节，供后续维护、扩展与问题排查时对照。
 
@@ -28,15 +28,15 @@
 
 | 文件 | 职责 |
 |------|------|
-| `domains/ol/drawing/composables/useDrawMeasure.js` | 测量核心：Draw/Snap 交互、ol/sphere 测地线计算、Overlay 提示框 |
-| `domains/ol/components/ControlsPanel/MeasurePanel.vue` | 测量 UI 面板：测距/测面工具选择、清除操作 |
+| `domains/ol/drawing/composables/useDrawMeasure.ts` | 测量核心：Draw/Snap 交互、ol/sphere 测地线计算、Overlay 提示框 |
+| `domains/ol/components/MeasurePanel.vue` | 测量 UI 面板：测距/测面工具选择、清除操作 |
 | `domains/ol/components/MapControlsBar.vue` | 坐标显示控制条：实时坐标、格式切换、坐标编辑跳转、缩放级别 |
-| `domains/common/map-view/coordinateFormatter.js` | 坐标格式化引擎：6 种格式定义、十进制/DMS 互转、坐标解析 |
-| `domains/ol/utils/coordTransform.js` | 前端坐标转换：WGS84 ↔ GCJ-02（国测局偏移算法） |
+| `domains/common/map-view/coordinateFormatter.ts` | 坐标格式化引擎：6 种格式定义、十进制/DMS 互转、坐标解析 |
+| `domains/common/data-import/crs/coordTransform.ts` | 前端坐标转换：WGS84 ↔ GCJ-02（国测局偏移算法） |
 | `domains/common/compass/services/CompassManager.ts` | 罗盘管理器：矢量图层生命周期、Canvas 原生渲染、传感器同步、URL 状态 |
 | `domains/common/compass/stores/useCompassStore.ts` | 罗盘 Pinia 状态：模式/位置/旋转/主题/宫位选中 |
 | `domains/common/compass/services/urlState.ts` | 罗盘 URL 状态读写：cs 参数编解码桥接 |
-| `domains/common/url-state/crypto.js` | BigInt 位打包编解码：经纬度/半径/相机状态 → Base62 短码 |
+| `domains/common/url-state/crypto.ts` | 编解码 re-export 门面；实现拆分到 `codec/positions.ts`（位置/罗盘）与 `codec/cesiumPose.ts`（相机位姿） |
 | `domains/common/shell/TopBar.vue` | 分享链接：私有参数排除、s=1 标记、Native Share / 剪贴板 |
 | `backend/core/coord_transform.py` | 点坐标 GCJ/BD 纯数学（本仓残留；`location` 用 `wgs2gcj`） |
 | ~~`backend/domains/tiles/**`~~ | **已迁出** → 开源仓 `tile-proxy`；线上 `https://vpn.negiao.cn/proxy/*` |
@@ -68,7 +68,7 @@
 
 ### 4.1 显示格式（6 种）
 
-`coordinateFormatter.js` 定义 `COORDINATE_FORMATS` 常量，支持 6 种坐标显示格式：
+`coordinateFormatter.ts` 定义 `COORDINATE_FORMATS` 常量，支持 6 种坐标显示格式：
 
 | 格式 ID | 说明 | 示例 |
 |---------|------|------|
@@ -101,7 +101,7 @@
 
 ### 4.4 WGS84 / GCJ-02 坐标转换
 
-前端 `coordTransform.js` 实现国测局偏移算法：
+前端 `coordTransform.ts` 实现国测局偏移算法：
 - `wgs84ToGcj02(lon, lat)`：正向加偏
 - `gcj02ToWgs84(lon, lat)`：逆向求解（线性近似：`lon*2 - mgLon`）
 
@@ -155,7 +155,7 @@ Pinia store 管理罗盘全部状态：
 
 ### 5.4 URL 状态持久化（cs 参数 BigInt 位打包）
 
-罗盘状态通过 URL 参数 `cs` 持久化，编解码在 `utils/url/crypto.js` 中实现：
+罗盘状态通过 URL 参数 `cs` 持久化，`domains/common/url-state/crypto.ts` 仅为 re-export 门面，编解码实现已拆分到 `domains/common/url-state/codec/positions.ts`（`encodeCompassState` / `decodeCompassState`，见 `positions.ts:233,299`；相机位姿编解码在 `codec/cesiumPose.ts`）：
 
 **编码流程**（`encodeCompassState`）：
 1. 经度平移 +180、纬度平移 +90，乘以 1e6 取整（保留 6 位小数精度）
@@ -176,15 +176,17 @@ Pinia store 管理罗盘全部状态：
 
 ### 6.1 私有参数排除
 
-`TopBar.vue` 定义分享黑名单：
+`TopBar.ts`（模板见 `TopBar.vue`）定义分享黑名单：
 
 ```mermaid
 flowchart TD
     URL(["当前地址栏 URL"]) --> PARSE["解析 hash route 查询参数"]
-    PARSE --> EXCLUDE["删除 SHARE_EXCLUDED_PARAMS"]
+    PARSE --> EXCLUDE["删除 SHARE_EXCLUDED_PARAMS<br/>(TopBar.ts:83，共 5 项)"]
     EXCLUDE -->|"ut = 用户身份"| DEL1["删除"]
     EXCLUDE -->|"loc = 定位来源"| DEL2["删除"]
     EXCLUDE -->|"p = GPS 精准位置"| DEL3["删除"]
+    EXCLUDE -->|"customUrl = 自定义底图 URL（按名称推断 ⚠️）"| DEL4["删除"]
+    EXCLUDE -->|"layerId = 图层 ID（按名称推断 ⚠️）"| DEL5["删除"]
     EXCLUDE --> NORM["历史别名 layer → l"]
     NORM --> APPEND["追加 s=1 分享标记"]
     APPEND --> ASSEMBLE(["重新组装分享 URL"])
@@ -195,8 +197,10 @@ flowchart TD
 | `ut` | 用户身份（guest/admin/registered） |
 | `loc` | 定位授权来源（gps/ip） |
 | `p` | 编码后的 GPS 精准位置 |
+| `customUrl` | 自定义底图 URL（按参数名推断 ⚠️，代码无注释） |
+| `layerId` | 图层 ID（按参数名推断 ⚠️，代码无注释） |
 
-其余参数（`lng`、`lat`、`z`、`l`、`view`、`cv`、`cs` 等）全部保留，用于还原分享者的视图与位置状态。
+黑名单定义见 `TopBar.ts:83`，共 5 项。其余参数（`lng`、`lat`、`z`、`l`、`view`、`cv`、`cs` 等）全部保留，用于还原分享者的视图与位置状态。
 
 ### 6.2 分享标记
 
@@ -235,8 +239,8 @@ flowchart TD
 
 **现有局限：**
 
-1. **坐标格式无 UTM**：`coordinateFormatter.js` 仅支持地理坐标（经纬度）的 6 种显示格式，不支持 UTM / MGRS 等投影坐标，工程测量场景不便。
-2. **前端 GCJ-02 逆转为线性近似**：`coordTransform.js` 的 `gcj02ToWgs84` 使用单次线性逼近（`lon*2 - mgLon`），精度约 1~2m；本仓 `core/coord_transform.py` 的 `gcj2wgs` 为牛顿迭代（约 0.1m），前端未同步。
+1. **坐标格式无 UTM**：`coordinateFormatter.ts` 仅支持地理坐标（经纬度）的 6 种显示格式，不支持 UTM / MGRS 等投影坐标，工程测量场景不便。
+2. **前端 GCJ-02 逆转为线性近似**：`coordTransform.ts` 的 `gcj02ToWgs84` 使用单次线性逼近（`lon*2 - mgLon`），精度约 1~2m；本仓 `core/coord_transform.py` 的 `gcj2wgs` 为牛顿迭代（约 0.1m），前端未同步。
 3. **测量无高程分量**：`ol/sphere` 的 `getLength` / `getArea` 基于椭球面，不考虑地形高程，山区实际地表距离会偏大。
 4. **罗盘主题本地化**：`useCompassStore` 的主题配置完全来自本地 JSON（`localThemes`），无远程主题市场接口。
 5. **分享链接无短链服务**：`buildShareMarkedUrl` 直接输出完整 URL（含 Base62 编码参数），链接较长，无短链压缩。

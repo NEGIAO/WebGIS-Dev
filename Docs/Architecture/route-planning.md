@@ -2,7 +2,7 @@
 
 日期：2026-07-21
 
-适用范围：`frontend/src/domains/ol/routing/` 面板模块，及其依赖的 `frontend/src/api/locationSearch.js`、`frontend/src/domains/ol/routing/utils/driveXmlParser.ts`、`frontend/src/domains/ol/routing/utils/transitRouteBuilder.js`、`frontend/src/domains/ol/routing/renderers/useRouteRendering.js`。
+适用范围：`frontend/src/domains/ol/routing/` 面板模块，及其依赖的 `frontend/src/api/locationSearch.ts`、`frontend/src/domains/ol/routing/composables/usePlaceSearch.ts`、`frontend/src/domains/ol/routing/utils/driveXmlParser.ts`、`frontend/src/domains/ol/routing/utils/transitRouteBuilder.ts`、`frontend/src/domains/ol/routing/renderers/useRouteRendering.ts`。
 
 本文是长期参考文档，说明 WebGIS 3.0 中"路径规划"功能的管线划分、天地图 API 调用、XML/JSON 解析、选点交互、路线渲染与 token/请求取消机制，供后续维护、排错与功能扩展时对照。
 
@@ -21,36 +21,36 @@
 
 | 文件 | 职责 |
 |------|------|
-| `domains/ol/routing/components/DrivingPlannerPanel.vue` | 驾车面板 + 编排层：起终点状态、策略选择、调用 drive API、调用 XML 解析器、结果展示与步骤交互；内含 `TokenMissingError` |
-| `domains/ol/routing/components/BusPlannerPanel.vue` | 公交面板 + 编排层：起终点状态、策略选择、调用 transit API、JSON 归一化（`extractLinesFromTransitResponse` / `normalizeTransitResults`）、候选方案与分段步骤展示 |
-| `domains/ol/routing/components/MapPointPickerCard.vue` | 起终点选点卡片：地图点选按钮 + 关键词搜索下拉（防抖 + `AbortController`），驾车/公交两套主题 |
-| `api/locationSearch.js` | 地名/POI 搜索模块：`fetchLocationResultsByService` 统一入口，`searchWithTianditu` 调天地图 `v2/search`；声明 WGS-84 坐标契约，透传 `signal` |
+| `domains/ol/routing/components/RoutePlannerPanel.vue` / `RoutePlannerPanel.ts` | **唯一**面板 + 编排层（Vue 模板 + TS `Instance` 类）：按 `mode`（`'bus'` / `'drive'`）分派起终点状态、策略、API 调用、解析与结果交互；`TokenMissingError` 定义在 TS 侧 |
+| `domains/ol/routing/components/MapPointPickerCard.vue` / `MapPointPickerCard.ts` | 起终点选点卡片：地图点选按钮 + 关键词搜索下拉，按 `mode` 切换主题 |
+| `domains/ol/routing/composables/usePlaceSearch.ts` | 搜索编排：400ms 防抖 + `AbortController` 中断在途请求 + 下拉高亮/键盘选择，调用 `fetchLocationResultsByService` |
+| `api/locationSearch.ts` | 地名/POI 搜索模块：`fetchLocationResultsByService` 统一入口，`searchWithTianditu` 调天地图 `v2/search`；声明 WGS-84 坐标契约，透传 `signal` |
 | `domains/ol/routing/utils/driveXmlParser.ts` | 驾车 XML 解析：`parseDriveRouteXml` 提取起终点、总览、分段与整线坐标串 |
-| `domains/ol/routing/utils/transitRouteBuilder.js` | 路线渲染数据构建：`buildBusRouteRenderData` / `buildDriveRouteRenderData` / `buildRouteRenderData` 生成 OpenLayers 要素，`fitExtentToCoverage` 视口适配 |
-| `domains/ol/routing/renderers/useRouteRendering.js` | 路线绘制功能库：`createRouteRenderingFeature` 工厂返回 `drawRouteOnMap`（公交）/ `drawDriveRouteOnMap`（驾车）/ `syncRouteManagedLayer` |
+| `domains/ol/routing/utils/transitRouteBuilder.ts` | 路线渲染数据构建：`buildBusRouteRenderData` / `buildDriveRouteRenderData` / `buildRouteRenderData` 生成 OpenLayers 要素，`fitExtentToCoverage` 视口适配 |
+| `domains/ol/routing/renderers/useRouteRendering.ts` | 路线绘制功能库：`createRouteRenderingFeature` 工厂返回 `drawRouteOnMap`（公交）/ `drawDriveRouteOnMap`（驾车）/ `syncRouteManagedLayer` |
 
-集成位置：`domains/common/shell/SidePanel.vue` 在 `activeTab === 'bus'` / `'drive'` 时分别挂载两个面板，并下发 `tiandituToken` 与一组地图回调；`domains/ol/components/MapContainer.vue` 通过 `createRouteRenderingFeature` 创建绘制函数，并以 `ensureRouteBuilderApi` **动态导入** `transitRouteBuilder.js`（按需加载）。
+集成位置：`domains/common/shell/SidePanel.vue` 在 `activeTab === 'bus'` / `'drive'` 时挂载**同一个** `RoutePlannerPanel`，分别传 `mode="bus"` / `mode="drive"` 与 `tiandituToken`、地图回调（两种 mode 共用 `startBusPointPick` 取点，见 `SidePanel.vue:125,143`）；`domains/ol/components/MapContainer.vue` 通过 `createRouteRenderingFeature` 创建绘制函数，并以 `ensureRouteBuilderApi` **动态导入** `transitRouteBuilder.ts`（按需加载）。
 
-## 3. 两条管线总览
+## 3. 两种模式管线总览
 
-驾车与公交共享同一套选点卡片与同一套渲染落地逻辑，但**请求—解析**两段完全独立：
+`RoutePlannerPanel` 是**单一组件**，由 `mode` 分派驾车/公交两套请求—解析分支；两者共享同一套选点卡片与渲染落地逻辑：
 
 ```mermaid
 flowchart TD
     subgraph INPUT["起终点输入"]
-        PICK["地图点选"]
-        SEARCH["关键词搜索<br/>→ searchWithTianditu"]
+        PICK["地图点选<br/>→ startPointPick"]
+        SEARCH["关键词搜索<br/>→ usePlaceSearch / fetchLocationResultsByService"]
     end
 
-    subgraph DRIVE["驾车管线"]
-        D1["DrivingPlannerPanel.startDriveSearch"] --> D2["fetch drive?type=search"]
+    subgraph DRIVE["驾车分支（mode=drive）"]
+        D1["RoutePlannerPanel.startDriveSearch"] --> D2["fetch drive?type=search"]
         D2 --> D3["parseDriveRouteXml (DOMParser)"]
         D3 --> D4["routeResult {distanceKm, steps[]}"]
         D4 --> D5["drawDriveRouteOnMap<br/>→ buildDriveRouteRenderData"]
     end
 
-    subgraph BUS["公交管线"]
-        B1["BusPlannerPanel.startTransitPlan"] --> B2["fetch transit?type=busplan"]
+    subgraph BUS["公交分支（mode=bus）"]
+        B1["RoutePlannerPanel.startTransitPlan"] --> B2["fetch transit?type=busplan"]
         B2 --> B3["extractLinesFromTransitResponse"]
         B3 --> B4["normalizeTransitResults"]
         B4 --> B5["routes[] (候选方案)"]
@@ -65,27 +65,27 @@ flowchart TD
     B6 --> RENDER
 ```
 
-两个面板都通过 props 接收地图回调（绘制、缩放、预览、清除预览、选点），自身不持有地图实例，做到 UI 编排与地图渲染解耦。
+`RoutePlannerPanel.ts:359`（`startTransitPlan`）与 `:529`（`startDriveSearch`）是同一 `Instance` 类的两个方法；面板通过 props 接收地图回调（绘制、缩放、预览、清除预览、取点），自身不持有地图实例，做到 UI 编排与地图渲染解耦。
 
 ## 4. 选点交互
 
-`MapPointPickerCard.vue` 是驾车/公交共用的起终点输入卡片，提供两条输入路径：
+`MapPointPickerCard.vue` / `MapPointPickerCard.ts` 是两种 mode 共用的起终点输入卡片，提供两条输入路径：
 
 ### 4.1 地图点选
 
-点击"设置起点/终点"按钮触发 `pick-start` / `pick-end` 事件，面板调用父级注入的 `startMapPointPick` / `startBusPointPick`（实际由 `MapContainer` 提供，在主地图上捕获单击坐标），返回 `{ lng, lat }`。面板随后调用 `locationToAddress` 做逆地理编码回填地址文本（失败则置空，不阻断主流程）。
+点击"设置起点/终点"按钮进入取点态，`RoutePlannerPanel` 通过 props 调用父级注入的 `startPointPick(type)`（两种 mode 均由 `SidePanel.vue` 注入同一个 `startBusPointPick`，实际由 `MapContainer` 在主地图上捕获单击坐标），返回 `{ lng, lat }`。面板随后调用 `locationToAddress` 做逆地理编码回填地址文本（失败则置空，不阻断主流程）。
 
 ### 4.2 关键词搜索（天地图）
 
-输入框 `@input` 触发 `onStartSearchInput` / `onEndSearchInput`：
+搜索逻辑由 `usePlaceSearch.ts` 统一封装：卡片为起点/终点各创建一个 composable 实例（`startSearch` / `endSearch`），输入框 `@input` 调用 `onInput()`：
 
 1. `clearTimeout` 重置 **400ms 防抖**定时器；
-2. 立即 `startAbort.abort()` 中断仍在飞行的上一次请求；
-3. 新建 `AbortController`，延时后调用 `doStartSearch` / `doEndSearch`。
+2. 立即 `abortController.abort()` 中断仍在飞行的上一次请求；
+3. 延时后 `runSearch()` 新建 `AbortController`。
 
-`doStartSearch` 调用 `fetchLocationResultsByService({ service: 'tianditu', keywords, page: 1, pageSize: 10, tiandituTk, signal })`，将结果填入下拉列表；捕获到 `AbortError` 时静默返回（避免乱序覆盖）。下拉支持 ↑/↓ 键高亮、Enter 选中、`mousedown` 选中，选中后 `emit('select-start-result', { lng: item.lon, lat: item.lat, address: item.display_name })`。
+`runSearch()` 调用 `fetchLocationResultsByService({ service: 'tianditu', keywords, page: 1, pageSize: 10, tiandituTk: getToken(), signal })`，将结果填入下拉列表；捕获到 `AbortError` 时静默返回（避免乱序覆盖）。下拉支持 ↑/↓ 键高亮、Enter 选中、`mousedown` 选中，选中后经 `onSelect` 回调写回 `{ lng: item.lon, lat: item.lat, address: item.display_name }`。
 
-`locationSearch.js` 的 `searchWithTianditu` 拼装天地图 `v2/search` 请求：
+`locationSearch.ts` 的 `searchWithTianditu` 拼装天地图 `v2/search` 请求：
 
 ```
 https://api.tianditu.gov.cn/v2/search?postStr=<encoded JSON>&type=query&tk=<token>
@@ -94,9 +94,9 @@ postStr: { keyWord, level: 12, mapBound, queryType: 1, start, count }
 
 未传 `mapBound` 时回退到中国大约范围 `73.5,18.2,135.0,53.5`。响应经 `parseTiandituResponse` 兼容多种结构（`area` / `areas` / `pois` / `queryResults.results` / `results` / `data` / 顶层数组），`normalizeTiandituItem` 统一为 `{ display_name, lon, lat, original }`。模块头部注释明确**坐标契约**：天地图与 Nominatim 直接返回 WGS-84，高德 POI 的 GCJ-02 会经 `gcj02ToWgs84` 转换，上层始终拿到 WGS-84。
 
-## 5. 驾车管线（drive API + XML）
+## 5. 驾车分支（mode=drive，drive API + XML）
 
-`DrivingPlannerPanel.vue` 的 `startDriveSearch` 是驾车编排核心：
+`RoutePlannerPanel`（`mode='drive'`）的 `startDriveSearch`（`RoutePlannerPanel.ts:529`）是驾车编排核心：
 
 1. **校验**：`parseCoord` + `isValidLngLat` 检查起终点经纬度合法（经度 ±180、纬度 ±90）。
 2. **token 检查**：`token` 为空时 `throw new TokenMissingError()`（见 §8）。
@@ -125,12 +125,12 @@ postStr: { keyWord, level: 12, mapBound, queryType: 1, start, count }
 
 结果列表点击步骤触发 `handleSelectDriveStep`：先 `drawDriveRouteOnMap` 重绘整线 + 各分段（保留步骤索引与分段索引一一对应，不过滤空项），再 `zoomToDriveRouteStep(stepIndex)` 定位；`mouseenter` / `mouseleave` 触发 `previewDriveRouteStep` / `clearDriveRouteStepPreview` 做高亮预览（预览失败被吞掉，不影响主流程）。步骤左侧色条由 `DRIVE_STEP_COLOR_PALETTE` 循环取色。
 
-## 6. 公交管线（transit API + JSON）
+## 6. 公交分支（mode=bus，transit API + JSON）
 
-`BusPlannerPanel.vue` 的 `startTransitPlan` 是公交编排核心：
+`RoutePlannerPanel`（`mode='bus'`）的 `startTransitPlan`（`RoutePlannerPanel.ts:359`）是公交编排核心：
 
 1. **校验**：起终点均需已设置。
-2. **token 检查**：为空时抛带引导文案的 `Error`（公交面板未单独定义 `TokenMissingError`，直接 `throw new Error(...)`）。
+2. **token 检查**：为空时直接 `throw new Error(...)`（公交分支未复用 `TokenMissingError`，见 `RoutePlannerPanel.ts:372`；与驾车分支 `:550` 的 `TokenMissingError` 处理不同）。
 3. **拼参请求**：
 
    ```
@@ -158,9 +158,9 @@ postStr: { keyWord, level: 12, mapBound, queryType: 1, start, count }
 
 ## 7. 路线渲染（OpenLayers）
 
-渲染分两层：**数据构建**（`transitRouteBuilder.js`）与**地图落地**（`useRouteRendering.js`）。
+渲染分两层：**数据构建**（`transitRouteBuilder.ts`）与**地图落地**（`useRouteRendering.ts`）。
 
-### 7.1 数据构建（transitRouteBuilder.js）
+### 7.1 数据构建（transitRouteBuilder.ts）
 
 - `buildBusRouteRenderData(route)`：遍历 `segments`，用 `parseTransitLinePoint` 把 `linePoint` 字符串（支持 `;`、`；`、`|` 分隔及正则回退）解析为坐标数组并 `fromLonLat` 投影，生成 `LineString` 线要素；站点用 `addOrMergeMarker` 按坐标去重合并（同坐标多角色合并为 `segment-both`），生成 `Point` 站标要素；同时累计 `fitExtent`。
 - `buildDriveRouteRenderData(routeInput)`：兼容字符串或对象入参（读 `routeInput?.routeLatLonStr`），生成整线要素（`stepIndex: -1`）与可选的逐步分段要素（`stepIndex: N`），供步骤点击定位。
@@ -168,7 +168,7 @@ postStr: { keyWord, level: 12, mapBound, queryType: 1, start, count }
 - `fitExtentToCoverage(map, extent, opts)`：按目标屏幕覆盖率（`targetCoverage`）+ 缓冲（`bufferRatio` / `minBufferMeters` / `maxBufferMeters`）计算目标范围并 `view.fit`，缩放钳制在 `[minZoom, maxZoom]`。
 - `normalizeLonLatPair` 会探测 lat/lon 顺序颠倒并自动交换，提升对异常响应的容错。
 
-### 7.2 地图落地（useRouteRendering.js）
+### 7.2 地图落地（useRouteRendering.ts）
 
 `createRouteRenderingFeature` 是工厂函数，注入地图实例、图层/数据源、托管图层记录等依赖后返回：
 
@@ -182,25 +182,25 @@ postStr: { keyWord, level: 12, mapBound, queryType: 1, start, count }
 
 ### 8.1 天地图 Token
 
-token 由 `SidePanel.vue` 以 `tiandituToken` 下发给两个面板与选点卡片。缺失时各处处理略有差异：
+token 由 `SidePanel.vue` 以 `tiandituToken` 下发给 `RoutePlannerPanel` 与选点卡片。缺失时同一组件内两个分支处理不同：
 
-- **驾车面板**：定义专门的 `TokenMissingError extends Error`（`name = 'TokenMissingError'`），`startDriveSearch` 中 token 为空即抛出，catch 分支识别后给出"请在「设置」→「API 密钥管理」中添加 tianditu_tk"的引导文案。
-- **公交面板**：直接 `throw new Error('天地图 Token 未配置...')`，文案与驾车一致但未走专用错误类型。
+- **驾车分支**（`startDriveSearch`，`RoutePlannerPanel.ts:550`）：定义专门的 `TokenMissingError extends Error`（`:85`，`name = 'TokenMissingError'`），token 为空即抛出，catch 分支（`:598`）识别后给出"请在「设置」→「API 密钥管理」中添加 tianditu_tk"的引导文案。
+- **公交分支**（`startTransitPlan`，`RoutePlannerPanel.ts:372`）：直接 `throw new Error(...)`，文案与驾车一致但未复用 `TokenMissingError`。
 - **搜索模块**：`searchWithTianditu` 在 `!tiandituTk` 时抛 `Error('天地图 Token 未配置')`，并在 catch 中识别 `Token` 关键字弹出提示。
 
 ### 8.2 请求取消（AbortController）
 
-`AbortController` 仅用于**地名搜索**场景：`MapPointPickerCard` 起点/终点各持有一个 `AbortController`（`startAbort` / `endAbort`），新输入时先 `abort()` 旧请求再发起新请求，`signal` 经 `fetchLocationResultsByService` 透传给 `fetch`，`AbortError` 被静默忽略。这避免了快速输入时旧响应乱序覆盖新结果。
+`AbortController` 仅用于**地名搜索**场景：`usePlaceSearch` 的每个实例各自持有一个 `abortController`（见 §4.2），新输入时先 `abort()` 旧请求再发起新请求，`signal` 经 `fetchLocationResultsByService` 透传给 `fetch`，`AbortError` 被静默忽略。这避免了快速输入时旧响应乱序覆盖新结果。
 
-驾车 `drive` 与公交 `transit` 的规划请求本身**未接入 AbortController**——它们是一次性"开始导航/规划"动作，靠 `isLoading` / `planning` 状态禁用按钮防止重复提交。
+驾车 `drive` 与公交 `transit` 的规划请求本身**未接入 AbortController**——它们是一次性"开始导航/规划"动作，靠 `planning` 状态禁用按钮防止重复提交。
 
 ### 8.3 网络错误兜底
 
-两个面板的 catch 都用 `/failed\s+to\s+fetch/i` 识别真正的网络层失败（CORS / Mixed Content），给出"确认 https 部署、token 已绑定域名、控制台无 CORS 报错"的排查清单；其余错误（XML 解析、坐标处理、地图渲染）原样透出消息并 `console.error`。
+两种 mode 的 catch 都用 `/failed\s+to\s+fetch/i` 识别真正的网络层失败（CORS / Mixed Content），给出"确认 https 部署、token 已绑定域名、控制台无 CORS 报错"的排查清单；其余错误（XML 解析、坐标处理、地图渲染）原样透出消息并 `console.error`。
 
 ## 9. 驾车 vs 公交对比
 
-| 维度 | 驾车（DrivingPlannerPanel） | 公交（BusPlannerPanel） |
+| 维度 | 驾车（RoutePlannerPanel，mode=drive） | 公交（RoutePlannerPanel，mode=bus） |
 |------|----------------------------|------------------------|
 | 天地图接口 | `drive?type=search` | `transit?type=busplan` |
 | 响应格式 | XML（`DOMParser` 解析） | JSON（`response.json()`） |
@@ -210,7 +210,7 @@ token 由 `SidePanel.vue` 以 `tiandituToken` 下发给两个面板与选点卡�
 | 结果形态 | 单一路线 + 分段步骤 | 多候选方案，每方案含换乘分段 |
 | 渲染构建 | `buildDriveRouteRenderData`（整线 + 逐步分段） | `buildBusRouteRenderData`（分段线 + 去重站标） |
 | 绘制函数 | `drawDriveRouteOnMap` | `drawRouteOnMap` |
-| token 缺失 | 专用 `TokenMissingError` | 普通 `Error`（文案相同） |
+| token 缺失 | 专用 `TokenMissingError`（`:550`） | 普通 `Error`（`:372`，文案相同） |
 | 主题色 | 蓝（`theme="drive"`） | 绿（`theme="bus"`） |
 
 ## 10. 坐标约定
@@ -218,19 +218,17 @@ token 由 `SidePanel.vue` 以 `tiandituToken` 下发给两个面板与选点卡�
 全链路统一 **WGS-84**：
 
 - 天地图 `drive` / `transit` / `v2/search` 接口直接返回 WGS-84，前端不做坐标转换；
-- `locationSearch.js` 头部注释固化契约：仅高德 POI 的 GCJ-02 需 `gcj02ToWgs84` 转换，天地图/Nominatim 原样输出；
-- 渲染前由 `transitRouteBuilder.js` 的 `fromLonLat` 将 WGS-84 经纬度投影为地图视图坐标；`normalizeLonLatPair` 额外做 lat/lon 顺序纠错。
+- `locationSearch.ts` 头部注释固化契约：仅高德 POI 的 GCJ-02 需 `gcj02ToWgs84` 转换，天地图/Nominatim 原样输出；
+- 渲染前由 `transitRouteBuilder.ts` 的 `fromLonLat` 将 WGS-84 经纬度投影为地图视图坐标；`normalizeLonLatPair` 额外做 lat/lon 顺序纠错。
 
 ## 11. 局限与升级方向
 
 **现有局限：**
 
-1. **死代码遗留**（经核对，以下符号仅有定义、全工程无引用）：
-   - `utils/drawTransitRoute.ts` 的 `drawTransitRoute`：基于天地图 JS SDK（`TiandituMap.addOverLay`）绘制公交线，已被 OpenLayers 渲染管线（`transitRouteBuilder` + `useRouteRendering`）取代。
-   - `utils/driveXmlParser.ts` 的 `parseAndDrawDriveRoute`：依赖全局 `T`（天地图 SDK）解析并绘制驾车路线，现仅 `parseDriveRouteXml` 被使用。
-   - `utils/loadTiandituSdk.js` 的 `loadTiandituSdk`：动态注入天地图 JS SDK script，当前路径规划走 REST 接口，无需 SDK。
-   这三处可在确认后清理，以免误导维护者以为渲染依赖天地图 SDK。
-2. **token 错误处理不统一**：驾车用 `TokenMissingError`，公交用普通 `Error`，建议统一为专用错误类型以便上层精确识别。
+1. **死代码遗留**：
+   - `utils/driveXmlParser.ts` 的 `parseAndDrawDriveRoute`（`:122`）：已核验符号仍在且全仓无引用，现仅 `parseDriveRouteXml` 被使用。
+   - ⚠️ 原条目 `utils/drawTransitRoute.ts` 的 `drawTransitRoute` 与 `utils/loadTiandituSdk.js` 的 `loadTiandituSdk`：本仓 `frontend/src` 下已无这两个文件，无法据现有代码核验，暂不保留结论。
+2. **token 错误处理不统一**：同一 `RoutePlannerPanel` 内驾车分支用 `TokenMissingError`、公交分支用普通 `Error`，建议统一为专用错误类型以便上层精确识别。
 3. **规划请求不可取消**：drive/transit 规划请求未接入 `AbortController`，仅靠按钮禁用防重复；慢网下无法主动中止。
 4. **绘制入参签名不一致**：`useRouteRendering.drawDriveRouteOnMap(routeLatLonStr)` 形参名为字符串，实际面板传入对象 `{ routeLatLonStr, stepLinePoints }`，靠 `buildDriveRouteRenderData` 兼容对象读取才正常工作，签名易误导。
 5. **公交指标取首线**：`parseSegmentMetrics` 仅取分段首条 `segmentLine` 的时长/距离，多线路分段时统计可能不完整。
@@ -238,7 +236,7 @@ token 由 `SidePanel.vue` 以 `tiandituToken` 下发给两个面板与选点卡�
 
 **升级方向：**
 
-1. 清理上述死代码，统一渲染入口与错误类型，收敛驾车/公交的对称实现。
+1. 清理上述死代码，统一渲染入口与错误类型，收敛两种 mode 的对称实现。
 2. 为规划请求引入 `AbortController` 与超时控制，提升弱网体验。
 3. 搜索 `mapBound` 接入当前地图视图范围，提高地名命中相关性。
 4. 公交分段指标聚合全部 `segmentLine`，并补充换乘步行距离、票价等字段展示。

@@ -228,6 +228,10 @@ def init_auth_tables_sync(conn) -> None:
         _safe_execute(conn, "ALTER TABLE sessions ADD COLUMN last_seen_at TEXT NOT NULL DEFAULT ''")
         # 存量回填 created_at：僵尸会话 created_at 久远 → 判离线；活跃旧会话首次请求即被心跳刷新
         _safe_execute(conn, "UPDATE sessions SET last_seen_at = created_at WHERE last_seen_at = ''")
+    # V3.7.14：统一 IP 地理中枢落库列——签发时解析一次，多处复用（历史行为留空）
+    for geo_col in ("ip_city", "ip_region", "ip_country"):
+        if geo_col not in session_columns:
+            _safe_execute(conn, f"ALTER TABLE sessions ADD COLUMN {geo_col} TEXT NOT NULL DEFAULT ''")
     _safe_execute(conn, "CREATE INDEX IF NOT EXISTS idx_sessions_last_seen ON sessions(last_seen_at)")
     _safe_execute(conn, "CREATE INDEX IF NOT EXISTS idx_sessions_username ON sessions(username)")
     _safe_execute(conn, "CREATE INDEX IF NOT EXISTS idx_sessions_expires_at ON sessions(expires_at)")
@@ -248,10 +252,20 @@ def init_auth_tables_sync(conn) -> None:
             created_at TEXT NOT NULL DEFAULT '',
             expires_at TEXT NOT NULL DEFAULT '',
             last_seen_at TEXT NOT NULL DEFAULT '',
+            ip_city TEXT NOT NULL DEFAULT '',
+            ip_region TEXT NOT NULL DEFAULT '',
+            ip_country TEXT NOT NULL DEFAULT '',
             archived_at TEXT NOT NULL,
             archive_reason TEXT NOT NULL DEFAULT ''
         )
     """)
+    expired_columns = {
+        str(dict(row).get("name") or "")
+        for row in conn.execute("PRAGMA table_info(expired_sessions)").fetchall()
+    }
+    for geo_col in ("ip_city", "ip_region", "ip_country"):
+        if geo_col not in expired_columns:
+            _safe_execute(conn, f"ALTER TABLE expired_sessions ADD COLUMN {geo_col} TEXT NOT NULL DEFAULT ''")
     _safe_execute(conn, "CREATE INDEX IF NOT EXISTS idx_expired_sessions_archived_at ON expired_sessions(archived_at)")
     _safe_execute(conn, "CREATE INDEX IF NOT EXISTS idx_expired_sessions_username ON expired_sessions(username)")
     _safe_execute(conn, "CREATE INDEX IF NOT EXISTS idx_expired_sessions_guest_uid ON expired_sessions(guest_uid)")

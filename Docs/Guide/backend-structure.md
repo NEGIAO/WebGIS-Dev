@@ -82,7 +82,8 @@ backend/
 ├── services/                                      # 共享业务服务
 │   ├── __init__.py
 │   ├── historical_imagery.py                      # ESRI Wayback 历史影像元数据同步与持久化（表创建 + 原子替换 + 每日/启动调度）
-│   └── ip_geo.py                                  # IP 地理定位统一服务
+│   ├── ip_geo.py                                  # IP 地理定位统一服务（四级降级 + TTL 缓存）
+│   └── request_geo.py                             # 统一 IP 地理中枢（请求级缓存 + 私网跳过，一处解析多处复用）
 │
 ├── scripts/                                       # 运维/辅助脚本
 │   ├── fetch_wayback_layers.py                    # ESRI Wayback 目录拉取 CLI（--json/--code/--urls/--pure-urls）

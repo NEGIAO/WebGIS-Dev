@@ -20,6 +20,7 @@ flowchart LR
         CHECKOUT["checkout WebGIS-Dev"]
         SETUP_NODE["setup Node.js 22"]
         NPM_INSTALL["npm install"]
+        SHADERS["npm run shaders:check<br/>shader bundle 一致性门禁"]
         NPM_BUILD["npm run build → dist"]
         UPLOAD["upload dist artifact"]
     end
@@ -38,7 +39,7 @@ HF Docker Space"]
 
     PUSH --> CHECKOUT
     MANUAL --> CHECKOUT
-    CHECKOUT --> SETUP_NODE --> NPM_INSTALL --> NPM_BUILD --> UPLOAD
+    CHECKOUT --> SETUP_NODE --> NPM_INSTALL --> SHADERS --> NPM_BUILD --> UPLOAD
     UPLOAD --> SELF
     UPLOAD --> HOMEPAGE
     UPLOAD --> HF_FE
@@ -56,11 +57,14 @@ HF Docker Space"]
 | `actions/checkout@v4` | 检出 WebGIS-Dev 仓库 |
 | `actions/setup-node@v4` | Node.js 22，缓存 `frontend/package-lock.json` |
 | `npm install` | 安装前端依赖 |
+| `npm run shaders:check` | Shader bundle 一致性门禁：仓库内 `frontend/src/domains/cesium/modules/cloud/lib/shaders/bundledShaders.ts` / public 镜像须与 `Shaders/` 真源一致，漂移则失败（`deploy.yml:47-49`） |
 | `npm run build` | 构建生产产物 → `frontend/dist` |
 | `upload-pages-artifact@v5` | 为 GitHub Pages 准备 artifact |
 | `upload-artifact@v4` | 为外部同步准备 artifact（`dist-files`） |
 
 **关键设计**：构建只发生一次，后续 Jobs 各自下载 artifact，避免重复构建。
+
+**运行时环境**：工作流顶层 `env.FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true`（`deploy.yml:21`），强制 Actions 自身使用 Node 24 运行时（规避 Node 20 弃用警告）；与 `setup-node` 安装的应用侧 Node 22 互不冲突。
 
 ### Job 2：deploy-to-self（GitHub Pages 本仓库部署）
 
@@ -170,7 +174,9 @@ push to main
             (git archive 全栈 → 单容器镜像)
 ```
 
+> build job 实际步骤（上图简写）：`checkout → setup Node 22 → npm install → npm run shaders:check → npm run build → upload artifact`（`deploy.yml:30-67`）。
+
 ---
 
 *本文档随 CI/CD 配置变化更新；日常改动见维护日志。*
-*基线版本：V3.5.5*
+*当前版本见根 [README.md](../../README.md)「项目简介」行*

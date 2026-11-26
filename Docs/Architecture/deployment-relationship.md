@@ -25,8 +25,11 @@ Posit Connect"]
 Vercel"]
     end
 
-    subgraph WEBGIS["🌍 WebGIS 前端（7 个域名）"]
+    subgraph WEBGIS["🌍 WebGIS 前端（8 个域名）"]
         direction LR
+        W_CN["webgis.negiao.cn
+GitHub Pages（正式域名）
+CNAME → 对外主入口"]
         W_GH1["negiao.github.io/WebGIS-Dev
 WebGIS-Dev 仓库根路径"]
         W_GH2["negiao.github.io/WebGIS
@@ -131,8 +134,10 @@ Hugging Face Docker 后端
     ├── /api/spatial/*    空间分析
     ├── /api/agent/*      AI 助手
     ├── /api/admin/*      管理
-    └── /proxy/*          瓦片代理
+    └── /api/proxy/*      外部 API 代理（external_proxy.py:70）
 ```
+
+> **注意**：后端路由前缀是 `/api/proxy`（外部 API 代理），不是 `/proxy/*`；`vpn.negiao.cn/proxy/*` 属于**外部 VPS** 的瓦片中转/纠偏服务，不在 HF 后端内（见下方"瓦片加载链路"）。
 
 ### 瓦片加载链路
 
@@ -152,6 +157,8 @@ VPS tile-proxy：https://vpn.negiao.cn/proxy/...
     ▼
 上游瓦片服务（Google / 高德 / 天地图 等）
 ```
+
+> ⚠️ **外部仓不可核验**：以下 CF Worker `negiao-api`、`/api/stats`、`/api/51la` 的源码不在本仓库（本仓无 `workers/` 目录与 `wrangler.toml`），描述来自前端消费代码与文档记录，无法以本仓代码核验。
 
 **第三方数据接口**：由 Cloudflare Worker `negiao-api` 承接，域名 `https://api.negiao.cn`（源码在主页仓库
 `workers/github-stats`，与 WebGIS-Dev 解耦、独立 `wrangler deploy`）。当前提供 `/api/stats`（GitHub 统计）、
@@ -227,4 +234,4 @@ VPS tile-proxy：https://vpn.negiao.cn/proxy/...
 ---
 
 *本文档随域名或部署配置变化更新；日常改动见维护日志。*
-*基线版本：V3.5.5*
+*当前版本见根 [README.md](../../README.md)「项目简介」行*

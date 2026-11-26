@@ -404,6 +404,9 @@ async def check_startup_state(request: Request, call_next):
     if request.method == "OPTIONS":
         return await call_next(request)
 
+    # V3.7.14：IP 地理解析改为业务端点惰性调用（get_request_geo），
+    # 不在全局中间件同步 await 外部服务，避免任意请求被第三方延迟拖慢。
+
     if getattr(request.app.state, "startup_error", None):
         # 尝试自动恢复：重新初始化认证存储
         try:

@@ -5,6 +5,14 @@
 - **任务等级**：L3（原始跨引擎方案）；V3.5.27 以 L2 修复 URL 契约
 - **状态**：已实施
 
+> **当前落地状态（以工作区代码为准，历史方案本身不改写）**：
+>
+> - 第 2.2 / 3 节的单一共享 URL 之外，已新增并行样式 URL 键 `webgis_custom_map_style_url`（`useSharedCustomBasemapUrl.ts:7,51`），与瓦片 URL `webgis_custom_basemap_url` 平行共享与持久化。
+> - 第 3 节职责划分中的 `useMapState.js` / `useCesiumUrlTracking.js` 实际文件后缀为 `.ts`（`useMapState.ts` / `useCesiumUrlTracking.ts`）。
+> - 其余契约（公开 `l` 为 1-based、`l=2` 固定 custom 身份、实际 URL 只在共享 ref 中、不写回路由等）与当前代码一致，原叙述保留。
+
+---
+
 ## 1. 背景与问题分析
 
 OL 与 Cesium 都支持固定的 `custom` 底图身份，ESRI Wayback 快照也复用该身份。此前实现把两个不同概念混在同一条路由中：
@@ -53,6 +61,8 @@ frontend/src/domains/common/basemap/useSharedCustomBasemapUrl.ts
 - `localStorage` 键 `webgis_custom_basemap_url` 负责同一浏览器的刷新与跨会话恢复。
 - 旧 Cesium 键 `cesium_custom_xyz_basemap_url` 仅用于读取兼容。
 
+> ⚠️ 当前落地补充：另新增并行样式 URL 键 `webgis_custom_map_style_url`（`useSharedCustomBasemapUrl.ts:7,51`），用于 custom 矢量瓦片配套的 MapLibre/Mapbox 样式地址；原方案此处只描述瓦片 URL。
+
 ## 3. 数据模型与职责边界
 
 ```ts
@@ -69,7 +79,7 @@ type BasemapSelection = {
 - `basemapOptions.ts`：1-based URL 数字与底图 ID 的双向纯函数映射。
 - `basemapRegistry.ts`：选择规范化、旧链接兼容与历史年份分组；不序列化实际 custom URL。
 - `useSharedCustomBasemapUrl.ts`：custom/Wayback 实际 URL 的运行时 SSOT 与本地持久化。
-- `useMapState.js` / `useCesiumUrlTracking.js`：只读写数字 `l`，并清理旧 `layerId/customUrl`。
+- `useMapState.js` / `useCesiumUrlTracking.js`：只读写数字 `l`，并清理旧 `layerId/customUrl`。（当前文件后缀为 `.ts`，见文首注记）
 - OL/Cesium 图层模块：监听共享 URL；当前底图为 `custom` 时重建各自 source/provider。
 
 ## 4. 数据流

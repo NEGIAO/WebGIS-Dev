@@ -165,6 +165,11 @@ class _TTLCache:
 _cache = _TTLCache()
 
 
+def _cache_key(ip: str, prefer_amap: bool) -> str:
+    """缓存键按解析模式分维：prefer_amap=False 不得复用高德预热结果。"""
+    return f"{ip}|{'amap' if prefer_amap else 'free'}"
+
+
 def _resolve_amap_key() -> str:
     """读取 L2 高德 key；旧部署若仍写 env，则作为兜底兼容。"""
     try:
@@ -229,7 +234,7 @@ class IpGeoService:
 
         # 1. 检查缓存
         if use_cache:
-            cached = _cache.get(ip)
+            cached = _cache.get(_cache_key(ip, prefer_amap))
             if cached:
                 return cached
 
@@ -241,25 +246,25 @@ class IpGeoService:
         if prefer_amap and amap_key:
             result = await self._locate_amap(ip, amap_key)
             if result:
-                _cache.set(ip, result)
+                _cache.set(_cache_key(ip, prefer_amap), result)
                 return result
 
         # 优先级 2: ipwho.is（免费，HTTPS，不屏蔽数据中心 IP）
         result = await self._locate_ipwho(ip)
         if result:
-            _cache.set(ip, result)
+            _cache.set(_cache_key(ip, prefer_amap), result)
             return result
 
         # 优先级 3: ip-api.com（免费，仅 HTTP，不稳定，可能返回 502）
         result = await self._locate_ip_api(ip)
         if result:
-            _cache.set(ip, result)
+            _cache.set(_cache_key(ip, prefer_amap), result)
             return result
 
         # 优先级 4: ipapi.co（有速率限制，最后兜底）
         result = await self._locate_ipapi(ip)
         if result:
-            _cache.set(ip, result)
+            _cache.set(_cache_key(ip, prefer_amap), result)
             return result
 
         logger.warning("所有 IP 定位服务都失败: ip=%s", ip)

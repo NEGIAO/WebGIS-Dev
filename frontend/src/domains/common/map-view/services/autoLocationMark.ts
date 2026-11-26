@@ -63,9 +63,14 @@ export async function fetchIpLocationCandidate(
         [lon, lat] = gcj02ToWgs84(center.lon, center.lat);
         accuracyMeters = estimateExtentAccuracyMeters(extent);
     } else {
-        // 新版：后端直接返回经纬度（WGS-84），无 extent 不阻断定位成功
-        lon = Number(result.longitude);
-        lat = Number(result.latitude);
+        // 新版：后端直接返回经纬度（WGS-84），无 extent 不阻断定位成功。
+        // 修复：后端可能返回 null（如高德未给经纬度），Number(null)=0 会被误判为
+        // 有效坐标 (0,0) 并把地图定位到几内亚湾——必须先校验原始值是有限数。
+        const rawLng = result.longitude;
+        const rawLat = result.latitude;
+        if (!Number.isFinite(rawLng) || !Number.isFinite(rawLat)) return null;
+        lon = Number(rawLng);
+        lat = Number(rawLat);
         accuracyMeters = 50000;
     }
 

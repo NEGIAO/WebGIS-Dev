@@ -18,10 +18,14 @@
 
 | 文件 | 职责 |
 |------|------|
-| `domains/cesium/modules/fluid-simulation/FluidSimulationPanel.vue` | UI 面板 + 编排层：地形采样、水位值域计算、洪水动画循环（CPU 侧）、参数映射、场景状态快照/恢复 |
-| `domains/cesium/modules/fluid-simulation/fluidRuntime.js` | GPU 运行时：`FluidRenderer` 类 + 全部 GLSL 着色器 + 自定义绘制命令封装（`CustomPrimitive` / `RenderUtil`）+ 大气雾后处理（`createSkyEffect`） |
+| `domains/cesium/modules/fluid-simulation/FluidSimulationPanel.vue` | UI 面板 + 编排层：水位值域计算、洪水动画循环（CPU 侧）、参数映射、场景状态快照/恢复 |
+| `domains/cesium/modules/fluid-simulation/terrainHeightMapSampler.ts` | 地形高程采样（`createTerrainHeightMapSource`，:182）：ENU 网格采样、`sampleTerrain()`、高度图纹理打包 |
+| `domains/cesium/modules/fluid-simulation/fluidRuntime.ts` | GPU 运行时：`FluidRenderer` 类 + 场景/命令调度（`CustomPrimitive` / `RenderUtil`），着色器与图元已拆出 |
+| `domains/cesium/modules/fluid-simulation/fluid/fluidShaders.ts` | 全部 GLSL 着色器源（Command / BufferA–D / renderShaderSource，`minAnimatedFilmDepth` 见 :19） |
+| `domains/cesium/modules/fluid-simulation/fluid/fluidRenderPrimitives.ts` | 图元与渲染工具封装（`createFluidRenderPrimitives`） |
+| `domains/cesium/modules/fluid-simulation/fluid/atmosphereShader.ts` | `createSkyEffect` 的大气雾后处理片元源 |
 
-`fluidRuntime.js` 通过 `createFluidRuntime(Cesium)` 工厂函数导出 `{ FluidRenderer, createSkyEffect }`，延迟注入 Cesium 依赖，避免模块顶层持有全局 Cesium。
+`fluidRuntime.ts` 通过 `createFluidRuntime(Cesium)` 工厂函数（:4）导出 `{ FluidRenderer, createSkyEffect }`，延迟注入 Cesium 依赖，避免模块顶层持有全局 Cesium。GPU 实现由 `fluidRuntime.ts` 与 `fluid/` 下三个文件共四个文件承载（着色器/图元从原单文件拆出）。
 
 ## 3. 算法总览
 
@@ -119,7 +123,7 @@ float waterDept = max(fluidParam.w - terrainElevation, animatedFilmDepth);
 
 ### 6.1 主路径：采样地形提供者
 
-`FluidSimulationPanel.vue` 的 `createTerrainHeightMapSource` 在选点后，以约 `TERRAIN_SAMPLE_TARGET_SPACING = 60`m 间距布设采样网格（`chooseTerrainSampleSize` 将点数约束在 64~160），通过 `createTerrainSamplePositions` 在选点处建立 ENU 局部坐标系生成均匀分布的采样位置，调用 `Cesium.sampleTerrain()` 从当前地形提供者（天地图 / ArcGIS 等）采出真实高程，`createSampledHeightMapSource` 打包为 Float32 RGBA 高度图纹理。
+`terrainHeightMapSampler.ts` 的 `createTerrainHeightMapSource`（:182）在选点后，以约 `TERRAIN_SAMPLE_TARGET_SPACING = 60`m 间距布设采样网格（`chooseTerrainSampleSize` 将点数约束在 64~160），通过 `createTerrainSamplePositions` 在选点处建立 ENU 局部坐标系生成均匀分布的采样位置，调用 `Cesium.sampleTerrain()` 从当前地形提供者（天地图 / ArcGIS 等）采出真实高程，`createSampledHeightMapSource` 打包为 Float32 RGBA 高度图纹理。
 
 采样层级由 `getExplicitTerrainSampleLevel` 决定：天地图（`_bottomLevel=11`）走 level 10，其余走 `min(maximumLevel, 12)`，避免 `sampleTerrainMostDetailed` 请求过高精度导致瓦片过载。
 
@@ -136,7 +140,7 @@ terrainElevation = clamp((texture(heightMap, uv).r - minHeight) / max(maxHeight 
 ### 6.3 退路
 
 - **纯椭球（无地形）**：`createFlatHeightMapSource` 返回全零平面。
-- **采样失败**：`_generateHeightMapTexture` 架一台正交相机（`_createOrthographicCamera`）从正上方对地球做**深度预渲染**，并通过 `_processHeightMapShaders` / `_modifyFragmentShader` 给地形 shader 注入逆 ENU 矩阵 `u_inverseEnuMatrix`，把每个片元的本地高度 `posMC.z` 写回颜色输出，相当于"现场扫描"出一张高度图。该路径会临时改写地形绘制命令的 shaderProgram 与 uniform，结束后由 `_restoreHeightMapShaders` 恢复。
+- **采样失败**：`fluidRuntime.ts` 的 `_generateHeightMapTexture`（:171）架一台正交相机（`_createOrthographicCamera`）从正上方对地球做**深度预渲染**；注入逻辑全部在 `_processHeightMapShaders`（:503）内完成：给地形绘制命令写入 `u_inverseEnuMatrix` uniform，并用 `getDerivedHeightMapShaderProgram` 派生 `heightMap_ShaderProgram`，把每个片元的本地高度 `posMC.z` 写回颜色输出，相当于"现场扫描"出一张高度图。结束后由 `_restoreHeightMapShaders`（:555）恢复原 shaderProgram 与 uniform。不存在独立的 `_modifyFragmentShader` 函数。
 
 ## 7. 体积渲染：光线步进合成
 

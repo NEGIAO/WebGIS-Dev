@@ -278,7 +278,8 @@ _TRANSIENT_CORRUPTION_BACKOFF_SECONDS = 0.15
 # 单 worker 进程内以访问级互斥根治：连接 with 块全程持锁（__enter__ 取锁 →
 # __exit__ 提交/回滚后放锁——提交必须发生在锁内），读与写提交在物理上不再重叠。
 # 前提：全部调用方均为 `with conn:` 用法（V3.7.7 审计 98 函数零嵌套；唯一例外
-# location.py 的 visit_tracking 已同步改为 with 块）；RLock 容忍同线程嵌套。
+# location.py 的 visit_tracking 已同步改为 with 块；该表 V3.7.14 已删除，写入统一到
+# visit_tracking_events）；RLock 容忍同线程嵌套。
 # 不经 with 的执行（借出探测 SELECT 1、恢复流程内部）不受锁保护——由瞬态重试 /
 # 恢复分支兜底；恢复流程自身串行于 _recovery_lock。
 _db_access_lock = threading.RLock()

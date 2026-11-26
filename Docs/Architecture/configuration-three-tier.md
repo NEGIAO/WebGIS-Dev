@@ -14,7 +14,7 @@
 ```mermaid
 flowchart TB
     subgraph SRC["配置来源（三层安全模型）"]
-        L1["L1 根目录 .env<br/>（.env.example = 55 key 全集清单）<br/>低密常量 · 模板提交 git"]
+        L1["L1 deploy/.env<br/>（deploy/.env.example = 146 key 全集清单）<br/>低密常量 · 模板提交 git"]
         L2["L2 Admin 面板 + SQLite<br/>system_config · api_keys 池 · announcements<br/>运营常变 · 免重启生效"]
         L3["L3 HF Space Secrets<br/>（本地 = 未提交私密 .env）<br/>绝密 · 不进 git / DB / 前端"]
     end
@@ -57,7 +57,7 @@ flowchart TB
     subgraph FE["前端（Vue 3 + Vite）"]
         ENVF["构建期 env（L1 前端段 · 统一收敛 deploy/）<br/>deploy/.env（npm run build 读取）<br/>deploy/.env.local（npm run dev 读取）"]
         PRT["src/config/publicRuntime.ts<br/>基址单点派生 + 4 个 URL helper<br/>全 src 唯一 import.meta.env 读取点"]
-        CONS["axios client ｜ 底图 12 处 URL + 代理兜底 ｜ 下载超时"]
+        CONS["axios client ｜ 底图源 URL（经 publicRuntime helper 拼接）+ 代理兜底 ｜ 下载超时<br/>⚠️ 原『12 处』未逐项核验，仅作历史表述"]
     end
 
     ENVF -- "VITE_*" --> PRT --> CONS
@@ -78,12 +78,12 @@ flowchart TB
 
 | 层 | 位置 | 放什么 | 谁改 | 生效方式 |
 |----|------|--------|------|----------|
-| **L1** | 根 `.env`（部署环境）+ 根 `.env.local`（本地开发，git 追踪） | URL、端口、TTL、Agent 非密默认、`VITE_*` | 部署者 | 重启 / 重新构建 |
+| **L1** | `deploy/.env`（部署环境）+ `deploy/.env.local`（本地开发） | URL、端口、TTL、Agent 非密默认、`VITE_*` | 部署者 | 重启 / 重新构建 |
 | **L2** | `system_config` / `api_keys`(+备份池) / `announcements`（SQLite） | 地图 token、高德 Web 服务 Key、Agent 主密钥、Agent 模型/配额/提示词、默认底图、公告、联系方式 | 运营（admin 面板） | 即时（后端动态读取） |
 | **L3** | HF Space Secrets（本地 = 未提交 `.env`） | `SUPER_USER`、OAuth Client Secret、`SMTP_PASSWORD`（账号在 L1，分开存取）、Supabase、`LOG` | 部署者（仅平台侧） | 重启容器 |
 
 硬性边界：L3 真值不进 git、不进 DB、不进前端；`VITE_*` 永远不承载 secret；
-根 `.env.example` 是 L1+L2+L3 全部 key 的唯一登记目录（L2/L3 只登记不写真值）。
+`deploy/.env.example` + `backend/config/catalog.py` 是全部 key 的权威登记处（L2/L3 只登记不写真值）；仓库根目录无任何 `.env*` 文件。
 
 ## 3. backend/config 统一入口
 
@@ -91,16 +91,15 @@ flowchart TB
 
 | 模块 | 职责 |
 |------|------|
-| `catalog.py` | 55 key 元数据登记（层级/默认值/secret 标记），与根 `.env.example` 一一对应；部署拓扑默认常量单源 |
+| `catalog.py` | 139 key 元数据登记（层级/默认值/secret 标记），与 `deploy/.env.example` 对应；部署拓扑默认常量单源 |
 | `load.py` | 启动加载 env 文件 → 冻结 `BackendSettings`（lru_cache 快照）；`get_str/get_int/get_float/get_bool`（缺省回退 catalog 默认、数值越界钳制）；`masked_summary()` 脱敏摘要 |
 | `runtime.py` | L2 覆盖读取 `get_effective_str`：`system_config(DB) ▸ L1 env ▸ default`；**catalog 标记为绝密的 key 走 DB 直接抛 `ValueError`** |
 | `public.py` | `build_public_config()`：非密值 + 功能可用布尔（oauth_google/github、email、agent_env_key、amap、supabase），无任何明文 |
 
-L1/L3 加载顺序（`load.py`）：**系统环境变量 ▸ 根 `.env` ▸ 根 `.env.local`（仅文件存在时） ▸ `backend/.env` ▸ catalog 默认**。
-系统环境变量优先，保证 HF Secrets / Docker 注入值永远不被仓库文件覆盖；`.env.local` 与 `.env` 均为 git 追踪（L1 不涉密），部署时需通过部署脚本排除或 HF Space Variables 显式覆盖 `APP_ENV=production`。
+L1/L3 加载规则（`load.py:92-110,147-162`）：按 `APP_ENV` **二选一**读取 `.env`（production）或 `.env.local`（development，仅开发枚举）；候选路径优先 `deploy/` → 仓库根（历史兼容） → `backend/`，命中首个存在的文件。系统环境变量（HF Secrets / Docker 注入）优先级最高，**仓库文件值永不覆盖系统环境变量**（命中 `system_keys` 的 key 直接跳过文件写入，`load.py:131,142-144`）。
 
 约束：除本包外，后端业务代码禁止 `os.getenv` / `os.environ`；新增 key 必须先登记
-根 `.env.example` + `catalog.py` 再写代码（由门禁脚本强制）。
+`deploy/.env.example` + `catalog.py` 再写代码（由门禁脚本强制）。
 
 ## 4. 关键业务链路
 
@@ -121,14 +120,15 @@ L1/L3 加载顺序（`load.py`）：**系统环境变量 ▸ 根 `.env` ▸ 根 
 
 ## 5. 前端消费（两条腿）
 
-**构建期**：Vite 通过 `selectiveEnvPlugin`（`vite.config.js`）按 mode 二选一读取 env 文件——
-`npm run build`（production）读根 `.env`，`npm run dev`（development）读根 `.env.local`；
-前端不再维护独立 env 文件，Vite 原生 `envFile` 已禁用；
-Vite 只把 `VITE_*` 前缀项注入构建产物，根 `.env` 中的后端/绝密变量不会泄漏 →
+**构建期**：Vite 通过 `selectiveEnvPlugin`（`frontend/vite.config.ts`）按 mode 二选一读取 env 文件——
+`npm run build`（production）读 `deploy/.env`，`npm run dev`（development）读 `deploy/.env.local`（`vite.config.ts:51-68,117-128`）；
+Vite 原生 `.env` 加载已关闭（`envDir: false`），根目录无任何 `.env*` 文件；
+Vite 只把 `VITE_*` 前缀项注入构建产物，`deploy/.env` 中的后端/绝密变量不会泄漏 →
 `src/config/publicRuntime.ts` 单点派生
 `BACKEND_BASE_URL` / `TILE_PROXY_BASE_URL` / `TILE_PROXY_MODE` / `DOWNLOAD_REQUEST_TIMEOUT_MS`
-及 `backendUrl/tileProxyUrl/gcj2wgsProxyUrl/backendTilesUrl` 四个 helper。
-axios 基址、`basemapConfig` 12 处底图源 URL、瓦片代理兜底、下载超时全部由此拼接；
+等常量，以及 `backendUrl` / `tileProxyUrl` / `gcj2wgsProxyUrl` / `bd2wgsProxyUrl` 四个 URL helper。
+实际读取的 `VITE_*` 远不止四项（超时、第三方端点、OAuth、静态资源候选链等，见 `publicRuntime.ts:46-172`）；
+axios 基址、底图源 URL、瓦片代理兜底、下载超时全部由此拼接（原「12 处底图源 URL」说法 ⚠️ 未逐项核验）；
 src 内已无任何硬编码部署域名。
 
 **运行期**：`/api/runtime-config/map-tokens` 拿地图 token 池；`/api/config/public` 拿公开配置与功能布尔；
@@ -138,7 +138,7 @@ admin 登录后 `/api/admin/overview` 的 `l3_env_status` 驱动「环境密钥�
 
 ```mermaid
 sequenceDiagram
-    participant HF as HF Secrets / .env
+    participant HF as HF Secrets / deploy/.env*
     participant CFG as backend/config
     participant APP as app.py
     participant FE as 前端
@@ -146,7 +146,7 @@ sequenceDiagram
 
     Note over HF,APP: 启动期
     APP->>CFG: import（触发 env 加载）
-    HF-->>CFG: 系统环境变量（优先）+ .env / .env.local 补充
+    HF-->>CFG: 系统环境变量（优先）+ deploy/.env 或 deploy/.env.local（按 APP_ENV 二选一）补充
     CFG-->>APP: BackendSettings 快照
     APP->>APP: 打印脱敏摘要 + L3 状态（缺项精确报错）
 
@@ -175,12 +175,14 @@ sequenceDiagram
 
 ## 9. 版本足迹
 
+> 当前版本以 [根 README](../../README.md) 为准；本节仅记录历史阶段，不在本文硬编码当前版本号。
+
 | 版本 | 内容 |
 |------|------|
 | V3.4.6 | 阶段 0–2：清单统一 + backend/config 全模块收敛 + OAuth 推导 |
 | V3.4.8 | 阶段 3：L2 对照表 + Admin L3 状态徽章 |
 | V3.4.10 | 阶段 4：前端 publicRuntime 单点 + 硬编码域名清零 + /api/config/public |
-| V3.4.11 | 阶段 5（部分）：compose env_file + LocalDev 自动生成根 .env.local |
+| V3.4.11 | 阶段 5（部分）：compose env_file + LocalDev 自动生成 .env.local（历史实现；现已统一到 `deploy/.env` / `deploy/.env.local`） |
 | V3.4.13 | 阶段 5/6 收官：HF Secrets 最小集合清单 + 门禁脚本 + 过时文档清理 |
 
 ---

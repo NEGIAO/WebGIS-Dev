@@ -225,6 +225,11 @@ async def _build_login_response(
 ) -> Dict[str, Any]:
     request_ip = _extract_client_ip(request)
     request_user_agent = str(request.headers.get("User-Agent", "unknown"))
+    # V3.7.14：统一 IP 地理中枢——入口中间件已解析并挂 request.state，
+    # 这里直接取用；无中间件上下文时按需解析。一个 IP 全局只解析一次。
+    from services.request_geo import get_request_geo
+
+    geo = await get_request_geo(request)
     session = await asyncio.to_thread(
         _create_session_sync,
         username,
@@ -234,6 +239,7 @@ async def _build_login_response(
         guest_uid,
         guest_device_id,
         requires_email_binding,
+        geo,
     )
     # guest_no 仅随会话对象内存传递（sessions 表无此列，不做迁移）：
     # _public_user_payload 优先读它，游客分支不再回查 guest_identity_records
@@ -791,6 +797,11 @@ async def create_guest_session(request: Request, payload: Optional[GuestSessionR
             detail=_auth_error_detail("GUEST_ISSUANCE_DISABLED", "游客身份签发未启用"),
         )
     # 三类身份统一：游客 token 也登记进 sessions 表，管理员一张表即可维护/删除。
+    # V3.7.14：按身份 IP（XFF 末跳）单独解析，不复用展示 IP 的 request.state 缓存；
+    # 进程级 TTL 缓存仍保证同一 IP 只解析一次。
+    from services.request_geo import resolve_ip_geo
+
+    geo = await resolve_ip_geo(identity_ip)
     await asyncio.to_thread(
         register_guest_session,
         guest_token,
@@ -798,6 +809,7 @@ async def create_guest_session(request: Request, payload: Optional[GuestSessionR
         identity_ip,
         request_user_agent,
         device_id,
+        geo,
     )
 
     guest_record = await asyncio.to_thread(_get_or_create_guest_username_sync, guest_uid)

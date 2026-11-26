@@ -26,13 +26,16 @@
 
 | 文件 | 职责 |
 |------|------|
-| `frontend/src/domains/ol/basemap/constants/basemapConfig.ts` | **SSOT 唯一真相源**：OL 专用图层源定义（`LAYER_SOURCE_DEFINITIONS`）+ 底图预设栈（`BASEMAP_PRESETS`）+ Cesium 描述符派生（`getDescriptorById()`），约 1431 行 |
-| `frontend/src/domains/ol/basemap/constants/basemapResolver.ts` | 底图解析器：预设解析、图层配置生成、UI 选项列表导出 |
+| `frontend/src/domains/ol/basemap/constants/basemapConfig.ts` | **SSOT 门面（129 行）**：聚合 `LAYER_SOURCE_DEFINITIONS`，re-export `basemapCore` 与 `basemapPresets`，并提供 Cesium 描述符派生（`getDescriptorById()`）。SSOT 语义保留在门面，定义实体已拆分 |
+| `frontend/src/domains/ol/basemap/constants/definitions/group-1.ts` ~ `group-4.ts` | 图层源定义拆分实体（共 1767 行），按序拼接为 `LAYER_SOURCE_DEFINITIONS` |
+| `frontend/src/domains/ol/basemap/constants/basemapCore.ts` | 核心类型与工具（172 行），由门面 `export *` 转发 |
+| `frontend/src/domains/ol/basemap/constants/basemapResolver.ts` | 底图解析器：预设解析、图层配置生成；UI 选项常量仅保留 re-export（定义在 common 域） |
+| `frontend/src/domains/common/basemap/basemapPresets.ts` | 预设目录纯数据 + `URL_LAYER_OPTIONS`（原由 resolver 导出） |
 | `frontend/src/domains/ol/tile-source/tileLifecycle.ts` | 瓦片请求生命周期：`prioritizeTileSourceRequest`（fetch + AbortController）、中断管理、代理兜底（`TILE_PROXY_BASE_URL`） |
 | `frontend/src/domains/ol/tile-source/types.ts` | 类型定义与常量（超时、错误状态等） |
-| `frontend/src/domains/ol/basemap/composables/basemapLayerFactory.js` | OL 图层工厂：栅格/矢量瓦片图层创建、高清瓦片 `zDirection` 注入 |
-| `frontend/src/domains/ol/layer/composables/useTileHDRendering.js` | 高清瓦片渲染全局开关（`tileHDRendering` ref，持久化到 localStorage） |
-| `frontend/src/domains/ol/basemap/resilience/useBasemapResilience.js` | 底图容灾：切换验证、加载监测、熔断降级（`createBasemapResilience`） |
+| `frontend/src/domains/ol/basemap/composables/basemapLayerFactory.ts` | OL 图层工厂：栅格/矢量瓦片图层创建、高清瓦片 `zDirection` 注入 |
+| `frontend/src/domains/ol/layer/composables/useTileHDRendering.ts` | 高清瓦片渲染全局开关（`tileHDRendering` ref，持久化到 localStorage） |
+| `frontend/src/domains/ol/basemap/resilience/useBasemapResilience.ts` | 底图容灾：切换验证、加载监测与异常通知（`createBasemapResilience`）；**自动降级链已删除** |
 | ~~`backend/domains/tiles/`~~ | **已迁出** → 开源仓 `tile-proxy` + 线上 `vpn.negiao.cn/proxy/*` |
 | `backend/core/coord_transform.py` | 点坐标 GCJ/BD 纯数学（本仓残留，无瓦片 IO） |
 
@@ -58,11 +61,11 @@ flowchart LR
     DESC --> CE
 ```
 
-底图源体系采用 **SSOT（单一真相源）** 架构：`basemapConfig.ts` 是唯一配置入口，Cesium 侧的描述符通过 `getDescriptorById()` 从 OL 定义自动派生，无需手动同步。
+底图源体系采用 **SSOT（单一真相源）** 架构：`basemapConfig.ts` 是唯一配置**门面**（129 行），定义实体拆分到 `definitions/group-1.ts` ~ `group-4.ts` 与 `basemapCore.ts`（172 行），入口语义不变；Cesium 侧的描述符通过 `getDescriptorById()` 从 OL 定义自动派生，无需手动同步。
 
 ### 3.1 LayerSourceDefinition（OL 专用）
 
-定义于 `basemapConfig.ts`，每条记录包含 `createSource` 工厂函数，直接返回 OpenLayers 的 `XYZ` / `OSM` / `TileWMS` / `VectorTile` 实例：
+定义实体位于 `definitions/group-1.ts` ~ `group-4.ts`，由 `basemapConfig.ts` 门面聚合导出 `LAYER_SOURCE_DEFINITIONS`；每条记录包含 `createSource` 工厂函数，直接返回 OpenLayers 的 `XYZ` / `OSM` / `TileWMS` / `VectorTile` 实例：
 
 ```typescript
 export type LayerSourceDefinition = {
@@ -79,7 +82,7 @@ export type LayerSourceDefinition = {
 
 ### 3.2 TileSourceDescriptor（Cesium 自动派生）
 
-定义于 `basemapConfig.ts` 的 `getDescriptorById(id)` 函数，从 `LAYER_SOURCE_DEFINITIONS` 自动派生引擎无关的纯数据描述：
+定义于 `basemapConfig.ts` 门面的 `getDescriptorById(id)` 函数，从 `LAYER_SOURCE_DEFINITIONS` 自动派生引擎无关的纯数据描述：
 
 ```typescript
 export type TileSourceDescriptor = {
@@ -93,7 +96,7 @@ export type TileSourceDescriptor = {
     tilePixelRatio?: number;   // HD/@2x 瓦片设为 2
     subdomains?: string[];
     nonStandardAdapter?: string;
-    needsContext?: ('tiandituTk' | 'customUrl' | 'normBase')[];
+    needsContext?: ('tiandituTk' | 'ovitalTdtkey' | 'customUrl')[];
     wms?: { layers: string; version?: string; ... };
     wmts?: { layer: string; matrixSet: string; ... };
 };
@@ -103,7 +106,7 @@ Cesium 侧通过 `basemapConfig.ts` 的 `getDescriptorById()` 获取描述符后
 
 ### 3.3 同步约束
 
-SSOT 模式下，新增/修改图源只需编辑 `basemapConfig.ts` 一处，Cesium 描述符自动派生，消除手动同步风险。`basemapResolver.ts` 中的 `LAYER_SOURCE_MAP` 提供 OL 侧索引。
+SSOT 模式下，新增/修改图源只需编辑对应 `definitions/group-*.ts` 中的一条定义（门面无需改动），Cesium 描述符自动派生，消除手动同步风险。`basemapResolver.ts` 中的 `LAYER_SOURCE_MAP` 提供 OL 侧索引。
 
 ## 4. 预设栈模型
 
@@ -125,14 +128,14 @@ export type BasemapPresetDefinition = {
 
 表示：Google 卫星影像（底）→ Google 山体阴影（中）→ 天地图注记（顶）。
 
-**关键索引**：
-- `index 0`：`local_tiles_preset`（本地瓦片）
-- `index 1`：`custom`（自定义 URL，`l=1`）
+**关键索引**（内部数组 0-based，公开 URL `l` 为 1-based）：
+- `index 0` → 公开 `l=1`：`local_tiles_preset`（本地瓦片）
+- `index 1` → 公开 `l=2`：`custom`（自定义 URL）
 - 默认预设：`DEFAULT_BASEMAP_PRESET_ID = 'custom_China_Blender_preset_2'`
 
-`basemapResolver.ts` 的 `resolvePresetLayerIds(optionId)` 将预设 ID 解析为去重、保序的图层源 ID 数组，过滤掉不存在的 ID。`URL_LAYER_OPTIONS` 导出预设 ID 列表供 URL 参数 `l={index}` 映射。
+`basemapResolver.ts` 的 `resolvePresetLayerIds(optionId)` 将预设 ID 解析为去重、保序的图层源 ID 数组，过滤掉不存在的 ID。UI 选项常量已迁至 common 域：`URL_LAYER_OPTIONS` 定义在 `basemapPresets.ts`，`BASEMAP_OPTIONS` 定义在 `basemapOptions.ts`，resolver 仅保留 re-export 兼容旧 import 路径。公开 URL 参数 `l` 取内部 `index + 1`（`basemapOptions.ts:18-26`、`basemapPresets.ts:359-364`）。
 
-当前预设栈共 **60+ 项**，覆盖天地图、图新、Google、高德、Mapbox、Yandex、腾讯、OSM、CartoDB、Stamen、MapTiler、ArcGIS/ESRI、Windy、MFF、GeoQ 等系列。
+当前预设栈共 **92 项常规预设**（`BASEMAP_PRESETS` 共 94 条记录，另含 `local_tiles_preset`、`custom` 两个特殊入口），覆盖天地图、图新、Google、高德、Mapbox、Yandex、腾讯、OSM、CartoDB、Stamen、MapTiler、ArcGIS/ESRI、Windy、MFF、GeoQ 等系列。
 
 ## 5. 瓦片请求生命周期
 `tileLifecycle.ts` 的 `prioritizeTileSourceRequest(source)` 是 OL 侧所有瓦片源的请求入口，核心策略：**fetch + AbortController 优先，CORS/redirect 失败回退后端代理**。
@@ -183,7 +186,7 @@ flowchart TD
 
 ## 6. 熔断与回退
 
-`useBasemapResilience.js` 的 `createBasemapResilience()` 提供底图容灾能力：
+`useBasemapResilience.ts` 的 `createBasemapResilience()` 提供底图容灾能力：
 
 ### 6.1 切换验证（validateBaseLayerSwitch）
 
@@ -203,19 +206,24 @@ flowchart TD
 | `ACTIVITY_TIMEOUT` | 10000ms | 无瓦片加载活动的超时 |
 | `WARNING_THRESHOLD` | 5 | 累计错误警告阈值 |
 
-### 6.3 降级链（FallbackManager）
+### 6.3 异常通知（自动降级链已删除）
 
-每个 `layerId` 维护独立的 `FallbackManager` 单例：
+旧版 `FallbackManager`（`tianDiTu → local → 提示用户` 的自动降级链）已删除：`isDefaultBaseLayer` 判断恒为 false（图层 ID 与预设 ID 永不匹配），降级实际从未生效；瓦片级代理兜底也已移至 `tileLifecycle.ts` 的 `TILE_PROXY_MODE`，不在底图层级做降级（`useBasemapResilience.ts:5-7,131`）。
+
+当前 `monitorLayerTimeout()` 在连续错误 `MAX_ERRORS = 3` 或无活动 `ACTIVITY_TIMEOUT = 10000ms` 时只做两件事：
+
+1. 两条提示：`message.warning` 输出 ``[底图监测] ${layerId} 可能异常: ${reason}``，`message.info` 输出「若页面长时间无底图，请尝试切换底图或刷新页面以重新加载。」（`useBasemapResilience.ts:170-171`）；
+2. 调用注入的 `onRuntimeTokenFailure({ layerId, reason, releaseMonitor })` 回调，由运行时 token 池侧按 `needsContext` 判定是否轮换密钥（见 `useRuntimeMapTokenPool.ts`）。
 
 ```mermaid
 flowchart TD
-    FAIL(["瓦片连续失败 ≥3 或超时"]) --> SKIP["跳过当前 layerId"]
-    SKIP --> TRY_TDT["尝试 tianDiTu（天地图）"]
-    TRY_TDT -->|成功| OK(["切换成功"])
-    TRY_TDT -->|失败| TRY_LOCAL["尝试 local（本地瓦片）"]
-    TRY_LOCAL -->|成功| OK
-    TRY_LOCAL -->|失败| MANUAL(["提示用户手动切换或刷新"])
+    FAIL(["瓦片连续失败 ≥3 或超时"]) --> NOTIFY["message.warning / info<br/>提示用户手动切换或刷新"]
+    NOTIFY --> CB["onRuntimeTokenFailure 回调<br/>交由 token 池按 needsContext 判定密钥池"]
+    CB --> ROTATE["有匹配密钥池：轮换备用 key 并重建图层"]
+    CB --> MANUAL["无匹配密钥池：仅提示，不自动切换底图"]
 ```
+
+注意：这里**不再**自动切换到天地图或本地瓦片；是否重试由 token 池与用户操作决定。
 
 ## 7. GCJ-02 火星坐标纠偏
 
@@ -266,7 +274,7 @@ https://negiao-webgis.hf.space/proxy/gcj2wgs/http://webst01.is.autonavi.com/appm
 
 ### 8.1 zDirection 偏上层取瓦
 
-`basemapLayerFactory.js` 的 `buildRasterBasemapSource(rawSource)` 在 `tileHDRendering` 开关开启时注入自定义 `NearestDirectionFunction`：
+`basemapLayerFactory.ts` 的 `buildRasterBasemapSource(rawSource)` 在 `tileHDRendering` 开关开启时注入自定义 `NearestDirectionFunction`：
 
 ```javascript
 function alwaysPickFinerZoom(target, high, low) {
@@ -287,11 +295,11 @@ HD/@2x 瓦片（如 MapTiler 影像 HD）实际为 512×512 像素叠在 256 网
 
 ### 8.4 全局开关
 
-`useTileHDRendering.js` 导出全局单例 `tileHDRendering`（Vue ref），默认 `true`（开启），持久化到 `localStorage` 键 `webgis:tileHDRendering`。
+`useTileHDRendering.ts` 导出全局单例 `tileHDRendering`（Vue ref），默认 `true`（开启），持久化到 `localStorage` 键 `webgis:tileHDRendering`。
 
 ## 9. 自定义底图接入
 
-自定义底图位于预设栈 `index 1`（URL 参数 `l=1`）：
+自定义底图位于预设栈内部 `index 1`，对应公开 URL 参数 **`l=2`**（1-based）：
 
 ```typescript
 { id: 'custom', label: '自定义URL', stack: ['custom'] }
@@ -393,12 +401,12 @@ URL 模板转换（`toCesiumUrlTemplate`）处理：
 |------|-----|------|------|
 | `TILE_REQUEST_TIMEOUT_MS` | 15000 | `tileSource/types.ts` | 单瓦片 fetch 超时（ms） |
 | `TILE_STATE_ERROR` | 3 | `tileSource/types.ts` | OL 瓦片错误状态码 |
-| `MAX_ERRORS` | 3 | `useBasemapResilience.js` | 连续错误熔断阈值 |
-| `ACTIVITY_TIMEOUT` | 10000 | `useBasemapResilience.js` | 无活动超时（ms） |
-| `WARNING_THRESHOLD` | 5 | `useBasemapResilience.js` | 累计错误警告阈值 |
+| `MAX_ERRORS` | 3 | `useBasemapResilience.ts` | 连续错误熔断阈值 |
+| `ACTIVITY_TIMEOUT` | 10000 | `useBasemapResilience.ts` | 无活动超时（ms） |
+| `WARNING_THRESHOLD` | 5 | `useBasemapResilience.ts` | 累计错误警告阈值 |
 | `PROXY_NOTIFY_DEBOUNCE_MS` | 5000 | `tileLifecycle.ts` | 代理通知防抖（ms） |
 | `GCJ2WGS_MAX_ITERATIONS` | 20 | `core/coord_transform.py` | 牛顿迭代最大次数 |
 | `GCJ2WGS_TOLERANCE` | 1e-6 | `core/coord_transform.py` | 迭代收敛精度（度） |
 | `DEFAULT_BASEMAP_PRESET_ID` | `'custom_China_Blender_preset_2'` | `basemapConfig.ts` | 默认底图预设 |
-| `checkTimeoutMs`（默认参数） | 3000 | `useBasemapResilience.js` | 切换验证超时（ms） |
-| `tileHDRendering`（默认值） | `true` | `useTileHDRendering.js` | 高清渲染默认开启 |
+| `checkTimeoutMs`（默认参数） | 3000 | `useBasemapResilience.ts` | 切换验证超时（ms） |
+| `tileHDRendering`（默认值） | `true` | `useTileHDRendering.ts` | 高清渲染默认开启 |

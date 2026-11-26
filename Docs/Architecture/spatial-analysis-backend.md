@@ -31,8 +31,8 @@
 | `backend/api/spatial/operations/fishnet.py` | 渔网分析（规则网格生成） |
 | `backend/api/spatial/operations/multi_ring_buffer.py` | 多环缓冲区分析 |
 | `frontend/src/domains/ol/components/SpatialAnalysisPanel.vue` | 前端 UI 面板：8 种工具选择、参数输入、事件发射 |
-| `frontend/src/domains/ol/spatial-analysis/composables/useSpatialAnalysis.js` | 前端编排层：OL Feature↔GeoJSON 序列化、API 调用、结果图层创建 |
-| `frontend/src/api/backend/spatial.js` | Axios 封装：`apiSpatialAnalysis()`，30 秒超时 |
+| `frontend/src/domains/ol/spatial-analysis/composables/useSpatialAnalysis.ts` | 前端编排层：OL Feature↔GeoJSON 序列化、API 调用、结果图层创建 |
+| `frontend/src/api/backend/spatial.ts` | Axios 封装：`apiSpatialAnalysis()`，30 秒超时 |
 
 ## 3. 单端点 + operation 分发架构
 
@@ -51,7 +51,7 @@ flowchart TD
     DISPATCH -->|"intersection/union/difference"| O2["do_overlay()"]
     DISPATCH -->|"convexhull"| O3["do_convex_hull()"]
     DISPATCH -->|"voronoi"| O4["do_voronoi()"]
-    DISPATCH -->|"aggregation"| O5["do_aggregation()"]
+    DISPATCH -->|"aggregation"| O5["do_spatial_aggregation()"]
     DISPATCH -->|"simplify"| O6["do_simplify()"]
     DISPATCH -->|"fishnet"| O7["do_fishnet()"]
     DISPATCH -->|"multiringbuffer"| O8["do_multi_ring_buffer()"]
@@ -87,7 +87,7 @@ WGS84（EPSG:4326）是地理坐标系，坐标单位为度，无法直接进行
 
 ### 4.3 前端侧
 
-`useSpatialAnalysis.js` 利用 OpenLayers 的 `GeoJSON` 格式器在 `EPSG:3857`（地图内部）与 `EPSG:4326`（API 传输）之间转换：
+`useSpatialAnalysis.ts` 利用 OpenLayers 的 `GeoJSON` 格式器在 `EPSG:3857`（地图内部）与 `EPSG:4326`（API 传输）之间转换：
 
 ```javascript
 // 序列化：地图 → API
@@ -127,7 +127,7 @@ gjFormat.readFeatures(geojson, {
 | 缓冲区分析 | `buffer` | Shapely `geom.buffer(radius, resolution=64)`，64 段圆弧逼近 | `radius`（米，默认 1000） |
 | 叠加分析 | `intersection` / `union` / `difference` | 先 `unary_union` 合并图层 B，再逐要素做精确布尔运算 | 需要 `features_b` |
 | 凸包分析 | `convexhull` | `unary_union` 合并全部几何后取 `.convex_hull` | 仅需 `features_a` |
-| 泰森多边形 | `voronoi` | `shapely.ops.voronoi_diagram`，以凸包外扩 50% 为裁剪边界 | 至少 2 个点要素 |
+| 泰森多边形 | `voronoi` | `shapely.ops.voronoi_diagram`，以点集 `bounds` 外扩 50% 为裁剪边界（退化回退 1000m padding，不再报错） | 至少 2 个点要素 |
 | 空间聚合 | `aggregation` | 生成方格网/六边形网格，`STRtree` 空间索引查询每格包含的点数 | `bbox`、`grid_type`、`grid_size` |
 | 几何简化 | `simplify` | Douglas-Peucker 算法，`preserve_topology=True` | `tolerance`（米） |
 | 渔网分析 | `fishnet` | 在 bbox 内按 grid_size 步长生成规则网格（面或线） | `bbox`、`grid_size`、`geometry_type`、`create_center_points` |
@@ -155,11 +155,11 @@ gjFormat.readFeatures(geojson, {
 
 1. 提取所有点坐标（Point 直接取，MultiPoint 展开，非点几何取质心）。
 2. 至少需要 2 个点，否则报错。
-3. 以点集凸包的 bounds 外扩 50%（退化时用 1000m）构建裁剪矩形 `bounding_poly`。
+3. 以点集 `multi_point.bounds` 外扩 50%（dx/dy 展布宽度 ≤0 时回退 1000m padding，EPSG:3857 下单位为米）构建裁剪矩形 `bounding_poly`。
 4. 调用 `shapely.ops.voronoi_diagram(multi_point, envelope=bounding_poly)` 计算 Voronoi 图。
 5. 每个 Voronoi 多边形裁剪到 `bounding_poly` 内，输出带 `site_index` 属性的 FeatureCollection。
 
-退化检测：若点集凸包为 Point 或 LineString（共线/重合），直接报错。
+退化处理：已移除旧「凸包为 Point / LineString 直接报错」逻辑——恰好 2 点或共线点集的凸包必为 LineString，旧实现会让「至少 2 个点」契约下的合法输入 100% 失败；改用 `bounds` 后退化情形同样可正常切分（见 `operations/voronoi.py:30-41`）。
 
 ### 6.5 空间聚合（aggregation）
 
@@ -221,7 +221,7 @@ candidate_indices = tree.query(cell, predicate="contains")
 
 ## 9. 前端调用链路
 
-`SpatialAnalysisPanel.vue` 是纯 UI 层，通过 `emit('analysis', params)` 将用户操作传递给父组件，父组件调用 `useSpatialAnalysis.js` 的 `runSpatialAnalysis(params)`：
+`SpatialAnalysisPanel.vue` 是纯 UI 层，通过 `emit('analysis', params)` 将用户操作传递给父组件，父组件调用 `useSpatialAnalysis.ts` 的 `runSpatialAnalysis(params)`：
 
 1. **参数校验**：检查目标图层、bbox、距离数组等必填项。
 2. **要素序列化**：`getLayerFeatures(layerId)` 从 OL 图层取 Feature，`featuresToGeoJSON()` 转为 EPSG:4326 GeoJSON。

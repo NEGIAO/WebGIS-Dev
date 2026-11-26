@@ -48,6 +48,9 @@ _SESSION_COLUMNS = (
     "created_at",
     "expires_at",
     "last_seen_at",
+    "ip_city",
+    "ip_region",
+    "ip_country",
 )
 
 _SESSION_COLUMNS_SQL = ", ".join(_SESSION_COLUMNS)
@@ -79,6 +82,9 @@ def archive_session_rows_locked(
             str(row.get("created_at") or ""),
             str(row.get("expires_at") or ""),
             str(row.get("last_seen_at") or ""),
+            str(row.get("ip_city") or ""),
+            str(row.get("ip_region") or ""),
+            str(row.get("ip_country") or ""),
             archived_at,
             str(reason or ARCHIVE_REASON_REVOKED),
         )

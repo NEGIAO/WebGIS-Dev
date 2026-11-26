@@ -303,18 +303,21 @@ async def fetch_geolocation(ip: str) -> Optional[dict]:
     Returns:
         包含 ip, city, region, country, latitude, longitude 的字典，失败返回 None
     """
-    result = await ip_geo_service.locate(ip=ip, prefer_amap=False, use_cache=True)
+    # V3.7.14：统一走 IP 地理中枢——进程级缓存与「一个 IP 只解析一次」由中枢保证，
+    # 不再直接调用 ip_geo_service（prefer_amap=False 保持访问事件既有口径）。
+    from services.request_geo import resolve_ip_geo
 
-    if result:
-        return {
-            "ip": result.ip,
-            "city": result.city or "Unknown",
-            "region": result.region or "Unknown",
-            "country": result.country or "Unknown",
-            "latitude": result.latitude,
-            "longitude": result.longitude,
-        }
-    return None
+    geo = await resolve_ip_geo(ip, prefer_amap=False)
+    if not geo.resolved:
+        return None
+    return {
+        "ip": geo.ip,
+        "city": geo.city or "Unknown",
+        "region": geo.region or "Unknown",
+        "country": geo.country or "Unknown",
+        "latitude": geo.latitude,
+        "longitude": geo.longitude,
+    }
 
 
 def get_current_shanghai_time() -> str:
@@ -1048,6 +1051,9 @@ def _mirror_identity_from_db_sync(conn: sqlite3.Connection, presence_id: str) ->
         "first_seen_at": "",
         "last_seen_at": "",
     }
+    # 修复：登录名（username）与展示名（display_name）不可混用——
+    # sessions / visit_tracking_events 按 username 查询，不能用已改名后的昵称。
+    username = ""
     if presence_id.startswith("u:"):
         username = presence_id[2:]
         row = conn.execute(
@@ -1155,11 +1161,43 @@ def _mirror_identity_from_db_sync(conn: sqlite3.Connection, presence_id: str) ->
     # 历史实现按 username 列匹配 guest_uid，username 改版后必然查不到地理信息；
     # 改按 visit_tracking_events.guest_uid 列（已有索引）精确匹配，账号仍用 username。
     # 旧库/测试内存库可能尚无 guest_uid 列，失败时回退 username 匹配，保持兼容。
+    # V3.7.14：优先读 sessions 新列（统一中枢签发时写入），缺值再回退访问事件表。
+    try:
+        if info["identity_type"] == "guest" and info["guest_uid"]:
+            session_geo = conn.execute(
+                "SELECT ip_city, ip_region, ip_country FROM sessions "
+                "WHERE guest_uid = ? AND role = 'guest' ORDER BY COALESCE(last_seen_at, created_at) DESC LIMIT 1",
+                (info["guest_uid"],),
+            ).fetchone()
+        else:
+            session_geo = conn.execute(
+                "SELECT ip_city, ip_region, ip_country FROM sessions "
+                "WHERE username = ? ORDER BY COALESCE(last_seen_at, created_at) DESC LIMIT 1",
+                (username,),
+            ).fetchone()
+    except sqlite3.OperationalError:
+        session_geo = None
+    if session_geo:
+        sg = dict(session_geo)
+        if str(sg.get("ip_city") or "").strip():
+            info.update(
+                {
+                    "ip_city": str(sg.get("ip_city") or ""),
+                    "ip_region": str(sg.get("ip_region") or ""),
+                    "ip_country": str(sg.get("ip_country") or ""),
+                }
+            )
+            # V3.7.14：coord_source 描述的是经纬度来源，不由城市来源决定；
+            # 经纬度仍走访问事件表（sessions 新列只存城市级，不新增隐私面）。
+
     if info["identity_type"] == "guest" and info["guest_uid"]:
         geo_keys = (("guest_uid", info["guest_uid"]), ("username", info["guest_uid"]))
     else:
-        geo_keys = (("username", info["display_name"]),)
+        # 修复：访问事件表按登录名索引，不能用展示名（改昵称后会查不到地理信息）
+        geo_keys = (("username", username),)
     geo = None
+    # 城市已从 sessions 取到时，仅补经纬度（保留访问事件的精确坐标），避免覆盖城市
+    city_from_session = bool(str(info.get("ip_city") or "").strip())
     for geo_column, geo_key in geo_keys:
         if not geo_key:
             continue
@@ -1181,16 +1219,26 @@ def _mirror_identity_from_db_sync(conn: sqlite3.Connection, presence_id: str) ->
             break
     if geo:
         g = dict(geo)
+        # V3.7.14：来源跟随实际坐标；即便城市来自 sessions，也不能把 GPS 点标成 IP。
+        event_coord_source = _normalize_coord_source(g.get("coord_source"))
         info.update(
             {
-                "ip_city": str(g.get("ip_city") or ""),
-                "ip_region": str(g.get("ip_region") or ""),
-                "ip_country": str(g.get("ip_country") or ""),
                 "latitude": g.get("latitude"),
                 "longitude": g.get("longitude"),
-                "coord_source": str(g.get("coord_source") or "unknown"),
+                "coord_source": event_coord_source,
             }
         )
+        if not city_from_session:
+            info.update(
+                {
+                    "ip_city": str(g.get("ip_city") or ""),
+                    "ip_region": str(g.get("ip_region") or ""),
+                    "ip_country": str(g.get("ip_country") or ""),
+                }
+            )
+    elif city_from_session:
+        # 无访问事件坐标时，城市来自 IP 解析，维持 IP 来源标注。
+        info["coord_source"] = "ip"
     return info
 
 
@@ -1349,7 +1397,9 @@ async def log_visit(
         gps_lat = visit_payload.gps_lat if visit_payload else None
         gps_accuracy = visit_payload.gps_accuracy if visit_payload else None
         gps_error = (visit_payload.gps_error if visit_payload else "") or ""
-        gps_timestamp = (visit_payload.gps_timestamp if visit_payload else "") or ""
+        # V3.7.14：时间戳统一服务端 UTC+8——忽略前端上报的 gps_timestamp，
+        # 避免客户端时钟漂移污染统计口径（前端契约保留该字段以兼容旧客户端）。
+        gps_timestamp = datetime.now(SHANGHAI_TZ).isoformat()
         geo_permission = _normalize_geo_permission(
             (visit_payload.geo_permission if visit_payload else "unknown")
         )

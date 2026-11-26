@@ -7,6 +7,8 @@ import secrets
 from datetime import timedelta
 from typing import Any, Dict, Optional
 
+from services.request_geo import RequestGeo
+
 from .constants import (
     SESSION_EXPIRE_HOURS,
     SESSION_TOUCH_THROTTLE_SECONDS,
@@ -61,6 +63,7 @@ def _create_session_sync(
     guest_uid: str = "",
     guest_device_id: str = "",
     requires_email_binding: bool = False,
+    geo: Optional[RequestGeo] = None,
 ) -> Dict[str, Any]:
     now = _utc_now()
     expires_at = now + timedelta(hours=SESSION_EXPIRE_HOURS)
@@ -100,9 +103,12 @@ def _create_session_sync(
                 requires_email_binding,
                 created_at,
                 expires_at,
-                last_seen_at
+                last_seen_at,
+                ip_city,
+                ip_region,
+                ip_country
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 token,
@@ -116,6 +122,9 @@ def _create_session_sync(
                 _iso(now),
                 _iso(expires_at),
                 _iso(now),  # 登录即在线（V3.4.60 在线判定心跳基点）
+                str(geo.city if geo else "") or "",
+                str(geo.region if geo else "") or "",
+                str(geo.country if geo else "") or "",
             ),
         )
         conn.commit()

@@ -2,13 +2,27 @@
 
 > **任务等级**：L3（架构级）
 > **日期**：2026-08-02
-> **状态**：待批准
+> **状态**：已实施（`getDescriptorById()` 已存在，`sourceDescriptors.ts` 已删除；详见下方「当前落地状态」）
+
+---
+
+> **当前落地状态（以工作区代码为准，历史方案本身不改写）**：
+>
+> - 本方案已实施：`basemapConfig.ts` 门面提供 `getDescriptorById()`，`sourceDescriptors.ts` 已删除。
+> - 第 1 节的行数快照是**重构前**历史值；当前 `basemapConfig.ts` 为 129 行门面，定义实体拆分到 `definitions/group-1~4.ts`（共 1767 行）与 `basemapCore.ts`（172 行），预设在 `common/basemap/basemapPresets.ts`。
+> - 第 4.1 节路由表中的 `/tiles/ships66/{z}/{x}/{y}.png` 专用端点已下线，现在只剩 `/proxy/*` 命名空间。
+> - 第 5.3.1 节序号前缀实际落地为 `${index + 1}`（1-based，`basemapPresets.ts:359-364`），而非方案中的 `${index}`。
+> - 第 4.2 节 `activeGoogleTileHost` 的运行时动态机制文中标 ❓：⚠️ **未核验**当前是否仍存在。
+>
+> 下文均保留原方案叙述，未作改写。
 
 ---
 
 ## 1. 核心症状
 
 当前底图配置分散在 3 个文件中，通过「人工保持同步」的方式维护一致性：
+
+> ⚠️ 下表行数为**重构前**历史快照，不代表当前代码行数（见文首「当前落地状态」）。
 
 | 文件 | 引擎 | 内容 | 行数 |
 |---|---|---|---|
@@ -98,6 +112,8 @@ sequenceDiagram
 /proxy/wgs2gcj/{target_url:path}      ← WGS→GCJ 纠偏
 /tiles/ships66/{z}/{x}/{y}.png        ← 专用海图代理
 ```
+
+> ⚠️ 当前落地：上表末行的 `/tiles/ships66/{z}/{x}/{y}.png` 端点已下线，路由表只剩 `/proxy/*` 命名空间。
 
 前端代理函数（`publicRuntime.ts`）：
 ```ts

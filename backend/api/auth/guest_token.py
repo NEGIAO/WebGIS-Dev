@@ -15,7 +15,7 @@ import logging
 import threading
 import time
 from collections import deque
-from typing import Deque, Dict, Optional, Tuple
+from typing import Any, Deque, Dict, Optional, Tuple
 
 from config import get_int, get_str
 
@@ -171,6 +171,7 @@ def register_guest_session(
     ip: str = "",
     user_agent: str = "",
     guest_device_id: str = "",
+    geo: Optional[Any] = None,
 ) -> None:
     """游客 token 签发后同步登记 sessions 行（管理员可在一张表里维护/删除）。
 
@@ -191,8 +192,9 @@ def register_guest_session(
                 """
                 INSERT OR REPLACE INTO sessions (
                     token, username, role, guest_uid, guest_device_id, ip,
-                    user_agent, requires_email_binding, created_at, expires_at, last_seen_at
-                ) VALUES (?, ?, 'guest', ?, ?, ?, ?, 0, ?, ?, ?)
+                    user_agent, requires_email_binding, created_at, expires_at, last_seen_at,
+                    ip_city, ip_region, ip_country
+                ) VALUES (?, ?, 'guest', ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     token,
@@ -204,6 +206,9 @@ def register_guest_session(
                     now_iso,
                     _guest_session_expiry_iso(token),
                     now_iso,
+                    str(getattr(geo, "city", "") or "") if geo is not None else "",
+                    str(getattr(geo, "region", "") or "") if geo is not None else "",
+                    str(getattr(geo, "country", "") or "") if geo is not None else "",
                 ),
             )
             conn.commit()
