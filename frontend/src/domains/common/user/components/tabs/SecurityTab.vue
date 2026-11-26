@@ -287,7 +287,7 @@
     text-align: left;
     font-size: 13px;
     font-weight: 600;
-    transition: all 0.18s ease;
+    transition: background, border-color, color 0.18s ease;
     box-shadow: 0 1px 3px rgba(34, 50, 38, 0.04);
 }
 
@@ -402,7 +402,7 @@
     align-items: center;
     justify-content: center;
     font-size: 12px;
-    transition: all 0.15s;
+    transition: background, border-radius, color, font-size, height, right, width 0.15s;
 }
 
 .pwd-toggle:hover {
@@ -450,7 +450,7 @@
     justify-content: center;
     gap: 8px;
     box-shadow: 0 3px 10px rgba(var(--brand-primary-rgb), 0.28);
-    transition: all 0.18s ease;
+    transition: background, border-radius, box-shadow, color, font-size, font-weight, gap, height 0.18s ease;
 }
 
 .btn-primary:hover:not(:disabled) {

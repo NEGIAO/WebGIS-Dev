@@ -18,7 +18,7 @@
                     class="chevron"
                     :class="{ open: expanded }"
                     :size="13"
-                    :stroke-width="2.2"
+                    :stroke-width="2"
                 />
             </button>
 
@@ -30,17 +30,17 @@
                 <FolderOpen
                     v-if="hasChildren && expanded"
                     :size="14"
-                    :stroke-width="1.8"
+                    :stroke-width="2"
                 />
                 <Folder
                     v-else-if="hasChildren"
                     :size="14"
-                    :stroke-width="1.8"
+                    :stroke-width="2"
                 />
                 <MapPin
                     v-else
                     :size="13"
-                    :stroke-width="1.8"
+                    :stroke-width="2"
                 />
             </span>
 
@@ -133,6 +133,7 @@
 }
 
 .tree-toggle {
+    position: relative;
     flex-shrink: 0;
     display: inline-flex;
     align-items: center;
@@ -148,6 +149,20 @@
     transition:
         color var(--toc-transition-fast),
         background var(--toc-transition-fast);
+}
+
+/* 命中区扩展：视觉仍是 18px，但可点区域放大到 40×28。
+   行高 30px 且行间无间隙，纵向无法再放大——44px 会与上下行的同列
+   折叠按钮命中区重叠，反而制造误触（碰撞规则优先于理想尺寸）。
+   横向 40px 在 .kind-icon(18px) 与 .node-select-button 之前收住。 */
+.tree-toggle::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 40px;
+    height: 28px;
+    transform: translate(-50%, -50%);
 }
 
 .tree-toggle:hover {

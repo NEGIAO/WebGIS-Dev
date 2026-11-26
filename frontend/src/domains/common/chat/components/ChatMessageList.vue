@@ -500,7 +500,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    transition: all 0.15s;
+    transition: background, border-radius, color, height, width 0.15s;
 }
 
 .action-btn:hover {
@@ -665,7 +665,7 @@
     padding: 6px 12px;
     font-size: 12px;
     cursor: pointer;
-    transition: all 0.15s;
+    transition: background, border-radius, color, font-size, padding 0.15s;
 }
 
 .suggestion-chip:hover {
@@ -695,7 +695,7 @@
     color: var(--text-secondary);
     cursor: pointer;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.14);
-    transition: all 0.15s;
+    transition: backdrop-filter, background, border-radius, bottom, box-shadow, color, height, right, width 0.15s;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -1082,7 +1082,7 @@
     font-weight: 500;
     line-height: 1.4;
     cursor: pointer;
-    transition: all 0.2s;
+    transition: background, border-radius, color, font-size, font-weight, line-height, opacity, padding, right, top 0.2s;
     opacity: 0;
     z-index: 2;
     box-sizing: border-box;

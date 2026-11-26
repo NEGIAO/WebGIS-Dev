@@ -329,7 +329,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    transition: background, border-radius, color, height, padding, width 0.2s cubic-bezier(0.4, 0, 0.2, 1);
     padding: 0;
     border-radius: 2px;
 }
@@ -427,7 +427,7 @@
     align-items: center;
     justify-content: center;
     cursor: pointer;
-    transition: all 0.2s;
+    transition: background, border-color, border-radius, box-shadow, color, height, padding, width 0.2s;
 }
 
 .nav-dialog-close:hover {
@@ -459,7 +459,7 @@
     color: #e8f6ff;
     cursor: pointer;
     text-align: left;
-    transition: all 0.25s cubic-bezier(0.25, 0.8, 0.25, 1);
+    transition: background, border-radius, color, gap, padding, width 0.25s cubic-bezier(0.25, 0.8, 0.25, 1);
 }
 
 /* 选项卡左侧呼吸边条 */
@@ -500,7 +500,7 @@
     background: rgba(0, 210, 255, 0.08);
     border: 1px solid rgba(0, 210, 255, 0.15);
     color: #00d2ff;
-    transition: all 0.2s;
+    transition: background, border-radius, color, font-size, height, width 0.2s;
 }
 
 .nav-option:hover .nav-option-icon {
@@ -537,7 +537,7 @@
     border-top: 2px solid rgba(0, 210, 255, 0.4);
     border-right: 2px solid rgba(0, 210, 255, 0.4);
     transform: rotate(45deg);
-    transition: all 0.2s;
+    transition: height, transform, width 0.2s;
 }
 
 .nav-option:hover .nav-option-arrow {
@@ -550,15 +550,15 @@
    ========================================================================== */
 .nav-dialog-fade-enter-active,
 .nav-dialog-fade-leave-active {
-    transition: all 0.3s cubic-bezier(0.19, 1, 0.22, 1);
+    transition: opacity 0.3s cubic-bezier(0.19, 1, 0.22, 1);
 }
 
 .nav-dialog-fade-enter-active .nav-dialog {
-    transition: all 0.3s cubic-bezier(0.19, 1, 0.22, 1);
+    transition: background-color, border-color, box-shadow, color, opacity, transform 0.3s cubic-bezier(0.19, 1, 0.22, 1);
 }
 
 .nav-dialog-fade-leave-active .nav-dialog {
-    transition: all 0.2s cubic-bezier(0.19, 1, 0.22, 1);
+    transition: background-color, border-color, box-shadow, color, opacity, transform 0.2s cubic-bezier(0.19, 1, 0.22, 1);
 }
 
 /* 结合了透明度和缩放（Scale）的入场，极具大屏系统展开感 */

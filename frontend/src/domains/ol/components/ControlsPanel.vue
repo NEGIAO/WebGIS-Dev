@@ -243,7 +243,7 @@
     min-height: 60px;
     /* 使用 min-height 确保高度 */
     cursor: pointer;
-    transition: all 0.3s ease;
+    transition: background, box-shadow, color 0.3s ease;
     border-radius: var(--panel-radius);
     color: var(--brand-accent-muted);
 }
@@ -376,7 +376,7 @@
     background: white;
     color: var(--brand-accent-muted);
     cursor: pointer;
-    transition: all 0.2s;
+    transition: background, border-radius, color, font-size, font-weight, padding, width 0.2s;
     font-weight: 500;
 }
 
@@ -420,7 +420,7 @@
     font-weight: 600;
     font-size: 13px;
     cursor: pointer;
-    transition: all 0.2s;
+    transition: background, border-color, box-shadow, color 0.2s;
 }
 
 .mode-btn:hover {
@@ -450,7 +450,7 @@
     font-size: 13px;
     font-weight: 600;
     cursor: pointer;
-    transition: all 0.2s;
+    transition: border-radius, font-size, font-weight, padding 0.2s;
 }
 
 .cancel-btn {

@@ -708,7 +708,6 @@
     padding: 20px 0 0;
     border: none !important;
     background: transparent !important;
-    will-change: contents, width;
 }
 
 /* line 模式兜底（bar:false） */

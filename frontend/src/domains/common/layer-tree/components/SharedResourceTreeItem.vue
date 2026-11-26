@@ -173,7 +173,7 @@
 }
 
 .shared-tree-file-btn:active {
-    transform: scale(0.98);
+    transform: scale(0.96);
 }
 
 .shared-tree-type {

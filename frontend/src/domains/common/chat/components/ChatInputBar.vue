@@ -122,7 +122,7 @@ textarea::placeholder {
     align-items: center;
     justify-content: center;
     flex-shrink: 0;
-    transition: all 0.18s ease;
+    transition: border-radius, height, width 0.18s ease;
 }
 
 .send-btn {

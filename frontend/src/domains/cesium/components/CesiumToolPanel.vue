@@ -1208,7 +1208,7 @@
     border: 1px solid rgba(var(--brand-primary-rgb), 0.14);
     border-radius: 8px;
     background: #fff;
-    transition: all 0.2s ease;
+    transition: background, border-color, box-shadow 0.2s ease;
 }
 
 /* 与 .module-card 统一：点击展开后菜单级高亮 */
@@ -1299,7 +1299,7 @@
     cursor: pointer;
     font-size: 11px;
     font-weight: 600;
-    transition: all 0.15s ease;
+    transition: background, border-color, box-shadow, color 0.15s ease;
 }
 
 .option-card:hover:not(:disabled) {
@@ -1566,7 +1566,7 @@
     border-radius: 7px;
     background: #fff;
     overflow: hidden;
-    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    transition: background, border-color, box-shadow 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .overlay-card:hover {
@@ -1603,7 +1603,7 @@
     border-radius: 50%;
     background: rgba(15, 23, 42, 0.18);
     flex-shrink: 0;
-    transition: all 0.2s ease;
+    transition: background, box-shadow 0.2s ease;
 }
 
 .overlay-status-dot.active {
@@ -1653,7 +1653,7 @@
     background: rgba(var(--brand-primary-rgb), 0.05);
     color: rgba(var(--ctp-ice-text-rgb), 0.6);
     cursor: pointer;
-    transition: all 0.15s ease;
+    transition: background, border-radius, color, height, width 0.15s ease;
 }
 
 .overlay-action-btn:hover {
@@ -1766,7 +1766,7 @@
     border-radius: 8px;
     background: rgba(var(--brand-primary-rgb), 0.05);
     cursor: pointer;
-    transition: all 0.2s ease;
+    transition: background, border-radius 0.2s ease;
 }
 
 .data-upload-area:hover {
@@ -1937,7 +1937,7 @@
 }
 
 .scene-sample-menu-item:active {
-    transform: translateX(2px) scale(0.98);
+    transform: translateX(2px) scale(0.96);
 }
 
 

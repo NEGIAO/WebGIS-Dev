@@ -128,6 +128,8 @@
     font-size: 2rem;
     font-weight: 700;
     color: var(--text-primary);
+    /* 短标题均衡断行，避免末行孤字（与 hero-title 的处理保持一致） */
+    text-wrap: balance;
     /* 字体双轨（借鉴南师大：标题用衬线宋体、正文用无衬线，形成"编辑感"对比）。
        中文落 Noto Serif SC / Songti SC / SimSun，英文落 Cinzel / Cormorant */
     font-family: var(--font-serif);

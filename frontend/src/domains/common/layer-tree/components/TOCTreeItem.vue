@@ -291,7 +291,7 @@
     gap: var(--toc-spacing-sm);
     border-radius: var(--toc-radius-md);
     padding: var(--toc-spacing-xs) var(--toc-spacing-md) var(--toc-spacing-xs) calc(6px + (var(--node-level, 0) * 18px));
-    transition: all var(--toc-transition-normal);
+    transition: background, background-color, box-shadow var(--toc-transition-normal);
     cursor: pointer;
     user-select: none;
 }
@@ -439,7 +439,7 @@
 }
 
 .visibility-btn:active {
-    transform: scale(0.9);
+    transform: scale(0.96);
 }
 
 .visibility-btn.off {
@@ -456,7 +456,7 @@
     display: flex;
     align-items: center;
     gap: 7px;
-    transition: all var(--toc-transition-normal);
+    transition: gap var(--toc-transition-normal);
 }
 
 .name {
@@ -496,7 +496,7 @@
     border-radius: 999px;
     padding: 1px 7px;
     line-height: 14px;
-    transition: all var(--toc-transition-normal);
+    transition: background, border-radius, color, font-size, line-height, padding var(--toc-transition-normal);
 }
 
 .toc-row:hover .feature-badge {
@@ -539,7 +539,7 @@
 }
 
 .more-btn:active {
-    transform: scale(0.92);
+    transform: scale(0.96);
 }
 
 .toc-row:hover .more-btn,
@@ -621,7 +621,7 @@
     padding: var(--toc-spacing-md) 10px;
     font-size: var(--toc-font-sm);
     cursor: pointer;
-    transition: all var(--toc-transition-fast);
+    transition: background, color var(--toc-transition-fast);
 }
 
 .menu-icon {
@@ -640,7 +640,7 @@
 }
 
 .menu-item:active {
-    transform: scale(0.98);
+    transform: scale(0.96);
 }
 
 .menu-item.danger {

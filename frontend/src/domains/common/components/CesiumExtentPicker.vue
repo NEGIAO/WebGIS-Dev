@@ -76,7 +76,7 @@
     font-size: 11px;
     font-weight: 500;
     cursor: pointer;
-    transition: all 0.2s;
+    transition: background, border-radius, color, font-size, font-weight, gap, padding 0.2s;
     border: 1px solid var(--brand-accent);
     background: var(--bg-hover, #f0f7f0);
     color: var(--brand-accent-muted, #2d8a4e);

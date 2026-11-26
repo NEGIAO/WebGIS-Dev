@@ -109,7 +109,7 @@
     background: white;
     color: var(--brand-accent-muted);
     cursor: pointer;
-    transition: all 0.2s;
+    transition: background, border-color, box-shadow, color 0.2s;
 }
 
 .tool-btn:hover {
@@ -144,7 +144,7 @@
     font-size: 12px;
     font-weight: 500;
     cursor: pointer;
-    transition: all 0.2s;
+    transition: border-radius, font-size, font-weight, gap, padding, width 0.2s;
 }
 
 .clear-btn {

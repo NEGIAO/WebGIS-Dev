@@ -62,7 +62,7 @@
                         >
                             <ChevronRight
                                 :size="16"
-                                :stroke-width="2.2"
+                                :stroke-width="2"
                             />
                         </button>
                     </div>
@@ -140,7 +140,7 @@
         >
             <House
                 :size="18"
-                :stroke-width="1.8"
+                :stroke-width="2"
             />
         </button>
     </div>
@@ -163,7 +163,7 @@
     border-radius: 9999px;
     color: var(--mc-text);
     white-space: nowrap;
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    transition: border-radius, gap, max-width, padding 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     background: rgba(255, 255, 255, 0.92);
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
@@ -186,7 +186,7 @@
     justify-content: space-between;
     gap: 8px;
     cursor: text;
-    transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    transition: background, border-color, box-shadow 0.25s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .coordinate-display:hover {
@@ -235,7 +235,7 @@
 }
 
 .coord-toggle-btn:active {
-    transform: scale(0.94);
+    transform: scale(0.96);
 }
 
 .coord-toggle-btn svg {
@@ -394,7 +394,7 @@
     background: transparent;
     cursor: pointer;
     text-align: left;
-    transition: all 0.15s ease;
+    transition: background, border-color 0.15s ease;
 }
 
 .format-option:hover {
@@ -447,7 +447,7 @@
     font-size: 12px;
     font-weight: 600;
     color: var(--toc-text-secondary);
-    transition: all 0.15s ease;
+    transition: background, border-color, box-shadow, color 0.15s ease;
 }
 
 .decimal-option:hover {
@@ -550,7 +550,7 @@
 }
 
 .home-btn:active {
-    transform: scale(0.94);
+    transform: scale(0.96);
 }
 
 @keyframes home-button-ripple {

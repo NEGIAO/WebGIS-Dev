@@ -273,7 +273,7 @@
     cursor: pointer;
     font-size: 13px;
     font-weight: 700;
-    transition: all 0.18s ease;
+    transition: border-radius, font-size, font-weight, gap, height 0.18s ease;
 }
 
 .cancel-btn {

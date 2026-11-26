@@ -446,7 +446,7 @@
     background: white;
     color: var(--brand-accent-muted);
     cursor: pointer;
-    transition: all 0.2s;
+    transition: background, border-color, box-shadow, color 0.2s;
     text-align: left;
 }
 
@@ -563,7 +563,7 @@
     color: var(--brand-accent-muted);
     font-size: 11px;
     cursor: pointer;
-    transition: all 0.2s;
+    transition: background, border-radius, color, font-size, gap, margin-top, padding 0.2s;
 }
 
 .fetch-bbox-btn:hover:not(:disabled) {
@@ -591,7 +591,7 @@
     font-size: 12px;
     font-weight: 500;
     cursor: pointer;
-    transition: all 0.2s;
+    transition: background, border-color, box-shadow, color 0.2s;
 }
 
 .mode-btn:hover {
@@ -619,7 +619,7 @@
     font-size: 13px;
     font-weight: 600;
     cursor: pointer;
-    transition: all 0.2s;
+    transition: background, border-radius, color, font-size, font-weight, gap, padding 0.2s;
 }
 
 .run-btn:hover:not(:disabled) {

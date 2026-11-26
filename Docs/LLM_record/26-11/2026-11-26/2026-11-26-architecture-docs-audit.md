@@ -147,3 +147,9 @@ flowchart LR
 - `backend/api/location.py:354-355` 代码注释仍称 `visit_tracking`「保留不删」，与已删除事实不一致；文档已标注，代码未改（越出本次范围）。
 - viewScale 无自动化往返测试，文档已标「待建」。
 - 核查期间工作区存在同日并行改动（用户新增日志/代码文件、部分改动已暂存）；本任务未触碰这些文件，版本号按用户明确指令并入 V3.7.14，未单独升号。
+
+## 零散修补（L1）
+
+- 2026-11-26 17:09 安装用户指定的外部 skill `make-interfaces-feel-better`（纯 Markdown 规则，无脚本，装于 `~/.workbuddy/skills/`），按其「显式过渡属性 / 标题平衡断行 / 正文防孤行」原则收敛 LandingView：三处 `transition: all 0.2s ease` 改为按实际 hover 属性列举的过渡；`.cta-card h3` 加 `text-wrap: balance`、`.cta-card p` 加 `text-wrap: pretty`。
+- 等级 L1：单文件、纯 CSS、无版本号变更；`npx eslint src/app/LandingView.vue` EXIT=0，`npx vue-tsc --noEmit` EXIT=0。
+- 范围规避：核查期间 `theme.css` / `ui-panel-theme.css` / `Message.vue` / `AdministrativeDivisionTreeNode.vue` 正被并行会话修改，本任务未触碰；LandingView 未发现并行改动。

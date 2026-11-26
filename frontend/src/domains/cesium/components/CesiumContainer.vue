@@ -306,7 +306,7 @@
 }
 
 .coord-toggle-btn:active {
-    transform: scale(0.94);
+    transform: scale(0.96);
 }
 
 .coord-toggle-btn svg {
@@ -487,7 +487,7 @@
 }
 
 .home-btn:active {
-    transform: scale(0.94);
+    transform: scale(0.96);
 }
 
 @media (pointer: coarse) {

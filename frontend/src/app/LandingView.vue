@@ -2072,6 +2072,8 @@ button:focus-visible {
     font-size: 1.05rem;
     line-height: 1.8;
     color: var(--text-secondary);
+    /* 中短段落：避免末行孤字，不使用有行数上限的 balance */
+    text-wrap: pretty;
 }
 
 .hero-actions {
@@ -2183,7 +2185,11 @@ button:focus-visible {
     text-decoration: none;
     font-weight: 600;
     font-size: 1rem;
-    transition: all 0.2s ease;
+    transition:
+        color 0.2s ease,
+        filter 0.2s ease,
+        box-shadow 0.2s ease,
+        transform 0.2s ease;
 }
 
 .btn-large {
@@ -3370,7 +3376,11 @@ button:focus-visible {
     font-weight: 600;
     font-size: 0.9rem;
     text-decoration: none;
-    transition: all 0.2s ease;
+    transition:
+        color 0.2s ease,
+        filter 0.2s ease,
+        box-shadow 0.2s ease,
+        transform 0.2s ease;
 }
 
 /* 数值小徽章：绿色实心按钮内用半透明白，描边按钮内用浅灰底 */
@@ -3549,6 +3559,7 @@ button:focus-visible {
     font-size: 1.6rem;
     font-weight: 700;
     color: var(--text-primary);
+    text-wrap: balance;
 }
 
 .cta-card p {
@@ -3558,6 +3569,7 @@ button:focus-visible {
     font-size: 0.95rem;
     line-height: 1.7;
     color: var(--text-secondary);
+    text-wrap: pretty;
 }
 
 .btn-cta {
@@ -3573,7 +3585,10 @@ button:focus-visible {
     font-weight: 700;
     font-size: 1rem;
     box-shadow: 0 4px 16px rgba(var(--brand-primary-rgb), 0.35);
-    transition: all 0.2s ease;
+    transition:
+        filter 0.2s ease,
+        box-shadow 0.2s ease,
+        transform 0.2s ease;
 }
 
 .btn-cta:hover {

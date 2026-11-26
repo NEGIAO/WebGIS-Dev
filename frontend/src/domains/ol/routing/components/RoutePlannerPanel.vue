@@ -9,12 +9,12 @@
                 <Bus
                     v-if="mode === 'bus'"
                     :size="16"
-                    :stroke-width="1.9"
+                    :stroke-width="2"
                 />
                 <Car
                     v-else
                     :size="16"
-                    :stroke-width="1.9"
+                    :stroke-width="2"
                 />
             </span>
             <div class="heading">
@@ -30,7 +30,7 @@
             >
                 <X
                     :size="14"
-                    :stroke-width="2.2"
+                    :stroke-width="2"
                 />
             </button>
         </div>
@@ -380,7 +380,7 @@
 }
 
 .close-btn:active {
-    transform: scale(0.94);
+    transform: scale(0.96);
 }
 
 /* ===== 策略条 ===== */
