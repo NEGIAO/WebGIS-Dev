@@ -375,6 +375,258 @@ export const BASEMAP_PRESETS: BasemapPresetDefinition[] = [
         label: '高德简洁底图+纯道路（WGS）',
         stack: ['vector_amap_clean_wgs', 'vector_amap_roads_wgs'],
     },
+    // 高德 256px 电子底图 ltype 常用组合（GCJ + WGS），逐条显式声明，追加在末尾保持 URL l 索引不变
+    {
+        id: 'vector_amap_256_ltype_1_gcj_preset',
+        label: '高德256 地貌(GCJ)',
+        stack: ['vector_amap_256_ltype_1_gcj'],
+    },
+    {
+        id: 'vector_amap_256_ltype_1_wgs_preset',
+        label: '高德256 地貌(WGS)',
+        stack: ['vector_amap_256_ltype_1_wgs'],
+    },
+    {
+        id: 'vector_amap_256_ltype_2_gcj_preset',
+        label: '高德256 路网(GCJ)',
+        stack: ['vector_amap_256_ltype_2_gcj'],
+    },
+    {
+        id: 'vector_amap_256_ltype_2_wgs_preset',
+        label: '高德256 路网(WGS)',
+        stack: ['vector_amap_256_ltype_2_wgs'],
+    },
+    {
+        id: 'vector_amap_256_ltype_3_gcj_preset',
+        label: '高德256 地貌+路网(GCJ)',
+        stack: ['vector_amap_256_ltype_3_gcj'],
+    },
+    {
+        id: 'vector_amap_256_ltype_3_wgs_preset',
+        label: '高德256 地貌+路网(WGS)',
+        stack: ['vector_amap_256_ltype_3_wgs'],
+    },
+    {
+        id: 'vector_amap_256_ltype_4_gcj_preset',
+        label: '高德256 注记(GCJ)',
+        stack: ['vector_amap_256_ltype_4_gcj'],
+    },
+    {
+        id: 'vector_amap_256_ltype_4_wgs_preset',
+        label: '高德256 注记(WGS)',
+        stack: ['vector_amap_256_ltype_4_wgs'],
+    },
+    {
+        id: 'vector_amap_256_ltype_5_gcj_preset',
+        label: '高德256 地貌+注记(GCJ)',
+        stack: ['vector_amap_256_ltype_5_gcj'],
+    },
+    {
+        id: 'vector_amap_256_ltype_5_wgs_preset',
+        label: '高德256 地貌+注记(WGS)',
+        stack: ['vector_amap_256_ltype_5_wgs'],
+    },
+    {
+        id: 'vector_amap_256_ltype_6_gcj_preset',
+        label: '高德256 路网+注记(GCJ)',
+        stack: ['vector_amap_256_ltype_6_gcj'],
+    },
+    {
+        id: 'vector_amap_256_ltype_6_wgs_preset',
+        label: '高德256 路网+注记(WGS)',
+        stack: ['vector_amap_256_ltype_6_wgs'],
+    },
+    {
+        id: 'vector_amap_256_ltype_7_gcj_preset',
+        label: '高德256 地貌+路网+注记(GCJ)',
+        stack: ['vector_amap_256_ltype_7_gcj'],
+    },
+    {
+        id: 'vector_amap_256_ltype_7_wgs_preset',
+        label: '高德256 地貌+路网+注记(WGS)',
+        stack: ['vector_amap_256_ltype_7_wgs'],
+    },
+    {
+        id: 'vector_amap_256_ltype_8_gcj_preset',
+        label: '高德256 建筑(GCJ)',
+        stack: ['vector_amap_256_ltype_8_gcj'],
+    },
+    {
+        id: 'vector_amap_256_ltype_8_wgs_preset',
+        label: '高德256 建筑(WGS)',
+        stack: ['vector_amap_256_ltype_8_wgs'],
+    },
+    {
+        id: 'vector_amap_256_ltype_11_gcj_preset',
+        label: '高德256 地貌+路网+建筑(GCJ)',
+        stack: ['vector_amap_256_ltype_11_gcj'],
+    },
+    {
+        id: 'vector_amap_256_ltype_11_wgs_preset',
+        label: '高德256 地貌+路网+建筑(WGS)',
+        stack: ['vector_amap_256_ltype_11_wgs'],
+    },
+    {
+        id: 'vector_amap_256_ltype_15_gcj_preset',
+        label: '高德256 全要素(GCJ)',
+        stack: ['vector_amap_256_ltype_15_gcj'],
+    },
+    {
+        id: 'vector_amap_256_ltype_15_wgs_preset',
+        label: '高德256 全要素(WGS)',
+        stack: ['vector_amap_256_ltype_15_wgs'],
+    },
+    // Google 全组合（依据 Google_tiles.md）：GCJ 原生与 WGS 原生均提供两种坐标格式，追加在末尾保持 l 索引不变
+    {
+        id: 'vector_google_combo_standard_gcj_preset',
+        label: 'Google标准电子(GCJ)',
+        stack: ['vector_google_combo_standard_gcj'],
+    },
+    {
+        id: 'vector_google_combo_standard_wgs_preset',
+        label: 'Google标准电子(WGS)',
+        stack: ['vector_google_combo_standard_wgs'],
+    },
+    {
+        id: 'vector_google_combo_hybrid_gcj_preset',
+        label: 'Google混合影像(GCJ)',
+        stack: ['vector_google_combo_hybrid_gcj'],
+    },
+    {
+        id: 'vector_google_combo_hybrid_wgs_preset',
+        label: 'Google混合影像(WGS)',
+        stack: ['vector_google_combo_hybrid_wgs'],
+    },
+    {
+        id: 'vector_google_combo_labels_gcj_preset',
+        label: 'Google仅注记(GCJ)',
+        stack: ['vector_google_combo_labels_gcj'],
+    },
+    {
+        id: 'vector_google_combo_labels_wgs_preset',
+        label: 'Google仅注记(WGS)',
+        stack: ['vector_google_combo_labels_wgs'],
+    },
+    {
+        id: 'vector_google_combo_road_labeled_gcj_preset',
+        label: 'Google纯路网含注记(GCJ)',
+        stack: ['vector_google_combo_road_labeled_gcj'],
+    },
+    {
+        id: 'vector_google_combo_road_labeled_wgs_preset',
+        label: 'Google纯路网含注记(WGS)',
+        stack: ['vector_google_combo_road_labeled_wgs'],
+    },
+    {
+        id: 'vector_google_combo_road_skeleton_gcj_preset',
+        label: 'Google纯路网骨架(GCJ)',
+        stack: ['vector_google_combo_road_skeleton_gcj'],
+    },
+    {
+        id: 'vector_google_combo_road_skeleton_wgs_preset',
+        label: 'Google纯路网骨架(WGS)',
+        stack: ['vector_google_combo_road_skeleton_wgs'],
+    },
+    {
+        id: 'vector_google_combo_road_text_gcj_preset',
+        label: 'Google纯路网注记(GCJ)',
+        stack: ['vector_google_combo_road_text_gcj'],
+    },
+    {
+        id: 'vector_google_combo_road_text_wgs_preset',
+        label: 'Google纯路网注记(WGS)',
+        stack: ['vector_google_combo_road_text_wgs'],
+    },
+    {
+        id: 'vector_google_combo_water_gcj_preset',
+        label: 'Google纯水体(GCJ)',
+        stack: ['vector_google_combo_water_gcj'],
+    },
+    {
+        id: 'vector_google_combo_water_wgs_preset',
+        label: 'Google纯水体(WGS)',
+        stack: ['vector_google_combo_water_wgs'],
+    },
+    {
+        id: 'vector_google_combo_pb_roadmap_gcj_preset',
+        label: 'GooglePB标准电子(GCJ)',
+        stack: ['vector_google_combo_pb_roadmap_gcj'],
+    },
+    {
+        id: 'vector_google_combo_pb_roadmap_wgs_preset',
+        label: 'GooglePB标准电子(WGS)',
+        stack: ['vector_google_combo_pb_roadmap_wgs'],
+    },
+    {
+        id: 'vector_google_combo_pb_roadline_gcj_preset',
+        label: 'GooglePB纯路网(GCJ)',
+        stack: ['vector_google_combo_pb_roadline_gcj'],
+    },
+    {
+        id: 'vector_google_combo_pb_roadline_wgs_preset',
+        label: 'GooglePB纯路网(WGS)',
+        stack: ['vector_google_combo_pb_roadline_wgs'],
+    },
+    {
+        id: 'vector_google_combo_satellite_wgs_preset',
+        label: 'Google纯卫星(WGS)',
+        stack: ['vector_google_combo_satellite_wgs'],
+    },
+    {
+        id: 'vector_google_combo_satellite_gcj_preset',
+        label: 'Google纯卫星(GCJ)',
+        stack: ['vector_google_combo_satellite_gcj'],
+    },
+    {
+        id: 'vector_google_combo_terrain_wgs_preset',
+        label: 'Google纯地形(WGS)',
+        stack: ['vector_google_combo_terrain_wgs'],
+    },
+    {
+        id: 'vector_google_combo_terrain_gcj_preset',
+        label: 'Google纯地形(GCJ)',
+        stack: ['vector_google_combo_terrain_gcj'],
+    },
+    {
+        id: 'vector_google_combo_terrain_hybrid_wgs_preset',
+        label: 'Google地形混合(WGS)',
+        stack: ['vector_google_combo_terrain_hybrid_wgs'],
+    },
+    {
+        id: 'vector_google_combo_terrain_hybrid_gcj_preset',
+        label: 'Google地形混合(GCJ)',
+        stack: ['vector_google_combo_terrain_hybrid_gcj'],
+    },
+    {
+        id: 'vector_google_combo_clean_terrain_wgs_preset',
+        label: 'Google干净地形(WGS)',
+        stack: ['vector_google_combo_clean_terrain_wgs'],
+    },
+    {
+        id: 'vector_google_combo_clean_terrain_gcj_preset',
+        label: 'Google干净地形(GCJ)',
+        stack: ['vector_google_combo_clean_terrain_gcj'],
+    },
+    {
+        id: 'vector_google_combo_clean_terrain_no_road_wgs_preset',
+        label: 'Google干净地形无路(WGS)',
+        stack: ['vector_google_combo_clean_terrain_no_road_wgs'],
+    },
+    {
+        id: 'vector_google_combo_clean_terrain_no_road_gcj_preset',
+        label: 'Google干净地形无路(GCJ)',
+        stack: ['vector_google_combo_clean_terrain_no_road_gcj'],
+    },
+    {
+        id: 'vector_google_combo_pb_hillshade_wgs_preset',
+        label: 'GooglePB山体阴影(WGS)',
+        stack: ['vector_google_combo_pb_hillshade_wgs'],
+    },
+    {
+        id: 'vector_google_combo_pb_hillshade_gcj_preset',
+        label: 'GooglePB山体阴影(GCJ)',
+        stack: ['vector_google_combo_pb_hillshade_gcj'],
+    },
 ];
 
 /** Preset labels use the public 1-based URL layer number. */

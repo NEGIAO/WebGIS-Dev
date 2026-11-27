@@ -33,6 +33,7 @@
 | 文件 | 状态 | 一句话 | 已完成 / 待做 |
 |---|:---:|---|---|
 | `bugfix-optimization-plan.md` | 🟢 活跃 | **滚动修复主规划**（P0–P3 分级），所有「顺带发现」的登记处 | 136 项待办，持续勾选 |
+| `2026-11-27-basemap-catalog-requirements.md` | 🟢 已实施 | **底图系统重构需求整理**：常驻搜索、三级菜单、图层属性定义、OL/Cesium 共享管理 | 方案与实施记录见 `Architecture/basemap-catalog-redesign.md` |
 | `guest-identity-governance-plan.md` | 🔵 实施中 | 游客身份治理：require_login fail-closed + 服务端签发游客 token（限频）+ 废随机 uid + 记录 90 天清理（P1-4 三项打包，V3.7.6 已落地） | 实机八步验证待用户（含 HF Secrets 配置 `GUEST_TOKEN_SECRET`） |
 | `2026-11-08-per-model-terrain-clamp-plan.md` | 🟡 待批准 | 3D Tiles 与多模型 GLB 逐体按真实地形高程贴地引擎（L3 架构） | 待用户批准后施工 |
 | `account-panel-ui-optimization.md` | 🔵 实施中 | 账号面板 UI 优化 | 2 项已做 / 8 项待做 |

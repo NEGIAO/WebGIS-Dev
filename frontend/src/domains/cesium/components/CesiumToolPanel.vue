@@ -268,30 +268,143 @@
                             v-if="isLayerSectionExpanded('basemap')"
                             class="section-body"
                         >
-                            <div class="option-grid">
+                            <div class="catalog-search-bar">
+                                <Search
+                                    :size="14"
+                                    stroke-width="2"
+                                />
+                                <input
+                                    v-model="basemapQuery"
+                                    class="catalog-search-input"
+                                    placeholder="搜索编号 / ID / 名称 / 服务商 / 坐标系"
+                                />
                                 <button
-                                    v-for="option in basemapOptions"
-                                    :key="option.value"
-                                    class="option-card"
-                                    :class="{ active: option.value === activeBasemap }"
+                                    v-if="isSearchActive"
                                     type="button"
-                                    :disabled="option.disabled"
-                                    :aria-pressed="option.value === activeBasemap"
-                                    :title="option.description || option.label"
-                                    @click="selectBasemapOption(option)"
+                                    class="close-search-btn"
+                                    aria-label="清空搜索"
+                                    @click="basemapQuery = ''"
                                 >
-                                    <span class="option-card-label">
-                                        <span class="preset-index">{{ option.label.split(' ')[0] }}</span>
-                                        <span class="preset-name">{{ option.label.slice(option.label.indexOf(' ') + 1) }}</span>
-                                    </span>
-                                    <Check
-                                        v-if="option.value === activeBasemap"
-                                        class="option-card-check"
-                                        :size="14"
-                                        stroke-width="2.5"
+                                    <X
+                                        :size="13"
+                                        stroke-width="2.2"
                                     />
                                 </button>
                             </div>
+
+                            <template v-if="isSearchActive">
+                                <div v-if="!searchResults.length" class="catalog-empty">没有匹配的底图</div>
+                                <div class="option-grid">
+                                    <button
+                                        v-for="entry in searchResults"
+                                        :key="`${entry.id}:${entry.customUrl || ''}`"
+                                        class="option-card catalog-result"
+                                        :class="{ active: entry.id === activeBasemap }"
+                                        type="button"
+                                        :title="entryTitle(entry)"
+                                        @click="selectCatalogEntry(entry)"
+                                    >
+                                        <span class="option-card-label">
+                                            <span class="preset-index">{{ entry.number || '—' }}</span>
+                                            <span class="preset-name">{{ entry.label }}</span>
+                                        </span>
+                                        <span class="catalog-crumb">{{ categoryLabel(entry.category) }} / {{ entry.provider }} / {{ coordLabel(entry.coord) }}</span>
+                                    </button>
+                                </div>
+                            </template>
+
+                            <template v-else>
+                                <div v-for="cat in catalogTree" :key="cat.category" class="catalog-category-group">
+                                    <button
+                                        type="button"
+                                        class="section-head section-toggle catalog-category-toggle"
+                                        :aria-expanded="cat.category === 'service' ? undefined : isCategoryOpen(cat.category)"
+                                        @click="cat.category === 'service' ? activateCustomBasemap() : toggleCategory(cat.category)"
+                                    >
+                                        <span class="section-main">{{ categoryLabel(cat.category) }}</span>
+                                        <ChevronDown
+                                            v-if="cat.category !== 'service'"
+                                            class="section-chevron"
+                                            :class="{ open: isCategoryOpen(cat.category) }"
+                                            :size="14"
+                                            stroke-width="2.2"
+                                        />
+                                        <span v-else class="catalog-trigger-hint">输入 URL</span>
+                                    </button>
+                                    <template v-if="cat.category !== 'service' && isCategoryOpen(cat.category)">
+                                        <template v-if="cat.category === 'recommended'">
+                                            <div class="option-grid">
+                                                <button
+                                                    v-for="entry in cat.entries || []"
+                                                    :key="entry.id"
+                                                    class="option-card catalog-entry"
+                                                    :class="{ active: entry.id === activeBasemap }"
+                                                    type="button"
+                                                    :title="entryTitle(entry)"
+                                                    @click="selectCatalogEntry(entry)"
+                                                >
+                                                    <span class="option-card-label">
+                                                        <span class="preset-index">{{ entry.number }}</span>
+                                                        <span class="preset-name">{{ entry.label }}</span>
+                                                    </span>
+                                                </button>
+                                            </div>
+                                        </template>
+                                        <template v-else>
+                                            <div v-for="prov in cat.providers" :key="prov.provider" class="catalog-provider-group">
+                                                <button
+                                                    type="button"
+                                                    class="section-head section-toggle catalog-provider-toggle"
+                                                    :aria-expanded="isProviderOpen(cat.category, prov.provider)"
+                                                    @click="toggleProvider(cat.category, prov.provider)"
+                                                >
+                                                    <span class="section-main">{{ prov.provider }}</span>
+                                                    <ChevronRight
+                                                        class="section-chevron"
+                                                        :class="{ open: isProviderOpen(cat.category, prov.provider) }"
+                                                        :size="13"
+                                                        stroke-width="2.2"
+                                                    />
+                                                </button>
+                                                <template v-if="isProviderOpen(cat.category, prov.provider)">
+                                                    <div v-for="coord in prov.coords" :key="coord.coord" class="catalog-coord-group">
+                                                        <button
+                                                            type="button"
+                                                            class="section-head section-toggle catalog-coord-toggle"
+                                                            :aria-expanded="isCoordOpen(cat.category, prov.provider, coord.coord)"
+                                                            @click="toggleCoord(cat.category, prov.provider, coord.coord)"
+                                                        >
+                                                            <span class="section-main">{{ coordLabel(coord.coord) }}</span>
+                                                            <ChevronRight
+                                                                class="section-chevron"
+                                                                :class="{ open: isCoordOpen(cat.category, prov.provider, coord.coord) }"
+                                                                :size="13"
+                                                                stroke-width="2.2"
+                                                            />
+                                                        </button>
+                                                        <div v-if="isCoordOpen(cat.category, prov.provider, coord.coord)" class="option-grid">
+                                                            <button
+                                                                v-for="entry in coord.entries"
+                                                                :key="`${entry.id}:${entry.customUrl || ''}`"
+                                                                class="option-card catalog-entry"
+                                                                :class="{ active: entry.id === activeBasemap }"
+                                                                type="button"
+                                                                :title="entryTitle(entry)"
+                                                                @click="selectCatalogEntry(entry)"
+                                                            >
+                                                                <span class="option-card-label">
+                                                                    <span class="preset-index">{{ entry.number || '—' }}</span>
+                                                                    <span class="preset-name">{{ entry.label }}</span>
+                                                                </span>
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                </template>
+                                            </div>
+                                        </template>
+                                    </template>
+                                </div>
+                            </template>
 
                             <!-- 自定义 XYZ 图层输入 -->
                             <form
@@ -1267,6 +1380,97 @@
 
 .option-group.expanded .section-chevron {
     transform: rotate(180deg);
+}
+
+.combo-provider-toggle {
+    margin-top: 4px;
+}
+
+.combo-coord-toggle {
+    padding-left: 22px;
+    font-size: 11px;
+}
+
+.combo-provider-toggle .section-chevron.open,
+.combo-coord-toggle .section-chevron.open {
+    transform: rotate(90deg);
+}
+
+.combo-option .preset-index {
+    min-width: 26px;
+    text-align: right;
+}
+
+.catalog-search-bar {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 6px;
+    border: 1px solid rgba(var(--brand-primary-rgb), 0.14);
+    border-radius: 6px;
+    background: #ffffff;
+}
+
+.catalog-search-input {
+    flex: 1;
+    min-width: 0;
+    border: 0;
+    outline: none;
+    font-size: 11px;
+    color: var(--text-primary);
+}
+
+.close-search-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    border: 0;
+    border-radius: 50%;
+    background: transparent;
+    color: var(--text-secondary);
+    cursor: pointer;
+}
+
+.catalog-empty {
+    padding: 10px;
+    color: var(--text-secondary);
+    font-size: 11px;
+    text-align: center;
+}
+
+.catalog-category-toggle .section-chevron.open {
+    transform: rotate(180deg);
+}
+
+.catalog-trigger-hint {
+    color: var(--text-secondary);
+    font-size: 10px;
+    font-weight: normal;
+}
+
+.catalog-provider-group .section-chevron.open,
+.catalog-coord-group .section-chevron.open {
+    transform: rotate(90deg);
+}
+
+.catalog-result {
+    min-height: 46px;
+    align-items: flex-start;
+    flex-wrap: wrap;
+}
+
+.catalog-crumb {
+    flex: 1 0 100%;
+    color: var(--text-secondary);
+    font-size: 10px;
+    line-height: 1.2;
+}
+
+.catalog-entry .preset-index {
+    min-width: 26px;
+    text-align: right;
 }
 
 .section-body {

@@ -86,6 +86,7 @@
         v-model:active-terrain="activeTerrain"
         v-model:custom-ion-height-offset="customIonHeightOffset"
         :basemap-options="basemapOptions"
+        :combo-provider-groups="comboProviderGroups"
         :terrain-options="terrainOptions"
         :overlay-options="overlayOptions"
         :custom-basemap-url="customXyzBasemapUrl"

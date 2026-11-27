@@ -22,6 +22,7 @@ import {
 } from '../core/cesiumStorage';
 import { resolvePresetLayerIds } from '@common/basemap/catalogProjection';
 import { DEFAULT_BASEMAP_PRESET_ID } from '@common/basemap/basemapPresets';
+import { buildComboProviderGroups, isComboBasemapId } from '@common/basemap/comboBasemaps';
 import { abortAllDescriptorRequests } from '@cesium-domain/constants/basemapProviderFactory';
 import { useCesiumBasemapSwitcher } from './useCesiumBasemapSwitcher';
 import {
@@ -213,19 +214,23 @@ export function useCesiumLayers({
     });
 
     const basemapOptions = computed(() => [
-        ...getUnifiedBasemapOptions().map((option: any) => {
-            if (option.value !== 'custom') return option;
-            return {
-                ...option,
-                description: customXyzBasemapUrl.value
-                    ? customXyzBasemapUrl.value
-                    : '输入 XYZ / WMS 图源 URL 后启用',
-                source: 'custom',
-                disabled: !customXyzBasemapUrl.value,
-            };
-        }),
+        ...getUnifiedBasemapOptions()
+            .filter((option: any) => !isComboBasemapId(option.value))
+            .map((option: any) => {
+                if (option.value !== 'custom') return option;
+                return {
+                    ...option,
+                    description: customXyzBasemapUrl.value
+                        ? customXyzBasemapUrl.value
+                        : '输入 XYZ / WMS 图源 URL 后启用',
+                    source: 'custom',
+                    disabled: !customXyzBasemapUrl.value,
+                };
+            }),
         ...officialBasemapOptions.value,
     ]);
+    /** AMAP / Google 组合底图按厂商 → 坐标系折叠，不进平铺网格 */
+    const comboProviderGroups = computed(() => buildComboProviderGroups(getUnifiedBasemapOptions()));
 
     const basemapSwitcher = useCesiumBasemapSwitcher({
         getViewer,
@@ -600,6 +605,7 @@ export function useCesiumLayers({
         customIonHeightOffset,
         customIonTilesetReady,
         basemapOptions,
+        comboProviderGroups,
         terrainOptions,
         overlayOptions,
         zoomToRemoteService: (serviceId: any) => cesiumRemoteAdapter?.flyTo?.(String(serviceId || '')) ?? false,

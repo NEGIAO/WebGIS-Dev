@@ -4,7 +4,7 @@
  * 说    明：视图层逻辑入口。页签与折叠态持久化、WMS 图层枚举、模块/动作图标映射、
  *          叠加层与数据导入事件派发。
  */
-import { computed, defineComponent, onBeforeUnmount, ref, watch, type ExtractPropTypes, type PropType, type SetupContext } from 'vue';
+import { computed, defineComponent, nextTick, onBeforeUnmount, ref, watch, type ComputedRef, type ExtractPropTypes, type PropType, type Ref, type SetupContext } from 'vue';
 import {
 	Box,
 	Building,
@@ -40,6 +40,7 @@ import {
 	RotateCcw,
 	Route,
 	ScanEye,
+	Search,
 	Send,
 	SlidersHorizontal,
 	Square,
@@ -53,6 +54,7 @@ import {
 import LilGuiControls from './LilGuiControls.vue';
 import { useLocale } from '@common/app/useLocale';
 import { looksLikeWmsSourceUrl, ensureWmsServiceInfo } from '@common/basemap/wmsService';
+import { useBasemapCatalogUi } from '@common/basemap/ui/useBasemapCatalogUi';
 
 // 一、Emits 类型
 type EmitsType = (
@@ -76,6 +78,7 @@ const propDefine = {
 	open: { type: Boolean, default: true },
 	embedded: { type: Boolean, default: false },
 	basemapOptions: { type: Array as PropType<any[]>, default: () : any => [] },
+	comboProviderGroups: { type: Array as PropType<any[]>, default: () : any => [] },
 	terrainOptions: { type: Array as PropType<any[]>, default: () : any => [] },
 	overlayOptions: { type: Array as PropType<any[]>, default: () : any => [] },
 	activeBasemap: { type: String, default: '' },
@@ -116,6 +119,7 @@ export default defineComponent({
 		Minimize2,
 		Mountain,
 		Navigation,
+		Search,
 		Send,
 		SlidersHorizontal,
 		Upload,
@@ -153,6 +157,23 @@ export class Instance {
 	public compactMode = ref(true);
 	public expandedLayerSectionIds = ref(new Set<string>());
 	public expandedModuleIds = ref(new Set<string>());
+	/** AMAP / Google 组合底图折叠态：厂商与 provider:coord 分别记忆 */
+	public openComboProviders = ref(new Set<string>());
+	public openComboCoords = ref(new Set<string>());
+	/** 统一目录树（与 OL 共用 @common/basemap/ui） */
+	public basemapQuery!: Ref<string>;
+	public catalogTree!: ComputedRef<any[]>;
+	public searchResults!: ComputedRef<any[]>;
+	public isSearchActive!: ComputedRef<boolean>;
+	public isCategoryOpen!: (category: string) => boolean;
+	public toggleCategory!: (category: string) => void;
+	public isProviderOpen!: (category: string, provider: string) => boolean;
+	public toggleProvider!: (category: string, provider: string) => void;
+	public isCoordOpen!: (category: string, provider: string, coord: string) => boolean;
+	public toggleCoord!: (category: string, provider: string, coord: string) => void;
+	public categoryLabel!: (category: string) => string;
+	public coordLabel!: (coord: string) => string;
+	public entryTitle!: (entry: any) => string;
 	public customBasemapDraft = ref('');
 
 	// ── 样例菜单 ──
@@ -187,6 +208,7 @@ export class Instance {
 		this.emit = this.ctx.emit;
 		const { t } = useLocale();
 		this.t = t;
+		Object.assign(this, useBasemapCatalogUi(() => []));
 
 		const storedUiState: any = this.readStoredUiState();
 		const shouldRestoreExpansionState = storedUiState.uiStateVersion === UI_STATE_VERSION;
@@ -211,6 +233,9 @@ export class Instance {
 	}
 	get basemapOptions() {
 		return this.props.basemapOptions;
+	}
+	get comboProviderGroups() {
+		return this.props.comboProviderGroups;
 	}
 	get terrainOptions() {
 		return this.props.terrainOptions;
@@ -443,6 +468,25 @@ export class Instance {
 		this.ctx.emit('update:open', value);
 	};
 
+	public isComboProviderOpen = (provider: string) => this.openComboProviders.value.has(provider);
+
+	public toggleComboProvider = (provider: string) => {
+		const next = new Set(this.openComboProviders.value);
+		if (next.has(provider)) next.delete(provider);
+		else next.add(provider);
+		this.openComboProviders.value = next;
+	};
+
+	public isComboCoordOpen = (provider: string, coord: string) => this.openComboCoords.value.has(`${provider}:${coord}`);
+
+	public toggleComboCoord = (provider: string, coord: string) => {
+		const key = `${provider}:${coord}`;
+		const next = new Set(this.openComboCoords.value);
+		if (next.has(key)) next.delete(key);
+		else next.add(key);
+		this.openComboCoords.value = next;
+	};
+
 	public isLayerSectionExpanded = (sectionId: string) => this.expandedLayerSectionIds.value.has(sectionId);
 
 	public toggleLayerSection = (sectionId: string) => {
@@ -463,7 +507,22 @@ export class Instance {
 
 	public selectBasemapOption = (option: any) => {
 		if (option?.disabled) return;
-		this.ctx.emit('update:activeBasemap', option.value);
+		// 统一目录条目使用 id；旧 BASEMAP_OPTIONS 使用 value，两者都兼容
+		this.ctx.emit('update:activeBasemap', option.value ?? option.id);
+	};
+
+	/** WMS/WMTS/MVT/XYZ 入口：聚焦自定义 URL 输入框 */
+	public activateCustomBasemap = () => {
+		void nextTick(() => {
+			const input = document.querySelector<HTMLInputElement>('.custom-basemap-input');
+			input?.focus();
+			input?.scrollIntoView({ block: 'nearest' });
+		});
+	};
+
+	/** 统一目录条目：普通预设走 preset id，动态项暂只支持预设（Wayback 由 OL 侧管理） */
+	public selectCatalogEntry = (entry: any) => {
+		this.selectBasemapOption(entry);
 	};
 
 	public submitCustomBasemap = () => {

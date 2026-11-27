@@ -29,6 +29,7 @@ import {
 	Image as ImageIcon,
 	Layers,
 	RotateCcw,
+	Search,
 	X,
 } from '@lucide/vue';
 import { defineResilientAsync } from '@common/utils/defineResilientAsync';
@@ -101,6 +102,7 @@ export default defineComponent({
 		Layers,
 		LocationSearch,
 		RotateCcw,
+		Search,
 		X,
 	},
 	props: propDefine,
@@ -143,6 +145,8 @@ export class Instance {
 	// ── 面板与菜单 ──
 	public layerManageButtonRef = ref<HTMLElement | null>(null);
 	public showLayerManager = ref(false);
+	public isLayerSearchOpen = ref(false);
+	public layerSearchQuery = ref('');
 	public layerManagerAnchor = ref({ top: 0, left: 0 });
 	public showLayerContextMenu = ref(false);
 	public showUrlSubmenu = ref(false);
@@ -217,13 +221,33 @@ export class Instance {
 	public esriWaybackLayers!: Ref<any[]>;
 	public historicalImageryUpdatedAt!: Ref<string>;
 	public openHistoryYears!: Ref<Set<string>>;
+	public openComboProviders!: Ref<Set<string>>;
+	public openComboCoords!: Ref<Set<string>>;
 	public regularBasemapOptions!: ComputedRef<any[]>;
+	public comboProviderGroups!: ComputedRef<any[]>;
+	public basemapQuery!: Ref<string>;
+	public catalogTree!: ComputedRef<any[]>;
+	public searchResults!: ComputedRef<any[]>;
+	public isSearchActive!: ComputedRef<boolean>;
+	public isCategoryOpen!: (category: string) => boolean;
+	public toggleCategory!: (category: string) => void;
+	public isProviderOpen!: (category: string, provider: string) => boolean;
+	public toggleProvider!: (category: string, provider: string) => void;
+	public isCoordOpen!: (category: string, provider: string, coord: string) => boolean;
+	public toggleCoord!: (category: string, provider: string, coord: string) => void;
+	public categoryLabel!: (category: string) => string;
+	public coordLabel!: (coord: string) => string;
+	public entryTitle!: (entry: any) => string;
 	public sentinelYearGroups!: ComputedRef<any[]>;
 	public esriYearGroups!: ComputedRef<any[]>;
 	public currentLayerLabel!: ComputedRef<string>;
 	public selectHistoricalProviderTab!: (tab: string) => void;
 	public toggleHistoryYear!: (provider: string, year: string | number) => void;
 	public isHistoryYearOpen!: (provider: string, year: string | number) => boolean;
+	public toggleComboProvider!: (provider: string) => void;
+	public isComboProviderOpen!: (provider: string) => boolean;
+	public toggleComboCoord!: (provider: string, coord: string) => void;
+	public isComboCoordOpen!: (provider: string, coord: string) => boolean;
 	public formatHistoryDate!: (value: string) => string;
 	public loadHistoricalImageryCatalog!: () => Promise<void>;
 
@@ -279,6 +303,24 @@ export class Instance {
 	get layerList() {
 		return this.props.layerList;
 	}
+
+	/** 图层检索：按名称/ID 过滤，命中项之外的行仅隐藏，保留原索引供拖拽排序使用 */
+	public layerMatchesSearch = (layer: any) => {
+		const query = this.layerSearchQuery.value.trim().toLowerCase();
+		if (!query) return true;
+		return `${layer?.name ?? ''} ${layer?.id ?? ''}`.toLowerCase().includes(query);
+	};
+
+	public toggleLayerSearch = () => {
+		this.isLayerSearchOpen.value = !this.isLayerSearchOpen.value;
+		if (!this.isLayerSearchOpen.value) this.layerSearchQuery.value = '';
+	};
+
+	public closeLayerSearch = () => {
+		this.isLayerSearchOpen.value = false;
+		this.layerSearchQuery.value = '';
+	};
+
 	get activeGraticule() {
 		return this.props.activeGraticule;
 	}
@@ -336,6 +378,7 @@ export class Instance {
 			if (!visible) {
 				this.unbindAnchorListeners();
 				this.draggingIndex.value = -1;
+				this.closeLayerSearch();
 				this.closeLayerContextMenu();
 				return;
 			}
@@ -407,7 +450,8 @@ export class Instance {
 	};
 
 	public selectOption = (option: any) => {
-		this.ctx.emit('change-layer', { layerId: option.value, source: 'dropdown' });
+		// 统一目录条目使用 id；旧 BASEMAP_OPTIONS 使用 value，两者都兼容
+		this.ctx.emit('change-layer', { layerId: option.value ?? option.id, source: 'dropdown' });
 		this.isSelectDropdownOpen.value = false;
 	};
 
@@ -422,6 +466,31 @@ export class Instance {
 		});
 	};
 
+	/** WMS/WMTS/MVT/XYZ 入口：切到 custom 并聚焦自定义输入框 */
+	public activateCustomBasemap = () => {
+		this.ctx.emit('change-layer', { layerId: 'custom', source: 'dropdown' });
+		this.isSelectDropdownOpen.value = false;
+		void nextTick(() => {
+			const input = document.querySelector<HTMLInputElement>('.custom-url-input');
+			input?.focus();
+			input?.scrollIntoView({ block: 'nearest' });
+		});
+	};
+
+	/** 统一目录条目：普通预设走 selectOption，Wayback 动态项走 custom-url */
+	public selectCatalogEntry = (entry: any) => {
+		if (entry?.customUrl) {
+			this.selectHistoricalSnapshot({
+				id: entry.id,
+				date: entry.label,
+				name: entry.description,
+				xyz_url: entry.customUrl,
+			});
+			return;
+		}
+		this.selectOption(entry);
+	};
+
 	/** Cesium overlay 开关变更：在实例层做类型断言，避免在 Vue 模板中使用 TS `as` 语法导致运行时 SyntaxError */
 	public onCesiumOverlayToggle = (event: Event, overlayId: string) => {
 		const target = event.target as HTMLInputElement;
@@ -433,8 +502,8 @@ export class Instance {
 	//#region 桌面拖拽排序
 
 	public onDragStart = (evt: DragEvent, index: number) => {
-		// 移动端禁用拖动
-		if (this.isTouchDevice.value) {
+		// 移动端或检索中禁用拖动（检索时列表有隐藏项，索引不可见）
+		if (this.isTouchDevice.value || this.layerSearchQuery.value.trim()) {
 			evt.preventDefault();
 			return;
 		}
@@ -447,7 +516,7 @@ export class Instance {
 	};
 
 	public onDrop = (evt: DragEvent, dropIndex: number) => {
-		if (this.isTouchDevice.value) {
+		if (this.isTouchDevice.value || this.layerSearchQuery.value.trim()) {
 			evt.preventDefault();
 			return;
 		}
@@ -589,7 +658,7 @@ export class Instance {
 
 	/** touchstart：起点在手柄上进拖拽，否则走长按计时（右键菜单） */
 	public onLayerTouchStart = (layer: any, index: number, event: TouchEvent) => {
-		if (!this.isTouchDevice.value) return;
+		if (!this.isTouchDevice.value || this.layerSearchQuery.value.trim()) return;
 
 		const touches = event.touches;
 		if (touches.length !== 1) {

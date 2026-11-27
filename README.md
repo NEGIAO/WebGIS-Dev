@@ -561,6 +561,7 @@ tiles.negiao.cc.cd"]
 |------|------|
 | 2D/3D 双引擎 | [`ol-cesium-dual-engine.md`](Docs/Architecture/ol-cesium-dual-engine.md) |
 | 底图源系统 | [`basemap-source-system.md`](Docs/Architecture/basemap-source-system.md) |
+| 底图目录统一元数据与分类重构 | [`basemap-catalog-redesign.md`](Docs/Architecture/basemap-catalog-redesign.md) |
 | 双引擎坐标转换规范 | [`ol-cesium-coordinate-transform-spec.md`](Docs/Architecture/ol-cesium-coordinate-transform-spec.md) |
 | 多格式数据导入 | [`multi-format-data-import.md`](Docs/Architecture/multi-format-data-import.md) |
 | 空间分析后端 | [`spatial-analysis-backend.md`](Docs/Architecture/spatial-analysis-backend.md) |

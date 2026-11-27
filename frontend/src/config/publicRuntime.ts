@@ -159,6 +159,17 @@ export function gcj2wgsProxyUrl(upstreamUrl: string): string {
 }
 
 /**
+ * 拼接 WGS-84 → GCJ-02 纠偏代理 URL（/proxy/wgs2gcj/{完整上游URL} 形式）
+ * @param upstreamUrl 完整上游 URL（含协议），如 https://mt0.google.com/vt/lyrs=s&x={x}&y={y}&z={z}
+ *
+ * ⚠️ 索引契约：与 gcj2wgs 一致，{x}/{y}/{z} 均为「标准 XYZ 网格」索引。
+ * 适用于把 WGS-84 原生图源（Google 卫星/地形等）火星化后叠加到 GCJ-02 主图。
+ */
+export function wgs2gcjProxyUrl(upstreamUrl: string): string {
+    return `${TILE_PROXY_BASE_URL}/proxy/wgs2gcj/${upstreamUrl}`;
+}
+
+/**
  * 拼接百度 BD-09 → WGS84 纠偏代理 URL（/proxy/bd2wgs/{完整上游URL} 形式）
  * @param upstreamUrl 完整上游百度瓦片 URL（含协议），如 https://maponline{s}.bdimg.com/tile/?qt=vtile&x={x}&y={y}&z={z}&styles=pl&scaler=1&from=jsapi2_0
  *

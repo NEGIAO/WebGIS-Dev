@@ -7,6 +7,7 @@
  */
 
 import { BASEMAP_OPTIONS } from '@common/basemap/basemapOptions';
+import { getBasemapEntryById } from '@common/basemap/catalog';
 import { getDescriptorById, resolvePresetLayerIds } from '@common/basemap/catalogProjection';
 import { CUSTOM_BASEMAP_URL_STORAGE_KEY } from '@common/basemap/useSharedCustomBasemapUrl';
 
@@ -31,11 +32,17 @@ export const GOOGLE_PHOTOREALISTIC_3D_TILES_VISIBLE_KEY = 'cesium_google_photore
  * @returns {Array<{value: string, label: string, description: string, source: string}>}
  */
 export function buildUnifiedBasemapOptions() {
-    return BASEMAP_OPTIONS.map((opt) => ({
-        ...opt,
-        description: getPresetDescription(opt.value),
-        source: 'preset',
-    }));
+    return BASEMAP_OPTIONS.map((opt) => {
+        const entry = getBasemapEntryById(opt.value);
+        return {
+            ...opt,
+            description: entry?.description || getPresetDescription(opt.value),
+            category: entry?.category,
+            provider: entry?.provider,
+            coord: entry?.coord,
+            source: 'preset',
+        };
+    });
 }
 
 /**

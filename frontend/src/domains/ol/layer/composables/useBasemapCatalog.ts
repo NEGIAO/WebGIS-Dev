@@ -6,6 +6,9 @@
 import { computed, ref } from 'vue';
 import { BASEMAP_OPTIONS } from '@/constants';
 import { groupBasemapsByYear } from '@common/basemap/basemapRegistry';
+import { buildComboProviderGroups, isComboBasemapId } from '@common/basemap/comboBasemaps';
+import { useBasemapCatalogUi } from '@common/basemap/ui/useBasemapCatalogUi';
+import type { BasemapCatalogEntry } from '@common/basemap/catalog';
 import { apiGetHistoricalImageryLayers } from '@/api';
 
 export interface BasemapCatalogDeps {
@@ -32,13 +35,50 @@ export function useBasemapCatalog(deps: BasemapCatalogDeps) {
 	const esriWaybackLayers = ref<any[]>([]);
 	const historicalImageryUpdatedAt = ref('');
 	const openHistoryYears = ref(new Set<string>());
+	const openComboProviders = ref(new Set<string>());
+	const openComboCoords = ref(new Set<string>());
 
 	const sentinelBasemapOptions = computed(() =>
 		BASEMAP_OPTIONS.filter((option: any) => String(option.value).startsWith('imagery_s2_cloudless_'))
 	);
 	const regularBasemapOptions = computed(() =>
-		BASEMAP_OPTIONS.filter((option: any) => !String(option.value).startsWith('imagery_s2_cloudless_'))
+		BASEMAP_OPTIONS.filter((option: any) => (
+			!String(option.value).startsWith('imagery_s2_cloudless_') && !isComboBasemapId(option.value)
+		))
 	);
+	/** AMAP / Google → GCJ / WGS → 简短要素组合，供折叠菜单逐层展开 */
+	const comboProviderGroups = computed(() => buildComboProviderGroups(BASEMAP_OPTIONS));
+
+	/** ESRI Wayback 动态快照映射为统一目录条目，进入历史影像 → ESRI Wayback → WGS84 */
+	const dynamicWaybackEntries = computed<BasemapCatalogEntry[]>(() =>
+		esriWaybackLayers.value.map((snapshot: any) => ({
+			id: `wayback:${snapshot.id}`,
+			label: String(snapshot.date ?? snapshot.id ?? ''),
+			stack: ['custom'],
+			number: 0,
+			displayLabel: `历史 ${snapshot.date ?? ''}`,
+			category: 'historical',
+			provider: 'ESRI Wayback',
+			coord: 'WGS84',
+			description: String(snapshot.name || snapshot.id || ''),
+			keywords: [String(snapshot.id ?? ''), String(snapshot.date ?? '')],
+			tags: ['historical', 'wayback'],
+			date: snapshot.date,
+			recommended: false,
+			dynamic: 'wayback',
+			customUrl: String(snapshot.xyz_url ?? ''),
+		})),
+	);
+	const catalogUi = useBasemapCatalogUi(() => dynamicWaybackEntries.value);
+
+	/** 展开历史影像时按需加载 ESRI Wayback 动态目录 */
+	const toggleCatalogCategory = (category: string) => {
+		catalogUi.toggleCategory(category);
+		if (category === 'historical' && !historicalCatalogLoaded.value && !historicalImageryLoading.value) {
+			void loadHistoricalImageryCatalog();
+		}
+	};
+
 	const sentinelYearGroups = computed(() =>
 		Array.from(
 			groupBasemapsByYear(
@@ -68,6 +108,39 @@ export function useBasemapCatalog(deps: BasemapCatalogDeps) {
 		if (next.has(key)) next.delete(key);
 		else next.add(key);
 		openHistoryYears.value = next;
+	}
+
+	/** 组合底图折叠键：provider 与 provider:coord 分别独立记忆展开状态 */
+	function comboProviderKey(provider: string) {
+		return provider;
+	}
+
+	function comboCoordKey(provider: string, coord: string) {
+		return `${provider}:${coord}`;
+	}
+
+	function isComboProviderOpen(provider: string) {
+		return openComboProviders.value.has(comboProviderKey(provider));
+	}
+
+	function toggleComboProvider(provider: string) {
+		const key = comboProviderKey(provider);
+		const next = new Set(openComboProviders.value);
+		if (next.has(key)) next.delete(key);
+		else next.add(key);
+		openComboProviders.value = next;
+	}
+
+	function isComboCoordOpen(provider: string, coord: string) {
+		return openComboCoords.value.has(comboCoordKey(provider, coord));
+	}
+
+	function toggleComboCoord(provider: string, coord: string) {
+		const key = comboCoordKey(provider, coord);
+		const next = new Set(openComboCoords.value);
+		if (next.has(key)) next.delete(key);
+		else next.add(key);
+		openComboCoords.value = next;
 	}
 
 	/** 当前底图显示名：历史快照优先，其次按 BASEMAP_OPTIONS 查表 */
@@ -120,20 +193,30 @@ export function useBasemapCatalog(deps: BasemapCatalogDeps) {
 	}
 
 	return {
+		...catalogUi,
+		toggleCategory: toggleCatalogCategory,
+		dynamicWaybackEntries,
 		historicalProviderTab,
 		historicalImageryLoading,
 		historicalCatalogLoaded,
 		esriWaybackLayers,
 		historicalImageryUpdatedAt,
 		openHistoryYears,
+		openComboProviders,
+		openComboCoords,
 		sentinelBasemapOptions,
 		regularBasemapOptions,
+		comboProviderGroups,
 		sentinelYearGroups,
 		esriYearGroups,
 		currentLayerLabel,
 		historyYearKey,
 		isHistoryYearOpen,
 		toggleHistoryYear,
+		isComboProviderOpen,
+		toggleComboProvider,
+		isComboCoordOpen,
+		toggleComboCoord,
 		formatHistoryDate,
 		loadHistoricalImageryCatalog,
 		selectHistoricalProviderTab,

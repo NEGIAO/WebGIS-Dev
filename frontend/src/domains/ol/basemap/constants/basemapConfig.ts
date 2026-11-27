@@ -22,10 +22,13 @@
  */
 
 import type { LayerCategory, LayerGroup, LayerSourceDefinition } from './basemapCore';
-import group1 from './definitions/group-1';
-import group2 from './definitions/group-2';
-import group3 from './definitions/group-3';
-import group4 from './definitions/group-4';
+import { registerLayerDefinitions } from '@common/basemap/catalog/layers';
+import service from './definitions/category-service';
+import imagery from './definitions/category-imagery';
+import terrain from './definitions/category-terrain';
+import electronic from './definitions/category-electronic';
+import historical from './definitions/category-historical';
+import vector from './definitions/category-vector';
 
 // 类型与工具函数的公共面保持不变：调用方仍可从 basemapConfig 入口取用
 export * from './basemapCore';
@@ -35,11 +38,27 @@ export type { BasemapPresetDefinition } from '@common/basemap/basemapPresets';
 
 // ========== 配置1：图层源定义（按分组聚合，顺序与拆分前一致） ==========
 export const LAYER_SOURCE_DEFINITIONS: LayerSourceDefinition[] = [
-    ...group1,
-    ...group2,
-    ...group3,
-    ...group4,
-];
+    ...service,
+    ...imagery,
+    ...terrain,
+    ...electronic,
+    ...historical,
+    ...vector,
+].sort((a, b) => a.order - b.order);
+
+/**
+ * 将图层定义登记到统一目录：所有分类/坐标/描述均来自 group-1~4 每条源定义
+ * 的显式字段，不再运行时推断或二次映射。
+ */
+registerLayerDefinitions(
+    LAYER_SOURCE_DEFINITIONS.map((definition) => ({
+        ...definition,
+        legacyCategory: definition.category,
+        category: definition.catalogCategory,
+        keywords: [definition.id, definition.name, definition.provider, definition.coord],
+        tags: [] as string[],
+    })),
+);
 
 
 // ========== Cesium 描述符自动派生（SSOT：从 LAYER_SOURCE_DEFINITIONS 派生，替代已删除的 sourceDescriptors.ts） ==========

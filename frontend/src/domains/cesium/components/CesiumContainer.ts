@@ -138,6 +138,7 @@ export class Instance {
     public customIonTilesetReady!: Ref<boolean>;
     public customXyzBasemapUrl!: Ref<string>;
     public basemapOptions!: Ref<any[]>;
+    public comboProviderGroups!: ComputedRef<any[]>;
     public terrainOptions!: any[];
     public overlayOptions!: Ref<any[]>;
     public cesiumToolPanelOpen!: Ref<boolean>;
@@ -287,6 +288,7 @@ export class Instance {
         this.customIonHeightOffset = layers.customIonHeightOffset;
         this.customIonTilesetReady = layers.customIonTilesetReady;
         this.basemapOptions = layers.basemapOptions;
+        this.comboProviderGroups = layers.comboProviderGroups;
         this.terrainOptions = layers.terrainOptions;
         this.overlayOptions = layers.overlayOptions;
         this.handleOverlayToggle = layers.handleOverlayToggle;

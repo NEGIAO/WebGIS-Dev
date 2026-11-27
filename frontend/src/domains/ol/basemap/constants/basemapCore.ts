@@ -16,6 +16,11 @@ import {
     buildMapsForFreeAdapter,
     prioritizeTileSourceRequest,
 } from '@ol/tile-source';
+import type {
+    BasemapCategory,
+    BasemapCoord,
+    BasemapProvider,
+} from '@common/basemap/catalog/types';
 
 // ========== 类型定义 ==========
 export type LayerCategory = 'label' | 'imagery' | 'terrain' | 'vector' | 'theme' | 'custom';
@@ -51,10 +56,19 @@ export type LayerFactoryContext = {
 };
 
 export type LayerSourceDefinition = {
+    /** 原始定义顺序，分类重组后用于恢复 LAYER_SOURCE_DEFINITIONS 原顺序 */
+    order: number;
     id: string;
     name: string;
+    /** 引擎显示分类（旧字段，保留兼容 z-band / descriptor） */
     category: LayerCategory;
     group: LayerGroup;
+    /** 统一目录分类：每条源定义显式声明，不再由运行时推断 */
+    catalogCategory: BasemapCategory;
+    provider: BasemapProvider;
+    coord: BasemapCoord;
+    description: string;
+    date?: string | number;
     defaultVisible?: boolean;
     adapters?: Record<string, NonStandardXYZAdapter>;
     /** plaintext URL 模板（含 {x}/{y}/{z}/{s}/{tiandituTk}/{customUrl} 等占位符）；Cesium 自动派生用，OL 不直接消费 */
@@ -161,10 +175,16 @@ export function buildS2CloudlessDef(year: number): LayerSourceDefinition {
     const layerParam = year === 2016 ? 's2cloudless_3857' : `s2cloudless-${year}_3857`;
     const url = EOX_WMTS_URL(layerParam);
     return {
+        order: 0,
         id: `imagery_s2_cloudless_${year}`,
         name: `Sentinel无云${year}`,
         category: 'imagery',
         group: '影像',
+        catalogCategory: 'historical',
+        provider: 'Sentinel',
+        coord: 'WGS84',
+        description: `Sentinel-2 无云年度镶嵌 ${year} · Sentinel / WGS84 · ${year} 年快照`,
+        date: year,
         url,
         serviceType: 'xyz',
         createSource: () => prioritizeTileSourceRequest(new XYZ({ url })),

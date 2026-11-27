@@ -1,0 +1,1973 @@
+/**
+ * 底图定义：电子底图
+ *
+ * 每条定义自带完整 URL 与显式属性；order 用于恢复原始定义顺序。
+ */
+import XYZ from 'ol/source/XYZ';
+import OSM from 'ol/source/OSM';
+import {
+    buildTiandituUrl,
+    buildOvitalUrl,
+    NON_STANDARD_XYZ_ADAPTERS,
+} from '../basemapCore';
+import {
+    createConfiguredServiceSource,
+    createVectorTileSourceFromUrl,
+    prioritizeTileSourceRequest,
+} from '@ol/tile-source';
+import { gcj2wgsProxyUrl, bd2wgsProxyUrl, tileProxyUrl } from '@/config/publicRuntime';
+import { withSkipHighResTile } from '../basemapCore';
+import type { LayerSourceDefinition } from '../basemapCore';
+
+const definitions: LayerSourceDefinition[] = [
+    {
+        order: 1,
+        id: 'Omap_label',
+        name: '奥维注记',
+        catalogCategory: 'electronic',
+        provider: 'Other',
+        coord: 'NONE',
+        description: '奥维注记 · Other / 无坐标系',
+        category: 'label',
+        group: '注记',
+        url: 'https://omap.map-world.com.cn/dia_w/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=dia&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles&TILEMATRIX={z}&TILECOL={x}&TILEROW={y}&tdtkey={ovitalTdtkey}',
+        serviceType: 'xyz',
+        needsContext: ['ovitalTdtkey'],
+        createSource: ({ ovitalTdtkey }) =>
+            withSkipHighResTile(
+                prioritizeTileSourceRequest(
+                    new XYZ({
+                        url: buildOvitalUrl(
+                            '/dia_w/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=dia&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles&TILEMATRIX={z}&TILECOL={x}&TILEROW={y}',
+                            ovitalTdtkey,
+                        ),
+                    }),
+                ),
+            ),
+    },
+    {
+        order: 2,
+        id: 'label_tianditu',
+        name: '天地图注记',
+        catalogCategory: 'electronic',
+        provider: 'Tianditu',
+        coord: 'WGS84',
+        description: '天地图注记 · Tianditu / WGS84',
+        category: 'label',
+        group: '注记',
+        url: 'https://t{s}.tianditu.gov.cn/cia_w/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=cia&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&tk={tiandituTk}',
+        serviceType: 'xyz',
+        createSource: ({ tiandituTk }) =>
+            withSkipHighResTile(
+                prioritizeTileSourceRequest(
+                    new XYZ({
+                        url: buildTiandituUrl(
+                            '/cia_w/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=cia&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}',
+                            tiandituTk,
+                        ),
+                    }),
+                ),
+            ),
+    },
+    {
+        order: 3,
+        id: 'label_tianditu_vector',
+        name: '天地图矢量注记',
+        catalogCategory: 'electronic',
+        provider: 'Tianditu',
+        coord: 'WGS84',
+        description: '天地图矢量注记 · Tianditu / WGS84',
+        category: 'label',
+        group: '注记',
+        url: 'https://t{s}.tianditu.gov.cn/cva_w/wmts?SERVICE=WMTS&VERSION=1.0.0&REQUEST=GetTile&LAYER=cva&STYLE=default&FORMAT=tiles&TILEMATRIXSET=w&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&tk={tiandituTk}',
+        serviceType: 'xyz',
+        createSource: ({ tiandituTk }) =>
+            withSkipHighResTile(
+                prioritizeTileSourceRequest(
+                    new XYZ({
+                        url: buildTiandituUrl(
+                            '/cva_w/wmts?SERVICE=WMTS&VERSION=1.0.0&REQUEST=GetTile&LAYER=cva&STYLE=default&FORMAT=tiles&TILEMATRIXSET=w&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}',
+                            tiandituTk,
+                        ),
+                    }),
+                ),
+            ),
+    },
+    {
+        order: 4,
+        id: 'label_tuxin',
+        name: '图新注记',
+        catalogCategory: 'electronic',
+        provider: 'Tuxin',
+        coord: 'GCJ02',
+        description: '图新注记 · Tuxin / GCJ02',
+        category: 'label',
+        group: '注记',
+        url: 'https://tiles.geovisearth.com/base/v1/cia/{z}/{x}/{y}?token=0aeb02f29320b060c2e2d0c04eb4887c6b8d5a8ed479b3aacff2b6a273b0d38d',
+        serviceType: 'xyz',
+        createSource: () =>
+            withSkipHighResTile(
+                prioritizeTileSourceRequest(
+                    new XYZ({
+                        url: 'https://tiles.geovisearth.com/base/v1/cia/{z}/{x}/{y}?token=0aeb02f29320b060c2e2d0c04eb4887c6b8d5a8ed479b3aacff2b6a273b0d38d',
+                    }),
+                ),
+            ),
+    },
+    {
+        order: 5,
+        id: 'label_minedata',
+        name: 'MineMap注记',
+        catalogCategory: 'electronic',
+        provider: 'MineMap',
+        coord: 'GCJ02',
+        description: 'MineMap注记 · MineMap / GCJ02',
+        category: 'label',
+        group: '注记',
+        
+        
+        
+        
+        
+        
+        url: gcj2wgsProxyUrl(
+            'https://map-api.minedata.cn/service/data/raster-label?style=standard&z={z}&x={x}&y={y}&key=5c6cb47b45c746de9e4e9135a725d857',
+        ),
+        serviceType: 'xyz',
+        maxZoom: 18,
+        
+        
+        createSource: () =>
+            withSkipHighResTile(
+                prioritizeTileSourceRequest(
+                    new XYZ({
+                        url: gcj2wgsProxyUrl(
+                            'https://map-api.minedata.cn/service/data/raster-label?style=standard&z={z}&x={x}&y={y}&key=5c6cb47b45c746de9e4e9135a725d857',
+                        ),
+                    }),
+                ),
+            ),
+    },
+    {
+        order: 6,
+        id: 'amap_label',
+        name: '高德注记无偏',
+        catalogCategory: 'electronic',
+        provider: 'AMAP',
+        coord: 'GCJ02',
+        description: '高德注记无偏 · AMAP / GCJ02',
+        group: '注记',
+        url: gcj2wgsProxyUrl(
+            'http://wprd02.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}',
+        ),
+        serviceType: 'xyz',
+        category: 'label',
+        createSource: () =>
+            withSkipHighResTile(
+                prioritizeTileSourceRequest(
+                    new XYZ({
+                        url: gcj2wgsProxyUrl(
+                            'http://wprd02.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}',
+                        ),
+                    }),
+                ),
+            ),
+    },
+    {
+        order: 7,
+        id: 'tianditu_ibo_w',
+        name: '天地图国界',
+        catalogCategory: 'electronic',
+        provider: 'Tianditu',
+        coord: 'WGS84',
+        description: '天地图国界 · Tianditu / WGS84',
+        category: 'label',
+        group: '注记',
+        
+        url: 'https://t{s}.tianditu.gov.cn/DataServer?T=ibo_w&x={x}&y={y}&l={z}&tk={tiandituTk}',
+        serviceType: 'xyz',
+        createSource: ({ tiandituTk }) =>
+            withSkipHighResTile(
+                prioritizeTileSourceRequest(
+                    new XYZ({
+                        url: buildTiandituUrl(
+                            '/DataServer?T=ibo_w&x={x}&y={y}&l={z}',
+                            tiandituTk,
+                        ),
+                    }),
+                ),
+            ),
+    },
+    {
+        order: 25,
+        id: 'label_stamen_toner_lines',
+        name: 'Stamen线划',
+        catalogCategory: 'electronic',
+        provider: 'Stamen',
+        coord: 'WGS84',
+        description: 'Stamen线划 · Stamen / WGS84',
+        category: 'label',
+        group: '注记',
+        url: 'https://tiles.stadiamaps.com/tiles/stamen_toner_lines/{z}/{x}/{y}.png?api_key=e5abf577-33b9-47f0-92b2-bd60f88d8c8d',
+        serviceType: 'xyz',
+        createSource: () =>
+            withSkipHighResTile(
+                prioritizeTileSourceRequest(
+                    new XYZ({
+                        url: 'https://tiles.stadiamaps.com/tiles/stamen_toner_lines/{z}/{x}/{y}.png?api_key=e5abf577-33b9-47f0-92b2-bd60f88d8c8d',
+                    }),
+                ),
+            ),
+    },
+    {
+        order: 26,
+        id: 'label_stamen_toner_labels',
+        name: 'Stamen注记',
+        catalogCategory: 'electronic',
+        provider: 'Stamen',
+        coord: 'WGS84',
+        description: 'Stamen注记 · Stamen / WGS84',
+        category: 'label',
+        group: '注记',
+        url: 'https://tiles.stadiamaps.com/tiles/stamen_toner_labels/{z}/{x}/{y}.png?api_key=e5abf577-33b9-47f0-92b2-bd60f88d8c8d',
+        serviceType: 'xyz',
+        createSource: () =>
+            withSkipHighResTile(
+                prioritizeTileSourceRequest(
+                    new XYZ({
+                        url: 'https://tiles.stadiamaps.com/tiles/stamen_toner_labels/{z}/{x}/{y}.png?api_key=e5abf577-33b9-47f0-92b2-bd60f88d8c8d',
+                    }),
+                ),
+            ),
+    },
+    {
+        order: 37,
+        id: 'theme_gd_basic_farmland_wms',
+        name: '广东基本农田(WMS)',
+        catalogCategory: 'electronic',
+        provider: 'Other',
+        coord: 'NONE',
+        description: '广东基本农田(WMS) · Other / 无坐标系',
+        category: 'theme',
+        group: '专题',
+        url: 'https://guangdong.tianditu.gov.cn/geostar/gdsyjjbntbhtb_mercator/wms',
+        serviceType: 'wms',
+        createSource: () =>
+            createConfiguredServiceSource(
+                {
+                    id: 'theme_gd_basic_farmland_wms',
+                    name: '广东基本农田(WMS)',
+                    serviceType: 'wms',
+                    url: 'https://guangdong.tianditu.gov.cn/geostar/gdsyjjbntbhtb_mercator/wms',
+                    wms: {
+                        layers: '基本农田保护图斑_mercator',
+                        version: '1.1.1',
+                        srs: 'EPSG:3857',
+                        format: 'image/png',
+                        styles: '',
+                        transparent: true,
+                    },
+                },
+                { adapters: NON_STANDARD_XYZ_ADAPTERS },
+            ),
+    },
+    {
+        order: 38,
+        id: 'theme_hn_basic_farmland_wmts',
+        name: '河南基本农田(WMTS)',
+        catalogCategory: 'electronic',
+        provider: 'Other',
+        coord: 'NONE',
+        description: '河南基本农田(WMTS) · Other / 无坐标系',
+        category: 'theme',
+        group: '专题',
+        url: 'https://www.hnsditu.cn/iserver/services/map-agscache-jibennongtian/wmts100?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=jibennongtian&STYLE=default&TILEMATRIXSET=GoogleMapsCompatible_jibennongtian&FORMAT=image/png&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}',
+        serviceType: 'wmts',
+        createSource: () =>
+            createConfiguredServiceSource(
+                {
+                    id: 'theme_hn_basic_farmland_wmts',
+                    name: '河南基本农田(WMTS)',
+                    serviceType: 'wmts',
+                    url: 'https://www.hnsditu.cn/iserver/services/map-agscache-jibennongtian/wmts100?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=jibennongtian&STYLE=default&TILEMATRIXSET=GoogleMapsCompatible_jibennongtian&FORMAT=image/png&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}',
+                    wmts: {
+                        layer: 'jibennongtian',
+                        style: 'default',
+                        matrixSet: 'GoogleMapsCompatible_jibennongtian',
+                        format: 'image/png',
+                        version: '1.0.0',
+                    },
+                },
+                { adapters: NON_STANDARD_XYZ_ADAPTERS },
+            ),
+    },
+    {
+        order: 39,
+        id: 'theme_hn_farmland_wmts',
+        name: '河南耕地(WMTS)',
+        catalogCategory: 'electronic',
+        provider: 'Other',
+        coord: 'NONE',
+        description: '河南耕地(WMTS) · Other / 无坐标系',
+        category: 'theme',
+        group: '专题',
+        url: 'https://www.hnsditu.cn/iserver/services/map-agscache-gengdi/wmts100?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=gengdi&STYLE=default&TILEMATRIXSET=GoogleMapsCompatible_gengdi&FORMAT=image/png&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}',
+        serviceType: 'wmts',
+        createSource: () =>
+            createConfiguredServiceSource(
+                {
+                    id: 'theme_hn_farmland_wmts',
+                    name: '河南耕地(WMTS)',
+                    serviceType: 'wmts',
+                    url: 'https://www.hnsditu.cn/iserver/services/map-agscache-gengdi/wmts100?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=gengdi&STYLE=default&TILEMATRIXSET=GoogleMapsCompatible_gengdi&FORMAT=image/png&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}',
+                    wmts: {
+                        layer: 'gengdi',
+                        style: 'default',
+                        matrixSet: 'GoogleMapsCompatible_gengdi',
+                        format: 'image/png',
+                        version: '1.0.0',
+                    },
+                },
+                { adapters: NON_STANDARD_XYZ_ADAPTERS },
+            ),
+    },
+    {
+        order: 40,
+        id: 'theme_arcgis_canvas_dark_base',
+        name: 'ESRI深灰色底图',
+        catalogCategory: 'electronic',
+        provider: 'ESRI',
+        coord: 'WGS84',
+        description: 'ESRI深灰色底图 · ESRI / WGS84',
+        category: 'theme',
+        group: 'Canvas',
+        url: 'https://services.arcgisonline.com/arcgis/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}',
+        serviceType: 'xyz',
+        createSource: () =>
+            prioritizeTileSourceRequest(
+                new XYZ({
+                    url: 'https://services.arcgisonline.com/arcgis/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}',
+                }),
+            ),
+    },
+    {
+        order: 41,
+        id: 'theme_arcgis_canvas_dark_ref',
+        name: 'ESRI深灰色参考注记',
+        catalogCategory: 'electronic',
+        provider: 'ESRI',
+        coord: 'WGS84',
+        description: 'ESRI深灰色参考注记 · ESRI / WGS84',
+        category: 'theme',
+        group: 'Canvas',
+        url: 'https://services.arcgisonline.com/arcgis/rest/services/Canvas/World_Dark_Gray_Reference/MapServer/tile/{z}/{y}/{x}',
+        serviceType: 'xyz',
+        createSource: () =>
+            prioritizeTileSourceRequest(
+                new XYZ({
+                    url: 'https://services.arcgisonline.com/arcgis/rest/services/Canvas/World_Dark_Gray_Reference/MapServer/tile/{z}/{y}/{x}',
+                }),
+            ),
+    },
+    {
+        order: 42,
+        id: 'theme_arcgis_canvas_light_base',
+        name: 'ESRI浅灰色底图',
+        catalogCategory: 'electronic',
+        provider: 'ESRI',
+        coord: 'WGS84',
+        description: 'ESRI浅灰色底图 · ESRI / WGS84',
+        category: 'theme',
+        group: 'Canvas',
+        url: 'https://services.arcgisonline.com/arcgis/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}',
+        serviceType: 'xyz',
+        createSource: () =>
+            prioritizeTileSourceRequest(
+                new XYZ({
+                    url: 'https://services.arcgisonline.com/arcgis/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}',
+                }),
+            ),
+    },
+    {
+        order: 43,
+        id: 'theme_arcgis_canvas_light_ref',
+        name: 'ESRI浅灰色参考注记',
+        catalogCategory: 'electronic',
+        provider: 'ESRI',
+        coord: 'WGS84',
+        description: 'ESRI浅灰色参考注记 · ESRI / WGS84',
+        category: 'theme',
+        group: 'Canvas',
+        url: 'https://services.arcgisonline.com/arcgis/rest/services/Canvas/World_Light_Gray_Reference/MapServer/tile/{z}/{y}/{x}',
+        serviceType: 'xyz',
+        createSource: () =>
+            prioritizeTileSourceRequest(
+                new XYZ({
+                    url: 'https://services.arcgisonline.com/arcgis/rest/services/Canvas/World_Light_Gray_Reference/MapServer/tile/{z}/{y}/{x}',
+                }),
+            ),
+    },
+    {
+        order: 50,
+        id: 'theme_arcgis_ref_boundaries',
+        name: 'ESRI世界边界地名',
+        catalogCategory: 'electronic',
+        provider: 'ESRI',
+        coord: 'WGS84',
+        description: 'ESRI世界边界地名 · ESRI / WGS84',
+        category: 'theme',
+        group: 'Reference',
+        url: 'https://services.arcgisonline.com/arcgis/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}',
+        serviceType: 'xyz',
+        createSource: () =>
+            prioritizeTileSourceRequest(
+                new XYZ({
+                    url: 'https://services.arcgisonline.com/arcgis/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}',
+                }),
+            ),
+    },
+    {
+        order: 51,
+        id: 'theme_arcgis_ref_boundaries_alt',
+        name: 'ESRI世界边界地名(备选)',
+        catalogCategory: 'electronic',
+        provider: 'ESRI',
+        coord: 'WGS84',
+        description: 'ESRI世界边界地名(备选) · ESRI / WGS84',
+        category: 'theme',
+        group: 'Reference',
+        url: 'https://services.arcgisonline.com/arcgis/rest/services/Reference/World_Boundaries_and_Places_Alternate/MapServer/tile/{z}/{y}/{x}',
+        serviceType: 'xyz',
+        createSource: () =>
+            prioritizeTileSourceRequest(
+                new XYZ({
+                    url: 'https://services.arcgisonline.com/arcgis/rest/services/Reference/World_Boundaries_and_Places_Alternate/MapServer/tile/{z}/{y}/{x}',
+                }),
+            ),
+    },
+    {
+        order: 52,
+        id: 'theme_arcgis_ref_overlay',
+        name: 'ESRI世界参考叠加层',
+        catalogCategory: 'electronic',
+        provider: 'ESRI',
+        coord: 'WGS84',
+        description: 'ESRI世界参考叠加层 · ESRI / WGS84',
+        category: 'theme',
+        group: 'Reference',
+        url: 'https://services.arcgisonline.com/arcgis/rest/services/Reference/World_Reference_Overlay/MapServer/tile/{z}/{y}/{x}',
+        serviceType: 'xyz',
+        createSource: () =>
+            prioritizeTileSourceRequest(
+                new XYZ({
+                    url: 'https://services.arcgisonline.com/arcgis/rest/services/Reference/World_Reference_Overlay/MapServer/tile/{z}/{y}/{x}',
+                }),
+            ),
+    },
+    {
+        order: 53,
+        id: 'theme_arcgis_ref_transport',
+        name: 'ESRI世界交通',
+        catalogCategory: 'electronic',
+        provider: 'ESRI',
+        coord: 'WGS84',
+        description: 'ESRI世界交通 · ESRI / WGS84',
+        category: 'theme',
+        group: 'Reference',
+        url: 'https://services.arcgisonline.com/arcgis/rest/services/Reference/World_Transportation/MapServer/tile/{z}/{y}/{x}',
+        serviceType: 'xyz',
+        createSource: () =>
+            prioritizeTileSourceRequest(
+                new XYZ({
+                    url: 'https://services.arcgisonline.com/arcgis/rest/services/Reference/World_Transportation/MapServer/tile/{z}/{y}/{x}',
+                }),
+            ),
+    },
+    {
+        order: 54,
+        id: 'theme_arcgis_spec_nav',
+        name: 'ESRI世界航海图',
+        catalogCategory: 'electronic',
+        provider: 'ESRI',
+        coord: 'WGS84',
+        description: 'ESRI世界航海图 · ESRI / WGS84',
+        category: 'theme',
+        group: 'Specialty',
+        url: 'https://services.arcgisonline.com/arcgis/rest/services/Specialty/World_Navigation_Charts/MapServer/tile/{z}/{y}/{x}',
+        serviceType: 'xyz',
+        createSource: () =>
+            prioritizeTileSourceRequest(
+                new XYZ({
+                    url: 'https://services.arcgisonline.com/arcgis/rest/services/Specialty/World_Navigation_Charts/MapServer/tile/{z}/{y}/{x}',
+                }),
+            ),
+    },
+    {
+        order: 55,
+        id: 'theme_arcgis_natgeo_world',
+        name: '国家地理世界地图',
+        catalogCategory: 'electronic',
+        provider: 'ESRI',
+        coord: 'WGS84',
+        description: '国家地理世界地图 · ESRI / WGS84',
+        category: 'theme',
+        group: 'World',
+        url: 'https://services.arcgisonline.com/arcgis/rest/services/NatGeo_World_Map/MapServer/tile/{z}/{y}/{x}',
+        serviceType: 'xyz',
+        createSource: () =>
+            prioritizeTileSourceRequest(
+                new XYZ({
+                    url: 'https://services.arcgisonline.com/arcgis/rest/services/NatGeo_World_Map/MapServer/tile/{z}/{y}/{x}',
+                }),
+            ),
+    },
+    {
+        order: 57,
+        id: 'theme_arcgis_physical_root',
+        name: '世界自然地理图',
+        catalogCategory: 'electronic',
+        provider: 'ESRI',
+        coord: 'WGS84',
+        description: '世界自然地理图 · ESRI / WGS84',
+        category: 'theme',
+        group: 'World',
+        url: 'https://services.arcgisonline.com/arcgis/rest/services/World_Physical_Map/MapServer/tile/{z}/{y}/{x}',
+        serviceType: 'xyz',
+        createSource: () =>
+            prioritizeTileSourceRequest(
+                new XYZ({
+                    url: 'https://services.arcgisonline.com/arcgis/rest/services/World_Physical_Map/MapServer/tile/{z}/{y}/{x}',
+                }),
+            ),
+    },
+    {
+        order: 59,
+        id: 'theme_arcgis_street_root',
+        name: '世界街道图',
+        catalogCategory: 'electronic',
+        provider: 'ESRI',
+        coord: 'WGS84',
+        description: '世界街道图 · ESRI / WGS84',
+        category: 'theme',
+        group: 'World',
+        url: 'https://services.arcgisonline.com/arcgis/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}',
+        serviceType: 'xyz',
+        createSource: () =>
+            prioritizeTileSourceRequest(
+                new XYZ({
+                    url: 'https://services.arcgisonline.com/arcgis/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}',
+                }),
+            ),
+    },
+    {
+        order: 63,
+        id: 'theme_windy',
+        name: 'windy',
+        catalogCategory: 'electronic',
+        provider: 'Windy',
+        coord: 'WGS84',
+        description: 'windy · Windy / WGS84',
+        category: 'theme',
+        group: '专题',
+        url: 'https://tiles.windy.com/v1/maptiles/outdoor/{z}/{x}/{y}/?lang=en',
+        serviceType: 'xyz',
+        createSource: () =>
+            prioritizeTileSourceRequest(
+                new XYZ({
+                    url: 'https://tiles.windy.com/v1/maptiles/outdoor/{z}/{x}/{y}/?lang=en',
+                }),
+            ),
+    },
+    {
+        order: 64,
+        id: 'theme_windy2',
+        name: 'windy2',
+        catalogCategory: 'electronic',
+        provider: 'Windy',
+        coord: 'WGS84',
+        description: 'windy2 · Windy / WGS84',
+        category: 'theme',
+        group: '专题',
+        url: 'https://tiles.windy.com/v1/maptiles/winter/{z}/{x}/{y}/?lang=en',
+        serviceType: 'xyz',
+        createSource: () =>
+            prioritizeTileSourceRequest(
+                new XYZ({
+                    url: 'https://tiles.windy.com/v1/maptiles/winter/{z}/{x}/{y}/?lang=en',
+                }),
+            ),
+    },
+    {
+        order: 65,
+        id: 'theme_windy_outer',
+        name: 'windy轮廓',
+        catalogCategory: 'electronic',
+        provider: 'Windy',
+        coord: 'WGS84',
+        description: 'windy轮廓 · Windy / WGS84',
+        category: 'theme',
+        group: '专题',
+        url: 'https://tiles.windy.com/tiles/v10.0/darkmap-retina/{z}/{x}/{y}.png',
+        serviceType: 'xyz',
+        createSource: () =>
+            prioritizeTileSourceRequest(
+                new XYZ({
+                    url: 'https://tiles.windy.com/tiles/v10.0/darkmap-retina/{z}/{x}/{y}.png',
+                }),
+            ),
+    },
+    {
+        order: 66,
+        id: 'theme_windy_greenland',
+        name: 'windy Gray',
+        catalogCategory: 'electronic',
+        provider: 'Windy',
+        coord: 'WGS84',
+        description: 'windy Gray · Windy / WGS84',
+        category: 'theme',
+        group: '专题',
+        url: 'https://tiles.windy.com/tiles/v10.0/grayland/{z}/{x}/{y}.png',
+        serviceType: 'xyz',
+        createSource: () =>
+            prioritizeTileSourceRequest(
+                new XYZ({ url: 'https://tiles.windy.com/tiles/v10.0/grayland/{z}/{x}/{y}.png' }),
+            ),
+    },
+    {
+        order: 67,
+        id: 'theme_maptiler_winter',
+        name: 'MapTiler冬季',
+        catalogCategory: 'electronic',
+        provider: 'MapTiler',
+        coord: 'WGS84',
+        description: 'MapTiler冬季 · MapTiler / WGS84',
+        category: 'theme',
+        group: '专题',
+        url: 'https://api.maptiler.com/maps/winter-v4/{z}/{x}/{y}.png?key=osLOujcXk1GJrGk5oaDz',
+        serviceType: 'xyz',
+        createSource: () =>
+            prioritizeTileSourceRequest(
+                new XYZ({
+                    url: 'https://api.maptiler.com/maps/winter-v4/{z}/{x}/{y}.png?key=osLOujcXk1GJrGk5oaDz',
+                }),
+            ),
+    },
+    {
+        order: 86,
+        id: 'vector_tianditu',
+        name: '天地图矢量',
+        catalogCategory: 'electronic',
+        provider: 'Tianditu',
+        coord: 'WGS84',
+        description: '天地图矢量 · Tianditu / WGS84',
+        category: 'vector',
+        group: '矢量',
+        url: 'https://t{s}.tianditu.gov.cn/vec_w/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=vec&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&tk={tiandituTk}',
+        serviceType: 'xyz',
+        createSource: ({ tiandituTk }) =>
+            prioritizeTileSourceRequest(
+                new XYZ({
+                    url: buildTiandituUrl(
+                        '/vec_w/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=vec&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}',
+                        tiandituTk,
+                    ),
+                }),
+            ),
+    },
+    {
+        order: 89,
+        id: 'vector_tuxin',
+        name: '图新矢量',
+        catalogCategory: 'electronic',
+        provider: 'Tuxin',
+        coord: 'GCJ02',
+        description: '图新矢量 · Tuxin / GCJ02',
+        category: 'vector',
+        group: '矢量',
+        url: 'https://tiles.geovisearth.com/base/v1/vec/{z}/{x}/{y}?token=0aeb02f29320b060c2e2d0c04eb4887c6b8d5a8ed479b3aacff2b6a273b0d38d',
+        serviceType: 'xyz',
+        createSource: () =>
+            prioritizeTileSourceRequest(
+                new XYZ({
+                    url: 'https://tiles.geovisearth.com/base/v1/vec/{z}/{x}/{y}?token=0aeb02f29320b060c2e2d0c04eb4887c6b8d5a8ed479b3aacff2b6a273b0d38d',
+                }),
+            ),
+    },
+    {
+        order: 90,
+        id: 'vector_amap',
+        name: '高德地图(GCJ)',
+        catalogCategory: 'electronic',
+        provider: 'AMAP',
+        coord: 'GCJ02',
+        description: '高德地图(GCJ) · AMAP / GCJ02',
+        category: 'vector',
+        group: '矢量',
+        url: 'https://webrd01.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&ltype=9&scl=2&x={x}&y={y}&z={z}',
+        serviceType: 'xyz',
+        createSource: () =>
+            prioritizeTileSourceRequest(
+                new XYZ({
+                    url: 'https://webrd01.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&ltype=9&scl=2&x={x}&y={y}&z={z}',
+                }),
+            ),
+    },
+    {
+        order: 91,
+        id: 'vector_amap_wgs',
+        name: '高德地图(WGS)',
+        catalogCategory: 'electronic',
+        provider: 'AMAP',
+        coord: 'WGS84',
+        description: '高德地图(WGS) · AMAP / WGS84',
+        category: 'vector',
+        group: '矢量',
+        url: gcj2wgsProxyUrl(
+            'http://webrd01.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&ltype=9&scl=1&x={x}&y={y}&z={z}',
+        ),
+        serviceType: 'xyz',
+        createSource: () =>
+            prioritizeTileSourceRequest(
+                new XYZ({
+                    url: gcj2wgsProxyUrl(
+                        'http://webrd01.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&ltype=9&scl=1&x={x}&y={y}&z={z}',
+                    ),
+                }),
+            ),
+    },
+    {
+        order: 92,
+        id: 'vector_amap_clean_hd',
+        name: '高德简洁电子(512 GCJ)',
+        catalogCategory: 'electronic',
+        provider: 'AMAP',
+        coord: 'GCJ02',
+        description: '高德简洁电子(512 GCJ) · AMAP / GCJ02',
+        category: 'vector',
+        group: '矢量',
+        url: 'https://webrd01.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&ltype=1&scl=2&x={x}&y={y}&z={z}',
+        serviceType: 'xyz',
+        createSource: () =>
+            prioritizeTileSourceRequest(
+                new XYZ({
+                    url: 'https://webrd01.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&ltype=1&scl=2&x={x}&y={y}&z={z}',
+                }),
+            ),
+    },
+    {
+        order: 93,
+        id: 'vector_amap_clean_roads',
+        name: '高德简洁有路(GCJ)',
+        catalogCategory: 'electronic',
+        provider: 'AMAP',
+        coord: 'GCJ02',
+        description: '高德简洁有路(GCJ) · AMAP / GCJ02',
+        category: 'vector',
+        group: '矢量',
+        url: 'https://webrd01.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&ltype=3&scl=2&x={x}&y={y}&z={z}',
+        serviceType: 'xyz',
+        createSource: () =>
+            prioritizeTileSourceRequest(
+                new XYZ({
+                    url: 'https://webrd01.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&ltype=3&scl=2&x={x}&y={y}&z={z}',
+                }),
+            ),
+    },
+    {
+        order: 94,
+        id: 'vector_amap_clean_wgs',
+        name: '高德简洁电子(WGS)',
+        catalogCategory: 'electronic',
+        provider: 'AMAP',
+        coord: 'WGS84',
+        description: '高德简洁电子(WGS) · AMAP / WGS84',
+        category: 'vector',
+        group: '矢量',
+        url: 'None',
+        serviceType: 'xyz',
+        createSource: () =>
+            prioritizeTileSourceRequest(
+                new XYZ({
+                    url: 'None',
+                }),
+            ),
+    },
+    {
+        order: 95,
+        id: 'vector_amap_roads_wgs',
+        name: '高德纯道路(WGS)',
+        catalogCategory: 'electronic',
+        provider: 'AMAP',
+        coord: 'WGS84',
+        description: '高德纯道路(WGS) · AMAP / WGS84',
+        category: 'vector',
+        group: '矢量',
+        url: 'None',
+        serviceType: 'xyz',
+        createSource: () =>
+            prioritizeTileSourceRequest(
+                new XYZ({
+                    url: 'None',
+                }),
+            ),
+    },
+    {
+        order: 96,
+        id: 'vector_baidu_wgs',
+        name: '百度地图(WGS)',
+        catalogCategory: 'electronic',
+        provider: 'Baidu',
+        coord: 'WGS84',
+        description: '百度地图(WGS) · Baidu / WGS84',
+        category: 'vector',
+        group: '矢量',
+        
+        
+        
+        url: bd2wgsProxyUrl(
+            'https://maponline0.bdimg.com/tile/?qt=vtile&x={x}&y={y}&z={z}&styles=pl&scaler=1&from=jsapi2_0',
+        ),
+        serviceType: 'xyz',
+        maxZoom: 18,
+        createSource: () =>
+            prioritizeTileSourceRequest(
+                new XYZ({
+                    url: bd2wgsProxyUrl(
+                        'https://maponline0.bdimg.com/tile/?qt=vtile&x={x}&y={y}&z={z}&styles=pl&scaler=1&from=jsapi2_0',
+                    ),
+                    maxZoom: 18,
+                }),
+            ),
+    },
+    {
+        order: 97,
+        id: 'vector_maptiler_streets',
+        name: 'MapTiler街道',
+        catalogCategory: 'electronic',
+        provider: 'MapTiler',
+        coord: 'WGS84',
+        description: 'MapTiler街道 · MapTiler / WGS84',
+        category: 'vector',
+        group: '矢量',
+        url: 'https://api.maptiler.com/maps/streets-v4/{z}/{x}/{y}.png?key=osLOujcXk1GJrGk5oaDz',
+        serviceType: 'xyz',
+        createSource: () =>
+            prioritizeTileSourceRequest(
+                new XYZ({
+                    url: 'https://api.maptiler.com/maps/streets-v4/{z}/{x}/{y}.png?key=osLOujcXk1GJrGk5oaDz',
+                }),
+            ),
+    },
+    {
+        order: 98,
+        id: 'vector_tengxun',
+        name: '腾讯地图(GCJ)',
+        catalogCategory: 'electronic',
+        provider: 'Tencent',
+        coord: 'GCJ02',
+        description: '腾讯地图(GCJ) · Tencent / GCJ02',
+        category: 'vector',
+        group: '矢量',
+        url: 'https://rt0.map.gtimg.com/realtimerender?z={z}&x={x}&y={-y}&type=vector&style=0',
+        serviceType: 'xyz',
+        createSource: () =>
+            prioritizeTileSourceRequest(
+                new XYZ({
+                    url: 'https://rt0.map.gtimg.com/realtimerender?z={z}&x={x}&y={-y}&type=vector&style=0',
+                }),
+            ),
+    },
+    {
+        order: 99,
+        id: 'vector_amap_256_ltype_1_gcj',
+        name: '高德电子256 地貌(ltype=1, GCJ)',
+        catalogCategory: 'electronic',
+        provider: 'AMAP',
+        coord: 'GCJ02',
+        description: '高德电子256 地貌(ltype=1, GCJ) · AMAP / GCJ02',
+        category: 'vector',
+        group: '矢量',
+        url: 'https://webrd01.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&ltype=1&x={x}&y={y}&z={z}',
+        serviceType: 'xyz',
+        createSource: () =>
+            prioritizeTileSourceRequest(
+                new XYZ({
+                    url: 'https://webrd01.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&ltype=1&x={x}&y={y}&z={z}',
+                }),
+            ),
+    },
+    {
+        order: 100,
+        id: 'vector_amap_256_ltype_1_wgs',
+        name: '高德电子256 地貌(ltype=1, WGS)',
+        catalogCategory: 'electronic',
+        provider: 'AMAP',
+        coord: 'WGS84',
+        description: '高德电子256 地貌(ltype=1, WGS) · AMAP / WGS84',
+        category: 'vector',
+        group: '矢量',
+        url: gcj2wgsProxyUrl('https://webrd01.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&ltype=1&x={x}&y={y}&z={z}'),
+        serviceType: 'xyz',
+        createSource: () =>
+            prioritizeTileSourceRequest(
+                new XYZ({
+                    url: gcj2wgsProxyUrl('https://webrd01.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&ltype=1&x={x}&y={y}&z={z}'),
+                }),
+            ),
+    },
+    {
+        order: 101,
+        id: 'vector_amap_256_ltype_2_gcj',
+        name: '高德电子256 路网(ltype=2, GCJ)',
+        catalogCategory: 'electronic',
+        provider: 'AMAP',
+        coord: 'GCJ02',
+        description: '高德电子256 路网(ltype=2, GCJ) · AMAP / GCJ02',
+        category: 'vector',
+        group: '矢量',
+        url: 'https://webrd01.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&ltype=2&x={x}&y={y}&z={z}',
+        serviceType: 'xyz',
+        createSource: () =>
+            prioritizeTileSourceRequest(
+                new XYZ({
+                    url: 'https://webrd01.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&ltype=2&x={x}&y={y}&z={z}',
+                }),
+            ),
+    },
+    {
+        order: 102,
+        id: 'vector_amap_256_ltype_2_wgs',
+        name: '高德电子256 路网(ltype=2, WGS)',
+        catalogCategory: 'electronic',
+        provider: 'AMAP',
+        coord: 'WGS84',
+        description: '高德电子256 路网(ltype=2, WGS) · AMAP / WGS84',
+        category: 'vector',
+        group: '矢量',
+        url: gcj2wgsProxyUrl('https://webrd01.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&ltype=2&x={x}&y={y}&z={z}'),
+        serviceType: 'xyz',
+        createSource: () =>
+            prioritizeTileSourceRequest(
+                new XYZ({
+                    url: gcj2wgsProxyUrl('https://webrd01.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&ltype=2&x={x}&y={y}&z={z}'),
+                }),
+            ),
+    },
+    {
+        order: 103,
+        id: 'vector_amap_256_ltype_3_gcj',
+        name: '高德电子256 地貌+路网(ltype=3, GCJ)',
+        catalogCategory: 'electronic',
+        provider: 'AMAP',
+        coord: 'GCJ02',
+        description: '高德电子256 地貌+路网(ltype=3, GCJ) · AMAP / GCJ02',
+        category: 'vector',
+        group: '矢量',
+        url: 'https://webrd01.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&ltype=3&x={x}&y={y}&z={z}',
+        serviceType: 'xyz',
+        createSource: () =>
+            prioritizeTileSourceRequest(
+                new XYZ({
+                    url: 'https://webrd01.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&ltype=3&x={x}&y={y}&z={z}',
+                }),
+            ),
+    },
+    {
+        order: 104,
+        id: 'vector_amap_256_ltype_3_wgs',
+        name: '高德电子256 地貌+路网(ltype=3, WGS)',
+        catalogCategory: 'electronic',
+        provider: 'AMAP',
+        coord: 'WGS84',
+        description: '高德电子256 地貌+路网(ltype=3, WGS) · AMAP / WGS84',
+        category: 'vector',
+        group: '矢量',
+        url: gcj2wgsProxyUrl('https://webrd01.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&ltype=3&x={x}&y={y}&z={z}'),
+        serviceType: 'xyz',
+        createSource: () =>
+            prioritizeTileSourceRequest(
+                new XYZ({
+                    url: gcj2wgsProxyUrl('https://webrd01.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&ltype=3&x={x}&y={y}&z={z}'),
+                }),
+            ),
+    },
+    {
+        order: 105,
+        id: 'vector_amap_256_ltype_4_gcj',
+        name: '高德电子256 注记(ltype=4, GCJ)',
+        catalogCategory: 'electronic',
+        provider: 'AMAP',
+        coord: 'GCJ02',
+        description: '高德电子256 注记(ltype=4, GCJ) · AMAP / GCJ02',
+        category: 'vector',
+        group: '矢量',
+        url: 'https://webrd01.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&ltype=4&x={x}&y={y}&z={z}',
+        serviceType: 'xyz',
+        createSource: () =>
+            prioritizeTileSourceRequest(
+                new XYZ({
+                    url: 'https://webrd01.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&ltype=4&x={x}&y={y}&z={z}',
+                }),
+            ),
+    },
+    {
+        order: 106,
+        id: 'vector_amap_256_ltype_4_wgs',
+        name: '高德电子256 注记(ltype=4, WGS)',
+        catalogCategory: 'electronic',
+        provider: 'AMAP',
+        coord: 'WGS84',
+        description: '高德电子256 注记(ltype=4, WGS) · AMAP / WGS84',
+        category: 'vector',
+        group: '矢量',
+        url: gcj2wgsProxyUrl('https://webrd01.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&ltype=4&x={x}&y={y}&z={z}'),
+        serviceType: 'xyz',
+        createSource: () =>
+            prioritizeTileSourceRequest(
+                new XYZ({
+                    url: gcj2wgsProxyUrl('https://webrd01.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&ltype=4&x={x}&y={y}&z={z}'),
+                }),
+            ),
+    },
+    {
+        order: 107,
+        id: 'vector_amap_256_ltype_5_gcj',
+        name: '高德电子256 地貌+注记(ltype=5, GCJ)',
+        catalogCategory: 'electronic',
+        provider: 'AMAP',
+        coord: 'GCJ02',
+        description: '高德电子256 地貌+注记(ltype=5, GCJ) · AMAP / GCJ02',
+        category: 'vector',
+        group: '矢量',
+        url: 'https://webrd01.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&ltype=5&x={x}&y={y}&z={z}',
+        serviceType: 'xyz',
+        createSource: () =>
+            prioritizeTileSourceRequest(
+                new XYZ({
+                    url: 'https://webrd01.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&ltype=5&x={x}&y={y}&z={z}',
+                }),
+            ),
+    },
+    {
+        order: 108,
+        id: 'vector_amap_256_ltype_5_wgs',
+        name: '高德电子256 地貌+注记(ltype=5, WGS)',
+        catalogCategory: 'electronic',
+        provider: 'AMAP',
+        coord: 'WGS84',
+        description: '高德电子256 地貌+注记(ltype=5, WGS) · AMAP / WGS84',
+        category: 'vector',
+        group: '矢量',
+        url: gcj2wgsProxyUrl('https://webrd01.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&ltype=5&x={x}&y={y}&z={z}'),
+        serviceType: 'xyz',
+        createSource: () =>
+            prioritizeTileSourceRequest(
+                new XYZ({
+                    url: gcj2wgsProxyUrl('https://webrd01.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&ltype=5&x={x}&y={y}&z={z}'),
+                }),
+            ),
+    },
+    {
+        order: 109,
+        id: 'vector_amap_256_ltype_6_gcj',
+        name: '高德电子256 路网+注记(ltype=6, GCJ)',
+        catalogCategory: 'electronic',
+        provider: 'AMAP',
+        coord: 'GCJ02',
+        description: '高德电子256 路网+注记(ltype=6, GCJ) · AMAP / GCJ02',
+        category: 'vector',
+        group: '矢量',
+        url: 'https://webrd01.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&ltype=6&x={x}&y={y}&z={z}',
+        serviceType: 'xyz',
+        createSource: () =>
+            prioritizeTileSourceRequest(
+                new XYZ({
+                    url: 'https://webrd01.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&ltype=6&x={x}&y={y}&z={z}',
+                }),
+            ),
+    },
+    {
+        order: 110,
+        id: 'vector_amap_256_ltype_6_wgs',
+        name: '高德电子256 路网+注记(ltype=6, WGS)',
+        catalogCategory: 'electronic',
+        provider: 'AMAP',
+        coord: 'WGS84',
+        description: '高德电子256 路网+注记(ltype=6, WGS) · AMAP / WGS84',
+        category: 'vector',
+        group: '矢量',
+        url: gcj2wgsProxyUrl('https://webrd01.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&ltype=6&x={x}&y={y}&z={z}'),
+        serviceType: 'xyz',
+        createSource: () =>
+            prioritizeTileSourceRequest(
+                new XYZ({
+                    url: gcj2wgsProxyUrl('https://webrd01.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&ltype=6&x={x}&y={y}&z={z}'),
+                }),
+            ),
+    },
+    {
+        order: 111,
+        id: 'vector_amap_256_ltype_7_gcj',
+        name: '高德电子256 地貌+路网+注记(ltype=7, GCJ)',
+        catalogCategory: 'electronic',
+        provider: 'AMAP',
+        coord: 'GCJ02',
+        description: '高德电子256 地貌+路网+注记(ltype=7, GCJ) · AMAP / GCJ02',
+        category: 'vector',
+        group: '矢量',
+        url: 'https://webrd01.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&ltype=7&x={x}&y={y}&z={z}',
+        serviceType: 'xyz',
+        createSource: () =>
+            prioritizeTileSourceRequest(
+                new XYZ({
+                    url: 'https://webrd01.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&ltype=7&x={x}&y={y}&z={z}',
+                }),
+            ),
+    },
+    {
+        order: 112,
+        id: 'vector_amap_256_ltype_7_wgs',
+        name: '高德电子256 地貌+路网+注记(ltype=7, WGS)',
+        catalogCategory: 'electronic',
+        provider: 'AMAP',
+        coord: 'WGS84',
+        description: '高德电子256 地貌+路网+注记(ltype=7, WGS) · AMAP / WGS84',
+        category: 'vector',
+        group: '矢量',
+        url: gcj2wgsProxyUrl('https://webrd01.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&ltype=7&x={x}&y={y}&z={z}'),
+        serviceType: 'xyz',
+        createSource: () =>
+            prioritizeTileSourceRequest(
+                new XYZ({
+                    url: gcj2wgsProxyUrl('https://webrd01.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&ltype=7&x={x}&y={y}&z={z}'),
+                }),
+            ),
+    },
+    {
+        order: 113,
+        id: 'vector_amap_256_ltype_8_gcj',
+        name: '高德电子256 建筑(ltype=8, GCJ)',
+        catalogCategory: 'electronic',
+        provider: 'AMAP',
+        coord: 'GCJ02',
+        description: '高德电子256 建筑(ltype=8, GCJ) · AMAP / GCJ02',
+        category: 'vector',
+        group: '矢量',
+        url: 'https://webrd01.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&ltype=8&x={x}&y={y}&z={z}',
+        serviceType: 'xyz',
+        createSource: () =>
+            prioritizeTileSourceRequest(
+                new XYZ({
+                    url: 'https://webrd01.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&ltype=8&x={x}&y={y}&z={z}',
+                }),
+            ),
+    },
+    {
+        order: 114,
+        id: 'vector_amap_256_ltype_8_wgs',
+        name: '高德电子256 建筑(ltype=8, WGS)',
+        catalogCategory: 'electronic',
+        provider: 'AMAP',
+        coord: 'WGS84',
+        description: '高德电子256 建筑(ltype=8, WGS) · AMAP / WGS84',
+        category: 'vector',
+        group: '矢量',
+        url: gcj2wgsProxyUrl('https://webrd01.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&ltype=8&x={x}&y={y}&z={z}'),
+        serviceType: 'xyz',
+        createSource: () =>
+            prioritizeTileSourceRequest(
+                new XYZ({
+                    url: gcj2wgsProxyUrl('https://webrd01.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&ltype=8&x={x}&y={y}&z={z}'),
+                }),
+            ),
+    },
+    {
+        order: 115,
+        id: 'vector_amap_256_ltype_11_gcj',
+        name: '高德电子256 地貌+路网+建筑(ltype=11, GCJ)',
+        catalogCategory: 'electronic',
+        provider: 'AMAP',
+        coord: 'GCJ02',
+        description: '高德电子256 地貌+路网+建筑(ltype=11, GCJ) · AMAP / GCJ02',
+        category: 'vector',
+        group: '矢量',
+        url: 'https://webrd01.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&ltype=11&x={x}&y={y}&z={z}',
+        serviceType: 'xyz',
+        createSource: () =>
+            prioritizeTileSourceRequest(
+                new XYZ({
+                    url: 'https://webrd01.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&ltype=11&x={x}&y={y}&z={z}',
+                }),
+            ),
+    },
+    {
+        order: 116,
+        id: 'vector_amap_256_ltype_11_wgs',
+        name: '高德电子256 地貌+路网+建筑(ltype=11, WGS)',
+        catalogCategory: 'electronic',
+        provider: 'AMAP',
+        coord: 'WGS84',
+        description: '高德电子256 地貌+路网+建筑(ltype=11, WGS) · AMAP / WGS84',
+        category: 'vector',
+        group: '矢量',
+        url: gcj2wgsProxyUrl('https://webrd01.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&ltype=11&x={x}&y={y}&z={z}'),
+        serviceType: 'xyz',
+        createSource: () =>
+            prioritizeTileSourceRequest(
+                new XYZ({
+                    url: gcj2wgsProxyUrl('https://webrd01.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&ltype=11&x={x}&y={y}&z={z}'),
+                }),
+            ),
+    },
+    {
+        order: 117,
+        id: 'vector_amap_256_ltype_15_gcj',
+        name: '高德电子256 全要素(ltype=15, GCJ)',
+        catalogCategory: 'electronic',
+        provider: 'AMAP',
+        coord: 'GCJ02',
+        description: '高德电子256 全要素(ltype=15, GCJ) · AMAP / GCJ02',
+        category: 'vector',
+        group: '矢量',
+        url: 'https://webrd01.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&ltype=15&x={x}&y={y}&z={z}',
+        serviceType: 'xyz',
+        createSource: () =>
+            prioritizeTileSourceRequest(
+                new XYZ({
+                    url: 'https://webrd01.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&ltype=15&x={x}&y={y}&z={z}',
+                }),
+            ),
+    },
+    {
+        order: 118,
+        id: 'vector_amap_256_ltype_15_wgs',
+        name: '高德电子256 全要素(ltype=15, WGS)',
+        catalogCategory: 'electronic',
+        provider: 'AMAP',
+        coord: 'WGS84',
+        description: '高德电子256 全要素(ltype=15, WGS) · AMAP / WGS84',
+        category: 'vector',
+        group: '矢量',
+        url: gcj2wgsProxyUrl('https://webrd01.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&ltype=15&x={x}&y={y}&z={z}'),
+        serviceType: 'xyz',
+        createSource: () =>
+            prioritizeTileSourceRequest(
+                new XYZ({
+                    url: gcj2wgsProxyUrl('https://webrd01.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&ltype=15&x={x}&y={y}&z={z}'),
+                }),
+            ),
+    },
+    {
+        order: 119,
+        id: 'vector_google_combo_standard_gcj',
+        name: 'Google标准电子(GCJ)',
+        catalogCategory: 'electronic',
+        provider: 'Google',
+        coord: 'GCJ02',
+        description: 'Google标准电子(GCJ) · Google / GCJ02',
+        category: 'vector',
+        group: '矢量',
+        url: 'https://mt0.google.com/vt/lyrs=m&hl=zh-CN&x={x}&y={y}&z={z}',
+        serviceType: 'xyz',
+        createSource: () =>
+            prioritizeTileSourceRequest(
+                new XYZ({
+                    url: 'https://mt0.google.com/vt/lyrs=m&hl=zh-CN&x={x}&y={y}&z={z}',
+                }),
+            ),
+    },
+    {
+        order: 120,
+        id: 'vector_google_combo_standard_wgs',
+        name: 'Google标准电子(WGS)',
+        catalogCategory: 'electronic',
+        provider: 'Google',
+        coord: 'WGS84',
+        description: 'Google标准电子(WGS) · Google / WGS84',
+        category: 'vector',
+        group: '矢量',
+        url: gcj2wgsProxyUrl('https://mt0.google.com/vt/lyrs=m&hl=zh-CN&x={x}&y={y}&z={z}'),
+        serviceType: 'xyz',
+        createSource: () =>
+            prioritizeTileSourceRequest(
+                new XYZ({
+                    url: gcj2wgsProxyUrl('https://mt0.google.com/vt/lyrs=m&hl=zh-CN&x={x}&y={y}&z={z}'),
+                }),
+            ),
+    },
+    {
+        order: 123,
+        id: 'vector_google_combo_labels_gcj',
+        name: 'Google仅注记(GCJ)',
+        catalogCategory: 'electronic',
+        provider: 'Google',
+        coord: 'GCJ02',
+        description: 'Google仅注记(GCJ) · Google / GCJ02',
+        category: 'vector',
+        group: '矢量',
+        url: 'https://mt0.google.com/vt/lyrs=h&hl=zh-CN&x={x}&y={y}&z={z}',
+        serviceType: 'xyz',
+        createSource: () =>
+            prioritizeTileSourceRequest(
+                new XYZ({
+                    url: 'https://mt0.google.com/vt/lyrs=h&hl=zh-CN&x={x}&y={y}&z={z}',
+                }),
+            ),
+    },
+    {
+        order: 124,
+        id: 'vector_google_combo_labels_wgs',
+        name: 'Google仅注记(WGS)',
+        catalogCategory: 'electronic',
+        provider: 'Google',
+        coord: 'WGS84',
+        description: 'Google仅注记(WGS) · Google / WGS84',
+        category: 'vector',
+        group: '矢量',
+        url: gcj2wgsProxyUrl('https://mt0.google.com/vt/lyrs=h&hl=zh-CN&x={x}&y={y}&z={z}'),
+        serviceType: 'xyz',
+        createSource: () =>
+            prioritizeTileSourceRequest(
+                new XYZ({
+                    url: gcj2wgsProxyUrl('https://mt0.google.com/vt/lyrs=h&hl=zh-CN&x={x}&y={y}&z={z}'),
+                }),
+            ),
+    },
+    {
+        order: 125,
+        id: 'vector_google_combo_road_labeled_gcj',
+        name: 'Google纯路网含注记(GCJ)',
+        catalogCategory: 'electronic',
+        provider: 'Google',
+        coord: 'GCJ02',
+        description: 'Google纯路网含注记(GCJ) · Google / GCJ02',
+        category: 'vector',
+        group: '矢量',
+        url: 'https://mt0.google.com/vt/lyrs=m&hl=zh-CN&x={x}&y={y}&z={z}&apistyle=s.t:0%7Cp.v:off,s.t:3%7Cp.v:on',
+        serviceType: 'xyz',
+        createSource: () =>
+            prioritizeTileSourceRequest(
+                new XYZ({
+                    url: 'https://mt0.google.com/vt/lyrs=m&hl=zh-CN&x={x}&y={y}&z={z}&apistyle=s.t:0%7Cp.v:off,s.t:3%7Cp.v:on',
+                }),
+            ),
+    },
+    {
+        order: 126,
+        id: 'vector_google_combo_road_labeled_wgs',
+        name: 'Google纯路网含注记(WGS)',
+        catalogCategory: 'electronic',
+        provider: 'Google',
+        coord: 'WGS84',
+        description: 'Google纯路网含注记(WGS) · Google / WGS84',
+        category: 'vector',
+        group: '矢量',
+        url: gcj2wgsProxyUrl('https://mt0.google.com/vt/lyrs=m&hl=zh-CN&x={x}&y={y}&z={z}&apistyle=s.t:0%7Cp.v:off,s.t:3%7Cp.v:on'),
+        serviceType: 'xyz',
+        createSource: () =>
+            prioritizeTileSourceRequest(
+                new XYZ({
+                    url: gcj2wgsProxyUrl('https://mt0.google.com/vt/lyrs=m&hl=zh-CN&x={x}&y={y}&z={z}&apistyle=s.t:0%7Cp.v:off,s.t:3%7Cp.v:on'),
+                }),
+            ),
+    },
+    {
+        order: 127,
+        id: 'vector_google_combo_road_skeleton_gcj',
+        name: 'Google纯路网骨架(GCJ)',
+        catalogCategory: 'electronic',
+        provider: 'Google',
+        coord: 'GCJ02',
+        description: 'Google纯路网骨架(GCJ) · Google / GCJ02',
+        category: 'vector',
+        group: '矢量',
+        url: 'https://mt0.google.com/vt/lyrs=m&x={x}&y={y}&z={z}&apistyle=s.t:0%7Cp.v:off,s.t:3%7Cp.v:on,s.t:3%7Cs.e:l%7Cp.v:off',
+        serviceType: 'xyz',
+        createSource: () =>
+            prioritizeTileSourceRequest(
+                new XYZ({
+                    url: 'https://mt0.google.com/vt/lyrs=m&x={x}&y={y}&z={z}&apistyle=s.t:0%7Cp.v:off,s.t:3%7Cp.v:on,s.t:3%7Cs.e:l%7Cp.v:off',
+                }),
+            ),
+    },
+    {
+        order: 128,
+        id: 'vector_google_combo_road_skeleton_wgs',
+        name: 'Google纯路网骨架(WGS)',
+        catalogCategory: 'electronic',
+        provider: 'Google',
+        coord: 'WGS84',
+        description: 'Google纯路网骨架(WGS) · Google / WGS84',
+        category: 'vector',
+        group: '矢量',
+        url: gcj2wgsProxyUrl('https://mt0.google.com/vt/lyrs=m&x={x}&y={y}&z={z}&apistyle=s.t:0%7Cp.v:off,s.t:3%7Cp.v:on,s.t:3%7Cs.e:l%7Cp.v:off'),
+        serviceType: 'xyz',
+        createSource: () =>
+            prioritizeTileSourceRequest(
+                new XYZ({
+                    url: gcj2wgsProxyUrl('https://mt0.google.com/vt/lyrs=m&x={x}&y={y}&z={z}&apistyle=s.t:0%7Cp.v:off,s.t:3%7Cp.v:on,s.t:3%7Cs.e:l%7Cp.v:off'),
+                }),
+            ),
+    },
+    {
+        order: 129,
+        id: 'vector_google_combo_road_text_gcj',
+        name: 'Google纯路网注记(GCJ)',
+        catalogCategory: 'electronic',
+        provider: 'Google',
+        coord: 'GCJ02',
+        description: 'Google纯路网注记(GCJ) · Google / GCJ02',
+        category: 'vector',
+        group: '矢量',
+        url: 'https://mt0.google.com/vt/lyrs=m&hl=zh-CN&x={x}&y={y}&z={z}&apistyle=s.t:0%7Cp.v:off,s.t:3%7Cp.v:on,s.t:3%7Cs.e:g%7Cp.v:off',
+        serviceType: 'xyz',
+        createSource: () =>
+            prioritizeTileSourceRequest(
+                new XYZ({
+                    url: 'https://mt0.google.com/vt/lyrs=m&hl=zh-CN&x={x}&y={y}&z={z}&apistyle=s.t:0%7Cp.v:off,s.t:3%7Cp.v:on,s.t:3%7Cs.e:g%7Cp.v:off',
+                }),
+            ),
+    },
+    {
+        order: 130,
+        id: 'vector_google_combo_road_text_wgs',
+        name: 'Google纯路网注记(WGS)',
+        catalogCategory: 'electronic',
+        provider: 'Google',
+        coord: 'WGS84',
+        description: 'Google纯路网注记(WGS) · Google / WGS84',
+        category: 'vector',
+        group: '矢量',
+        url: gcj2wgsProxyUrl('https://mt0.google.com/vt/lyrs=m&hl=zh-CN&x={x}&y={y}&z={z}&apistyle=s.t:0%7Cp.v:off,s.t:3%7Cp.v:on,s.t:3%7Cs.e:g%7Cp.v:off'),
+        serviceType: 'xyz',
+        createSource: () =>
+            prioritizeTileSourceRequest(
+                new XYZ({
+                    url: gcj2wgsProxyUrl('https://mt0.google.com/vt/lyrs=m&hl=zh-CN&x={x}&y={y}&z={z}&apistyle=s.t:0%7Cp.v:off,s.t:3%7Cp.v:on,s.t:3%7Cs.e:g%7Cp.v:off'),
+                }),
+            ),
+    },
+    {
+        order: 131,
+        id: 'vector_google_combo_water_gcj',
+        name: 'Google纯水体(GCJ)',
+        catalogCategory: 'electronic',
+        provider: 'Google',
+        coord: 'GCJ02',
+        description: 'Google纯水体(GCJ) · Google / GCJ02',
+        category: 'vector',
+        group: '矢量',
+        url: 'https://mt0.google.com/vt/lyrs=m&x={x}&y={y}&z={z}&apistyle=s.t:0%7Cp.v:off,s.t:6%7Cp.v:on',
+        serviceType: 'xyz',
+        createSource: () =>
+            prioritizeTileSourceRequest(
+                new XYZ({
+                    url: 'https://mt0.google.com/vt/lyrs=m&x={x}&y={y}&z={z}&apistyle=s.t:0%7Cp.v:off,s.t:6%7Cp.v:on',
+                }),
+            ),
+    },
+    {
+        order: 132,
+        id: 'vector_google_combo_water_wgs',
+        name: 'Google纯水体(WGS)',
+        catalogCategory: 'electronic',
+        provider: 'Google',
+        coord: 'WGS84',
+        description: 'Google纯水体(WGS) · Google / WGS84',
+        category: 'vector',
+        group: '矢量',
+        url: gcj2wgsProxyUrl('https://mt0.google.com/vt/lyrs=m&x={x}&y={y}&z={z}&apistyle=s.t:0%7Cp.v:off,s.t:6%7Cp.v:on'),
+        serviceType: 'xyz',
+        createSource: () =>
+            prioritizeTileSourceRequest(
+                new XYZ({
+                    url: gcj2wgsProxyUrl('https://mt0.google.com/vt/lyrs=m&x={x}&y={y}&z={z}&apistyle=s.t:0%7Cp.v:off,s.t:6%7Cp.v:on'),
+                }),
+            ),
+    },
+    {
+        order: 133,
+        id: 'vector_google_combo_pb_roadmap_gcj',
+        name: 'GooglePB标准电子(GCJ)',
+        catalogCategory: 'electronic',
+        provider: 'Google',
+        coord: 'GCJ02',
+        description: 'GooglePB标准电子(GCJ) · Google / GCJ02',
+        category: 'vector',
+        group: '矢量',
+        url: 'https://www.google.com/maps/vt/pb=!1m4!1m3!1i{z}!2i{x}!3i{y}!2m1!1e0',
+        serviceType: 'xyz',
+        createSource: () =>
+            prioritizeTileSourceRequest(
+                new XYZ({
+                    url: 'https://www.google.com/maps/vt/pb=!1m4!1m3!1i{z}!2i{x}!3i{y}!2m1!1e0',
+                }),
+            ),
+    },
+    {
+        order: 134,
+        id: 'vector_google_combo_pb_roadmap_wgs',
+        name: 'GooglePB标准电子(WGS)',
+        catalogCategory: 'electronic',
+        provider: 'Google',
+        coord: 'WGS84',
+        description: 'GooglePB标准电子(WGS) · Google / WGS84',
+        category: 'vector',
+        group: '矢量',
+        url: gcj2wgsProxyUrl('https://www.google.com/maps/vt/pb=!1m4!1m3!1i{z}!2i{x}!3i{y}!2m1!1e0'),
+        serviceType: 'xyz',
+        createSource: () =>
+            prioritizeTileSourceRequest(
+                new XYZ({
+                    url: gcj2wgsProxyUrl('https://www.google.com/maps/vt/pb=!1m4!1m3!1i{z}!2i{x}!3i{y}!2m1!1e0'),
+                }),
+            ),
+    },
+    {
+        order: 135,
+        id: 'vector_google_combo_pb_roadline_gcj',
+        name: 'GooglePB纯路网(GCJ)',
+        catalogCategory: 'electronic',
+        provider: 'Google',
+        coord: 'GCJ02',
+        description: 'GooglePB纯路网(GCJ) · Google / GCJ02',
+        category: 'vector',
+        group: '矢量',
+        url: 'https://www.google.com/maps/vt/pb=!1m4!1m3!1i{z}!2i{x}!3i{y}!2m1!1e4',
+        serviceType: 'xyz',
+        createSource: () =>
+            prioritizeTileSourceRequest(
+                new XYZ({
+                    url: 'https://www.google.com/maps/vt/pb=!1m4!1m3!1i{z}!2i{x}!3i{y}!2m1!1e4',
+                }),
+            ),
+    },
+    {
+        order: 136,
+        id: 'vector_google_combo_pb_roadline_wgs',
+        name: 'GooglePB纯路网(WGS)',
+        catalogCategory: 'electronic',
+        provider: 'Google',
+        coord: 'WGS84',
+        description: 'GooglePB纯路网(WGS) · Google / WGS84',
+        category: 'vector',
+        group: '矢量',
+        url: gcj2wgsProxyUrl('https://www.google.com/maps/vt/pb=!1m4!1m3!1i{z}!2i{x}!3i{y}!2m1!1e4'),
+        serviceType: 'xyz',
+        createSource: () =>
+            prioritizeTileSourceRequest(
+                new XYZ({
+                    url: gcj2wgsProxyUrl('https://www.google.com/maps/vt/pb=!1m4!1m3!1i{z}!2i{x}!3i{y}!2m1!1e4'),
+                }),
+            ),
+    },
+    {
+        order: 149,
+        id: 'vector_tengxun_wgs',
+        name: '腾讯地图(WGS)',
+        catalogCategory: 'electronic',
+        provider: 'Tencent',
+        coord: 'WGS84',
+        description: '腾讯地图(WGS) · Tencent / WGS84',
+        category: 'vector',
+        group: '矢量',
+        
+        
+        
+        
+        
+        url: gcj2wgsProxyUrl(
+            'https://rt0.map.gtimg.com/realtimerender?z={z}&x={x}&y={-y}&type=vector&style=0',
+        ),
+        serviceType: 'xyz',
+        createSource: () =>
+            prioritizeTileSourceRequest(
+                new XYZ({
+                    url: gcj2wgsProxyUrl(
+                        'https://rt0.map.gtimg.com/realtimerender?z={z}&x={x}&y={-y}&type=vector&style=0',
+                    ),
+                }),
+            ),
+    },
+    {
+        order: 150,
+        id: 'vector_Google_clean',
+        name: 'Google简洁(wgs)',
+        catalogCategory: 'electronic',
+        provider: 'Google',
+        coord: 'WGS84',
+        description: 'Google简洁(wgs) · Google / WGS84',
+        category: 'vector',
+        group: '矢量',
+        url: gcj2wgsProxyUrl(
+            'https://mt0.google.com/vt/lyrs=p&x={x}&y={y}&z={z}&s=Ga&apistyle=s.e:l%7Cp.v:off,s.t:1%7Cs.e.g%7Cp.v:off,s.t:2%7Cs.e.g%7Cp.v:off,s.t:3%7Cs.e.g%7Cp.v:off,s.t:4%7Cs.e.g%7Cp.v:off',
+        ),
+        serviceType: 'xyz',
+        createSource: () =>
+            prioritizeTileSourceRequest(
+                new XYZ({
+                    url: gcj2wgsProxyUrl(
+                        'https://mt0.google.com/vt/lyrs=p&x={x}&y={y}&z={z}&s=Ga&apistyle=s.e:l%7Cp.v:off,s.t:1%7Cs.e.g%7Cp.v:off,s.t:2%7Cs.e.g%7Cp.v:off,s.t:3%7Cs.e.g%7Cp.v:off,s.t:4%7Cs.e.g%7Cp.v:off',
+                    ),
+                }),
+            ),
+    },
+    {
+        order: 151,
+        id: 'vector_osm',
+        name: 'OSM标准',
+        catalogCategory: 'electronic',
+        provider: 'OSM',
+        coord: 'WGS84',
+        description: 'OSM标准 · OSM / WGS84',
+        category: 'vector',
+        group: '矢量',
+        url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+        serviceType: 'osm',
+        createSource: () => prioritizeTileSourceRequest(new OSM()),
+    },
+    {
+        order: 152,
+        id: 'vector_cyclosm',
+        name: 'CyclOSM骑行',
+        catalogCategory: 'electronic',
+        provider: 'OSM',
+        coord: 'WGS84',
+        description: 'CyclOSM骑行 · OSM / WGS84',
+        category: 'vector',
+        group: '矢量',
+        url: 'https://{a-c}.tile-cyclosm.openstreetmap.fr/cyclosm/{z}/{x}/{y}.png',
+        serviceType: 'xyz',
+        createSource: () =>
+            prioritizeTileSourceRequest(
+                new XYZ({
+                    url: 'https://{a-c}.tile-cyclosm.openstreetmap.fr/cyclosm/{z}/{x}/{y}.png',
+                }),
+            ),
+    },
+    {
+        order: 153,
+        id: 'vector_carton_light',
+        name: 'CartoDB',
+        catalogCategory: 'electronic',
+        provider: 'Carto',
+        coord: 'WGS84',
+        description: 'CartoDB · Carto / WGS84',
+        category: 'vector',
+        group: '矢量',
+        url: 'https://{a-d}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png',
+        serviceType: 'xyz',
+        createSource: () =>
+            prioritizeTileSourceRequest(
+                new XYZ({ url: 'https://{a-d}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png' }),
+            ),
+    },
+    {
+        order: 154,
+        id: 'vector_carton_dark',
+        name: 'CartoDB Dark',
+        catalogCategory: 'electronic',
+        provider: 'Carto',
+        coord: 'WGS84',
+        description: 'CartoDB Dark · Carto / WGS84',
+        category: 'vector',
+        group: '矢量',
+        url: 'https://{a-d}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png',
+        serviceType: 'xyz',
+        createSource: () =>
+            prioritizeTileSourceRequest(
+                new XYZ({ url: 'https://{a-d}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png' }),
+            ),
+    },
+    {
+        order: 155,
+        id: 'vector_wikipedia',
+        name: 'Wikipedia',
+        catalogCategory: 'electronic',
+        provider: 'Other',
+        coord: 'NONE',
+        description: 'Wikipedia · Other / 无坐标系',
+        category: 'vector',
+        group: '矢量',
+        url: 'https://maps.wikimedia.org/osm-intl/{z}/{x}/{y}.png',
+        serviceType: 'xyz',
+        createSource: () =>
+            prioritizeTileSourceRequest(
+                new XYZ({ url: 'https://maps.wikimedia.org/osm-intl/{z}/{x}/{y}.png' }),
+            ),
+    },
+    {
+        order: 156,
+        id: 'vector_toner',
+        name: 'Stamen Toner',
+        catalogCategory: 'electronic',
+        provider: 'Stamen',
+        coord: 'WGS84',
+        description: 'Stamen Toner · Stamen / WGS84',
+        category: 'vector',
+        group: '矢量',
+        url: 'https://tiles.stadiamaps.com/tiles/stamen_toner/{z}/{x}/{y}.png?api_key=e5abf577-33b9-47f0-92b2-bd60f88d8c8d',
+        serviceType: 'xyz',
+        createSource: () =>
+            prioritizeTileSourceRequest(
+                new XYZ({
+                    url: 'https://tiles.stadiamaps.com/tiles/stamen_toner/{z}/{x}/{y}.png?api_key=e5abf577-33b9-47f0-92b2-bd60f88d8c8d',
+                }),
+            ),
+    },
+    {
+        order: 157,
+        id: 'vector_alidade',
+        name: 'Alidade Sm',
+        catalogCategory: 'electronic',
+        provider: 'Stadia',
+        coord: 'WGS84',
+        description: 'Alidade Sm · Stadia / WGS84',
+        category: 'vector',
+        group: '矢量',
+        url: 'https://tiles.stadiamaps.com/tiles/alidade_smooth/{z}/{x}/{y}.png?api_key=e5abf577-33b9-47f0-92b2-bd60f88d8c8d',
+        serviceType: 'xyz',
+        createSource: () =>
+            prioritizeTileSourceRequest(
+                new XYZ({
+                    url: 'https://tiles.stadiamaps.com/tiles/alidade_smooth/{z}/{x}/{y}.png?api_key=e5abf577-33b9-47f0-92b2-bd60f88d8c8d',
+                }),
+            ),
+    },
+    {
+        order: 158,
+        id: 'vector_stamen_toner_background',
+        name: 'Stamen Toner底',
+        catalogCategory: 'electronic',
+        provider: 'Stamen',
+        coord: 'WGS84',
+        description: 'Stamen Toner底 · Stamen / WGS84',
+        category: 'vector',
+        group: '矢量',
+        url: 'https://tiles.stadiamaps.com/tiles/stamen_toner_background/{z}/{x}/{y}.png?api_key=e5abf577-33b9-47f0-92b2-bd60f88d8c8d',
+        serviceType: 'xyz',
+        createSource: () =>
+            prioritizeTileSourceRequest(
+                new XYZ({
+                    url: 'https://tiles.stadiamaps.com/tiles/stamen_toner_background/{z}/{x}/{y}.png?api_key=e5abf577-33b9-47f0-92b2-bd60f88d8c8d',
+                }),
+            ),
+    },
+    {
+        order: 159,
+        id: 'vector_stamen_toner_lite',
+        name: 'Stamen Toner浅',
+        catalogCategory: 'electronic',
+        provider: 'Stamen',
+        coord: 'WGS84',
+        description: 'Stamen Toner浅 · Stamen / WGS84',
+        category: 'vector',
+        group: '矢量',
+        url: 'https://tiles.stadiamaps.com/tiles/stamen_toner_lite/{z}/{x}/{y}.png?api_key=e5abf577-33b9-47f0-92b2-bd60f88d8c8d',
+        serviceType: 'xyz',
+        createSource: () =>
+            prioritizeTileSourceRequest(
+                new XYZ({
+                    url: 'https://tiles.stadiamaps.com/tiles/stamen_toner_lite/{z}/{x}/{y}.png?api_key=e5abf577-33b9-47f0-92b2-bd60f88d8c8d',
+                }),
+            ),
+    },
+    {
+        order: 160,
+        id: 'vector_alidade_smooth_dark',
+        name: 'Alidade暗色',
+        catalogCategory: 'electronic',
+        provider: 'Stadia',
+        coord: 'WGS84',
+        description: 'Alidade暗色 · Stadia / WGS84',
+        category: 'vector',
+        group: '矢量',
+        url: 'https://tiles.stadiamaps.com/tiles/alidade_smooth_dark/{z}/{x}/{y}.png?api_key=e5abf577-33b9-47f0-92b2-bd60f88d8c8d',
+        serviceType: 'xyz',
+        createSource: () =>
+            prioritizeTileSourceRequest(
+                new XYZ({
+                    url: 'https://tiles.stadiamaps.com/tiles/alidade_smooth_dark/{z}/{x}/{y}.png?api_key=e5abf577-33b9-47f0-92b2-bd60f88d8c8d',
+                }),
+            ),
+    },
+    {
+        order: 161,
+        id: 'vector_osm_bright',
+        name: 'OSM Bright',
+        catalogCategory: 'electronic',
+        provider: 'OSM',
+        coord: 'WGS84',
+        description: 'OSM Bright · OSM / WGS84',
+        category: 'vector',
+        group: '矢量',
+        url: 'https://tiles.stadiamaps.com/tiles/osm_bright/{z}/{x}/{y}.png?api_key=e5abf577-33b9-47f0-92b2-bd60f88d8c8d',
+        serviceType: 'xyz',
+        createSource: () =>
+            prioritizeTileSourceRequest(
+                new XYZ({
+                    url: 'https://tiles.stadiamaps.com/tiles/osm_bright/{z}/{x}/{y}.png?api_key=e5abf577-33b9-47f0-92b2-bd60f88d8c8d',
+                }),
+            ),
+    },
+    {
+        order: 162,
+        id: 'vector_geoq_hydro',
+        name: 'GeoQ水(GCJ)',
+        catalogCategory: 'electronic',
+        provider: 'GeoQ',
+        coord: 'GCJ02',
+        description: 'GeoQ水(GCJ) · GeoQ / GCJ02',
+        category: 'vector',
+        group: '矢量',
+        url: 'https://thematic.geoq.cn/arcgis/rest/services/ThematicMaps/WorldHydroMap/MapServer/WMTS/tile/1.0.0/ThematicMaps_WorldHydroMap/default/GoogleMapsCompatible/{z}/{y}/{x}.png',
+        serviceType: 'xyz',
+        createSource: () =>
+            prioritizeTileSourceRequest(
+                new XYZ({
+                    url: 'https://thematic.geoq.cn/arcgis/rest/services/ThematicMaps/WorldHydroMap/MapServer/WMTS/tile/1.0.0/ThematicMaps_WorldHydroMap/default/GoogleMapsCompatible/{z}/{y}/{x}.png',
+                }),
+            ),
+    },
+    {
+        order: 163,
+        id: 'vector_henu_border_pbf',
+        name: 'HENU边界矢量',
+        catalogCategory: 'electronic',
+        provider: 'Other',
+        coord: 'NONE',
+        description: 'HENU边界矢量 · Other / 无坐标系',
+        category: 'vector',
+        group: '矢量',
+        url: 'https://webgis.henu.edu.cn/server/rest/services/Hosted/Border_Vector/VectorTileServer/tile/{z}/{y}/{x}.pbf',
+        serviceType: 'vector-tile',
+        createSource: () =>
+            createVectorTileSourceFromUrl(
+                'https://webgis.henu.edu.cn/server/rest/services/Hosted/Border_Vector/VectorTileServer/tile/{z}/{y}/{x}.pbf',
+            ),
+    },
+    {
+        order: 169,
+        id: 'google_Backend_Proxy',
+        name: '后端代理',
+        catalogCategory: 'electronic',
+        provider: 'Google',
+        coord: 'WGS84',
+        description: '后端代理 · Google / WGS84',
+        category: 'custom',
+        group: '自定义',
+        url: tileProxyUrl('mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}'),
+        serviceType: 'xyz',
+        createSource: () =>
+            prioritizeTileSourceRequest(
+                new XYZ({
+                    url: tileProxyUrl('mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}'),
+                }),
+            ),
+    },
+    {
+        order: 170,
+        id: 'osm_Backend_Proxy',
+        name: 'OSM代理',
+        catalogCategory: 'electronic',
+        provider: 'OSM',
+        coord: 'WGS84',
+        description: 'OSM代理 · OSM / WGS84',
+        category: 'custom',
+        group: '自定义',
+        
+        
+        
+        url: tileProxyUrl('tile.openstreetmap.org/{z}/{x}/{y}.png'),
+        serviceType: 'xyz',
+        
+        maxZoom: 19,
+        createSource: () =>
+            prioritizeTileSourceRequest(
+                new XYZ({
+                    url: tileProxyUrl('tile.openstreetmap.org/{z}/{x}/{y}.png'),
+                    maxZoom: 19,
+                }),
+            ),
+    },
+    {
+        order: 171,
+        id: 'ships66',
+        name: '船舶网',
+        catalogCategory: 'electronic',
+        provider: 'Other',
+        coord: 'NONE',
+        description: '船舶网 · Other / 无坐标系',
+        category: 'custom',
+        group: '自定义',
+        
+        
+        url: tileProxyUrl('http://g3.ships66.com/maps/one/{z}/{x}/{y}.png'),
+        serviceType: 'xyz',
+        createSource: () =>
+            prioritizeTileSourceRequest(
+                new XYZ({
+                    url: tileProxyUrl('http://g3.ships66.com/maps/one/{z}/{x}/{y}.png'),
+                }),
+            ),
+    },
+    {
+        order: 172,
+        id: 'custom_mapbox_labeled',
+        name: 'Mapbox 自定义',
+        catalogCategory: 'electronic',
+        provider: 'Mapbox',
+        coord: 'WGS84',
+        description: 'Mapbox 自定义 · Mapbox / WGS84',
+        category: 'custom',
+        group: '自定义',
+        url: 'https://api.mapbox.com/styles/v1/1tpjc/cmo6wg8dm003v01s8d58qckdv/tiles/{z}/{x}/{y}?access_token=pk.eyJ1IjoieGVyb2MiLCJhIjoiY21lenIyeWk4MXRuOTJrcTVjMWIwMXc3dCJ9.nMoRkxxiCpnFxmZ1H-ScwQ',
+        serviceType: 'xyz',
+        createSource: () =>
+            prioritizeTileSourceRequest(
+                new XYZ({
+                    url: 'https://api.mapbox.com/styles/v1/1tpjc/cmo6wg8dm003v01s8d58qckdv/tiles/{z}/{x}/{y}?access_token=pk.eyJ1IjoieGVyb2MiLCJhIjoiY21lenIyeWk4MXRuOTJrcTVjMWIwMXc3dCJ9.nMoRkxxiCpnFxmZ1H-ScwQ',
+                }),
+            ),
+    },
+    {
+        order: 173,
+        id: 'custom_mapbox_unlabeled',
+        name: 'Mapbox 自定义(无标注)',
+        catalogCategory: 'electronic',
+        provider: 'Mapbox',
+        coord: 'WGS84',
+        description: 'Mapbox 自定义(无标注) · Mapbox / WGS84',
+        category: 'custom',
+        group: '自定义',
+        url: 'https://api.mapbox.com/styles/v1/1tpjc/cmo71ml4b001m01sp8u9o773g/tiles/{z}/{x}/{y}?access_token=pk.eyJ1IjoieGVyb2MiLCJhIjoiY21lenIyeWk4MXRuOTJrcTVjMWIwMXc3dCJ9.nMoRkxxiCpnFxmZ1H-ScwQ',
+        serviceType: 'xyz',
+        createSource: () =>
+            prioritizeTileSourceRequest(
+                new XYZ({
+                    url: 'https://api.mapbox.com/styles/v1/1tpjc/cmo71ml4b001m01sp8u9o773g/tiles/{z}/{x}/{y}?access_token=pk.eyJ1IjoieGVyb2MiLCJhIjoiY21lenIyeWk4MXRuOTJrcTVjMWIwMXc3dCJ9.nMoRkxxiCpnFxmZ1H-ScwQ',
+                }),
+            ),
+    },
+    {
+        order: 174,
+        id: 'custom_China_Blender',
+        name: 'China Blender',
+        catalogCategory: 'electronic',
+        provider: 'Custom',
+        coord: 'NONE',
+        description: 'China Blender · Custom / 无坐标系',
+        category: 'custom',
+        group: '自定义',
+        url: 'https://webgis.henu.edu.cn/server/rest/services/Hosted/China_Blender/MapServer/WMTS/tile/1.0.0/China_Blender/default/GoogleMapsCompatible/{z}/{y}/{x}.png',
+        serviceType: 'xyz',
+        createSource: () =>
+            prioritizeTileSourceRequest(
+                new XYZ({
+                    url: 'https://webgis.henu.edu.cn/server/rest/services/Hosted/China_Blender/MapServer/WMTS/tile/1.0.0/China_Blender/default/GoogleMapsCompatible/{z}/{y}/{x}.png',
+                }),
+            ),
+    },
+];
+
+export default definitions;

@@ -40,91 +40,125 @@
                     />
                 </div>
             <div v-show="isSelectDropdownOpen" class="custom-select-dropdown">
-                <div
-                    v-for="option in regularBasemapOptions"
-                    :key="option.value"
-                    class="custom-select-option"
-                    :class="{ 'selected': option.value === selectedLayer }"
-                    @click.stop="selectOption(option)"
-                >
-                    <span class="preset-index">{{ option.label.split(' ')[0] }}</span>
-                    <span class="preset-name">{{ option.label.slice(option.label.indexOf(' ') + 1) }}</span>
+                <div class="catalog-search-bar">
+                    <Search
+                        :size="14"
+                        :stroke-width="2"
+                    />
+                    <input
+                        v-model="basemapQuery"
+                        class="catalog-search-input"
+                        placeholder="搜索编号 / ID / 名称 / 服务商 / 坐标系"
+                    />
+                    <button
+                        v-if="isSearchActive"
+                        type="button"
+                        class="close-search-btn"
+                        aria-label="清空搜索"
+                        @click.stop="basemapQuery = ''"
+                    >
+                        <X
+                            :size="13"
+                            :stroke-width="2.2"
+                        />
+                    </button>
                 </div>
 
-                <div class="history-section-divider" aria-hidden="true"></div>
-                <div class="history-section-title">历史影像</div>
-                <div class="history-tabs">
-                    <button
-                        type="button"
-                        class="history-tab"
-                        :class="{ active: historicalProviderTab === 'sentinel' }"
-                        @click.stop="historicalProviderTab = 'sentinel'"
+                <template v-if="isSearchActive">
+                    <div v-if="!searchResults.length" class="history-empty">没有匹配的底图</div>
+                    <div
+                        v-for="entry in searchResults"
+                        :key="`${entry.id}:${entry.customUrl || ''}`"
+                        class="custom-select-option catalog-result"
+                        :class="{ selected: entry.customUrl ? entry.customUrl === customMapUrl : entry.id === selectedLayer }"
+                        :title="entryTitle(entry)"
+                        @click.stop="selectCatalogEntry(entry)"
                     >
-                        Sentinel
-                    </button>
-                    <button
-                        type="button"
-                        class="history-tab"
-                        :class="{ active: historicalProviderTab === 'esri' }"
-                        @click.stop="selectHistoricalProviderTab('esri')"
-                    >
-                        ESRI Wayback
-                    </button>
-                </div>
-                <template v-if="historicalProviderTab === 'sentinel'">
-                    <div v-for="group in sentinelYearGroups" :key="group.year" class="history-year-group">
-                        <button type="button" class="history-year-toggle" @click.stop="toggleHistoryYear('sentinel', group.year)">
-                            <span>{{ group.year }}年</span>
-                            <ChevronRight
-                                class="year-chevron"
-                                :class="{ open: isHistoryYearOpen('sentinel', group.year) }"
-                                :size="14"
-                                :stroke-width="2.2"
-                            />
-                        </button>
-                        <template v-if="isHistoryYearOpen('sentinel', group.year)">
-                            <div
-                                v-for="option in group.items"
-                                :key="option.value"
-                                class="custom-select-option history-option"
-                                :class="{ selected: option.value === selectedLayer }"
-                                @click.stop="selectOption(option)"
-                            >
-                                <span class="preset-name">{{ String(option.label).replace(/^\d+\s+/, '') }}</span>
-                            </div>
-                        </template>
+                        <span class="preset-index">{{ entry.number || '—' }}</span>
+                        <span class="preset-name">{{ entry.label }}</span>
+                        <span class="catalog-crumb">{{ categoryLabel(entry.category) }} / {{ entry.provider }} / {{ coordLabel(entry.coord) }}</span>
                     </div>
                 </template>
+
                 <template v-else>
-                    <div v-if="historicalImageryLoading" class="history-empty">正在读取快照目录…</div>
-                    <div v-else-if="!esriWaybackLayers.length" class="history-empty">
-                        暂无数据，后端将在启动后自动同步
-                    </div>
-                    <div v-for="group in esriYearGroups" :key="group.year" class="history-year-group">
-                        <button type="button" class="history-year-toggle" @click.stop="toggleHistoryYear('esri', group.year)">
-                            <span>{{ group.year }}年</span>
+                    <div v-for="cat in catalogTree" :key="cat.category" class="catalog-category-group">
+                        <button
+                            type="button"
+                            class="history-year-toggle catalog-category-toggle"
+                            @click.stop="cat.category === 'service' ? activateCustomBasemap() : toggleCategory(cat.category)"
+                        >
+                            <span>{{ categoryLabel(cat.category) }}</span>
                             <ChevronRight
+                                v-if="cat.category !== 'service'"
                                 class="year-chevron"
-                                :class="{ open: isHistoryYearOpen('esri', group.year) }"
+                                :class="{ open: isCategoryOpen(cat.category) }"
                                 :size="14"
                                 :stroke-width="2.2"
                             />
+                            <span v-else class="catalog-trigger-hint">输入 URL</span>
                         </button>
-                        <template v-if="isHistoryYearOpen('esri', group.year)">
-                            <div
-                                v-for="snapshot in group.items"
-                                :key="snapshot.id"
-                                class="custom-select-option history-option"
-                                :class="{ selected: selectedLayer === 'custom' && snapshot.xyz_url === customMapUrl }"
-                                :title="snapshot.name || snapshot.id"
-                                @click.stop="selectHistoricalSnapshot(snapshot)"
-                            >
-                                <span class="preset-name">{{ snapshot.date }}</span>
-                            </div>
+                        <template v-if="cat.category !== 'service' && isCategoryOpen(cat.category)">
+                            <template v-if="cat.category === 'recommended'">
+                                <div
+                                    v-for="entry in cat.entries || []"
+                                    :key="entry.id"
+                                    class="custom-select-option history-option catalog-entry"
+                                    :class="{ selected: entry.id === selectedLayer }"
+                                    :title="entryTitle(entry)"
+                                    @click.stop="selectCatalogEntry(entry)"
+                                >
+                                    <span class="preset-index">{{ entry.number }}</span>
+                                    <span class="preset-name">{{ entry.label }}</span>
+                                </div>
+                            </template>
+                            <template v-else>
+                                <div v-for="prov in cat.providers" :key="prov.provider" class="combo-provider-group">
+                                    <button
+                                        type="button"
+                                        class="history-year-toggle combo-provider-toggle"
+                                        @click.stop="toggleProvider(cat.category, prov.provider)"
+                                    >
+                                        <span>{{ prov.provider }}</span>
+                                        <ChevronRight
+                                            class="year-chevron"
+                                            :class="{ open: isProviderOpen(cat.category, prov.provider) }"
+                                            :size="13"
+                                            :stroke-width="2.2"
+                                        />
+                                    </button>
+                                    <template v-if="isProviderOpen(cat.category, prov.provider)">
+                                        <div v-for="coord in prov.coords" :key="coord.coord" class="combo-coord-group">
+                                            <button
+                                                type="button"
+                                                class="history-year-toggle combo-coord-toggle"
+                                                @click.stop="toggleCoord(cat.category, prov.provider, coord.coord)"
+                                            >
+                                                <span>{{ coordLabel(coord.coord) }}</span>
+                                                <ChevronRight
+                                                    class="year-chevron"
+                                                    :class="{ open: isCoordOpen(cat.category, prov.provider, coord.coord) }"
+                                                    :size="13"
+                                                    :stroke-width="2.2"
+                                                />
+                                            </button>
+                                            <template v-if="isCoordOpen(cat.category, prov.provider, coord.coord)">
+                                                <div
+                                                    v-for="entry in coord.entries"
+                                                    :key="`${entry.id}:${entry.customUrl || ''}`"
+                                                    class="custom-select-option history-option catalog-entry"
+                                                    :class="{ selected: entry.customUrl ? entry.customUrl === customMapUrl : entry.id === selectedLayer }"
+                                                    :title="entryTitle(entry)"
+                                                    @click.stop="selectCatalogEntry(entry)"
+                                                >
+                                                    <span class="preset-index">{{ entry.number || '—' }}</span>
+                                                    <span class="preset-name">{{ entry.label }}</span>
+                                                </div>
+                                            </template>
+                                        </div>
+                                    </template>
+                                </div>
+                            </template>
                         </template>
-                    </div>
-                    <div v-if="historicalImageryUpdatedAt" class="history-updated">
-                        更新于 {{ formatHistoryDate(historicalImageryUpdatedAt) }}
                     </div>
                 </template>
             </div>
@@ -265,7 +299,38 @@
                         :size="16"
                         :stroke-width="2"
                     />
-                    <span class="panel-header-title">底图排序与显隐</span>
+                    <button
+                        v-if="!isLayerSearchOpen"
+                        type="button"
+                        class="panel-header-title panel-search-toggle"
+                        title="点击搜索图层"
+                        @click="toggleLayerSearch"
+                    >
+                        底图排序与显隐
+                    </button>
+                    <template v-else>
+                        <Search
+                            :size="14"
+                            :stroke-width="2"
+                        />
+                        <input
+                            v-model="layerSearchQuery"
+                            class="layer-search-input"
+                            placeholder="搜索图层（名称 / ID）"
+                            @keydown.esc="closeLayerSearch"
+                        />
+                        <button
+                            type="button"
+                            class="close-search-btn"
+                            aria-label="关闭搜索"
+                            @click="closeLayerSearch"
+                        >
+                            <X
+                                :size="13"
+                                :stroke-width="2.2"
+                            />
+                        </button>
+                    </template>
                     <button
                         type="button"
                         class="close-panel-btn"
@@ -284,9 +349,10 @@
                 >
                     <div
                         v-for="(layer, index) in layerList"
+                        v-show="layerMatchesSearch(layer)"
                         :key="layer.id"
                         class="layer-item"
-                        :draggable="!isTouchDevice"
+                        :draggable="!isTouchDevice && !layerSearchQuery.trim()"
                         :class="{ dragging: draggingIndex === index, 'is-off': !layer.visible, 'touch-drop-target': touchDragActive && touchDropIndex === index && touchDragIndex !== index }"
                         @dragstart="onDragStart($event, index)"
                         @dragend="onDragEnd"
@@ -749,6 +815,76 @@
     background: var(--toc-primary-bg);
 }
 
+.combo-coord-toggle {
+    padding: 5px 20px;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--toc-text-light);
+}
+
+.combo-option .preset-index {
+    min-width: 26px;
+    text-align: right;
+}
+
+.catalog-search-bar {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 8px;
+    background: var(--bg-brand-light);
+    border-bottom: 1px solid var(--brand-primary-lighter);
+}
+
+.catalog-search-input {
+    flex: 1;
+    min-width: 0;
+    padding: 4px 6px;
+    border: 1px solid var(--brand-primary-lighter);
+    border-radius: 4px;
+    background: #ffffff;
+    color: var(--toc-text-primary);
+    font-size: 11px;
+    outline: none;
+}
+
+.catalog-search-input:focus {
+    border-color: var(--brand-primary);
+    box-shadow: 0 0 0 2px rgba(var(--brand-primary-rgb), 0.12);
+}
+
+.catalog-category-toggle {
+    color: var(--brand-accent-dark);
+    font-size: 12px;
+}
+
+.catalog-trigger-hint {
+    color: var(--toc-text-light);
+    font-size: 10px;
+    font-weight: normal;
+}
+
+.catalog-result {
+    align-items: flex-start;
+    flex-wrap: wrap;
+}
+
+.catalog-crumb {
+    flex: 1 0 100%;
+    padding-left: 30px;
+    color: var(--toc-text-light);
+    font-size: 10px;
+    line-height: 1.2;
+}
+
+.catalog-entry .preset-index {
+    min-width: 26px;
+    text-align: right;
+}
+
 .year-chevron {
     color: var(--toc-text-light);
 
@@ -933,6 +1069,61 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+}
+
+.panel-search-toggle {
+    border: 0;
+    padding: 0;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+
+.panel-search-toggle:hover {
+    color: var(--brand-accent);
+}
+
+.layer-search-input {
+    flex: 1;
+    min-width: 0;
+    padding: 4px 6px;
+    border: 1px solid var(--brand-primary-lighter);
+    border-radius: 4px;
+    background: #ffffff;
+    color: var(--toc-text-primary);
+    font-size: 12px;
+    font-weight: normal;
+    outline: none;
+}
+
+.layer-search-input:focus {
+    border-color: var(--brand-primary);
+    box-shadow: 0 0 0 2px rgba(var(--brand-primary-rgb), 0.12);
+}
+
+.close-search-btn {
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    border: 0;
+    border-radius: 50%;
+    background: transparent;
+    color: var(--toc-text-secondary);
+    cursor: pointer;
+}
+
+.close-search-btn:hover {
+    background: rgba(var(--brand-primary-rgb), 0.12);
+}
+
+.close-search-btn svg {
+    width: 13px;
+    height: 13px;
 }
 
 /* 图标尺寸单源落在 CSS：模板 :size 仅为无样式兜底 */
