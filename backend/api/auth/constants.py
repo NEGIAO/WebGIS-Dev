@@ -53,7 +53,9 @@ SUPPORTED_UNIT_SYSTEMS = {
 
 # ─── 会话/安全配置 ───
 # 默认值登记于根 .env.example / config.catalog，可经 L1 env 调整。
-SESSION_EXPIRE_HOURS = get_settings().session_expire_hours
+# 签发会话硬上限 4 小时（游客/注册/管理员同一口径）。
+# config 层已把上限钳到 4，这里再兜一次底，防止其它配置入口绕过。
+SESSION_EXPIRE_HOURS = min(4, max(1, int(get_settings().session_expire_hours)))
 PASSWORD_HASH_ITERATIONS = get_settings().password_hash_iterations
 
 # ─── 在线判定（普通常量非配置 key）───
@@ -105,6 +107,11 @@ REGISTERED_DAILY_API_QUOTA = 1000
 USERNAME_PATTERN = re.compile(r"^[A-Za-z0-9_]{3,24}$")
 PASSWORD_PATTERN = re.compile(r"^(?=.*[A-Za-z])(?=.*\d).{6,64}$")
 GUEST_DEVICE_ID_PATTERN = re.compile(r"^[A-Za-z0-9_.:-]{6,128}$")
+# V3.7.13：前端游客设备 ID 格式（gd_ 前缀 + 至少 6 位字母数字）。
+# 现代前端生成 gd_ + 32 位随机 hex（auth.ts::randomGuestDeviceSeed），
+# 但历史版本可能生成更短的 gd_ 值——为兼容真实老用户，只要带 gd_ 前缀即视为标准。
+# 仅用于在线 presence 的"真实浏览器"判定；不是鉴权凭证，不用于限流/配额。
+STANDARD_GUEST_DEVICE_ID_PATTERN = re.compile(r"^gd_[A-Za-z0-9_.:-]{6,}$")
 DISPLAY_NAME_CONTROL_PATTERN = re.compile(r"[\x00-\x1f\x7f]")
 
 # ─── 保留名 ───
@@ -134,6 +141,35 @@ def _normalize_guest_device_id(raw_value: Optional[str]) -> str:
     return compact[:128]
 
 
+def is_private_client_ip(raw_value: Optional[str]) -> bool:
+    """是否为私网/回环/链路本地/保留地址（容器网关 IP 属此类）。
+
+    仅用于在线 presence 的组合过滤，不作为鉴权依据。
+    非法 IP 文本返回 False（交给其它判据处理）。
+    """
+    try:
+        parsed = ipaddress.ip_address(str(raw_value or "").strip())
+    except ValueError:
+        return False
+    return bool(
+        parsed.is_private
+        or parsed.is_loopback
+        or parsed.is_link_local
+        or parsed.is_reserved
+        or parsed.is_multicast
+        or parsed.is_unspecified
+    )
+
+
+def is_standard_guest_device_id(raw_value: Optional[str]) -> bool:
+    """是否为前端标准生成的游客设备 ID（gd_ + 32 位 hex）。
+
+    用于在线 presence 过滤：测试脚本常见的 `vt-test-device` / `guest_<hex>`
+    等非标准值不计为真实浏览器。仅此判定，不作为鉴权或限流依据。
+    """
+    return bool(STANDARD_GUEST_DEVICE_ID_PATTERN.fullmatch(str(raw_value or "").strip()))
+
+
 # ─── 游客 UID 构建 ───
 def _build_guest_uid(ip: str, user_agent: str, guest_device_id: str) -> str:
     # 身份种子只含 device_id：IP/UA 不参与哈希，避免同一访客因网络切换
@@ -153,11 +189,11 @@ def _build_guest_uid(ip: str, user_agent: str, guest_device_id: str) -> str:
 
 
 def _derive_uid_from_ip_ua(ip: str, user_agent: str) -> str:
-    """无 token 请求的确定性配额桶：H(末跳IP | UA)。
+    """无 token 请求的确定性配额桶：H(身份IP | UA)。
 
     V3.7.6 游客身份治理核心派生：device_id **不参与**桶派生——轮换
     X-Guest-Device-Id 不再产生新桶；伪造成本抬升为「需同时轮换出口 IP 与 UA」。
-    IP 须传 `_extract_identity_ip` 的结果（XFF 末跳），不要传展示用首跳。
+    IP 须传 `_extract_identity_ip` 的结果（XFF 最右侧公网跳），不要传展示用首跳。
     """
     digest = hashlib.sha256(
         f"guestip|{str(ip or '').strip()}|{str(user_agent or '').strip()}".encode("utf-8")
@@ -166,20 +202,36 @@ def _derive_uid_from_ip_ua(ip: str, user_agent: str) -> str:
 
 
 def _extract_identity_ip(request: Request) -> str:
-    """身份派生用客户端 IP：取 X-Forwarded-For **末跳**（可信反代 HF 追加）。
+    """身份派生用客户端 IP：取 X-Forwarded-For **最右侧公网跳**。
+
+    部署链：客户端 → HF 边缘代理 → 容器内网代理 → uvicorn。XFF 按经过的
+    代理从左向右追加：HF 边缘追加真实用户 IP，内网代理再追加一跳后末跳
+    就变成内网 IP——取末跳等于取「离容器最近的代理」，不是用户（V3.7.18
+    修复：此前取末跳导致全站用户共用身份 IP 10.16.1.43，同 UA 撞桶、
+    轮换 UA 绕过签发限频）。
+    因此从右向左跳过私网/保留/回环等非公网跳，取第一个公网 IP：
+    客户端只能在链首塞假 IP（左侧），最右侧公网跳是最后一个可信代理
+    追加的真实用户 IP，无法由请求方伪造。
+
+    回退顺序：XFF 最右侧公网跳 → request.client.host（仅当其为公网 IP，
+    覆盖无代理直连）→ ""（全链皆私网/无可用 IP 时返回空串，调用方
+    不再把内网代理 IP 当作身份；生产 HF 链恒有公网跳）。
 
     与展示用 `_extract_client_ip` 的区别：不读客户端可写的 `X-Client-IP`，
-    不取 XFF 首跳（可被请求方任意塞值）。仅用于游客桶派生 / 签发限频键等
-    反滥用场景；展示、审计仍走 `_extract_client_ip`。
+    不取 XFF 首跳。仅用于游客桶派生 / 签发限频键等反滥用场景；展示、审计
+    仍走 `_extract_client_ip`。
     """
     forwarded = str(request.headers.get("X-Forwarded-For") or "")
     if forwarded:
         hops = [hop.strip() for hop in forwarded.split(",") if hop.strip()]
         for hop in reversed(hops):
             valid_ip = _first_valid_ip(hop)
-            if valid_ip:
+            if valid_ip and not is_private_client_ip(valid_ip):
                 return valid_ip
-    return str(getattr(request.client, "host", "") or "")
+    direct = _first_valid_ip(str(getattr(request.client, "host", "") or ""))
+    if direct and not is_private_client_ip(direct):
+        return direct
+    return ""
 
 
 # ─── 角色标准化 ───
@@ -326,6 +378,15 @@ def _validate_register_payload(username: str, password: str) -> None:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="该用户名为保留账号，请更换用户名",
+        )
+
+    # V3.7.12 Code Review：游客 username 统一为 guest_<id>；若允许注册同形名字，
+    # 注销/改密按 username 删会话会连带撤销真实游客会话，且 admin 在线判定按
+    # guest_ 前缀识别身份也会混淆。前缀整体保留，避免撞名与角色串味。
+    if lowered.startswith("guest_"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="该用户名前缀为系统保留，请更换用户名",
         )
 
     if not USERNAME_PATTERN.fullmatch(username):

@@ -64,6 +64,7 @@ export default {
         insertToTable: 'Insert into current table',
         // Database pagination & export
         pageSizeAll: 'All',
+        pageSizeLabel: 'Rows per page',
         prevPage: 'Prev',
         nextPage: 'Next',
         pageInfo: 'Page {current} / {total}',

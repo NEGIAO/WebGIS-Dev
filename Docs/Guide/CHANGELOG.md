@@ -6,6 +6,22 @@
 
 ## 版本记录
 
+### V3.7.18 (2026-11-27) — 访客身份 IP 提取修复 · XFF 最右侧公网跳（L2）
+
+`_extract_identity_ip` 改为从右向左取第一个公网 IP：修复 HF 部署下 XFF 末跳取到容器内网代理 IP `10.16.1.43`，导致全站用户共用身份 IP、同 UA 撞进同一配额桶、轮换 UA 绕过签发限频（6/小时）的问题。签发、游客登录、无 token 兜底三条路径自动受益；`sessions.ip` 与地理位置解析首次拿到真实公网 IP。新增 7 个 `_extract_identity_ip` 单测（HF 实测链、链首伪造、直连、全私网链、非法跳、IPv6），`test_guest_identity.py` 29 passed。详见 [guest-identity-ip-fix](../LLM_record/26-11/2026-11-26/2026-11-26-guest-identity-ip-fix.md)。
+
+### V3.7.17 (2026-11-26) — Agent 提示词瘦身 · intent 本地解析（L2）
+
+System Prompt 从 9,779 字符 / 17,767 字节压缩到 962 字符 / 1,840 字节（字符降幅 90.16%）。移除前置的 20 条工具签名、18 条瓦片规则和长篇风水规则，改为在 `switch_basemap(intent=用户原话)` 调用时由本地规则表解析 presetId/URL。OL/Cesium 共用 `validateBasemapArg`，保留明确的服务商边界：高德水系/湖泊请求不会被静默改判成 Google。详见 [prompt-slimming](../LLM_record/26-11/2026-11-26/2026-11-26-agent-prompt-slimming.md)。
+
+### V3.7.16 (2026-11-26) — Agent System Prompt 传输修复 · 瓦片语义预设（L2）
+
+修复 Agent 请求的 422 错误：前端 `llmCall.ts` 曾把完整 System Prompt 伪装成 `history[0]` 的 user 消息，瓦片语义规则扩展后达到 9,779 字符，触发后端 `history.content` 8000 上限。现三个通道统一使用专用 `system_prompt` 字段，history 只保留真实对话轮次；后端 `system_prompt` 上限提升到 16,000，`/chat/completions` 与 `/chat/completions/stream` 改为优先使用前端提交的提示词。history 单条 8000 上限保持不变。详见 [history-8000-fix](../LLM_record/26-11/2026-11-26/2026-11-26-agent-history-8000-fix.md)。
+
+### V3.7.15 (2026-11-26) — Agent 瓦片语义预设（L2）
+
+新增 [瓦片语义规则表](../LLM_record/26-11/2026-11-26/2026-11-26-agent-tile-intent-presets.md)，把高德 `style/ltype/scl` 与 Google `lyrs/apistyle` 的文档结论压缩为 18 条自然语言映射。`agentToolsSchema.ts` 的 System Prompt 现在强制 Agent 从规则表选择已登记 `presetId` 或精确 URL，禁止自行发明参数；明确高德无法单独拆分水系/湖泊/土地利用，Google `apistyle` 属于非稳定服务参数。不新增工具，不触碰 MapCommandBus，复用既有 `switch_basemap` 执行链。
+
 > **版本号归并（2026-11-07）**：按用户「所有冲突的文档记录合并修改为 V3.6.42」的指令，
 > 将 V3.6.38 / V3.6.39 两个整合条目中记述的**曾用中间版本号**（11-01 / 11-02 两次整合前
 > 零散升号、整合后即废弃，号段均高于当前版本）统一归并为 **V3.6.42**。
@@ -17,87 +33,97 @@
 > 注：V3.7.2 号段已于同日重新启用，对应《修复 OpenLayers 加载 OSM 标准瓦片 403》条目，与本条无冲突。
 > 分主题的原始过程记录保留在 `Docs/LLM_record/26-11/2026-11-14/`，不迁移、不改写。
 
-### V3.7.18 (2026-11-24) — 增加 Supabase 访客同步 payload 单测
+### V3.7.14 (2026-11-26) — 统一 IP 地理中枢 · 会话持久化城市 · 暂存区 Code Review 修复 · 架构文档核查（L3）
 
-> 维护日志：[supabase-visit-payload-tests](../LLM_record/26-11/2026-11-24/2026-11-24-supabase-visit-payload-tests.md)
+> **版本归并（2026-11-26）**：按用户明确指令，将同一批暂存区工作（L3 统一中枢 · 会话持久化城市 + L2 暂存区代码审查修复）统一整合为单一版本 **V3.7.14**；过程日志保留不迁移、不改写，本条为唯一版本入口。L3 方案文档：[ip-city-persistence-plan](../TODO/2026-11-26-ip-city-persistence-plan.md)。同日架构文档全量核查更新（原拟 V3.7.15）亦按用户明确指令并入本条，不单独升号；核查与 Code Review 日志：[architecture-docs-audit](../LLM_record/26-11/2026-11-26/2026-11-26-architecture-docs-audit.md)。
 
-**问题**：Supabase 访客同步的字段映射行为无测试锁定；核对代码发现同步 payload 用 `event_id`（取自本地 SQLite 行 id）而非 `id`，若按直觉建表会同步失败。
+**问题与修复**：含 IP 的表（sessions、expired_sessions）没有城市字段，IP 解析逻辑分散在多处各自调用；随后对暂存区做代码审查，发现 2 项 High 与多项 Medium 问题，本条一并修复。
 
-**修复**：新增 `backend/tests/test_statistics_supabase.py`，5 例单测覆盖 `event_id` 映射、空记录默认值、经纬度透传与 `quota_subject` 回退。
+1. **统一中枢**：新增 `services/request_geo.py`，提供 `get_request_geo(request)`（请求级缓存挂 request.state）与 `resolve_ip_geo(ip)`（无 request 版本）；私网 IP 在中枢层直接跳过，零外部请求；解析失败静默留空。
+2. **业务端点惰性取用**：不挂全局中间件——`app.py` 中间件不再 `await` IP 地理服务（CORS / 健康检查 / OPTIONS 白名单跳过）；由 `ip-locate` / `track-visit` / 签发路径按需取用，进程级 TTL 缓存保证一个 IP 只解析一次。
+3. **会话落库**：`sessions` / `expired_sessions` 增加 `ip_city/ip_region/ip_country`（幂等 ALTER）；账号与游客签发时复用中枢结果写入；归档搬运同步新列。
+4. **多处复用**：在线表镜像优先读 sessions 城市（回退 `visit_tracking_events`，保留经纬度）；`fetch_geolocation` 改经中枢；注册页与 proxy 无 request 上下文时用中枢的 IP 版本。
+5. **IP 服务说明**：四级降级——高德（需 key，中国 IP）→ ipwho.is → ip-api.com → ipapi.co，自带 TTL 缓存与私网跳过。
+6. **位置统计架构文档**：新增 [user-location-statistics](../Architecture/user-location-statistics.md)，梳理 GPS/IP 采集、`p` 短码（前后端同算法）、两套访问追踪端点与七张地理字段表的完整链路。
+7. **修复架构文档标注的 3 处不一致**：① `/location/ip-locate` 与 `/location/track-visit` 改走 `request_geo` 中枢（全仓 IP 解析单一入口）；② `track-visit` 改写 `visit_tracking_events`，旧只写不读的 `visit_tracking` 表停写保留；③ `gps_timestamp` 统一服务端 UTC+8，忽略前端上报值。日志：[location-inconsistencies-fix](../LLM_record/26-11/2026-11-26/2026-11-26-location-inconsistencies-fix.md)
+8. **删除死表 + 修复 5 个 bug**：删除无读取方的 `visit_tracking` 表（1282 行，已备份）；修复 ① `Number(null)=0` 导致 IP 坐标变 (0,0) ② IP 坐标被误标 `loc=gps` ③ visit log 擦除 `loc=ip` ④ `prefer_free_service` 开关失效 ⑤ 用昵称查登录名导致改昵称后城市为空。日志：[location-bugs-fix](../LLM_record/26-11/2026-11-26/2026-11-26-location-bugs-fix.md)
+9. **空结果显式状态**：`RequestGeo` 新增 `resolved`；私网/非法/失败为 `False` 但保留 `ip` 供审计，`ip-locate` / `fetch_geolocation` 不再误报成功。
+10. **IP 同源与缓存分维**：`track-visit` 落库 IP 统一用中枢校验后的 `geo.ip`；`ip_geo` 缓存键加入 `amap/free` 维度，`prefer_amap=False` 不再拿到高德预热结果。
+11. **来源标注与测试**：在线表 `coord_source` 跟随访问事件实际坐标来源，无事件时回退 IP；源码字符串断言替换为行为回归测试；debug 日志 IP 脱敏。日志：[staged-code-review-fixes](../LLM_record/26-11/2026-11-26/2026-11-26-staged-code-review-fixes.md)
+12. **架构文档全量核查（以代码为准）**：`Docs/Architecture/` 25 份逐份核实、24 份修订（1 份核实准确未改）。核心双引擎视角同步改归 canonical resolution + 射线实测 + Precision 校正；坐标规范 §28–30 模块树改为 10 个 `.ts`、5 个函数改名、任务书改为实现现状；底图门面拆分 / `l` 1-based / 94 预设 / 删除 FallbackManager 降级；配置权威 `deploy/.env.example`（146 key）+ `catalog.py`（139 key）；token 4 池 + 批量拉取。日志：[architecture-docs-audit](../LLM_record/26-11/2026-11-26/2026-11-26-architecture-docs-audit.md)
+13. **Cesium / 数据 / 身份文档对齐**：风场改为 vendored `WindLayer` + GFS U/V，云三档 + `sampler3D` + `ShadowResolvePass`，图层模型/能力矩阵/端口注册/清档策略按代码重写；路径规划双面板合并为单一 `RoutePlannerPanel`；身份口径更新为 sessionStorage、fail-closed `LOGIN_REQUIRED`、XFF 末跳 + 签名 guest token、4h、18 接口；3 份 `decisions/` 保留历史正文并加落地状态注记。
+14. **版本 SSOT 与 Code Review**：硬编码版本基线改为链接 README，外部仓事实标 ⚠️ 未核验；复核修正 6 处事实偏差（臆造的 `CloudManager` 初始化流程、env 覆盖方向、guest token 存储媒介、云参数映射归属、球面迭代次数、容灾提示文案）。
 
-**验证**：本地 `python -m unittest tests.test_statistics_supabase` 5 例通过；门禁见维护日志。
+**验证**：中枢单测 4/4、行为回归 10/10、全量 pytest 184 passed / 1 既有失败（`test_shutdown_webhook_watches_noop_when_idle`，async 插件配置问题，与本次无关）、`vue-tsc`/`eslint src/` 0 错误、门禁全绿、生产构建成功（前序会话执行）。架构文档部分：25 份 Markdown 围栏配对全通过、结构树/配置门禁双绿、平台红线扫描通过（纯文档任务无需实机验证）。日志：[ip-city-persistence](../LLM_record/26-11/2026-11-26/2026-11-26-ip-city-persistence.md)
 
-### V3.7.17 (2026-11-24) — 向 Agent 明示单轮 10 次工具调用预算
+### V3.7.13 (2026-11-25) — URL 参数治理 · 会话签发收敛 · 在线统计治理 · 身份唯一性
 
-> 维护日志：[agent-tool-round-budget-prompt](../LLM_record/26-11/2026-11-24/2026-11-24-agent-tool-round-budget-prompt.md)
+> **版本归并（2026-11-25）**：按用户明确指令，将暂存区全部过程日志（URL 参数清理、版本注入、定位标记、分享文本化、会话签发架构收敛、在线人数治理、身份唯一性等）统一整合为单一版本 **V3.7.13**；过程日志保留不迁移、不改写，本条为唯一版本入口。L3 方案文档：[auth-issuance-architecture-plan](../TODO/2026-11-25-auth-issuance-architecture-plan.md)。
 
-**问题**：运行时已有 10 步上限，但提示词未解释其含义，模型可能在接近上限时继续尝试无效调用。
+**问题与修复**：访问首页时地址栏不携带版本信息，缓存标识与人工排查缺乏直接可见的版本线索；URL 中还常出现 `s=0&loc=0&p=0` 占位值与重复 `v` 参数。
 
-**修复**：系统提示词明确 10 次是用户体验与防循环的产品策略；Agent 应在预算内完成任务，接近上限时总结而非重试，达到上限后说明未完成原因与已完成内容。
+1. **复用构建期版本注入**：新增 `@common/url-state/appVersionQuery`，从 `__APP_VERSION__`（`vite.config.ts` 由 README「当前版本」正则提取）解析纯数字版本（`V3.7.13` → `3.7.13`），以 `history.replaceState` 写入 URL search 的 `v` 参数：`webgis.negiao.cn` → `webgis.negiao.cn/?v=3.7.13#/`。日志：[url-version-query](../LLM_record/26-11/2026-11-25/2026-11-25-url-version-query.md)
+2. **幂等与兼容**：版本一致时不改 URL；保留其余 search 参数与 hash 全部内容，不影响 hash 内的 s/p/loc/ut 分享与鉴权参数。
+3. **不污染历史与路由**：用 `replaceState` 而非 `router.replace`，不新增历史记录条目、不触发路由守卫重建。
+4. **URL 占位参数清理**：新增 `@common/url-state/urlParamSanitizer`，按参数语义剔除占位值：`s` 仅 `'1'` 保留、`loc` 仅 `'gps'`/`'ip'` 保留、`p`/`cs` 仅非空且非 `'0'` 保留；数值参数 `lng`/`lat`/`z`/`l` 的合法 `0` 保留。覆盖 `useMapState`（移除 s/loc/p 必填门槛）、首页 TOC 定位动作、`userLocationMath`、`auth.ts`、分享链接 `TopBar` 全部写入出口；读取端仍兼容旧链接占位值。日志：[url-placeholder-params](../LLM_record/26-11/2026-11-25/2026-11-25-url-placeholder-params.md)
+5. **修复版本参数 v 被复制进 hash**：切换 Cesium 后 `?v=…#/home?v=…` 重复出现——`useCesiumUrlTracking` 与罗盘 `urlState` 的"search 补缺"把 `v` 并入快照后经 `router.replace` 写回 hash。新增 `SEARCH_ONLY_QUERY_KEYS`（仅根 search 参数）在两处补缺时跳过，并在入口注入时顺带清理 hash 内残留旧 `v`。日志：[url-version-duplicate-in-hash](../LLM_record/26-11/2026-11-25/2026-11-25-url-version-duplicate-in-hash.md)
+6. **实现进入系统自动定位标记 loc=ip**：此前 IP 定位标记只在用户手动触发且 `extent` 存在时发生，而后端 `ip-locate` 成功返回 `latitude`/`longitude`、`extent` 为 null，导致 `loc=ip` 实际不可达。将 `useUserLocation` 中既有的 IP 请求/坐标转换/精度估算迁移为共享函数 `fetchIpLocationCandidate`（三路业务同源，全仓仅一处直接调 `apiLocationIpLocate`），入口非阻塞调用，成功即复用既有 `markLocationSuccessFlagInUrl('ip')` 标记（无 p 编码）；GPS 授权仍由既有流程覆盖为 `loc=gps`，GPS 优先逻辑不变，两者失败则不写 loc。日志：[loc-ip-auto-mark](../LLM_record/26-11/2026-11-25/2026-11-25-loc-ip-auto-mark.md)
+7. **分享按钮改为复制说明文本 + URL**：移除不兼容的 `navigator.share` 分支；点击后从分享 URL 的 `lng/lat` 复用高德逆地理编码（`apiReverseGeocode`）解析具体地名，生成"我在 NEGIAO's WebGIS 中分享了一处地点：{place}…{url}"文本并复制，弹 message 提醒。地名 API 失败按"定位上下文 → 经纬度文本 → 兜底词"三级降级，不阻断分享。日志：[share-copy-text](../LLM_record/26-11/2026-11-25/2026-11-25-share-copy-text.md)
+8. **修复落地页被写入 loc=ip**：入口自动定位原在 `main.ts` 顶层无条件触发，落地页（`/`）也被写入 `#/?loc=ip`。改为 `router.afterEach` 仅在进入 `/home` 时触发，`markIpLocationFromBackend` 与 `markLocationSuccessFlagInUrl` 均增加非 `/home` 短路防御。日志：[loc-mark-on-landing-page](../LLM_record/26-11/2026-11-25/2026-11-25-loc-mark-on-landing-page.md)
+9. **修复在线镜像 display_name 与用户中心不一致**：注册/管理员分支原取 `sessions.username`（登录名），用户中心取 `users.display_name`（昵称）——改为联查 `users` 取昵称、空值回退 username；游客分支原取可能残留旧值的 `guest_identity_records.username`（如 `user_1133`），改为复用 `_guest_visible_username(id)` 生成 `guest_<id>`（如 `guest_1134`），与用户中心 `getUserDisplayName` 及 URL `ut=guest_<id>` 同口径。补单测断言，真实库双分支实测通过。日志：[online-mirror-display-name](../LLM_record/26-11/2026-11-25/2026-11-25-online-mirror-display-name.md)
+10. **在线表私有网关 IP 展示层过滤**：HF/Docker 容器未注入公网 XFF 时，`_extract_client_ip` 回落到容器网关 IP（10.16.x.x / 172.19.0.1），在线表误显示为访客 IP。按用户选定方案，只在 `admin_online_presence` 展示写入时过滤私有/回环/保留 IP 为 `unknown`，不改鉴权/身份派生/限频核心逻辑。日志：[online-ip-private-gateway](../LLM_record/26-11/2026-11-25/2026-11-25-online-ip-private-gateway.md)
+11. **修复在线人数长期虚报（Plan B）**：根因是容器网关私网 IP + 测试残留的非标准 device_id（`vt-test-device` / `guest_<hex>`）被当作真实游客计入在线，并靠 25s 心跳长期挂在线表。新增组合判据——私网网关 IP 且 device_id 非标准 `gd_` 格式时归入不可数 `e:`；标准 `gd_`（前端真实浏览器生成，含 clone 项目连线上库的用户）与公网用户一律保留。不按 IP 一刀切，不误伤任何真实用户；注册/管理员不受影响。日志：[online-count-inflation-fix](../LLM_record/26-11/2026-11-25/2026-11-25-online-count-inflation-fix.md)
+12. **会话签发架构收敛（L3）**：删除 `main.ts` 顶层 `ensureGuestSession()`；游客身份匿名签发只发生在 `/home` 守卫内的分享模式与应急游客模式两条合法路径，普通游客访问 /home 仍按既有 requiresAuth 语义重定向 register。landing 根目录纯展示，零签发零验证零心跳（已核实 LandingView 不挂载账户面板）；后端鉴权/限频/配额/签发端点语义零改动。日志：[auth-issuance-architecture](../LLM_record/26-11/2026-11-25/2026-11-25-auth-issuance-architecture.md)
+13. **URL ut 标签改用展示名**：`buildUserTypeTag` 的 registered 分支原取 `username`，OAuth 账号带唯一性 hash（如 `negiao_033f72`）不适合展示；改为优先经温和清洗（去控制字符/压缩空白/限长 32）的 `display_name`、空值回退 username。全仓确认 ut 无消费方（仅展示标签），不影响鉴权与统计。日志：[ut-display-name](../LLM_record/26-11/2026-11-25/2026-11-25-ut-display-name.md)
+14. **Google One Tap FedCM 兼容**：核查确认 `?v=` 前缀非根因（origin 校验不涉及 path/query/hash），真正问题是 `prompt()` 回调用了 FedCM 下失效的 `isNotDisplayed/isSkippedMoment/getSkippedReason`（GSI 迁移警告源头）；移除失效 status API 调用改为空回调（用户关闭/取消属正常行为，注册页已有显式登录兜底）。`use_fedcm_for_prompt` 经官方 reference 确认已 Deprecated 被忽略，未采用。日志：[google-onetap-fedcm](../LLM_record/26-11/2026-11-25/2026-11-25-google-onetap-fedcm.md)
+15. **同一身份全局唯一 token（单端登录）**：`supersede_sessions_locked` 账号分支原按 `username+IP+UA`（同设备）去重，导致同一 admin 在不同浏览器/网络各留一枚 token。改为按 `username` 全局去重（admin/registered 新签发必作废旧 token）；游客按 `guest_uid` 口径不变，三类身份统一。旧 token 归档到 `expired_sessions` 保留排查依据。日志：[single-session-per-identity](../LLM_record/26-11/2026-11-25/2026-11-25-single-session-per-identity.md)
+16. **暂存区 code review 与版本合并**：解决 CHANGELOG 中未解决的 Git 合并冲突标记；将 V3.7.14 条目合并进 V3.7.13（本条为单一版本入口），README 三处版本与代码注释、日志版本统一为 3.7.13。日志：[code-review-version-merge](../LLM_record/26-11/2026-11-25/2026-11-25-code-review-version-merge.md)
 
-**验证**：类型检查、ESLint、构建与门禁见维护日志。
+**为何不用日期**：同日多次发版日期相同、缓存破坏失效，且无法与 CHANGELOG 对应；版本号随 L2/L3 每次发版 +1，天然满足缓存刷新与追溯。
 
-### V3.7.16 (2026-11-24) — 明确额度耗尽指 WebGIS 平台 API 额度
+**验证**：版本提取纯函数 6/6、清洗规则 8/8、v 剔除与 search 合并过滤 5/5、`vue-tsc --noEmit` 0 错误、门禁 4 项全绿、生产构建成功。
 
-> 维护日志：[clarify-webgis-quota-semantics](../LLM_record/26-11/2026-11-24/2026-11-24-clarify-webgis-quota-semantics.md)
+### V3.7.12 (2026-11-25) — 三类身份会话统一 · 会话归档 · 在线统计治理 · URL 身份标签细化 · 管理端控件主题化
 
-**问题**：额度提示语义模糊，容易被理解成模型供应商额度。
+> **版本归并（2026-11-25）**：按用户明确指令，将暂存区中多次不规范提交对应的过程日志（含原 V3.7.13 会话归档批次、URL 身份标签批次）统一整合为单一版本 **V3.7.12**；过程日志保留不迁移、不改写，本条为唯一版本入口。
 
-**澄清与修复**：系统提示词与中英文文案明确为 WebGIS 平台 API 额度：guest 默认 100/日，注册用户默认 1000/日（管理员可调），API 工具调用会消耗该额度；耗尽后停止工具调用并建议登录/注册。
+> **升级影响（务必阅读）**：旧版本签发的游客 token 没有 `sessions` 行，部署后首次请求会返回 401 `SESSION_EXPIRED` 并强制回 `/register` 一次，重新进入即自动签发新身份。该行为是「4h 到期不静默续签」设计的既定结果，非故障。
 
-**验证**：类型检查、ESLint、构建与门禁见维护日志。
+**问题与修复**：
 
-### V3.7.15 (2026-11-24) — Agent 单次对话工具调用上限提升到 10
+1. **SSE 幽灵连接与在线人数震荡**：在线口径收敛为“带 client_id 的显式心跳/API 活跃”：取消 `_default` liveness、SSE 写出不再刷新存活、迟到 SSE 清理按 `conn_id` 精准撤销、心跳窗口 90s→150s 容纳后台标签页节流；只读统计端点不再反向标活，前端加 generation/时序守卫、30s 对账、即时 ping 与静默重连；新增 `admin_online_presence` 镜像表与管理员在线明细接口（每 10s 动态维护，仅保留当前在线身份及 IP/设备/身份信息）。日志：[fix-sse-ghost-presence](../LLM_record/26-11/2026-11-25/2026-11-25-fix-sse-ghost-presence.md)
+2. **管理员接口返回真实敏感值**：按用户明确指令，管理员 DB 行与 API key 状态/详情不再掩码，便于直接管理密钥；`reveal` 保留为兼容别名。日志：[restore-admin-plaintext-values](../LLM_record/26-11/2026-11-25/2026-11-25-restore-admin-plaintext-values.md)
+3. **三类身份会话过期统一提示与跳转**：admin / registered / guest 一律签发并检测 session，过期/被删统一弹「会话过期，请重新登陆」并强制回 `/register`；过期登录 token 不再静默降级游客，前端 60s 周期体检兜底长期停留场景；并发 401 做 3s 合并。日志：[fix-session-expired-unified-redirect](../LLM_record/26-11/2026-11-25/2026-11-25-fix-session-expired-unified-redirect.md)
+4. **三类身份会话统一到 sessions 表**：游客 token 签发即写入 `sessions`（role=guest），验签按 token 查表；管理员在同一张表删行即让 admin / registered / guest 会话失效并返回 401，前端同步清游客 token，避免续签绕过。日志：[fix-guest-session-admin-revoke](../LLM_record/26-11/2026-11-25/2026-11-25-fix-guest-session-admin-revoke.md)
+5. **用户中心管理控件去浏览器原生化**：删除确认（数据库行、API 密钥/备份）改系统主题弹窗；数据表/分页/底图/统计天数/偏好设置等原生 `<select>` 全量替换为自绘 `ThemedSelect`，样式与主题统一。日志：[fix-admin-native-controls](../LLM_record/26-11/2026-11-25/2026-11-25-fix-admin-native-controls.md)
+6. **Code Review 修复**：DB 查询异常不再被误判为 token 过期而集体踢下线；游客 session 登记写入 `guest_device_id`，管理员删除游客记录时按设备派生 presence_id 精确撤销在线；游客在线镜像在缺少 `guest_identity_records` 时回查 `sessions` 补全 IP/设备/UA。日志：[code-review-version-v3.7.12](../LLM_record/26-11/2026-11-25/2026-11-25-code-review-version-v3.7.12.md)
+7. **会话只增不减**：新增 `expired_sessions` 归档表；签发新 token 时按身份取代旧 token（游客按 `guest_uid`、账号按 `username + IP + UA` 同设备），过期/注销/被撤销的会话先归档再删除；`app.py` 新增每 30 分钟一轮的清理任务（单轮上限 1000 行）。`sessions` 表因此稳定在「当前有效会话」规模，历史可按 `archive_reason` 回源。日志：[session-archive-online-roles](../LLM_record/26-11/2026-11-25/2026-11-25-session-archive-online-roles.md)
+8. **游客在线靠隐式搭车**：`presence/ping` 新增已验签游客 token（`X-Guest-Token`）解析，三类身份同口径计入在线，与是否游客无关；前端 presence 请求在无 Bearer 时附带游客 token，不再依赖 `/auth/me` 轮询保活。
+9. **在线角色靠字符串猜**：tracker 记录身份真实 role，`online_by_role` 按 admin / registered / guest 真实分类（废除 `pid == "u:admin"` 判断）；`online_sessions` 恢复 sessions 表原义，实时在线数另开 `online_sessions_presence`。
+10. **游客 token 可穿账号级端点**：新增 `require_account`（`require_login` + 拒绝 guest，403 `ACCOUNT_REQUIRED`），覆盖 OAuth 绑定/解绑、改密、改头像、改昵称、绑邮箱、偏好、个人 Agent 配置；注销仍允许游客清理身份。
+11. **确认弹窗 Promise 挂起**：管理面板与 API Key 面板在组件卸载时释放未决确认，Esc 视为取消；分页选项改 computed，切语言即时生效。
+12. **两套下拉实现**：`ThemedSelect` 升级为可访问组件（combobox/listbox ARIA、↑↓/Home/End/Enter/Space/Esc、高亮滚动跟随、触屏 ≥40px），管理面板三处内联 `.custom-select` 改用该组件并删除约 80 行重复样式；移除重复的 `idx_sessions_guest_uid` 索引、修正 legacy heartbeat 过期 docstring。
+13. **游客 username 统一为可读序号**：数据库 `guest_identity_records.username` / `sessions.username` 由 `guest_<hex16>` 改为 `guest_<id>`，与用户中心 `guest_no` 展示同口径；采用懒迁移逐行改写，不做全表 UPDATE；`guest_uid` 作为 token 验签 / presence / 配额稳定主键保持不变。
+14. **URL 身份标签细化**：URL hash 的 `ut` 参数由三类角色名改为可区分标识——`admin`（全局唯一、不附加）、`guest_<guest_no>`（缺失回退 username 数字 id）、`registered_<username>`；新增纯函数 `buildUserTypeTag` 统一构造。日志：[url-ut-identity-labels](../LLM_record/26-11/2026-11-25/2026-11-25-url-ut-identity-labels.md)
+15. **游客签发补齐 URL 同步**：`ensureGuestSession` 此前只写本地身份快照、不更新 `ut`，签发成功后补调 `syncUserRoleToUrl`，使游客访问也能按 `guest_<id>` 分组统计；分享链接排除名单保持不变（`ut` 不进入分享 URL）。
 
-> 维护日志：[raise-agent-tool-round-limit](../LLM_record/26-11/2026-11-24/2026-11-24-raise-agent-tool-round-limit.md)
+> `ut` 位于 URL hash，不上送服务器、不参与鉴权，取值变化无权限风险。
 
-**问题**：复杂 GIS 任务在第 6 步工具调用后被提前中止，提示“已达单次对话最多 6 步工具调用”。
+**验证**：后端 `test_session_expiry` + `test_guest_identity` + `test_realtime_stats` + 隔离 SQLite 迁移验证全通过；全量 pytest 171 passed / 1 个既有异步标记失败（与本版本无关）；vue-tsc 0、ESLint 0、结构树 751/751、Vue 范式与配置登记通过、生产构建成功；URL 标签构造纯函数 7/7 通过。
 
-**调整**：`MAX_TOOL_ROUNDS` 6 → 10。保留重复调用检测与配额耗尽终止护栏，避免失控循环。
+### V3.7.11 (2026-11-24) — Agent 任务闭环 · 配额提示 · 工具预算 · 罗盘半径自适应
 
-**验证**：类型检查、ESLint、构建与门禁见维护日志。
+> **版本归并（2026-11-25）**：按用户明确指令，将暂存区的 V3.7.11 ~ V3.7.18 合并为单条 **V3.7.11**；中间版本号自本条起废弃，过程日志保留不迁移、不改写。
 
-### V3.7.14 (2026-11-24) — 调大 Agent 罗盘半径默认档位
+**问题与修复**：
 
-> 维护日志：[scale-up-agent-compass-radius](../LLM_record/26-11/2026-11-24/2026-11-24-scale-up-agent-compass-radius.md)
+1. **指定地点风水分析提前停止**：新增“定位 → 启用罗盘 → 提示用户点击卦象”的完成契约；工具结果不再复用 `[工具调用已执行]` 占位文案；重复签名加入 view 维度。日志：[fix-agent-fengshui-task-completion](../LLM_record/26-11/2026-11-24/2026-11-24-fix-agent-fengshui-task-completion.md)
+2. **额度耗尽提示不清晰**：明确为 WebGIS 平台 API 额度（guest 100/日、注册 1000/日，管理员可调），耗尽后停止调用工具并建议登录/注册。日志：[agent-quota-exhausted-notice](../LLM_record/26-11/2026-11-24/2026-11-24-agent-quota-exhausted-notice.md)、[clarify-webgis-quota-semantics](../LLM_record/26-11/2026-11-24/2026-11-24-clarify-webgis-quota-semantics.md)
+3. **工具调用预算**：单轮最多 10 次工具，作为用户体验与防循环的产品策略；运行时上限同步为 10。日志：[raise-agent-tool-round-limit](../LLM_record/26-11/2026-11-24/2026-11-24-raise-agent-tool-round-limit.md)、[agent-tool-round-budget-prompt](../LLM_record/26-11/2026-11-24/2026-11-24-agent-tool-round-budget-prompt.md)
+4. **罗盘半径自适应**：AgentMapContextV1 新增 `compassRadiusHintMeters`，按 OL zoom / Cesium cameraHeight 推荐半径；工具上限 100 km → 2,000 km，全档位上调。日志：[agent-compass-radius-by-zoom](../LLM_record/26-11/2026-11-24/2026-11-24-agent-compass-radius-by-zoom.md)、[scale-up-agent-compass-radius](../LLM_record/26-11/2026-11-24/2026-11-24-scale-up-agent-compass-radius.md)
+5. **其他同批改动**：Supabase 访客同步 payload 单测、SQLite 恢复增强、会话/游客 token 4h 上限、在线 presence 去重、导出下载失败语义修正、traffic workflow 补记漏算日期。日志：[supabase-visit-payload-tests](../LLM_record/26-11/2026-11-24/2026-11-24-supabase-visit-payload-tests.md)
 
-**问题**：V3.7.13 的半径档位偏保守，100 km 上限使小比例尺罗盘仍不够醒目。
-
-**调整**：Agent 工具上限 100 km → 2,000 km；全档位上调（z≤5 / 高相机高度 2,000 km，z≈13 50 km，z≥16 2 km）；前端映射、工具 schema、后端严格模型与提示词说明同步。
-
-**验证**：类型检查、ESLint、后端单测、构建与门禁见维护日志。
-
-### V3.7.13 (2026-11-24) — Agent 按视图缩放级别决定罗盘半径
-
-> 维护日志：[agent-compass-radius-by-zoom](../LLM_record/26-11/2026-11-24/2026-11-24-agent-compass-radius-by-zoom.md)
-
-**问题**：OL 的 z 与 Cesium 的相机高度语义不同，`enable_compass` 不传半径时沿用固定默认半径，小比例尺下罗盘过小、用户看不到。
-
-**修复**：AgentMapContextV1 新增 `compassRadiusHintMeters`，按 OL zoom / Cesium cameraHeight 映射 100m~100km；后端严格模型与 prompt 摘要同步接纳该字段；提示词强制 `enable_compass` 显式传 `radiusMeters`，优先取提示值，缺失时按映射表估算。
-
-**验证**：类型检查、ESLint、后端单测、构建与门禁见维护日志。
-
-### V3.7.12 (2026-11-24) — 额度耗尽时 Agent 主动提示并停止工具调用
-
-> 维护日志：[agent-quota-exhausted-notice](../LLM_record/26-11/2026-11-24/2026-11-24-agent-quota-exhausted-notice.md)
-
-**问题**：访客用户额度耗尽后，Agent 可能静默丢弃提问或在工具调用失败后继续重试，用户看不到明确说明。
-
-**修复**：系统提示词把额度耗尽列为终止条件；发送前守卫、多轮工具异常、首轮请求异常三处统一写入可见错误提示，明确说明无法继续调用工具，并建议登录或切换更高权限账号。新增中英文 `chat.quotaToolUnavailable` 文案。
-
-**验证**：类型检查、ESLint、构建与门禁见维护日志。
-
-### V3.7.11 (2026-11-24) — 修复 Agent「分析某地风水」提前停止
-
-> 维护日志：[fix-agent-fengshui-task-completion](../LLM_record/26-11/2026-11-24/2026-11-24-fix-agent-fengshui-task-completion.md)
-
-**问题**：用户问「分析汕头市澄海区峰下村的风水」，Agent 只解析坐标并显示工具已执行就停止，没有定位地图、启用罗盘。
-
-**根因**：提示词缺少「指定地点风水分析」串行工作流；后续轮指令鼓励“执行成功就总结”；双视图定位超过 4 轮上限；重复签名不区分视图。
-
-**修复**：系统提示词新增任务完成契约（定位→启用罗盘→提示用户点击卦象）；后续轮强制对照原始任务，未完成继续调用工具；`MAX_TOOL_ROUNDS` 4→6；重复检测加入当前视图维度。
-
-**验证**：类型检查、ESLint、构建与门禁见维护日志。
+**验证**：vue-tsc 0、ESLint 0、后端相关单测 44/44、结构树 749/749、生产构建成功；平台红线仅命中已知 `maxRayDistance` 假阳性，生产基线通过。
 
 ### V3.7.10 (2026-11-24) — 罗盘全链路增强 · Agent 工具扩展 · 双引擎修复 · Code Review 收口
 

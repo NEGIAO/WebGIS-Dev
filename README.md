@@ -618,9 +618,12 @@ tiles.negiao.cc.cd"]
 
 | 版本 | 日期 | 概要 |
 |------|------|------|
-| **V3.7.18** | 2026-11-24 | **增加 Supabase 访客同步 payload 单测**。锁定 `_build_supabase_visit_payload` 的 event_id 映射与默认值行为；本地 5 例通过。详见[完整更新日志](Docs/Guide/CHANGELOG.md) |
-| **V3.7.17** | 2026-11-24 | **向 Agent 明示单轮 10 次工具调用预算**。说明这是用户体验与防循环策略，要求接近上限时总结而非重试。详见[完整更新日志](Docs/Guide/CHANGELOG.md) |
-| **V3.7.16** | 2026-11-24 | **明确额度耗尽指 WebGIS 平台 API 额度**。guest 默认 100/日、注册用户 1000/日（管理员可调），API 工具调用会消耗该额度；提示词与文案同步修正。 |
+| **V3.7.18** | 2026-11-27 | **访客身份 IP 提取修复 · XFF 最右侧公网跳**。`_extract_identity_ip` 改为从右向左取第一个公网 IP，修复 HF 部署下全站用户共用身份 IP `10.16.1.43`、同 UA 撞进同一配额桶、轮换 UA 绕过签发限频的问题；签发、游客登录、无 token 兜底三条路径自动受益；新增 7 个单测。详见[完整更新日志](Docs/Guide/CHANGELOG.md) |
+| **V3.7.17** | 2026-11-26 | **Agent 提示词瘦身 · intent 本地解析**。System Prompt 从 9,779 字符压缩到 962 字符（降幅 90.16%），瓦片规则表不再前置发送；`switch_basemap(intent)` 在本地解析用户语义为 presetId/URL，工具数量不变。 |
+| **V3.7.16** | 2026-11-26 | **Agent System Prompt 传输修复 · 瓦片语义预设**。修复 System Prompt 被注入 `history[0]` 导致 8000 字符校验失败；Prompt 改走专用 `system_prompt` 字段，字段上限提升到 16000，history 保持 8000 上限。新增 `tileIntentPresets.ts`，把高德/Google 瓦片文档压缩为 18 条可审计语义规则。 |
+| **V3.7.15** | 2026-11-26 | **Agent 瓦片语义预设**。新增 `tileIntentPresets.ts`，把高德/Google 瓦片文档的 `style/ltype/scl`、`lyrs/apistyle` 语义压缩为可审计规则表；System Prompt 强制按表选择 `presetId` 或精确 URL，禁止模型自行发明参数；明确高德无法单独拆分水系/湖泊/土地利用，Google `apistyle` 标注为非稳定服务参数。 |
+| **V3.7.14** | 2026-11-26 | **统一 IP 地理中枢 · 会话持久化城市 · 暂存区 Code Review 修复 · 架构文档核查**。新增 `services/request_geo.py`（请求级 + 进程级双层缓存，一个 IP 只解析一次；业务端点惰性取用，不在全局中间件等待）；`sessions` / `expired_sessions` 加 `ip_city/ip_region/ip_country`，签发即落库；在线表优先读会话城市、回退访问事件；空结果显式 `resolved`、落库 IP 同源、缓存分 amap/free 维、`coord_source` 跟随实际坐标、行为回归测试；另完成 25 份架构文档逐份核实、24 份修订（canonical 视角链路、TS 路径、身份口径、Cesium 特效、历史决策注记）。详见[完整更新日志](Docs/Guide/CHANGELOG.md) |
+| **V3.7.13** | 2026-11-25 | **URL 参数治理 · 会话签发收敛 · 在线统计治理 · 身份唯一性**。首页写入 `?v=<版本号>`、`s/loc/p` 占位清理、自动定位 `loc=ip`、分享文本化；landing 零签发零心跳，根治脚本访问首页虚报在线；在线镜像 display_name 与用户中心同口径、网关 IP 过滤、非标准 device 排除；ut 用展示名、One Tap FedCM 兼容、同一身份全局唯一 token（单端登录）。 |
 
 
 ---
@@ -643,6 +646,6 @@ tiles.negiao.cc.cd"]
 |:------:|:--------:|:--------:|
 | [GitHub](https://github.com/NEGIAO/WebGIS-Dev) | [webgis.negiao.cn](https://webgis.negiao.cn)（正式域名，GitHub Pages 托管） | [Hugging Face](https://NEGIAO-WebGIS.hf.space) |
 
-<sub>V3.7.18 · 开发中 · 最后更新 2026-11-24</sub>
+<sub>V3.7.18 · 开发中 · 最后更新 2026-11-27</sub>
 
 </div>

@@ -422,7 +422,7 @@
 }
 
 .mini-icon-btn:active {
-    transform: scale(0.92);
+    transform: scale(0.96);
 }
 
 .head-subtitle {
@@ -697,7 +697,7 @@
     height: 14px;
     border-radius: 50%;
     border: 1.5px solid rgba(153, 195, 170, 0.7);
-    transition: all 0.15s ease;
+    transition: border-radius, height, width 0.15s ease;
 }
 
 .mode-card.active .radio-indicator {

@@ -239,7 +239,7 @@
     display: flex;
     flex-direction: column;
     gap: 8px;
-    transition: all 0.2s ease-in-out;
+    transition: background-color, border-color, box-shadow, color, opacity, transform 0.2s ease-in-out;
 }
 
 .task-card:hover {
@@ -316,7 +316,7 @@
     background: #ffffff;
     color: #64748b;
     cursor: pointer;
-    transition: all 0.2s;
+    transition: background, border-radius, color, height, width 0.2s;
 }
 
 .icon-btn:hover {
@@ -430,7 +430,7 @@
     background: #ffffff;
     color: #475569;
     cursor: pointer;
-    transition: all 0.2s;
+    transition: background, border-color, color 0.2s;
 }
 
 .action-btn:hover {

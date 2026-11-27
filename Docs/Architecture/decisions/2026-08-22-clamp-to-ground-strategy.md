@@ -4,6 +4,13 @@
 > 日期：2026-08-22
 > 关联：`Docs/TODO/bugfix-optimization-plan.md`
 
+> **当前落地状态（以工作区代码为准，历史方案本身不改写）**：
+>
+> - 第 4–5 节的目标架构未按原方案命名落地：`terrainSampling.ts` 实际导出 `sampleTerrainBatch` / `sampleTerrainHeight`；`terrainClampService.ts` 仅导出 `isTerrainEnabled` / `clampEntityToGround` / `clampDataSourceToGround`。`clampRecord` / `liftModelToTerrain` / `sampleTerrainSafe` 三个符号在当前代码中未找到。
+> - 实际落地另增 `groundPlacementService` / `groundPlacementRegistry` / `groundPlacementCapabilities`，以及 `strategies/`（`modelGroundStrategy` / `tilesetGroundStrategy` / `vectorGroundStrategy`）。
+> - 第 2.1 / 2.2 / 5 节所述 gltfLoader「采样失败关闭全局地形」兜底已不存在：现改为 Entity `ModelGraphics.heightReference`（语义高度 > 0 → `RELATIVE_TO_GROUND`，否则 `CLAMP_TO_GROUND`，见 `gltfLoader.ts`）。
+> - 第 4.1 节「`clampToGround.js` 并入后删除」的记述准确，保留。
+
 ---
 
 ## 1. 问题陈述

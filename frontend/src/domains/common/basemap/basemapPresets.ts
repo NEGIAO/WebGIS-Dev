@@ -354,6 +354,27 @@ export const BASEMAP_PRESETS: BasemapPresetDefinition[] = [
         label: 'OpenFreeMap矢量',
         stack: ['vector_openfreemap_liberty'],
     },
+    // 追加在末尾，保持既有 URL 参数 l 的 1-based 编号不变。
+    {
+        id: 'vector_amap_clean_hd_preset',
+        label: '高德简洁512（无道路）',
+        stack: ['vector_amap_clean_hd'],
+    },
+    {
+        id: 'vector_amap_clean_wgs_preset',
+        label: '高德简洁纠偏（WGS）',
+        stack: ['vector_amap_clean_wgs'],
+    },
+    {
+        id: 'vector_amap_clean_roads_preset',
+        label: '高德简洁有路（无注记）',
+        stack: ['vector_amap_clean_roads'],
+    },
+    {
+        id: 'vector_amap_pure_roads_wgs_preset',
+        label: '高德简洁底图+纯道路（WGS）',
+        stack: ['vector_amap_clean_wgs', 'vector_amap_roads_wgs'],
+    },
 ];
 
 /** Preset labels use the public 1-based URL layer number. */

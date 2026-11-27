@@ -7,6 +7,7 @@
 - 访问追踪：记录用户访问时的位置和设备信息
 """
 
+import asyncio
 import logging
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, Optional
@@ -20,18 +21,13 @@ from pydantic import BaseModel, Field
 
 from config import get_str
 
-from api.auth import (
-    auth_db_generation,
-    get_auth_db_connection,
-    resolve_optional_session,
-)
+from api.auth import resolve_optional_session
 from services import ip_geo_service
 from core.coord_transform import wgs2gcj
 
 logger = logging.getLogger(__name__)
 
-_visit_tracking_table_ready = False
-_visit_tracking_table_ready_gen = -1
+# V3.7.14：旧 visit_tracking 表（只写不读）已停止写入，动态建表标志随之移除。
 
 # ==================== 配置 ====================
 
@@ -234,29 +230,33 @@ async def ip_locate(
                 "message": "IP 地址格式不合法",
             }
 
-    # 使用统一的 IP 定位服务
-    result = await ip_geo_service.locate(
-        ip=ip,
-        prefer_amap=not request_data.prefer_free_service,
-        use_cache=True,
+    # V3.7.14：统一走 IP 地理中枢——显式 ip 用 resolve_ip_geo（保留 prefer_free_service 口径），
+    # 无显式 ip 用 get_request_geo（复用入口中间件已解析的结果，同一请求不重复解析）。
+    from services.request_geo import get_request_geo, resolve_ip_geo
+
+    prefer_amap = not request_data.prefer_free_service
+    geo = (
+        await resolve_ip_geo(ip, prefer_amap=prefer_amap)
+        if request_data.ip.strip()
+        else await get_request_geo(request, prefer_amap=prefer_amap)
     )
 
-    if result:
+    if geo.resolved:
         return {
             "code": 200,
             "data": {
                 "ok": True,
                 "status": "1",
-                "source": result.source,
-                "ip": result.ip,
-                "city": result.city,
-                "province": result.region,
-                "country": result.country,
-                "country_code": result.country_code,
+                "source": geo.source,
+                "ip": geo.ip,
+                "city": geo.city,
+                "province": geo.region,
+                "country": geo.country,
+                "country_code": geo.country_code,
                 "adcode": "",  # 高德特有字段，其他服务为空
                 "extent": None,
-                "latitude": result.latitude,
-                "longitude": result.longitude,
+                "latitude": geo.latitude,
+                "longitude": geo.longitude,
             },
             "message": "success"
         }
@@ -338,53 +338,45 @@ async def track_visit(
     - 与用户关联（如已登陆）
     """
 
-    ip = get_client_ip(request)
+    # V3.7.14：时间戳统一服务端 UTC+8（不使用前端上报的 gps_timestamp，避免时钟漂移）
     timestamp = datetime.now(_BEIJING_TZ).isoformat()
 
-    # IP 定位（使用统一服务，带缓存）
-    location = await ip_geo_service.locate(ip=ip, prefer_amap=False, use_cache=True)
+    # V3.7.14：统一走 IP 地理中枢（惰性解析，同一请求内复用 request.state）
+    from services.request_geo import get_request_geo
 
-    if location:
-        city = location.city
-        province = location.region
-        country = location.country
-    else:
-        city = province = country = None
-    
-    # 尝试保存到数据库
-    global _visit_tracking_table_ready, _visit_tracking_table_ready_gen
+    geo = await get_request_geo(request)
+    # V3.7.14：落库 IP 与地理信息同源，统一用中枢校验后的 IP，避免「A 的 IP + B 的城市」。
+    ip = geo.ip or get_client_ip(request)
+    city = geo.city or None
+    province = geo.region or None
+    country = geo.country or None
+
+    # V3.7.14：口径统一——写入 visit_tracking_events（统计源），不再写只写不读的 visit_tracking。
+    # 旧表保留不删（历史数据），但停止写入；写入函数自带默认值兜底。
+    from api.statistics import _insert_visit_tracking_event_sync
+
     username = str(current_user.get("username") or "") if current_user else ""
+    role = str(current_user.get("role") or "") if current_user else ""
     try:
-        # V3.7.8：标准 with 块用法（退出即提交/异常即回滚）——纳入连接访问串行化，
-        # 消除手动 commit 在网络盘上的撕裂写窗口；连接为线程本地共享资源，不关闭
-        with get_auth_db_connection() as conn:
-            cursor = conn.cursor()
-
-            # 创建表（如果不存在），使用模块级标志避免每次请求执行 DDL
-            # V3.7.7 批次 A：就绪标志带连接代际——库被恢复/重建后自动重跑 DDL
-            if not _visit_tracking_table_ready or _visit_tracking_table_ready_gen != auth_db_generation():
-                cursor.execute("""
-                    CREATE TABLE IF NOT EXISTS visit_tracking (
-                        id INTEGER PRIMARY KEY AUTOINCREMENT,
-                        ip VARCHAR(50) NOT NULL,
-                        city VARCHAR(100),
-                        province VARCHAR(100),
-                        country VARCHAR(100),
-                        user_agent TEXT,
-                        referrer TEXT,
-                        username TEXT,
-                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                    )
-                """)
-                _visit_tracking_table_ready = True
-                _visit_tracking_table_ready_gen = auth_db_generation()
-
-            # 插入记录
-            cursor.execute("""
-                INSERT INTO visit_tracking (ip, city, province, country, user_agent, referrer, username)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
-            """, (ip, city, province, country, request_data.user_agent[:500], request_data.referrer[:500], username or None))
-        # with 退出即提交
+        event_record = {
+            "username": username or "unknown",
+            "role": role or "guest",
+            "guest_uid": str(current_user.get("guest_uid") or "") if current_user else "",
+            "quota_subject": username or "unknown",
+            "ip": ip,
+            "ip_city": city or "Unknown",
+            "ip_region": province or "Unknown",
+            "ip_country": country or "Unknown",
+            "latitude": geo.latitude,
+            "longitude": geo.longitude,
+            # 本端点只有 IP 定位，坐标来源固定 ip
+            "coord_source": "ip" if geo.latitude is not None else "unknown",
+            "geo_permission": "unknown",
+            "gps_timestamp": "",  # 服务端时间已写入 visit_time
+            "visit_time": timestamp,
+            "user_agent": request_data.user_agent[:500] or "Unknown",
+        }
+        await asyncio.to_thread(_insert_visit_tracking_event_sync, event_record)
 
         return {
             "code": 200,

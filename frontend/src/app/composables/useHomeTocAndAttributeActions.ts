@@ -5,6 +5,7 @@
  */
 import { ref, type Ref } from 'vue';
 import { apiLogVisit } from '@/api/backend';
+import { sanitizeUrlParams } from '@common/url-state/urlParamSanitizer';
 import { showLoading, hideLoading } from '@common/ui/loading';
 import {
     dispatchLayerAction,
@@ -531,7 +532,7 @@ export function useHomeTocAndAttributeActions({
         return payload;
     }
 
-    function syncVisitPosCodeToUrl(encodedPos: string, geoPermission = 'unknown'): void {
+    function syncVisitPosCodeToUrl(encodedPos: string, coordSource = 'unknown'): void {
         if (typeof window === 'undefined') return;
 
         const normalizedCode = String(encodedPos || '').trim() || '0';
@@ -544,14 +545,21 @@ export function useHomeTocAndAttributeActions({
             const normalizedHashPath = hashPath.startsWith('/') ? hashPath : `/${hashPath}`;
             const params = new URLSearchParams(hashQueryRaw);
 
-            if (geoPermission === 'granted' && normalizedCode !== '0') {
+            // 修复：必须按后端判定的坐标来源决定是否写 GPS 标记。
+            // 仅看 geo_permission 会把「权限 granted 但 GPS 失败 → 后端回退 IP」误标为 gps。
+            const isGpsSource = coordSource === 'gps';
+            if (isGpsSource && normalizedCode !== '0') {
                 params.set('p', normalizedCode);
                 params.set('loc', 'gps');
             } else {
-                params.set('p', '0');
-                params.set('loc', '0');
+                // 定位失败/未授权不写占位值；但保留入口自动定位已写的 loc=ip，
+                // 避免两个异步流程竞态把 IP 标记擦掉（GPS 优先级规则不变）。
+                params.delete('p');
+                if (params.get('loc') !== 'ip') params.delete('loc');
             }
 
+            // 统一剔除其它占位参数（s=0 等），避免地址栏噪声
+            sanitizeUrlParams(params);
             const nextHashQuery = params.toString();
             const nextHash = nextHashQuery
                 ? `#${normalizedHashPath}?${nextHashQuery}`
@@ -569,7 +577,8 @@ export function useHomeTocAndAttributeActions({
             const visitPayload = await buildVisitLogPayload();
             const visitResponse = await apiLogVisit(visitPayload);
             const encodedPos = String(visitResponse?.data?.encoded_pos || '0');
-            syncVisitPosCodeToUrl(encodedPos, visitPayload.geo_permission);
+            const coordSource = String(visitResponse?.data?.coord_source || 'unknown');
+            syncVisitPosCodeToUrl(encodedPos, coordSource);
         } catch {
             // 访问记录失败不影响主页面使用
         }

@@ -304,7 +304,7 @@
     border-radius: 4px;
     backdrop-filter: blur(8px);
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
-    transition: all 0.2s ease-out;
+    transition: backdrop-filter, background, border-radius, box-shadow, color, height, width 0.2s ease-out;
     color: var(--text-on-brand);
 }
 
@@ -344,7 +344,7 @@
     border-radius: 4px;
     color: var(--text-on-brand);
     cursor: pointer;
-    transition: all 0.2s ease-out;
+    transition: backdrop-filter, background, border-radius, box-shadow, color, height, margin-bottom, padding, width 0.2s ease-out;
     backdrop-filter: blur(8px);
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
     touch-action: manipulation;
@@ -416,7 +416,7 @@
     font-size: 14px;
     font-weight: 600;
     cursor: pointer;
-    transition: all 0.2s ease-out;
+    transition: background, border-color, box-shadow 0.2s ease-out;
     touch-action: manipulation;
     -webkit-tap-highlight-color: transparent;
 }

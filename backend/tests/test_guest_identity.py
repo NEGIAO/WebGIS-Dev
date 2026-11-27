@@ -22,8 +22,12 @@ from api.auth.guest_token import (
     GuestIssueLimiter,
     guest_token_issuance_enabled,
     issue_limit_key,
+    peek_guest_token_uid,
+    register_guest_session,
+    revoke_guest_uid,
     sign_guest_token,
     verify_guest_token,
+    verify_guest_token_active,
 )
 from api.auth.user import _purge_stale_guest_identities_sync
 
@@ -139,6 +143,59 @@ class GuestUidDerivationTests(unittest.TestCase):
         self.assertNotEqual(device_uid, ip_ua_uid)
 
 
+class ExtractIdentityIpTests(unittest.TestCase):
+    """V3.7.18：身份 IP 取 XFF 最右侧公网跳（此前取末跳，HF 下取到内网代理 IP）。"""
+
+    def _req(self, xff=None, host="10.16.1.43"):
+        from types import SimpleNamespace
+
+        headers = {"X-Forwarded-For": xff} if xff else {}
+        return SimpleNamespace(headers=headers, client=SimpleNamespace(host=host))
+
+    def test_hf_chain_returns_real_client_ip(self):
+        # HF 实测链：真实用户公网 IP + 内网代理末跳 → 取真实 IP，不取 10.16.1.43
+        req = self._req("8.8.8.8, 10.16.1.43")
+        self.assertEqual(auth_constants._extract_identity_ip(req), "8.8.8.8")
+
+    def test_spoofed_first_hop_is_ignored(self):
+        # 链首可由客户端任意塞值：取最右侧公网跳（可信代理追加），不取链首伪造值
+        req = self._req("1.2.3.4, 114.114.114.114, 10.16.1.43")
+        self.assertEqual(auth_constants._extract_identity_ip(req), "114.114.114.114")
+
+    def test_direct_connection_uses_client_host(self):
+        # 无代理直连：XFF 缺失时回退 request.client.host（公网才取）
+        req = self._req(None, host="223.5.5.5")
+        self.assertEqual(auth_constants._extract_identity_ip(req), "223.5.5.5")
+
+    def test_all_private_chain_returns_empty(self):
+        # 全链皆私网且直连也是私网：返回 ""，不再把内网代理 IP 当作身份
+        req = self._req("10.16.1.43, 172.19.0.1")
+        self.assertEqual(auth_constants._extract_identity_ip(req), "")
+        req = self._req(None, host="127.0.0.1")
+        self.assertEqual(auth_constants._extract_identity_ip(req), "")
+
+    def test_invalid_hops_are_skipped(self):
+        req = self._req("garbage, 8.8.4.4, 10.0.0.1")
+        self.assertEqual(auth_constants._extract_identity_ip(req), "8.8.4.4")
+
+    def test_ipv6_public_and_private(self):
+        req = self._req("2606:4700:4700::1111, fd00::1")
+        self.assertEqual(auth_constants._extract_identity_ip(req), "2606:4700:4700::1111")
+        req = self._req("fd00::1, fe80::1")
+        self.assertEqual(auth_constants._extract_identity_ip(req), "")
+
+    def test_same_ua_different_users_no_longer_collide(self):
+        # 回归：修复前两用户同 UA 撞进同一 guest_uid（身份 IP 恒为 10.16.1.43）
+        ua = "Mozilla/5.0"
+        uid_a = auth_constants._derive_uid_from_ip_ua(
+            auth_constants._extract_identity_ip(self._req("8.8.8.8, 10.16.1.43")), ua
+        )
+        uid_b = auth_constants._derive_uid_from_ip_ua(
+            auth_constants._extract_identity_ip(self._req("114.114.114.114, 10.16.1.43")), ua
+        )
+        self.assertNotEqual(uid_a, uid_b)
+
+
 class _TempAuthDbMixin(unittest.TestCase):
     """为 purge 测试提供临时 auth 库（替换 _db_connection）。"""
 
@@ -223,6 +280,178 @@ class GuestIdentityPurgeTests(_TempAuthDbMixin):
         self._insert("guest_old1", "2026-01-01T00:00:00+08:00")
         self.assertEqual(_purge_stale_guest_identities_sync(0), 0)
         self.assertEqual(_purge_stale_guest_identities_sync(-1), 0)
+
+
+class _MemoryDbContext:
+    def __init__(self, conn):
+        self.conn = conn
+
+    def __enter__(self):
+        return self.conn
+
+    def __exit__(self, *args):
+        return False
+
+
+class GuestTokenRevocationTests(unittest.TestCase):
+    """管理员删除游客会话后，HMAC token 必须失效并返回结构化 401。"""
+
+    def test_revoked_token_fails_active_verification(self):
+        conn = sqlite3.connect(":memory:", check_same_thread=False)
+        conn.execute(
+            "CREATE TABLE sessions (token TEXT PRIMARY KEY, username TEXT, role TEXT, "
+            "guest_uid TEXT, guest_device_id TEXT, ip TEXT, user_agent TEXT, "
+            "requires_email_binding INTEGER, created_at TEXT, expires_at TEXT, last_seen_at TEXT, "
+            "ip_city TEXT, ip_region TEXT, ip_country TEXT)"
+        )
+        with mock.patch("api.auth.db.get_auth_db_connection", return_value=_MemoryDbContext(conn)):
+            with mock.patch("api.auth.guest_token.get_str", return_value="secret"):
+                token = sign_guest_token("guest_revoked_01", ttl_hours=2)
+                register_guest_session(token, "guest_revoked_01")
+                self.assertEqual(verify_guest_token_active(token), "guest_revoked_01")
+                # 管理员在 sessions 表删行（或删除游客记录联动删除）后应立即失效
+                revoke_guest_uid("guest_revoked_01", "admin-delete-sessions")
+                self.assertIsNone(verify_guest_token_active(token))
+                self.assertEqual(peek_guest_token_uid(token), "guest_revoked_01")
+        conn.close()
+
+    def test_revoked_guest_token_raises_session_expired(self):
+        import asyncio
+        from types import SimpleNamespace
+
+        from fastapi import HTTPException
+        from api.auth import dependencies
+
+        fake_request = SimpleNamespace(
+            headers={}, query_params={}, cookies={}, client=SimpleNamespace(host="127.0.0.1")
+        )
+        with mock.patch.object(dependencies, "_extract_guest_token", return_value="gt1_revoked"):
+            with mock.patch.object(dependencies, "verify_guest_token_active", return_value=None):
+                with mock.patch.object(
+                    dependencies, "peek_guest_token_uid", return_value="guest_revoked_01"
+                ):
+                    with self.assertRaises(HTTPException) as ctx:
+                        asyncio.run(
+                            dependencies._build_temporary_guest_session_async(fake_request)
+                        )
+        self.assertEqual(ctx.exception.status_code, 401)
+        self.assertEqual(ctx.exception.detail["code"], "SESSION_EXPIRED")
+
+    def test_expired_login_token_never_falls_back_to_guest(self):
+        """admin/注册用户 token 过期被删时，游客可达端点也必须返回 401。"""
+        import asyncio
+        from types import SimpleNamespace
+
+        from fastapi import HTTPException
+        from api.auth import dependencies
+
+        fake_request = SimpleNamespace(
+            headers={}, query_params={}, cookies={}, client=SimpleNamespace(host="127.0.0.1")
+        )
+        with mock.patch.object(dependencies, "_extract_token", return_value="stale-login-token"):
+            with mock.patch.object(dependencies, "_get_session_sync", return_value=None):
+                with mock.patch.object(
+                    dependencies,
+                    "_build_temporary_guest_session_async",
+                    side_effect=AssertionError("stale login token must not become guest"),
+                ):
+                    with self.assertRaises(HTTPException) as ctx:
+                        asyncio.run(
+                            dependencies._authenticate_login_or_guest(fake_request)
+                        )
+        self.assertEqual(ctx.exception.status_code, 401)
+        self.assertEqual(ctx.exception.detail["code"], "SESSION_EXPIRED")
+
+    def test_session_db_failure_is_not_treated_as_expired(self):
+        """DB 暂不可用不得误判 token 过期，否则全站用户会被集体强制登出。"""
+        import asyncio
+        from types import SimpleNamespace
+
+        from api.auth import dependencies
+
+        async def _fake_guest(request):
+            return {"username": "guest_x", "role": "guest", "guest_uid": "guest_x"}
+
+        fake_request = SimpleNamespace(
+            headers={}, query_params={}, cookies={}, client=SimpleNamespace(host="127.0.0.1")
+        )
+        with mock.patch.object(dependencies, "_extract_token", return_value="token-1"):
+            with mock.patch.object(
+                dependencies,
+                "_get_session_sync",
+                side_effect=RuntimeError("db temporarily unavailable"),
+            ):
+                with mock.patch.object(
+                    dependencies, "_build_temporary_guest_session_async", _fake_guest
+                ):
+                    session = asyncio.run(
+                        dependencies._authenticate_login_or_guest(fake_request)
+                    )
+        self.assertEqual(session["username"], "guest_x")
+
+    def test_admin_delete_collects_guest_context_before_delete(self):
+        conn = sqlite3.connect(":memory:", check_same_thread=False)
+        conn.row_factory = sqlite3.Row
+        conn.execute(
+            "CREATE TABLE sessions (username TEXT, guest_uid TEXT, role TEXT, guest_device_id TEXT)"
+        )
+        conn.execute(
+            "INSERT INTO sessions VALUES "
+            "('guest_collect', 'guest_collect', 'guest', 'gd_collect_device')"
+        )
+        from api import admin
+
+        with mock.patch.object(admin, "_db_connection", return_value=_MemoryDbContext(conn)):
+            contexts = admin._collect_guest_contexts_before_delete_sync(
+                "sessions", {"username": "guest_collect"}
+            )
+        self.assertEqual(
+            contexts,
+            [{"guest_uid": "guest_collect", "guest_device_id": "gd_collect_device"}],
+        )
+        conn.close()
+
+
+class AccountScopeDependencyTests(unittest.TestCase):
+    """V3.7.12：游客 token 虽在 sessions 表，但不得穿过账号级端点。"""
+
+    def test_require_account_rejects_guest_session(self):
+        import asyncio
+        from types import SimpleNamespace
+
+        from fastapi import HTTPException
+
+        from api.auth import dependencies
+
+        fake_request = SimpleNamespace(headers={}, query_params={}, cookies={})
+        guest_session = {"username": "guest_abc", "role": "guest", "guest_uid": "guest_abc"}
+
+        async def _fake_require_login(_request):
+            return guest_session
+
+        with mock.patch.object(dependencies, "require_login", new=_fake_require_login):
+            with self.assertRaises(HTTPException) as ctx:
+                asyncio.run(dependencies.require_account(fake_request))
+
+        self.assertEqual(ctx.exception.status_code, 403)
+        self.assertEqual(ctx.exception.detail["code"], "ACCOUNT_REQUIRED")
+
+    def test_require_account_allows_registered_session(self):
+        import asyncio
+        from types import SimpleNamespace
+
+        from api.auth import dependencies
+
+        fake_request = SimpleNamespace(headers={}, query_params={}, cookies={})
+        account_session = {"username": "alice", "role": "registered"}
+
+        async def _fake_require_login(_request):
+            return account_session
+
+        with mock.patch.object(dependencies, "require_login", new=_fake_require_login):
+            resolved = asyncio.run(dependencies.require_account(fake_request))
+
+        self.assertEqual(resolved["username"], "alice")
 
 
 if __name__ == "__main__":

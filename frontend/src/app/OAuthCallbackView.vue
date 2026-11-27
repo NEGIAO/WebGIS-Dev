@@ -266,7 +266,7 @@
     border-radius: 12px;
     border: none;
     cursor: pointer;
-    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    transition: border-radius, font-size, font-weight, gap, padding, width 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 .btn-primary {
     background: linear-gradient(135deg, var(--brand-primary) 0%, var(--brand-dark) 100%);

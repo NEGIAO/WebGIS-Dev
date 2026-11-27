@@ -3,6 +3,8 @@
 """
 
 import asyncio
+import ipaddress
+import json
 import logging
 import sqlite3
 from datetime import datetime, timedelta
@@ -28,8 +30,10 @@ from api.auth import (
     require_admin,
     require_api_access_or_guest,
     require_api_access_or_guest_noconsume,
+    require_api_access_or_guest_readonly,
     resolve_quota_subject,
 )
+from api.auth.user import _guest_visible_username
 from api.realtime_stats import get_online_tracker
 from services import ip_geo_service
 
@@ -260,6 +264,33 @@ def extract_client_ip(request: Request) -> str:
     return _extract_client_ip(request)
 
 
+def _public_ip_for_display(ip: Any) -> str:
+    """展示层 IP 过滤：私有/回环/链路本地/保留/组播地址一律显示 unknown。
+
+    容器环境（HF Space / Docker）下 request.client.host 是网关内网 IP
+    （如 10.16.x.x / 172.19.0.1），真实公网 IP 需由反代注入 XFF；
+    在拿不到公网 IP 时宁可显示 unknown，也不把网关 IP 误标为访客 IP。
+    仅用于 admin_online_presence 展示，不影响鉴权/身份派生/IP 定位。
+    """
+    text = str(ip or "").strip()
+    if not text:
+        return "unknown"
+    try:
+        parsed = ipaddress.ip_address(text)
+    except ValueError:
+        return "unknown"
+    if (
+        parsed.is_private
+        or parsed.is_loopback
+        or parsed.is_link_local
+        or parsed.is_reserved
+        or parsed.is_multicast
+        or parsed.is_unspecified
+    ):
+        return "unknown"
+    return text
+
+
 async def fetch_geolocation(ip: str) -> Optional[dict]:
     """
     获取 IP 地理位置信息
@@ -272,18 +303,21 @@ async def fetch_geolocation(ip: str) -> Optional[dict]:
     Returns:
         包含 ip, city, region, country, latitude, longitude 的字典，失败返回 None
     """
-    result = await ip_geo_service.locate(ip=ip, prefer_amap=False, use_cache=True)
+    # V3.7.14：统一走 IP 地理中枢——进程级缓存与「一个 IP 只解析一次」由中枢保证，
+    # 不再直接调用 ip_geo_service（prefer_amap=False 保持访问事件既有口径）。
+    from services.request_geo import resolve_ip_geo
 
-    if result:
-        return {
-            "ip": result.ip,
-            "city": result.city or "Unknown",
-            "region": result.region or "Unknown",
-            "country": result.country or "Unknown",
-            "latitude": result.latitude,
-            "longitude": result.longitude,
-        }
-    return None
+    geo = await resolve_ip_geo(ip, prefer_amap=False)
+    if not geo.resolved:
+        return None
+    return {
+        "ip": geo.ip,
+        "city": geo.city or "Unknown",
+        "region": geo.region or "Unknown",
+        "country": geo.country or "Unknown",
+        "latitude": geo.latitude,
+        "longitude": geo.longitude,
+    }
 
 
 def get_current_shanghai_time() -> str:
@@ -944,21 +978,21 @@ def _merge_online_tracker(stats: Dict[str, Any]) -> Dict[str, Any]:
     """
     将内存实时在线口径（OnlineUserTracker）合并进 DB 口径快照。
 
-    DB 口径（online_users）只统计 sessions 表登录会话，游客
-    （guest_identity_records）不在其内；而游客的在线信号只存在于内存
-    tracker。轮询型端点（center / realtime）合并后：
+    DB 口径（online_users / online_sessions / online_by_role）保持原值，另存为
+    `*_db` 字段供管理员对比；展示主字段统一为 tracker 口径：
 
-    - realtime_online_users：tracker 口径（SSE + 兜底心跳，含游客）
-    - online_users：展示统一为 tracker 口径，避免前端回退到「仅登录会话」
-      的 DB 计数（该计数漏游客，曾导致显示恒为少数几个登录会话）
-    - online_users_db：保留原始 sessions 口径，供管理员对比
-    - online_guests_db：guest_identity_records 在活跃窗口内的游客数
+    - online_users / realtime_online_users：窗口内有显式心跳/API 活跃的身份数，
+      三类身份（admin / registered / guest）同口径，与是否游客无关；
+    - online_by_role：按身份真实 role 分类计数（不再用 `u:admin` 字符串判断）；
+    - online_sessions：保留 sessions 表口径（会话数），实时在线数另见
+      `online_sessions_presence`。
     """
     tracker = get_online_tracker()
-    realtime_count = tracker.get_online_count()
-    realtime_list = tracker.get_online_users()
+    realtime_count, realtime_list, realtime_by_role = tracker.snapshot_online_with_roles()
 
     db_online = int(stats.get("online_users") or 0)
+    db_sessions = stats.get("online_sessions")
+    db_by_role = stats.get("online_by_role")
     guest_online = 0
     try:
         from api.auth import ONLINE_WINDOW_MINUTES
@@ -977,13 +1011,324 @@ def _merge_online_tracker(stats: Dict[str, Any]) -> Dict[str, Any]:
     except Exception:
         guest_online = 0
 
+    # 保留 DB 口径供管理对比；展示主字段统一为 tracker 口径。
     stats["online_users_db"] = db_online
+    stats["online_sessions_db"] = db_sessions
+    stats["online_by_role_db"] = db_by_role
     stats["online_guests_db"] = guest_online
     stats["realtime_online_users"] = realtime_count
     stats["realtime_online_userlist"] = realtime_list
-    # 展示主字段：始终以实时 tracker 为准（登录 + 游客，去重 presence）
     stats["online_users"] = realtime_count
+    # online_sessions 保持 sessions 表原义（会话数），实时在线数另开字段，
+    # 避免同一字段在不同调用点被解释成两种口径。
+    stats["online_sessions_presence"] = realtime_count
+    stats["online_by_role"] = dict(realtime_by_role)
     return stats
+
+
+# ─── 管理员实时在线镜像表 ───
+# 表 admin_online_presence 只保留“当前在线”身份，由后台任务按内存 tracker 每 10s
+# 同步一次；在线真值仍以 tracker 的显式心跳为准，本表仅用于管理员查看详情。
+ONLINE_MIRROR_REFRESH_SECONDS = 10
+
+
+def _mirror_identity_from_db_sync(conn: sqlite3.Connection, presence_id: str) -> Dict[str, Any]:
+    """按 presence_id 从 sessions / guest_identity_records / visit_tracking_events 补全详情。"""
+    info: Dict[str, Any] = {
+        "display_name": "",
+        "role": "guest",
+        "identity_type": "guest",
+        "guest_uid": "",
+        "guest_device_id": "",
+        "ip": "",
+        "ip_city": "",
+        "ip_region": "",
+        "ip_country": "",
+        "latitude": None,
+        "longitude": None,
+        "coord_source": "unknown",
+        "user_agent": "",
+        "first_seen_at": "",
+        "last_seen_at": "",
+    }
+    # 修复：登录名（username）与展示名（display_name）不可混用——
+    # sessions / visit_tracking_events 按 username 查询，不能用已改名后的昵称。
+    username = ""
+    if presence_id.startswith("u:"):
+        username = presence_id[2:]
+        row = conn.execute(
+            """
+            SELECT username, role, guest_uid, guest_device_id, ip, user_agent,
+                   created_at, last_seen_at
+            FROM sessions
+            WHERE username = ?
+            ORDER BY COALESCE(last_seen_at, created_at) DESC
+            LIMIT 1
+            """,
+            (username,),
+        ).fetchone()
+        if row:
+            r = dict(row)
+            role = normalize_role(r.get("role"), r.get("username") or username)
+            # V3.7.13：display_name 与用户中心口径对齐——优先 users.display_name（昵称），
+            # 空值回退 username（与 auth/session.py 会话装配一致），不再显示登录名。
+            display_name = ""
+            try:
+                user_row = conn.execute(
+                    "SELECT display_name FROM users WHERE username = ? LIMIT 1",
+                    (username,),
+                ).fetchone()
+                if user_row is not None:
+                    display_name = str((dict(user_row)).get("display_name") or "").strip()
+            except sqlite3.OperationalError:
+                # 测试内存库/旧库可能无 users 表：回退 username，不阻断镜像刷新
+                pass
+            info.update(
+                {
+                    "display_name": display_name or r.get("username") or username,
+                    "role": role,
+                    "identity_type": "admin" if role == ROLE_ADMIN else "registered",
+                    "guest_uid": str(r.get("guest_uid") or ""),
+                    "guest_device_id": str(r.get("guest_device_id") or ""),
+                    "ip": str(r.get("ip") or ""),
+                    "user_agent": str(r.get("user_agent") or ""),
+                    "first_seen_at": str(r.get("created_at") or ""),
+                    "last_seen_at": str(r.get("last_seen_at") or ""),
+                }
+            )
+        else:
+            info.update({"display_name": username, "role": "registered", "identity_type": "registered"})
+    else:
+        guest_uid = presence_id[2:]
+        row = conn.execute(
+            """
+            SELECT id, guest_uid, username, role, guest_device_id, ip, user_agent,
+                   first_seen_at, last_seen_at
+            FROM guest_identity_records
+            WHERE guest_uid = ? OR username = ?
+            ORDER BY last_seen_at DESC
+            LIMIT 1
+            """,
+            (guest_uid, guest_uid),
+        ).fetchone()
+        if row:
+            r = dict(row)
+            # V3.7.13：游客展示名与用户中心同口径——guest_<guest_identity_records.id>，
+            # 不再用可能残留旧值（user_N / guest_<hex16>）的 username 列。
+            display_name = _guest_visible_username(int(r.get("id") or 0))
+            info.update(
+                {
+                    "display_name": display_name,
+                    "role": "guest",
+                    "identity_type": "guest",
+                    "guest_uid": str(r.get("guest_uid") or guest_uid),
+                    "guest_device_id": str(r.get("guest_device_id") or ""),
+                    "ip": str(r.get("ip") or ""),
+                    "user_agent": str(r.get("user_agent") or ""),
+                    "first_seen_at": str(r.get("first_seen_at") or ""),
+                    "last_seen_at": str(r.get("last_seen_at") or ""),
+                }
+            )
+        else:
+            info.update({"display_name": guest_uid, "guest_uid": guest_uid})
+
+        # 游客 token 的会话真值在 sessions；guest_identity_records 可能不存在或
+        # 缺少最新 IP/设备信息（如仅签发 token、尚未产生访问事件）。缺失字段回查
+        # sessions 行，保证管理员在线表能展示完整身份/IP/设备。
+        if not info["ip"] or not info["guest_device_id"] or not info["user_agent"]:
+            session_row = conn.execute(
+                """
+                SELECT ip, user_agent, guest_device_id, created_at, last_seen_at
+                FROM sessions
+                WHERE guest_uid = ? AND role = 'guest'
+                ORDER BY COALESCE(last_seen_at, created_at) DESC
+                LIMIT 1
+                """,
+                (guest_uid,),
+            ).fetchone()
+            if session_row:
+                s = dict(session_row)
+                info["ip"] = info["ip"] or str(s.get("ip") or "")
+                info["user_agent"] = info["user_agent"] or str(s.get("user_agent") or "")
+                info["guest_device_id"] = info["guest_device_id"] or str(
+                    s.get("guest_device_id") or ""
+                )
+                info["first_seen_at"] = info["first_seen_at"] or str(s.get("created_at") or "")
+                info["last_seen_at"] = info["last_seen_at"] or str(s.get("last_seen_at") or "")
+
+    # V3.7.12 Code Review：游客 username 已规范化为 guest_<id>，而
+    # presence_id 里携带的是 guest_uid（设备/IP 派生 hex），两者不再相等。
+    # 历史实现按 username 列匹配 guest_uid，username 改版后必然查不到地理信息；
+    # 改按 visit_tracking_events.guest_uid 列（已有索引）精确匹配，账号仍用 username。
+    # 旧库/测试内存库可能尚无 guest_uid 列，失败时回退 username 匹配，保持兼容。
+    # V3.7.14：优先读 sessions 新列（统一中枢签发时写入），缺值再回退访问事件表。
+    try:
+        if info["identity_type"] == "guest" and info["guest_uid"]:
+            session_geo = conn.execute(
+                "SELECT ip_city, ip_region, ip_country FROM sessions "
+                "WHERE guest_uid = ? AND role = 'guest' ORDER BY COALESCE(last_seen_at, created_at) DESC LIMIT 1",
+                (info["guest_uid"],),
+            ).fetchone()
+        else:
+            session_geo = conn.execute(
+                "SELECT ip_city, ip_region, ip_country FROM sessions "
+                "WHERE username = ? ORDER BY COALESCE(last_seen_at, created_at) DESC LIMIT 1",
+                (username,),
+            ).fetchone()
+    except sqlite3.OperationalError:
+        session_geo = None
+    if session_geo:
+        sg = dict(session_geo)
+        if str(sg.get("ip_city") or "").strip():
+            info.update(
+                {
+                    "ip_city": str(sg.get("ip_city") or ""),
+                    "ip_region": str(sg.get("ip_region") or ""),
+                    "ip_country": str(sg.get("ip_country") or ""),
+                }
+            )
+            # V3.7.14：coord_source 描述的是经纬度来源，不由城市来源决定；
+            # 经纬度仍走访问事件表（sessions 新列只存城市级，不新增隐私面）。
+
+    if info["identity_type"] == "guest" and info["guest_uid"]:
+        geo_keys = (("guest_uid", info["guest_uid"]), ("username", info["guest_uid"]))
+    else:
+        # 修复：访问事件表按登录名索引，不能用展示名（改昵称后会查不到地理信息）
+        geo_keys = (("username", username),)
+    geo = None
+    # 城市已从 sessions 取到时，仅补经纬度（保留访问事件的精确坐标），避免覆盖城市
+    city_from_session = bool(str(info.get("ip_city") or "").strip())
+    for geo_column, geo_key in geo_keys:
+        if not geo_key:
+            continue
+        try:
+            geo = conn.execute(
+                f"""
+                SELECT ip_city, ip_region, ip_country, latitude, longitude, coord_source
+                FROM visit_tracking_events
+                WHERE {geo_column} = ?
+                ORDER BY created_at DESC
+                LIMIT 1
+                """,
+                (geo_key,),
+            ).fetchone()
+        except sqlite3.OperationalError:
+            # 旧表缺 guest_uid 列时回退，不阻断镜像刷新主流程
+            continue
+        if geo:
+            break
+    if geo:
+        g = dict(geo)
+        # V3.7.14：来源跟随实际坐标；即便城市来自 sessions，也不能把 GPS 点标成 IP。
+        event_coord_source = _normalize_coord_source(g.get("coord_source"))
+        info.update(
+            {
+                "latitude": g.get("latitude"),
+                "longitude": g.get("longitude"),
+                "coord_source": event_coord_source,
+            }
+        )
+        if not city_from_session:
+            info.update(
+                {
+                    "ip_city": str(g.get("ip_city") or ""),
+                    "ip_region": str(g.get("ip_region") or ""),
+                    "ip_country": str(g.get("ip_country") or ""),
+                }
+            )
+    elif city_from_session:
+        # 无访问事件坐标时，城市来自 IP 解析，维持 IP 来源标注。
+        info["coord_source"] = "ip"
+    return info
+
+
+def _refresh_admin_online_mirror_sync() -> int:
+    """以 tracker 真值重建镜像表：新增/更新在线身份，删除已下线身份。"""
+    details = get_online_tracker().snapshot_details()
+    refreshed_at = _iso(_utc_now())
+    now_dt = _utc_now()
+    active_ids: List[str] = []
+    with _db_connection() as conn:
+        for item in details:
+            presence_id = str(item["presence_id"])
+            info = _mirror_identity_from_db_sync(conn, presence_id)
+            age = float(item.get("last_seen_age_seconds") or 0.0)
+            heartbeat_at = _iso(now_dt - timedelta(seconds=age))
+            active_ids.append(presence_id)
+            conn.execute(
+                """
+                INSERT OR REPLACE INTO admin_online_presence (
+                    presence_id, display_name, role, identity_type, guest_uid,
+                    guest_device_id, device_presence_id, client_ids, session_count,
+                    sse_connections, ip, ip_city, ip_region, ip_country,
+                    latitude, longitude, coord_source, user_agent,
+                    first_seen_at, last_seen_at, last_heartbeat_at, refreshed_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    presence_id,
+                    info["display_name"],
+                    info["role"],
+                    info["identity_type"],
+                    info["guest_uid"],
+                    info["guest_device_id"],
+                    ",".join(item.get("device_presence_ids") or []),
+                    json.dumps(item.get("client_ids") or []),
+                    int(item.get("session_count") or 0),
+                    int(item.get("sse_connections") or 0),
+                    _public_ip_for_display(info["ip"]),
+                    info["ip_city"],
+                    info["ip_region"],
+                    info["ip_country"],
+                    info["latitude"],
+                    info["longitude"],
+                    info["coord_source"],
+                    info["user_agent"],
+                    info["first_seen_at"],
+                    info["last_seen_at"],
+                    heartbeat_at,
+                    refreshed_at,
+                ),
+            )
+        if active_ids:
+            placeholders = ",".join("?" for _ in active_ids)
+            conn.execute(
+                f"DELETE FROM admin_online_presence WHERE presence_id NOT IN ({placeholders})",
+                active_ids,
+            )
+        else:
+            conn.execute("DELETE FROM admin_online_presence")
+    return len(active_ids)
+
+
+def _load_admin_online_mirror_sync() -> List[Dict[str, Any]]:
+    with _db_connection() as conn:
+        rows = conn.execute(
+            "SELECT * FROM admin_online_presence ORDER BY last_heartbeat_at DESC, presence_id"
+        ).fetchall()
+    result = []
+    for row in rows:
+        item = dict(row)
+        try:
+            item["client_ids"] = json.loads(item.get("client_ids") or "[]")
+        except Exception:
+            item["client_ids"] = []
+        result.append(item)
+    return result
+
+
+async def online_presence_mirror_task(
+    interval_seconds: int = ONLINE_MIRROR_REFRESH_SECONDS,
+) -> None:
+    """后台动态维护管理员在线镜像表；退出时由 lifespan 取消。"""
+    while True:
+        try:
+            await asyncio.to_thread(_refresh_admin_online_mirror_sync)
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            logger.warning("管理员在线镜像刷新失败: %s", exc)
+        await asyncio.sleep(interval_seconds)
 
 
 def _list_all_user_stats_sync(limit: int = 500) -> List[Dict[str, Any]]:
@@ -1052,7 +1397,9 @@ async def log_visit(
         gps_lat = visit_payload.gps_lat if visit_payload else None
         gps_accuracy = visit_payload.gps_accuracy if visit_payload else None
         gps_error = (visit_payload.gps_error if visit_payload else "") or ""
-        gps_timestamp = (visit_payload.gps_timestamp if visit_payload else "") or ""
+        # V3.7.14：时间戳统一服务端 UTC+8——忽略前端上报的 gps_timestamp，
+        # 避免客户端时钟漂移污染统计口径（前端契约保留该字段以兼容旧客户端）。
+        gps_timestamp = datetime.now(SHANGHAI_TZ).isoformat()
         geo_permission = _normalize_geo_permission(
             (visit_payload.geo_permission if visit_payload else "unknown")
         )
@@ -1258,7 +1605,7 @@ async def get_center_statistics(
 
 @router.get("/statistics/realtime")
 async def get_realtime_statistics(
-    _session: Dict[str, Any] = Depends(require_api_access_or_guest_noconsume),
+    _session: Dict[str, Any] = Depends(require_api_access_or_guest_readonly),
 ) -> Dict[str, Any]:
     """功能：获取全站实时统计快照。"""
     realtime = await asyncio.to_thread(_get_realtime_global_stats_sync)
@@ -1360,6 +1707,26 @@ async def list_all_user_statistics(
     rows = await asyncio.to_thread(_list_all_user_stats_sync, 800)
     return {
         "status": "success",
+        "data": rows,
+    }
+
+
+@router.get("/statistics/admin/online-users")
+async def admin_list_online_users(
+    refresh: int = Query(default=0, ge=0, le=1),
+    _session: Dict[str, Any] = Depends(require_admin),
+) -> Dict[str, Any]:
+    """管理员查看“当前在线”用户明细（身份、IP、设备、心跳时间等）。
+
+    数据来自 admin_online_presence 镜像表，由后台任务每 10s 以内存 tracker 真值
+    动态维护；传 ?refresh=1 可强制立即同步一次（仅管理员可用）。
+    """
+    if refresh:
+        await asyncio.to_thread(_refresh_admin_online_mirror_sync)
+    rows = await asyncio.to_thread(_load_admin_online_mirror_sync)
+    return {
+        "status": "success",
+        "count": len(rows),
         "data": rows,
     }
 

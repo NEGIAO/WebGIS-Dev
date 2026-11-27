@@ -1,5 +1,6 @@
 import { decodeCompassState, encodeCompassState } from '@common/url-state/crypto';
 import { getCompassThemeIndex } from '@common/url-state/compassThemeCode';
+import { isSearchOnlyQueryKey } from '@common/url-state/urlParamSanitizer';
 
 export type CompassUrlPayload = {
     lng?: number | null;
@@ -48,6 +49,8 @@ function readMergedQuery(): { path: string; query: URLSearchParams } {
     );
 
     searchParams.forEach((value, key) => {
+        // V3.7.13：v 等仅 search 参数不得补进 hash query，避免写回时产生重复 v
+        if (isSearchOnlyQueryKey(key)) return;
         if (!query.has(key)) query.set(key, value);
     });
 

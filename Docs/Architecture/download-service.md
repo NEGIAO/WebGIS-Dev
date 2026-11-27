@@ -1,15 +1,15 @@
 # 瓦片下载服务（独立节点）
 
-> **状态**：✅ 可用。走 **`https://gis.negiao.cn:8443`**（443 被备案拦截，8443 不触发，见 §5）。
-> **引入版本**：V3.6.28。
-> **相关配置**：`VITE_DOWNLOAD_SERVICE_URL`（见 `deploy/.env.example`）。
+> **状态**：✅ 可用。走 `VITE_DOWNLOAD_SERVICE_URL` 配置值（历史部署为 `https://gis.negiao.cn:8443`，443 被备案拦截、8443 不触发，见 §5）。⚠️ 本仓 `deploy/.env.example` 中该变量为空模板，实际值以部署环境为准，本仓不可核验。
+> **引入版本**：见根 [README 版本演进](../../README.md#-版本演进)（本文不硬编码版本号）。
+> **相关配置**：`VITE_DOWNLOAD_SERVICE_URL`（见 `deploy/.env.example`；⚠️ 模板中为空值，实际值以部署环境为准，本仓不可核验）。
 > **⚠️ 临时性**：节点为腾讯云活动赠送、**有效期一个月**，仅用于验证与过渡；到期需迁移（§5.4）。
 
 ---
 
 ## 1. 背景与定位
 
-V3.6.5 起，HF Space 因平台政策删除了 `backend/domains/tiles/download/` 与 `/proxy/*`，
+据根 [README 版本演进](../../README.md#-版本演进)，早期版本起 HF Space 因平台政策删除了 `backend/domains/tiles/download/` 与 `/proxy/*`，
 前端下载入口随之失效（调用返回 404）。本仓 `Docs/TODO/plan-download-feature-git-marker.md`
 记录了当时的临时处置。
 
@@ -26,7 +26,7 @@ V3.6.5 起，HF Space 因平台政策删除了 `backend/domains/tiles/download/`
 
 ```mermaid
 flowchart LR
-    FE["前端<br/>api/download.js"] -->|"① VITE_DOWNLOAD_SERVICE_URL 已配置"| NODE["下载节点<br/>gis.negiao.cn（腾讯云）"]
+    FE["前端<br/>api/download.ts"] -->|"① VITE_DOWNLOAD_SERVICE_URL 已配置"| NODE["下载节点<br/>gis.negiao.cn（腾讯云）"]
     FE -->|"② 未配置时回落"| BE["本机后端<br/>/api/download/*（已无此路由，必然 404）"]
     NODE -->|"抓取瓦片"| UP["瓦片上游<br/>高德 / 天地图 / OSM …"]
     NODE -->|"拼装 GeoTIFF"| DISK["节点侧磁盘<br/>TTL 30 分钟后过期"]
@@ -44,7 +44,7 @@ flowchart LR
 
 ## 2. 接口契约
 
-基址：`VITE_DOWNLOAD_SERVICE_URL`（当前配置 **`https://gis.negiao.cn:8443`**，端口不可省略）。
+基址：`VITE_DOWNLOAD_SERVICE_URL`（⚠️ 本仓 `deploy/.env.example` 中为空模板；历史部署为 **`https://gis.negiao.cn:8443`**，端口不可省略；实际值以部署环境为准，本仓不可核验）。
 所有路径均为 `/api/download/*`，与旧后端完全一致。
 
 | 方法 | 路径 | 用途 | 关键返回 |
@@ -102,7 +102,7 @@ Access-Control-Expose-Headers: Content-Disposition, Content-Length
 ```
 
 `Access-Control-Expose-Headers` 必须包含 `Content-Disposition`，否则跨域下前端读不到文件名
-（`download.js` 的 blob 分支依赖它）。节点侧已正确配置。
+（`download.ts` 的 blob 分支依赖它）。节点侧已正确配置。
 
 ### 2.4 CORS 契约
 
@@ -129,7 +129,7 @@ export const DOWNLOAD_SERVICE_BASE_URL: string = stripTrailingSlash(
 ```
 
 ```js
-// src/api/download.js
+// src/api/download.ts
 const USE_REMOTE_SERVICE =
     Boolean(DOWNLOAD_SERVICE_BASE_URL) && DOWNLOAD_SERVICE_BASE_URL !== BACKEND_BASE_URL;
 const downloadAPI = USE_REMOTE_SERVICE ? axios.create({ baseURL: DOWNLOAD_SERVICE_BASE_URL, ... }) : backendAPI;
@@ -137,7 +137,7 @@ const downloadAPI = USE_REMOTE_SERVICE ? axios.create({ baseURL: DOWNLOAD_SERVIC
 
 | 场景 | `VITE_DOWNLOAD_SERVICE_URL` | 行为 |
 |---|---|---|
-| 生产 / 联调 | `https://gis.negiao.cn:8443` | 直连节点（**必须带 `:8443`**） |
+| 生产 / 联调 | ⚠️ 部署环境实际值（历史示例：`https://gis.negiao.cn:8443`） | 直连节点（历史配置**必须带 `:8443`**；本仓模板为空，不可核验） |
 | 本地开发（节点未就绪） | 留空 | 回落 `VITE_BACKEND_URL` 同源 `/api/download/*`（当前必 404，仅作降级占位） |
 
 ---
@@ -164,7 +164,7 @@ const downloadAPI = USE_REMOTE_SERVICE ? axios.create({ baseURL: DOWNLOAD_SERVIC
 | 文件名头 | ✅ `content-disposition: attachment; filename*=UTF-8''v3628-verify_200m_10_26_11.tif` |
 | `GET /tasks` / `POST /cancel` | ✅ 均 200 |
 | CORS | ✅ 反射 `https://webgis.negiao.cn` + `allow-credentials: true` + `Expose-Headers` 正确 |
-| 任务未完成时取文件 | ✅ `400` + JSON 错误体（前端应解析，见 §7 缺陷 2） |
+| 任务未完成时取文件 | ✅ `400` + JSON 错误体（前端已解析，见 §7 缺陷 2「已解决」） |
 
 **耗时观察**：2 片瓦片走 `tile.openstreetmap.org` 上游耗时 **约 100 秒**（国内节点访问 OSM 慢）。
 任务 TTL 仅 30 分钟，**下载上游必须选国内源**（高德 / 天地图），否则大批量任务会超时。
@@ -236,7 +236,7 @@ CF 回源必须携带 `SNI = gis.negiao.cn`（免费/Pro 无 SNI Override），`
 5. **CORS 白名单**：节点对来源做反射放行，新增前端部署域名时需确认节点侧已加入，否则下载会 403（与瓦片代理的 `TILE_PROXY_ALLOWED_ORIGINS` 是两套独立配置）。
 6. **⚠️ 节点到期**：腾讯云机器为活动赠送，**有效期一个月**。到期后 `gis.negiao.cn:8443` 全部接口失效，前端下载功能会整体不可用——需提前按 §5.4 迁移。
 7. **证书续期**：`CN=gis.negiao.cn` 为 Let's Encrypt，**2027-01-24 到期**（90 天）。续期由节点侧负责，本仓不感知；过期后浏览器会直接拒绝连接。
-8. **端口不可省略**：`VITE_DOWNLOAD_SERVICE_URL` 必须写 `https://gis.negiao.cn:8443`。漏掉 `:8443` 会回到 443，表现为请求全部 `000`（RST），且错误信息不会提示「端口错了」。
+8. **端口不可省略**：⚠️ `VITE_DOWNLOAD_SERVICE_URL` 实际值以部署环境为准（本仓 `deploy/.env.example` 为空模板，不可核验）。历史配置为 `https://gis.negiao.cn:8443`；若仍采用该节点，漏掉 `:8443` 会回到 443，表现为请求全部 `000`（RST），且错误信息不会提示「端口错了」。
 
 ---
 
@@ -245,7 +245,7 @@ CF 回源必须携带 `SNI = gis.negiao.cn`（免费/Pro 无 SNI Override），`
 | # | 问题 | 影响 | 状态 |
 |---|---|---|---|
 | 1 | ~~域名备案拦截~~ | 已通过 **8443 非标端口**规避（§5） | ✅ 已解决；长期仍需备案或迁香港 |
-| 2 | 远端路径的 **blob 错误体未解析**：`download.js` 的 `responseType: 'blob'` 请求失败时，`error.response.data` 是 Blob，`resp?.data?.detail` 取不到，错误信息退化为「Request failed with status code 4xx」 | 配额/过期等错误提示不精确（状态码判定仍正确） | 已记入 TODO，未修（避免扩大本次范围） |
+| 2 | ~~远端路径的 **blob 错误体未解析**：`responseType: 'blob'` 请求失败时 `error.response.data` 是 Blob，`resp?.data?.detail` 取不到，错误信息退化~~ | （历史影响）配额/过期等错误提示不精确 | ✅ **已解决**：拦截器经 `readErrorPayload` 解析 Blob 错误体，并映射 `isQuotaExceeded` / `isQuotaInsufficient`（`download.ts:57-70`、`blobError.ts:57-76`） |
 | 3 | 本地回退路径与本机后端返回结构不同：`backendAPI` 会解包 `{code,data}` 信封，远端路径直接取 `response.data` | 当前本机后端已无该路由，无实际影响；若日后恢复需对齐 | 已记入 TODO |
 | 4 | 节点 `allow-credentials: true` 但前端未开 `withCredentials` | 当前无状态接口无影响；引入会话后会失效 | 已记入本文档 §2.4 |
 | 5 | **节点与证书均为临时资源**（服务器 1 个月、证书 90 天） | 到期即整体不可用，且无自动兜底 | 待迁移（§5.4） |

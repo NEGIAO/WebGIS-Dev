@@ -378,7 +378,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    transition: all 0.15s;
+    transition: background, border-radius, color, height, width 0.15s;
 }
 
 .cfg-head-btn:hover:not(:disabled) {
@@ -503,7 +503,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    transition: all 0.15s;
+    transition: background, border-radius, color, height, right, width 0.15s;
 }
 
 .cfg-input-btn:hover {
@@ -644,7 +644,7 @@
     font-weight: 600;
     cursor: pointer;
     box-shadow: 0 2px 8px rgba(var(--brand-primary-rgb), 0.3);
-    transition: all 0.15s;
+    transition: background, border-radius, box-shadow, color, font-size, font-weight, gap, padding 0.15s;
 }
 
 .cfg-primary-btn:hover:not(:disabled) {
@@ -668,7 +668,7 @@
     color: var(--text-secondary);
     font-size: 11.5px;
     cursor: pointer;
-    transition: all 0.15s;
+    transition: background, border-radius, color, font-size, gap, padding 0.15s;
 }
 
 .cfg-text-btn:hover:not(:disabled) {

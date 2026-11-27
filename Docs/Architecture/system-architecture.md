@@ -23,20 +23,21 @@ flowchart TB
     %% ============================================================
     %% Layer 2: CI/CD
     %% ============================================================
-    subgraph CI["⚙️ CI / CD（GitHub Actions）"]
+    subgraph CI["⚙️ CI / CD（GitHub Actions · deploy.yml）"]
         direction LR
-        JOB_BUILD["① Build
-npm run build → dist"]
-        JOB_SYNC["② Sync
-dist → 主页仓库WebGIS/目录"]
-        JOB_DEPLOY["③ Deploy
-多平台分发"]
+        JOB_BUILD["① build<br/>npm install + shaders:check + npm run build → dist<br/>上传 pages artifact 与 dist-files artifact"]
+        JOB_SELF["② deploy-to-self<br/>actions/deploy-pages → 本仓库 GitHub Pages"]
+        JOB_SYNC["③ sync-to-main-repo<br/>dist → 主页仓库 WebGIS/ 目录"]
+        JOB_HF_STATIC["④ deploy-frontend-to-hf<br/>dist（LFS）→ HF Space NEGIAO/Web"]
+        JOB_HF_FULL["⑤ sync-to-huggingface<br/>git archive 全栈 → HF Space NEGIAO/WebGIS"]
     end
 
     REPO_DEV --> JOB_BUILD
+    JOB_BUILD --> JOB_SELF
     JOB_BUILD --> JOB_SYNC
+    JOB_BUILD --> JOB_HF_STATIC
+    JOB_BUILD --> JOB_HF_FULL
     JOB_SYNC --> REPO_HOME
-    JOB_BUILD --> JOB_DEPLOY
 
     %% ============================================================
     %% Layer 3: Deployment Platforms
@@ -50,8 +51,9 @@ dist → 主页仓库WebGIS/目录"]
         P_VC["Vercel"]
     end
 
-    JOB_DEPLOY --> P_GH
-    JOB_DEPLOY --> P_HF
+    JOB_SELF --> P_GH
+    JOB_HF_STATIC --> P_HF
+    JOB_HF_FULL --> P_HF
     REPO_HOME --> P_GH
     REPO_HOME --> P_CF
     REPO_HOME --> P_PC
@@ -65,7 +67,7 @@ dist → 主页仓库WebGIS/目录"]
         FE_HOME["个人主页
 6 个域名"]
         FE_WEBGIS["WebGIS 前端
-7 个域名"]
+8 个域名"]
         BE["Docker 后端 API
 negiao-webgis.hf.space"]
         R2["瓦片存储
@@ -113,14 +115,19 @@ tiles.negiao.cc.cd"]
 
 ### 第二层：CI/CD 层
 
-**单一工作流文件**：[.github/workflows/deploy.yml](../../.github/workflows/deploy.yml)
+**主部署工作流**：[.github/workflows/deploy.yml](../../.github/workflows/deploy.yml)；另有 4 个辅助工作流：`codeql.yml`（CodeQL 安全扫描）、`pre-check.yml`（PR Check）、`dependabot-automerge.yml`（Dependabot 自动合并）、`traffic-counter.yml`（访问统计更新）。
 
 触发条件：`main` 分支 push 或手动触发（`workflow_dispatch`）
 
-流水线阶段：
-1. **Build** — Node.js 22 构建前端，产出 `frontend/dist`
-2. **Sync** — dist 文件同步到 `NEGIAO.github.io` 仓库的 `WebGIS/` 目录（触发主页仓库的下游部署）
-3. **Deploy** — 直接部署到 GitHub Pages / Hugging Face（Static + Docker）
+`deploy.yml` 共 5 个 job：`build` 完成后并行触发其余 4 路（均 `needs: build`）：
+
+1. **build** — `setup-node` 固定 Node.js 22，依次执行 `npm install` → `npm run shaders:check` → `npm run build`，产出 `frontend/dist`，并上传 pages artifact 与普通 `dist-files` artifact。
+2. **deploy-to-self** — `actions/deploy-pages@v5` 把 pages artifact 部署到本仓库 GitHub Pages。
+3. **sync-to-main-repo** — 把 `dist-files` 同步到 `NEGIAO.github.io` 仓库的 `WebGIS/` 目录（触发主页仓库的下游部署）。
+4. **deploy-frontend-to-hf** — 把 dist（二进制走 Git LFS）推送到 Hugging Face Static Space `NEGIAO/Web`。
+5. **sync-to-huggingface** — `git archive deploy backend frontend` 组装全栈上下文，推送到 Hugging Face Docker Space `NEGIAO/WebGIS`（nginx 前端 + FastAPI）。
+
+> **Actions 运行时强制 Node 24**：`deploy.yml` 顶层 `env` 设置 `FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true`，GitHub Actions 内置 JS Action 以 Node 24 运行时执行；这与 `build` job 中 `setup-node` 指定的 Node.js 22（项目构建所用版本）是两个不同层面。
 
 > 详细流水线分析见 [cicd-pipeline.md](cicd-pipeline.md)
 
@@ -163,7 +170,7 @@ tiles.negiao.cc.cd"]
 | 组件 | 入口数量 | 说明 |
 |------|----------|------|
 | **个人主页前端** | 6 个域名 | 静态个人主页，托管在多个平台 |
-| **WebGIS 前端** | 7 个域名 | Vue 3 SPA，静态资源 |
+| **WebGIS 前端** | 8 个域名 | Vue 3 SPA，静态资源 |
 | **Docker 后端 API** | 1 个域名 | FastAPI + SQLite + 空间分析 |
 | **瓦片存储** | 1 个域名 | Cloudflare R2 对象存储的 XYZ 自定义瓦片服务 |
 
@@ -244,7 +251,7 @@ tiles.negiao.cc.cd"]
     │
     ├── 个人主页域名 ──► 静态个人主页（6 个域名）
     │
-    └── WebGIS 前端域名 ──► Vue 3 SPA（7 个域名）
+    └── WebGIS 前端域名 ──► Vue 3 SPA（8 个域名）
                             │
                             ├── REST API ──────────► HF Docker 后端（FastAPI + SQLite）
                             │                          negiao-webgis.hf.space
@@ -258,4 +265,4 @@ tiles.negiao.cc.cd"]
 ---
 
 *本文档随部署架构变化更新；日常改动见维护日志。*
-*基线版本：V3.5.5*
+*当前版本见根 [README.md](../../README.md)「项目简介」行*

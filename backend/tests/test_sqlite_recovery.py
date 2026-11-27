@@ -348,6 +348,60 @@ class SQLiteRecoveryIntegrationTests(unittest.TestCase):
             self.assertEqual(payload["status"], "recovery_failed")
             self.assertEqual(payload["error_message"], "synthetic backup failure")
 
+    def test_logical_failure_restores_previous_backup_instead_of_empty_db(self):
+        """历史验证备份存在时，逻辑恢复失败必须先恢复备份，不能降级为空库。"""
+        with tempfile.TemporaryDirectory() as temp_name:
+            db_path = Path(temp_name) / "auth.db"
+            _create_auth_fixture(db_path)
+            old_dir = db_path.parent / "recovery_backups" / "previous_event"
+            old_dir.mkdir(parents=True)
+            previous_backup = old_dir / "webgis_auth.recovered.previous.backup.db"
+            _create_auth_fixture(previous_backup)
+            previous_hash = _sha256(previous_backup)
+
+            with mock.patch.object(recovery_module, "_run_export", return_value=1):
+                result = recover_sqlite_database(
+                    db_path,
+                    required_tables=self.required_tables,
+                    required_columns=self.required_columns,
+                    minimum_total_rows=3,
+                    activate=True,
+                    empty_fallback_initializer=_initialize_empty_auth_schema,
+                )
+
+            self.assertTrue(result.success)
+            self.assertEqual(result.method, "previous_verified_backup")
+            self.assertEqual(_sha256(result.binary_backup_path), previous_hash)
+            validation = validate_sqlite_database(
+                db_path,
+                required_tables=self.required_tables,
+                required_columns=self.required_columns,
+                minimum_total_rows=3,
+            )
+            self.assertTrue(validation.valid, validation.error)
+            self.assertEqual(validation.row_counts["users"], 1)
+
+    def test_empty_fallback_can_be_disabled(self):
+        """显式禁用后，恢复失败必须抛错而不是静默清空主库。"""
+        with tempfile.TemporaryDirectory() as temp_name:
+            db_path = Path(temp_name) / "auth.db"
+            _create_auth_fixture(db_path)
+            original_bytes = db_path.read_bytes()
+
+            with mock.patch.object(recovery_module, "_run_export", return_value=1):
+                with self.assertRaises(SQLiteRecoveryError):
+                    recover_sqlite_database(
+                        db_path,
+                        required_tables=self.required_tables,
+                        required_columns=self.required_columns,
+                        minimum_total_rows=3,
+                        activate=True,
+                        empty_fallback_initializer=_initialize_empty_auth_schema,
+                        allow_empty_fallback=False,
+                    )
+
+            self.assertEqual(db_path.read_bytes(), original_bytes)
+
     def test_failed_recovery_keeps_source_bytes_unchanged(self):
         with tempfile.TemporaryDirectory() as temp_name:
             db_path = Path(temp_name) / "auth.db"

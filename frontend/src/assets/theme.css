@@ -228,6 +228,10 @@
 html {
     -webkit-text-size-adjust: 100%;
     text-size-adjust: 100%;
+    /* macOS 文字默认偏重：在根节点统一细化，避免逐组件声明造成字重不一致。
+       其他平台忽略这两条属性，可安全全局生效。 */
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
 }
 
 html,

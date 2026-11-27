@@ -477,7 +477,7 @@
   outline: none;
   overflow: hidden;
   border-radius: 6px;
-  transition: all 0.3s ease;
+  transition: background, border-radius, padding 0.3s ease;
 }
 
 .btn-text {
@@ -487,7 +487,7 @@
   font-size: 0.88rem;
   font-weight: 700;
   letter-spacing: 2px;
-  transition: all 0.3s ease;
+  transition: color, font-size, font-weight, letter-spacing 0.3s ease;
 }
 
 .btn-glow {
@@ -499,7 +499,7 @@
   background: rgba(0, 255, 102, 0.1);
   border-radius: 50%;
   transform: translate(-50%, -50%);
-  transition: all 0.4s ease;
+  transition: background, border-radius, height, left, top, transform, width 0.4s ease;
   z-index: 1;
 }
 

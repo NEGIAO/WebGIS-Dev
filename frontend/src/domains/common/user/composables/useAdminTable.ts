@@ -3,8 +3,9 @@
  * 日    期：2026/11/13
  * 说    明：从 AdminControlPanel.vue 抽出的表格能力层，不持有组件生命周期，
  *          仅通过 deps 注入 message / t / 变更回调，便于独立复用与测试。
+ *          唯一例外：确认弹窗的 Esc 监听与卸载时释放未决 Promise（防调用方永久挂起）。
  */
-import { computed, ref, watch } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useCellEditing } from '@common/composables/useCellEditing';
 import { useRequestToken } from '@common/composables/useRequestToken';
 import {
@@ -56,6 +57,25 @@ export function useAdminTable(deps: AdminTableDeps) {
 	// ── 新增行表单 ──
 	const insertRowData = ref<Record<string, string>>({});
 	const showInsertRow = ref(false);
+
+	// ── 系统自绘控件（杜绝浏览器原生 confirm / select）──
+	const deleteConfirmVisible = ref(false);
+	const deleteConfirmMessage = ref('');
+	let pendingDeleteResolve: ((confirmed: boolean) => void) | null = null;
+	// 分页选项用 computed：切换语言时“全部”标签需立即跟随，不能在 setup 期一次性求值
+	const pageSizeOptions = computed(() => [
+		{ value: 30, label: '30' },
+		{ value: 100, label: '100' },
+		{ value: 200, label: '200' },
+		{ value: 0, label: t('admin.pageSizeAll') },
+	]);
+	/** 数据表下拉选项（ThemedSelect 用）：表名即标签 */
+	const tableSelectOptions = computed(() =>
+		tables.value.map((item: any) => {
+			const name = String(item?.name || '');
+			return { value: name, label: name };
+		})
+	);
 
 	// ── 行级 JSON 编辑 ──
 	const editingRowKey = ref<string | null>(null);
@@ -387,7 +407,46 @@ export function useAdminTable(deps: AdminTableDeps) {
 		}
 	}
 
-	/** 删除行（二次确认） */
+	/** 系统主题确认弹窗：替代 window.confirm，返回用户选择 */
+	function requestDeleteConfirm(_row: Record<string, any>): Promise<boolean> {
+		deleteConfirmMessage.value = t('admin.deleteConfirm');
+		deleteConfirmVisible.value = true;
+		return new Promise<boolean>((resolve) => {
+			pendingDeleteResolve = resolve;
+		});
+	}
+
+	function resolveDeleteConfirm(confirmed: boolean) {
+		deleteConfirmVisible.value = false;
+		const resolve = pendingDeleteResolve;
+		pendingDeleteResolve = null;
+		resolve?.(confirmed);
+	}
+
+	/** Esc 关闭确认弹窗并视为取消（与系统弹窗交互一致） */
+	function onConfirmKeydown(event: KeyboardEvent) {
+		if (event.key !== 'Escape' || !deleteConfirmVisible.value) return;
+		event.preventDefault();
+		resolveDeleteConfirm(false);
+	}
+
+	onMounted(() => document.addEventListener('keydown', onConfirmKeydown));
+	// 卸载时释放未决 Promise，避免 handleDeleteRow 永久 await
+	onBeforeUnmount(() => {
+		document.removeEventListener('keydown', onConfirmKeydown);
+		if (deleteConfirmVisible.value) resolveDeleteConfirm(false);
+	});
+
+	function selectTable(name: string) {
+		selectedTable.value = name;
+	}
+
+	function selectPageSize(size: number) {
+		tablePageSize.value = size;
+		tablePage.value = 1;
+	}
+
+	/** 删除行（系统主题二次确认） */
 	async function handleDeleteRow(row: Record<string, any>) {
 		if (submittingTable.value) return;
 		const tableName = String(selectedTable.value || '').trim();
@@ -396,7 +455,7 @@ export function useAdminTable(deps: AdminTableDeps) {
 			message.warning(t('admin.noLocateKeyDelete'));
 			return;
 		}
-		if (!window.confirm(t('admin.deleteConfirm'))) return;
+		if (!(await requestDeleteConfirm(row))) return;
 
 		submittingTable.value = true;
 		try {
@@ -495,6 +554,10 @@ export function useAdminTable(deps: AdminTableDeps) {
 		editingJsonText,
 		editingCell,
 		editingCellValue,
+		deleteConfirmVisible,
+		deleteConfirmMessage,
+		tableSelectOptions,
+		pageSizeOptions,
 		// 派生
 		selectedTableMeta,
 		filteredRowCount,
@@ -516,6 +579,10 @@ export function useAdminTable(deps: AdminTableDeps) {
 		loadRows,
 		goToPage,
 		handleInsertRow,
+		requestDeleteConfirm,
+		resolveDeleteConfirm,
+		selectTable,
+		selectPageSize,
 		handleDeleteRow,
 		exportCsv,
 		highlightCell,

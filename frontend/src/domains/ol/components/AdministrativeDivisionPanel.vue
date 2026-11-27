@@ -19,7 +19,7 @@
                 >
                     <X
                         :size="13"
-                        :stroke-width="2.2"
+                        :stroke-width="2"
                     />
                 </button>
             </header>
@@ -208,7 +208,7 @@
     color: var(--text-brand-dark);
     font-size: 13px;
     outline: none;
-    transition: all 0.2s;
+    transition: background, border-radius, color, font-size, height, padding, width 0.2s;
 }
 
 .eco-input:focus {
@@ -299,7 +299,7 @@
 /* 动画效果：平滑上浮 */
 .eco-panel-fade-enter-active,
 .eco-panel-fade-leave-active {
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    transition: opacity, transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .eco-panel-fade-enter-from,

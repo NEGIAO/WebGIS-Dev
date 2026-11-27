@@ -56,6 +56,10 @@ export function useAdminSettings(deps: AdminSettingsDeps) {
 	const loadingBasemap = ref(false);
 	const submittingBasemap = ref(false);
 	const basemapOptions = BASEMAP_OPTIONS.map((opt: any, i: number) => ({ index: i, label: opt.label }));
+	/** 设置底图索引（下拉由系统主题 ThemedSelect 承担，不再维护自定义展开状态） */
+	function selectBasemap(index: number) {
+		defaultBasemapIndex.value = index;
+	}
 
 	// ── 下载 TTL ──
 	const downloadTtlMinutes = ref(30);
@@ -266,6 +270,7 @@ export function useAdminSettings(deps: AdminSettingsDeps) {
 		loadingBasemap,
 		submittingBasemap,
 		basemapOptions,
+		selectBasemap,
 		downloadTtlMinutes,
 		loadingDownloadTtl,
 		agentTokensPerUnit,

@@ -29,11 +29,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
 from starlette.background import BackgroundTasks
-from api.statistics import router as statistics_router
+from api.statistics import online_presence_mirror_task, router as statistics_router
 from api.location import router as location_router
 from api.external_proxy import router as external_proxy_router
 from api.auth import init_auth_storage, router as auth_router, check_smtp_configured
 from api.auth.user import guest_identity_retention_task
+from api.auth.session_archive import session_archive_task
 from api.admin import router as admin_router
 from api.api_management import router as api_management_router
 from api.api_keys_management import router as api_keys_router, runtime_config_router
@@ -157,6 +158,11 @@ async def lifespan(app: FastAPI):
     app.state.guest_retention_task = asyncio.create_task(guest_identity_retention_task())
     logger.info("游客身份保留期清理任务已创建")
 
+    # 过期会话归档清理（V3.7.12）：启动即搬一次，此后每 30min 一轮；
+    # 只把 sessions 中已过期的行搬进 expired_sessions，鉴权仍只读 sessions。
+    app.state.session_archive_task = asyncio.create_task(session_archive_task())
+    logger.info("过期会话归档任务已创建")
+
     # SMTP 邮件服务配置检查
     if check_smtp_configured():
         logger.info("邮件服务已配置（SMTP: %s）", _mask_smtp_user())
@@ -193,6 +199,10 @@ async def lifespan(app: FastAPI):
     start_periodic_broadcast()
     logger.info("实时统计定时广播已启动")
 
+    # 管理员在线明细镜像表：每 10s 以 tracker 真值重建，只保留当前在线身份
+    app.state.online_mirror_task = asyncio.create_task(online_presence_mirror_task())
+    logger.info("管理员在线镜像维护任务已创建")
+
     if app.state.startup_error:
         logger.warning("应用以降级模式启动: %s", app.state.startup_error)
     else:
@@ -211,6 +221,16 @@ async def lifespan(app: FastAPI):
             pass
         logger.info("整点报时后台任务已停止")
 
+    # 取消管理员在线镜像维护任务
+    mirror_task = getattr(app.state, "online_mirror_task", None)
+    if mirror_task is not None:
+        mirror_task.cancel()
+        try:
+            await mirror_task
+        except asyncio.CancelledError:
+            pass
+        logger.info("管理员在线镜像维护任务已停止")
+
     # 取消游客身份保留期清理任务
     retention_task = getattr(app.state, "guest_retention_task", None)
     if retention_task is not None:
@@ -220,6 +240,16 @@ async def lifespan(app: FastAPI):
         except asyncio.CancelledError:
             pass
         logger.info("游客身份保留期清理任务已停止")
+
+    # 取消过期会话归档任务
+    session_archive_worker = getattr(app.state, "session_archive_task", None)
+    if session_archive_worker is not None:
+        session_archive_worker.cancel()
+        try:
+            await session_archive_worker
+        except asyncio.CancelledError:
+            pass
+        logger.info("过期会话归档任务已停止")
 
     historical_scheduler = getattr(app.state, "historical_imagery_scheduler", None)
     if historical_scheduler is not None:
@@ -373,6 +403,9 @@ async def check_startup_state(request: Request, call_next):
     # OPTIONS 一律放行给 CORS 层直接应答，不触碰存储。
     if request.method == "OPTIONS":
         return await call_next(request)
+
+    # V3.7.14：IP 地理解析改为业务端点惰性调用（get_request_geo），
+    # 不在全局中间件同步 await 外部服务，避免任意请求被第三方延迟拖慢。
 
     if getattr(request.app.state, "startup_error", None):
         # 尝试自动恢复：重新初始化认证存储

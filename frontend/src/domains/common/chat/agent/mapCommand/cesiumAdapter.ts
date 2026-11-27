@@ -244,8 +244,12 @@ export function createCesiumMapCommandAdapter({
         };
     }
 
-    async function switchBasemap({ presetId, url } = {} as { presetId?: unknown; url?: unknown }): Promise<MapCommandResult> {
-        const validated = validateBasemapArg({ presetId: presetId as string | undefined, url: url as string | undefined });
+    async function switchBasemap({ presetId, url, intent } = {} as { presetId?: unknown; url?: unknown; intent?: unknown }): Promise<MapCommandResult> {
+        const validated = validateBasemapArg({
+            presetId: presetId as string | undefined,
+            url: url as string | undefined,
+            intent: intent as string | undefined,
+        });
         if (validated.error) return { success: false, code: 'INVALID_BASEMAP_PRESET', message: validated.error };
         if (typeof setBasemap !== 'function') {
             return { success: false, code: 'MAP_RUNTIME_NOT_READY', message: 'Cesium basemap switching is not ready' };

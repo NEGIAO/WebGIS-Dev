@@ -2,7 +2,7 @@
 
 日期：2026-07-21
 
-适用范围：`frontend/src/domains/common/data-import/`（格式分发与解析）、`frontend/src/domains/ol/data-import/composables/useLayerDataImport.js`（2D/OL 导入管线）、`frontend/src/domains/cesium/composables/dataImport/useCesiumDataImport.js`（3D/Cesium 导入管线）。
+适用范围：`frontend/src/domains/common/data-import/`（格式分发与解析）、`frontend/src/domains/ol/data-import/composables/useLayerDataImport.ts`（2D/OL 导入管线）、`frontend/src/domains/cesium/composables/dataImport/useCesiumDataImport.ts`（3D/Cesium 导入管线）。
 
 本文是长期参考文档，说明 WebGIS 3.0 中"多格式数据导入"功能的格式分发机制、2D 与 3D 双管线差异、Shapefile 解析、坐标参考转换、3D Tiles blob URL 加载方案及 GLTF 坐标提取等核心实现，供后续维护、格式扩展与 bug 修复时对照。
 
@@ -12,21 +12,21 @@
 
 支持的格式包括：GeoJSON、KML/KMZ、Shapefile（.shp + .dbf/.shx/.prj/.cpg）、GeoTIFF、GLB/GLTF、CZML、3D Tiles（ZIP 包或文件夹）。
 
-**重要边界**：2D 管线与 3D 管线是**独立的两套实现**，共享底层解析工具（`shpParser.ts`、`crs-engine.ts`、`decompressFile.js`），但上层的格式路由、图层创建、相机定位逻辑完全分离。2D 管线不处理 GLTF/CZML/3D Tiles；3D 管线不处理 GeoTIFF 栅格。
+**重要边界**：2D 管线与 3D 管线是**独立的两套实现**，共享底层解析工具（`shpParser.ts`、`crs/crs-engine.ts`、`decompressFile.ts`），但上层的格式路由、图层创建、相机定位逻辑完全分离。2D 管线不处理 GLTF/CZML/3D Tiles；3D 管线不处理 GeoTIFF 栅格。
 
 ## 2. 文件结构
 
 | 文件 | 职责 |
 |------|------|
-| `domains/common/data-import/dataDispatcher.js` | 格式分发入口：根据扩展名/魔术字节路由到 ZIP/KMZ 解包、KML 解析、GeoJSON 解析、TIFF 打包等流程 |
-| `domains/common/data-import/archiveProcessor.js` | 归档处理：ZIP/KMZ 解包后 SHP 文件分组、资源 Blob URL 管理、批量 packet 构建 |
-| `domains/common/data-import/decompressFile.js` | ZIP 解压（JSZip）+ 魔术字节检测，返回标准化 entry 列表（`{ name, path, extension, buffer }`） |
+| `domains/common/data-import/dataDispatcher.ts` | 格式分发入口：根据扩展名/魔术字节路由到 ZIP/KMZ 解包、KML 解析、GeoJSON 解析、TIFF 打包等流程 |
+| `domains/common/data-import/archiveProcessor.ts` | 归档处理：ZIP/KMZ 解包后 SHP 文件分组、资源 Blob URL 管理、批量 packet 构建 |
+| `domains/common/data-import/decompressFile.ts` | ZIP 解压（JSZip）+ 魔术字节检测，返回标准化 entry 列表（`{ name, path, extension, buffer }`） |
 | `domains/common/data-import/parsers/shpParser.ts` | Shapefile 解析：`parseShpPartsToGeoJSON` 多策略解析 + DBF 属性增强 + CRS 重投影 |
-| `domains/common/data-import/crs-engine.ts` | proj4 坐标参考引擎：PRJ WKT 识别、EPSG 注册、`reprojectGeoJSON` 逐坐标转换 |
-| `domains/common/data-import/crsAware.js` | 投影感知辅助：`detectGeoJsonProjection`、`detectKmlProjectionHint`、`detectShpProjectionFromPrj` |
-| `domains/ol/data-import/composables/useLayerDataImport.js` | 2D/OL 导入主管线（约 1533 行）：矢量要素创建、栅格图层渲染、自动定位 |
+| `domains/common/data-import/crs/crs-engine.ts` | proj4 坐标参考引擎完整实现（19KB）：PRJ WKT 识别、EPSG 注册、`reprojectGeoJSON` 逐坐标转换；根目录 `crs-engine.ts` 仅 353B re-export 门面 |
+| `domains/common/data-import/crsAware.ts` | 投影感知辅助：`detectGeoJsonProjection`、`detectKmlProjectionHint`、`detectShpProjectionFromPrj` |
+| `domains/ol/data-import/composables/useLayerDataImport.ts` | 2D/OL 导入主管线：矢量要素创建、栅格图层渲染、自动定位 |
 | `domains/ol/data-import/composables/useGisLoader.ts` | 2D 管线的分发桥接层：文件夹/ZIP 递归扫描、SHP 分组、调用 `dispatchGisData` |
-| `domains/cesium/composables/dataImport/useCesiumDataImport.js` | 3D/Cesium 导入主管线（约 1187 行）：DataSource 加载、3D Tiles blob URL 方案、GLTF 坐标提取 |
+| `domains/cesium/composables/dataImport/useCesiumDataImport.ts` | 3D/Cesium 导入主管线：DataSource 加载、3D Tiles blob URL 方案、GLTF 坐标提取 |
 | `domains/cesium/components/CesiumContainer.vue` | 3D 场景容器：拖拽事件监听（`@drop.prevent="onDrop"`）→ 调用 `loadDataFile` |
 
 ## 3. 格式支持矩阵
@@ -35,7 +35,7 @@
 |------|:---:|:---:|------|
 | GeoJSON / JSON | ✓ | ✓ | 2D 通过 `ol/format/GeoJSON` 读取；3D 通过 `GeoJsonDataSource.load()` |
 | KML | ✓ | ✓ | 2D 通过 `ol/format/KML`；3D 通过 `KmlDataSource.load(blobUrl)` |
-| KMZ | ✓ | ✓ | 2D 走 ZIP 解包管线；3D 优先 `KmlDataSource` 原生支持，失败回退手动解压 |
+| KMZ | ✓ | ✓ | 2D 走 ZIP 解包管线；3D 统一手动解压 `extractKmlFromKmz` + 资源 href 重写为 blob URL，不再依赖 `KmlDataSource` 原生支持 |
 | Shapefile | ✓ | ✓ | 统一经 `parseShpPartsToGeoJSON` → EPSG:4326 GeoJSON → 各引擎加载 |
 | GeoTIFF | ✓ | — | 2D 通过 `ol/source/GeoTIFF` + WebGLTileLayer；3D 不支持 |
 | GLB / GLTF | — | ✓ | 3D 通过 `Model.fromGltfAsync`，支持坐标自动提取或用户手动输入 |
@@ -43,7 +43,7 @@
 | 3D Tiles（ZIP/文件夹） | — | ✓ | 3D 通过 blob URL 重写方案 + `Cesium3DTileset.fromUrl()` |
 | 文件夹批量导入 | ✓ | — | 2D 通过 `useGisLoader` 递归扫描并批量分发 |
 
-## 4. 格式分发流程（dataDispatcher.js）
+## 4. 格式分发流程（dataDispatcher.ts）
 
 `dispatchGisData(input)` 是 2D 管线的统一入口，接收 `{ content, type, name }` 并返回标准化的 packet 结构：
 
@@ -66,9 +66,9 @@ flowchart TD
     SHP -->|是| ERR(["抛错: 需按组上传"])
 ```
 
-**归档批处理**（`buildArchivePackets`）：解压后通过 `classifyArchiveDatasets` 将 entries 分类为 KML/KMZ/SHP/TIFF/GeoJSON 五组，SHP 通过 `groupShpEntriesByBaseName` 按同名文件组配对（.shp + .dbf + .shx + .prj + .cpg），每组生成一个 packet。嵌套 KMZ 通过延迟注入的 `_dispatchGisData` 递归处理。
+**归档批处理**（`buildArchivePackets`）：解压后通过 `classifyArchiveDatasets`（定义于 `batchProcessor.ts:12`）将 entries 分类为 KML/KMZ/SHP/TIFF/GeoJSON 五组，SHP 通过 `groupShpEntriesByBaseName`（定义于 `archiveProcessor.ts:37`）按同名文件组配对（.shp + .dbf + .shx + .prj + .cpg），每组生成一个 packet。嵌套 KMZ 通过延迟注入的 `_dispatchGisData` 递归处理。
 
-## 5. 2D 导入管线（useLayerDataImport.js）
+## 5. 2D 导入管线（useLayerDataImport.ts）
 
 ### 5.1 主入口
 
@@ -101,7 +101,7 @@ flowchart TD
 
 首个成功导入的图层触发 `map.getView().fit(extent, { padding: [50,50,50,50], maxZoom: 18, duration: 900 })`，范围通过 `projectExtentToMapView` 从源投影转换到视图投影。
 
-## 6. 3D 导入管线（useCesiumDataImport.js）
+## 6. 3D 导入管线（useCesiumDataImport.ts）
 
 ### 6.1 主入口
 
@@ -111,7 +111,7 @@ flowchart TD
 switch (ext) {
     case 'geojson': case 'json':  // 含 tileset.json 检测
     case 'kml':                   // KmlDataSource.load(blobUrl)
-    case 'kmz':                   // 优先原生，回退手动解压
+    case 'kmz':                   // 统一手动解压 extractKmlFromKmz + 资源 href 重写
     case 'shp':                   // parseShpPartsToGeoJSON → GeoJsonDataSource
     case 'glb': case 'gltf':     // Model.fromGltfAsync + 坐标提取
     case 'czml':                  // CzmlDataSource.load(blobUrl)
@@ -161,7 +161,7 @@ for (const attempt of attempts) {
 
 DBF 编码通过三级检测：CPG 文件内容 → DBF 头部 LDID 字节（0x4d→CP936, 0x7a→CP936 等）→ UTF-8/GBK 自动探测（`decodeMaybeText`）。
 
-## 8. 坐标参考转换（crs-engine.ts）
+## 8. 坐标参考转换（crs/crs-engine.ts，门面见 crs-engine.ts）
 
 ### 8.1 投影识别
 
@@ -295,9 +295,7 @@ const model = await Cesium.Model.fromGltfAsync({ url: blobUrl, modelMatrix });
 
 ## 12. 局限与升级方向
 
-**已知 bug：**
-
-1. **`loadKMZFallback` 字段名不一致**：`useCesiumDataImport.js` 的 KMZ 手动解压回退路径中，查找内部 KML 文件时使用 `entry.ext === 'kml'`，但 `decompressBuffer` 返回的 entry 对象字段名为 `extension`（非 `ext`）。同时使用 `entry.name` 做后缀匹配，而规范路径字段为 `entry.path`。当前因 `entry.name`（原始 ZIP 条目名）通常也含 `.kml` 后缀，第二个条件可兜底命中，但第一个条件永远为 false，属于潜在隐患。此外，`decompressBuffer` 返回的是包含 `.entries` 数组的对象，而 `loadKMZFallback` 直接对返回值调用 `.find()`，在回退路径触发时会抛出 TypeError。
+> 原「`loadKMZFallback` 字段名不一致」bug 条目已删除：该函数已不存在，3D KMZ 现统一由 `loadKMZ` 经 `extractKmlFromKmz` 手动解压处理（见 §3、§6.1）。
 
 **现有局限：**
 

@@ -36,6 +36,9 @@ import { useLocale } from '@common/app/useLocale';
 import { useAppStore } from '@common/app/stores/useAppStore';
 import { ASSET_BASE_URL } from '@/config/publicRuntime';
 import { DEFAULT_BASEMAP_URL_LAYER_NUMBER, getBasemapIdByUrlLayerNumber } from '@common/basemap/basemapOptions';
+import { sanitizeUrlParams } from '@common/url-state/urlParamSanitizer';
+import { apiReverseGeocode } from '@/api';
+import { getGlobalUserLocationContext } from '@common/map-view/services/userLocationContext';
 
 // 一、Emits 类型
 type EmitsType = (
@@ -72,7 +75,7 @@ const QUICK_LOCATION_COORDS = Object.freeze([
 
 /**
  * 分享链接剥离清单：用户私有信息，分享时一律清空。
- * ut  = 用户类型标签（guest/admin/registered）
+ * ut  = 身份标签（admin / guest_<序号> / registered_<用户名>）
  * loc = 定位授权来源（gps/ip）
  * p   = 编码后的 GPS 精准位置
  * 其余参数（lng、lat、z、l、view、cv、cs 等）全部保留，用于还原分享者的视图与位置状态。
@@ -298,10 +301,40 @@ export class Instance {
 
 	//#region 分享
 
-	private canUseNativeShare() {
-		if (typeof navigator === 'undefined' || typeof navigator.share !== 'function') return false;
-		const ua = navigator.userAgent || '';
-		return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini|Mobile/i.test(ua);
+	/**
+	 * 由 URL 经纬度解析具体地名（复用高德逆地理编码，高德优先、WGS-84 入参）。
+	 * 失败按「定位上下文 → 经纬度文本 → 兜底词」三级降级，不阻断分享。
+	 * @param lng 经度（来自 URL）
+	 * @param lat 纬度（来自 URL）
+	 * @returns 用于分享文案的地点描述
+	 */
+	private async resolvePlaceLabel(lng: number, lat: number): Promise<string> {
+		if (Number.isFinite(lng) && Number.isFinite(lat)) {
+			try {
+				const response: any = await apiReverseGeocode(lng, lat, { silent: true });
+				const data: any = response?.data || response || {};
+				const formatted = String(data?.formattedAddress || '').trim();
+				const city = String(data?.city || '').trim();
+				const district = String(data?.district || '').trim();
+				const place = formatted || [city, district].filter(Boolean).join('');
+				if (place) return place;
+			} catch {
+				// 高德逆地理编码失败：静默降级到定位上下文/坐标文本
+			}
+		}
+
+		try {
+			const context: any = getGlobalUserLocationContext();
+			const cached = String(context?.encodedLocation?.formattedAddress || '').trim();
+			if (cached) return cached;
+		} catch {
+			// 定位上下文不可用时继续降级
+		}
+
+		if (Number.isFinite(lng) && Number.isFinite(lat)) {
+			return `${lng.toFixed(5)}, ${lat.toFixed(5)}`;
+		}
+		return this.t('topbar.sharePlaceFallback');
 	}
 
 	/** execCommand 兜底复制（保留并恢复用户原有选区） */
@@ -364,6 +397,7 @@ export class Instance {
 			);
 			hashParams.delete('layer');
 			hashParams.set('s', '1');
+			sanitizeUrlParams(hashParams);
 
 			const nextHashQuery = hashParams.toString();
 			const normalizedHashPath = hashPath.startsWith('/') ? hashPath : `/${hashPath}`;
@@ -393,6 +427,7 @@ export class Instance {
 			);
 			hashParams.delete('layer');
 			hashParams.set('s', '1');
+			sanitizeUrlParams(hashParams);
 
 			const nextHashQuery = hashParams.toString();
 			const normalizedHashPath = hashPath.startsWith('/') ? hashPath : `/${hashPath}`;
@@ -407,30 +442,38 @@ export class Instance {
 		}
 	}
 
-	/** 分享当前视图：优先系统分享，其次剪贴板，最后 execCommand */
+	/**
+	 * 分享当前视图：解析 URL 经纬度为具体地名，生成「说明文本 + URL」并复制到剪贴板。
+	 * V3.7.13：不再调用 navigator.share（桌面不兼容且行为不可控），
+	 * 纯文本复制最通用——用户粘贴即是一段可直接发送的分享语。
+	 */
 	public handleShareView = async () => {
 		const url = this.buildShareMarkedUrl(window.location.href);
+		// 逆地理编码可能耗时，先给即时反馈，避免点击后看似无响应
+		this.message.info(this.t('topbar.shareResolving'), { duration: 2000 });
+
+		// 从分享 URL 的 hash query 读取视图坐标（与当前定位上下文可能不同）
+		let lng = NaN;
+		let lat = NaN;
 		try {
-			if (this.canUseNativeShare()) {
-				await (navigator as any).share({
-					title: this.t('topbar.shareNativeTitle'),
-					text: this.t('topbar.shareNativeText'),
-					url,
-				});
-				this.syncShareFlagInCurrentUrl();
-				this.message.success(this.t('topbar.sharePanelOpened'));
-				return;
-			}
-		} catch (error: any) {
-			if (error && (error.name === 'AbortError' || error.name === 'NotAllowedError')) return;
-			// 其他错误则回退到剪贴板逻辑
+			const parsed = new URL(url, window.location.origin);
+			const hash = String(parsed.hash || '');
+			const queryIndex = hash.indexOf('?');
+			const params = new URLSearchParams(queryIndex >= 0 ? hash.slice(queryIndex + 1) : '');
+			lng = Number(params.get('lng'));
+			lat = Number(params.get('lat'));
+		} catch {
+			// 解析失败时按无坐标处理，地点走兜底词
 		}
+
+		const place = await this.resolvePlaceLabel(lng, lat);
+		const shareText = this.t('topbar.shareText', { place, url });
 
 		try {
 			if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
-				await navigator.clipboard.writeText(url);
+				await navigator.clipboard.writeText(shareText);
 			} else {
-				this.fallbackCopyViaExecCommand(url);
+				this.fallbackCopyViaExecCommand(shareText);
 			}
 			this.syncShareFlagInCurrentUrl();
 			this.message.success(this.t('topbar.shareCopied'));

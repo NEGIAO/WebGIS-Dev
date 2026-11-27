@@ -314,7 +314,7 @@
     gap: 8px;
     cursor: pointer;
     box-shadow: 0 6px 20px rgba(var(--brand-primary-rgb), 0.18);
-    transition: all 0.25s ease;
+    transition: backdrop-filter, background, border-radius, box-shadow, color, gap, height, min-height, padding 0.25s ease;
     position: relative;
 }
 
@@ -401,7 +401,7 @@
     flex-direction: column;
     overflow: hidden;
     transform-origin: bottom left;
-    transition: all 0.3s ease;
+    transition: border-radius 0.3s ease;
 }
 
 /* ── 头部：品牌渐变横幅 ── */
@@ -537,7 +537,7 @@
     align-items: center;
     justify-content: center;
     cursor: pointer;
-    transition: all 0.2s ease;
+    transition: background, border-radius, box-shadow, color, font-size, height, width 0.2s ease;
     font-size: 13px;
     flex-shrink: 0;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.18);
@@ -741,7 +741,7 @@
     align-items: center;
     justify-content: center;
     gap: 8px;
-    transition: all 0.2s ease;
+    transition: background, border-radius, color, font-size, font-weight, gap, height, width 0.2s ease;
 }
 
 .btn-logout:hover:not(:disabled) {
@@ -816,7 +816,7 @@
 /* ========== 过渡动画 ========== */
 .account-panel-transition-enter-active,
 .account-panel-transition-leave-active {
-    transition: all 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+    transition: opacity, transform 0.3s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .account-panel-transition-enter-from,

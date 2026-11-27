@@ -12,10 +12,11 @@ import type Map from 'ol/Map';
 import type VectorSource from 'ol/source/Vector';
 import { fromLonLat } from 'ol/proj';
 import type { Ref } from 'vue';
-import { apiAddressGeocode, apiIpCountry, apiLocationIpLocate, apiLocationReverse } from '@/api';
+import { apiAddressGeocode, apiIpCountry, apiLocationReverse } from '@/api';
 import { useMessage } from '@common/shell/useMessage';
 import { saveUserPositionToCache } from '@common/map-view/services/userPositionCache';
 import { setGlobalUserLocationContext } from '@common/map-view/services/userLocationContext';
+import { fetchIpLocationCandidate } from '@common/map-view/services/autoLocationMark';
 import { gcj02ToWgs84 } from '@common/data-import/crs/coordTransform';
 import {
     estimateExtentAccuracyMeters,
@@ -98,23 +99,14 @@ export function useUserLocation({
         const preferFreeService = disableAmapIpLocation || devModeEnabled;
 
         try {
-            const locationResponse: any = await apiLocationIpLocate(ip, {
-                preferFreeService,
-                silent: true,
-            });
-
-            const location: any = locationResponse || null;
+            // V3.7.13：复用共享 IP 候选构造（与入口自动定位、buildIpCandidate 同源）
+            const candidate = await fetchIpLocationCandidate(ip, preferFreeService);
+            const location: any = candidate?.ipResult || null;
             if (!location?.ok) {
                 if (!silent) {
-                    const errorMsg = location?.errorMessage || 'IP 定位失败';
-                    message.warning(errorMsg);
+                    message.warning(location?.errorMessage || 'IP 定位失败');
                 }
-                return {
-                    ...location,
-                    didFit: false,
-                    geocode: null,
-                    reverseGeocode: null,
-                };
+                return { ...location, didFit: false, geocode: null, reverseGeocode: null };
             }
 
             if (location.adcode) {
@@ -261,27 +253,16 @@ export function useUserLocation({
         if (disableAmapIpLocation) return null;
 
         try {
-            const locationResponse: any = await apiLocationIpLocate(ip, {
-                preferFreeService: false,
-                silent: true,
-            });
-
-            const ipResult: any = locationResponse || null;
-            if (!ipResult?.ok) return null;
-
-            const center = getExtentCenter(ipResult.extent);
-            if (!center || !Number.isFinite(center.lon) || !Number.isFinite(center.lat))
-                return null;
-
-            const accuracyMeters = estimateExtentAccuracyMeters(ipResult.extent);
-            // 高德 IP 定位返回 GCJ-02 坐标，统一转换为 WGS-84 以保持坐标系一致性
-            const [wgsLon, wgsLat] = gcj02ToWgs84(center.lon, center.lat);
+            // V3.7.13：复用 services/autoLocationMark 的共享 IP 候选构造，
+            // 该函数同时兼容后端旧 extent 返回与新 latitude/longitude 返回。
+            const candidate = await fetchIpLocationCandidate(ip);
+            if (!candidate) return null;
             return {
                 source: 'ip',
-                lon: wgsLon,
-                lat: wgsLat,
-                accuracyMeters,
-                ipResult,
+                lon: candidate.lon,
+                lat: candidate.lat,
+                accuracyMeters: candidate.accuracyMeters,
+                ipResult: candidate.ipResult,
             };
         } catch (error: any) {
             if (error?.isQuotaExceeded) {

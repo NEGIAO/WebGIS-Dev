@@ -705,7 +705,7 @@ svg {
 }
 
 .mini-icon-btn:active {
-    transform: scale(0.9);
+    transform: scale(0.96);
 }
 
 /* 绘图工具磁贴：图标在上、文字在下 */
@@ -755,7 +755,7 @@ svg {
 }
 
 .eco-tool-tile:active:not(.active) {
-    transform: scale(0.94);
+    transform: scale(0.96);
 }
 
 .eco-tool-tile.active {
@@ -892,7 +892,7 @@ svg {
 }
 
 .eco-btn-reverse:active {
-    transform: scale(0.98);
+    transform: scale(0.96);
 }
 
 /* 错误提示条 */
@@ -1540,7 +1540,7 @@ svg {
     background: transparent;
     color: var(--toc-text-secondary);
     cursor: pointer;
-    transition: all 0.15s;
+    transition: background, border-radius, color, height, width 0.15s;
 }
 
 .toc-icon-btn:hover {
@@ -1549,7 +1549,7 @@ svg {
 }
 
 .toc-icon-btn:active {
-    transform: scale(0.92);
+    transform: scale(0.96);
 }
 
 .ghost-btn,
@@ -1573,7 +1573,7 @@ svg {
     padding: 6px 8px;
     font-size: 12px;
     cursor: pointer;
-    transition: all 0.15s ease;
+    transition: background, border-color, color, font-weight 0.15s ease;
 }
 
 .draw-tool-btn:hover {
@@ -1685,7 +1685,7 @@ svg {
 }
 
 .tpl-swatch:active {
-    transform: scale(0.94);
+    transform: scale(0.96);
 }
 
 .swatch-dot {
@@ -1909,7 +1909,7 @@ svg {
     font-size: 12px;
     font-weight: 600;
     cursor: pointer;
-    transition: all 0.15s ease;
+    transition: opacity 0.15s ease;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -1983,7 +1983,7 @@ svg {
 }
 
 .apply-btn:active {
-    transform: scale(0.98);
+    transform: scale(0.96);
 }
 
 .hint {

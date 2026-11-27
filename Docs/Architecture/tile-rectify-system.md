@@ -8,13 +8,13 @@
 | 项 | 位置 |
 |---|---|
 | **开源实现** | 独立仓 `tile-proxy`（GCJ-02 / BD-09 ↔ WGS84 逐瓦片纠偏 + 直通代理） |
-| **线上入口** | `https://vpn.negiao.cn/proxy/*`（Azure VPS，nginx → 127.0.0.1:9002） |
+| **线上入口** | `https://vpn.negiao.cn/proxy/*`（Azure VPS，nginx → 127.0.0.1:9002）⚠️ 本地不可核验（属外部仓/运维配置） |
 | **本仓库残留** | 仅 `backend/core/coord_transform.py` 纯坐标数学（无网络 IO，供 `location` 展示 GCJ） |
 | **HF Space** | **禁止**挂载任何 `/proxy/*`、`/tiles/*` 中转（平台 Content Policy） |
 
 ```mermaid
 flowchart LR
-    FE["WebGIS 前端<br/>webgis.negiao.cn / HF / localhost"] -->|"VITE_TILE_PROXY_BASE_URL"| VPS["vpn.negiao.cn/proxy/*<br/>tile-proxy 服务 :9002"]
+    FE["WebGIS 前端<br/>webgis.negiao.cn / HF / localhost"] -->|"VITE_TILE_PROXY_BASE_URL"| VPS["vpn.negiao.cn/proxy/*<br/>tile-proxy 服务 :9002 ⚠️"]
     VPS --> UP["高德 / 百度 / 腾讯 / 谷歌中国 等加偏上游瓦片<br/>（天地图直连，不经本代理）"]
     FE -->|"VITE_BACKEND_URL"| HF["negiao-webgis.hf.space<br/>业务 API（无瓦片中转）"]
 ```
@@ -31,7 +31,7 @@ flowchart LR
 | BD-09 | 百度全系 | GCJ-02 之上再加偏 |
 | BD09MC（百度墨卡托） | 百度瓦片网格 | 独立投影 + 独立网格 |
 
-> 代码对照：`basemapConfig.ts` 中走 `gcj2wgsProxyUrl` 的仅高德（注记无偏 / 影像 WGS / 地图 WGS）、谷歌中国（水系 WGS / 简洁 wgs）、腾讯（地图 WGS）；走 `bd2wgsProxyUrl` 的仅百度（地图 WGS）；天地图各图源走 `buildTiandituUrl`。
+> 代码对照：代理 URL 拼接函数定义在 `frontend/src/config/publicRuntime.ts`（`gcj2wgsProxyUrl` :157 / `bd2wgsProxyUrl` :171）；具体图源的**调用**分布在 `domains/ol/basemap/constants/definitions/group-1.ts` / `group-3.ts` / `group-4.ts`，由 `basemapConfig.ts` 聚合导出。走 `gcj2wgsProxyUrl` 的仅高德（注记无偏 / 影像 WGS / 地图 WGS）、谷歌中国（水系 WGS / 简洁 wgs）、腾讯（地图 WGS）；走 `bd2wgsProxyUrl` 的仅百度（地图 WGS）；天地图各图源走 `buildTiandituUrl`。
 
 把 GCJ/BD 瓦片按标准 XYZ 直接贴到 WGS84 画布会整城错位。纠偏服务在**服务端逐瓦片重采样**，输出与请求方网格对齐的 256×256 图，前端零改造。
 
@@ -48,7 +48,7 @@ flowchart LR
 
 CORS：`Access-Control-Allow-Origin: *`（任意前端源）。
 
-前端拼接统一走 `frontend/src/config/publicRuntime.ts` 的 `tileProxyUrl` / `gcj2wgsProxyUrl` / `bd2wgsProxyUrl`，基址来自 `VITE_TILE_PROXY_BASE_URL`（生产默认 `https://vpn.negiao.cn`）。
+前端拼接统一走 `frontend/src/config/publicRuntime.ts` 的 `tileProxyUrl` / `gcj2wgsProxyUrl` / `bd2wgsProxyUrl`；基址 `TILE_PROXY_BASE_URL`（:56-59）取 `VITE_TILE_PROXY_BASE_URL || VITE_BACKEND_URL || 'http://localhost:7860'`，这是**代码默认**。生产环境使用的 `https://vpn.negiao.cn` 来自**部署配置** `deploy/.env:156` 的 `VITE_TILE_PROXY_BASE_URL`，不是代码内默认值。
 
 ## 4. 与本仓库的边界
 
@@ -60,9 +60,9 @@ CORS：`Access-Control-Allow-Origin: *`（任意前端源）。
 
 ## 5. 运维与开源
 
-- **VPS 代码树**：`vpn.negiao.cn` 仓库 `src/backend/tile-proxy/`（push 经 post-receive 部署）
-- **开源仓**：独立 `tile-proxy`（FastAPI + `domains/tiles`，可单独部署任意主机）
-- **小内存护栏**：单 worker、内存缓存约 3000 条、磁盘缓存上限与按龄清理见开源仓 README
+- **VPS 代码树**：`vpn.negiao.cn` 仓库 `src/backend/tile-proxy/`（push 经 post-receive 部署）⚠️ 本地不可核验（外部仓）
+- **开源仓**：独立 `tile-proxy`（FastAPI + `domains/tiles`，可单独部署任意主机）⚠️ 本地不可核验（外部仓代码）
+- **小内存护栏**：单 worker、内存缓存约 3000 条、磁盘缓存上限与按龄清理见开源仓 README ⚠️ 缓存条数本地不可核验（外部仓）
 
 ## 6. 历史
 

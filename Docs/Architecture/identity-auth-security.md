@@ -57,10 +57,10 @@ flowchart TD
     A["请求携带 Authorization 头"] --> B{"_extract_token()"}
     B -->|无凭据| C{"是否 guest-allow 端点"}
     C -->|是| C1["临时游客会话（无 token）"]
-    C -->|否| C2["401 GUEST_NO_TOKEN"]
+    C -->|否| C2["401 LOGIN_REQUIRED"]
     B -->|有凭据| D{"_get_session_sync(token)"}
     D -->|不存在 / 已过期| E["401 SESSION_EXPIRED"]
-    D -->|存在| F["normalize_role(username, role)"]
+    D -->|存在| F["normalize_role(raw_role, username)"]
     F --> G{"依赖层级"}
     G -->|require_login| H["放行"]
     G -->|require_api_access| I{"邮箱已绑定? 配额充足?"}
@@ -77,7 +77,7 @@ flowchart TD
 |---|---|---|
 | `require_login` | 只验会话有效，不做角色与配额判断 | 个人资料、偏好、登出 |
 | `require_api_access` | 会话 + 邮箱绑定校验 + 每日配额扣减 | 搜索、AI、代理、导入 |
-| `require_admin` | `require_api_access` + `role == admin` | `admin.py` 全部 19 个接口 |
+| `require_admin` | `require_api_access` + `role == admin` | `admin.py` 全部 18 个 `@router.*` 接口（`admin.py:397-691`） |
 
 ### 2.3 三条身份的分支差异
 
@@ -85,7 +85,7 @@ flowchart TD
 |---|---|---|---|
 | 管理员 | `SUPER_USER`（HF Secret） | 与 Secret 等时比较，**每次登录现算** | 正常签发 |
 | 注册用户 | `users.password_hash` | PBKDF2-HMAC-SHA256，16 字节随机盐，120000 次迭代 | 正常签发 |
-| 游客 | 共享口令（L1 配置） | 等时比较；身份由 `IP + UA + 设备号` 派生 | 正常签发（游客权限） |
+| 游客 | 共享口令（L1 配置 `GUEST_PASSWORD`） | 等时比较；身份取验签 guest token，否则 `H(XFF 末跳 IP|UA)`（设备号不参与） | 正常签发（游客权限） |
 | 临时游客 | 无 | 特定端点自动创建，2 小时内存态 | **无 token** |
 
 ---
@@ -134,7 +134,7 @@ flowchart TD
 | CSRF | 不使用 Cookie，令牌需 JS 显式放入请求头 | 无（跨站无法读取 sessionStorage） |
 | 越权访问管理接口 | `require_admin` 覆盖 `admin.py` 全部端点；角色服务端归一 | 无已知旁路 |
 | 会话固定 | 每次登录新建令牌，登录前不存在会话 | 无 |
-| 令牌重放 | 72 小时有效期；登出即删行；改密注销该账号全部会话 | 无设备绑定，令牌泄漏后 72 小时内可用；**令牌在 DB 中以明文存储**，库泄漏等于会话全失 |
+| 令牌重放 | 硬上限 4 小时（`min(4, AUTH_SESSION_EXPIRE_HOURS)`，`constants.py:58`）；读取时按 `created_at` 强制作废超 4h 的旧 token（`session.py:186-190`）；登出即删行，改密注销该账号全部会话 | 无设备绑定，令牌泄漏后至多 4 小时内可用；72h 仅旧版遗留数据（读取即作废）；**令牌在 DB 中以明文存储**，库泄漏等于会话全失 |
 | 中间人 | CF 边缘 TLS；80 端口 301 到 https | 未下发 `Strict-Transport-Security`，首次明文请求可被劫持 |
 | 统计伪造 | 无（URL 字段天生可伪造） | 记录不可作为入侵证据，只能作参考 |
 | 配置误判 | `APP_ENV` 默认 `production`；未配 `SUPER_USER` 时管理员登录直接 503 | 503 会暴露「管理员登录被禁用」这一状态 |
@@ -151,11 +151,11 @@ flowchart TD
 | 登录节流 | 账号优先 + IP 兜底 | 中高。账号维度不可伪造 |
 | 浏览器跨域 | CORS 白名单（9 个前端来源） | 低。只约束浏览器脚本，`curl` / 服务端直连不受限 |
 | 边缘防护 | Cloudflare 仅代理前端域名（80/443/8443 等） | 低。后端 `*.hf.space` **不经过 CF**，WAF/限流规则对 API 无效 |
-| 游客身份 | `guest_uid = f(IP, UA, 设备号)` | 低。`X-Client-IP` 可伪造 → 可反复领取新游客额度 |
+| 游客身份 | 无 token 桶 `guest_uid = H(XFF 末跳 IP|UA)` + 后端签名 guest token（`dependencies.py:108-122`） | 中低。前端自报 `X-Client-IP` 已停用；XFF 末跳由反代追加，签名 token 由后端签发且限频 6 次/小时（`routes.py:775-780`） |
 
 **已知缺口（按影响排序）**：
 
-1. **游客配额可通过伪造 IP 无限续杯**——改动会重置全部游客身份，故暂未处理；
+1. **游客配额绕过已收敛（V3.7.6）**——桶改 `H(XFF 末跳 IP|UA)` + 签名 guest token，签发限频 6 次/小时；残留边界是更换网络出口仍可换桶；
 2. **API 层缺少通用速率限制**——目前只有登录节流与配额扣减，没有「每分钟请求数」维度的约束；
 3. **令牌明文入库**——若数据库文件泄漏，攻击者可直接复用未过期会话（建议改为存 `sha256(token)`，登录时比对摘要）。
 

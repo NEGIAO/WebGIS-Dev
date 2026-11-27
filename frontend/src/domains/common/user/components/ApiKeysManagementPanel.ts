@@ -3,7 +3,7 @@
  * 日    期：2026/11/13
  * 说    明：视图层逻辑入口。密钥状态加载、掩码显隐、备份增删、默认 AI 配置编辑。
  */
-import { computed, defineComponent, onMounted, ref, type ExtractPropTypes, type SetupContext } from 'vue';
+import { computed, defineComponent, onBeforeUnmount, onMounted, ref, type ExtractPropTypes, type SetupContext } from 'vue';
 import { AlertTriangle } from '@lucide/vue';
 import { useMessage } from '@common/shell/useMessage';
 import { useLocale } from '@common/app/useLocale';
@@ -59,6 +59,10 @@ export class Instance {
 
 
 	public loading = ref(false);
+	/** 系统主题确认弹窗（替代浏览器原生 confirm） */
+	public confirmVisible = ref(false);
+	public confirmMessage = ref('');
+	private confirmResolve: ((confirmed: boolean) => void) | null = null;
 	public copiedKey = ref('');
 	public revealedKeys = ref<Record<string, boolean>>({});
 	/** 已显式拉取的密钥明文缓存（V3.7.6：后端默认只发掩码，reveal 按需拉明文） */
@@ -119,15 +123,28 @@ export class Instance {
 	/** 生命周期集中注册 */
 	private init() {
 		onMounted(async () => {
+			document.addEventListener('keydown', this.onConfirmKeydown);
 			await this.loadKeysStatus();
 			await this.loadAgentConfigWrapped();
 			await this.loadDefaultAIConfig();
 		});
+		// 卸载时释放未决确认 Promise，避免调用方永久挂起
+		onBeforeUnmount(() => {
+			document.removeEventListener('keydown', this.onConfirmKeydown);
+			if (this.confirmVisible.value) this.resolveConfirm(false);
+		});
 	}
+
+	/** Esc 关闭确认弹窗并视为取消 */
+	private onConfirmKeydown = (event: KeyboardEvent) => {
+		if (event.key !== 'Escape' || !this.confirmVisible.value) return;
+		event.preventDefault();
+		this.resolveConfirm(false);
+	};
 
 	//#region 密钥展示
 
-	/** 密钥展示值（V3.7.6：后端默认只下发掩码值，明文走 reveal 按需拉取） */
+	/** 密钥展示值（V3.7.12 起管理面不再掩码，直接下发真实值；reveal 仅保留兼容） */
 	private keyValue(name: string) {
 		return String(this.keysStatus.value[name]?.key_value || '');
 	}
@@ -302,8 +319,24 @@ export class Instance {
 		}
 	};
 
+	/** 系统统一确认弹窗：返回用户选择，不依赖 window.confirm */
+	public requestConfirm = (message: string): Promise<boolean> => {
+		this.confirmMessage.value = message;
+		this.confirmVisible.value = true;
+		return new Promise<boolean>((resolve) => {
+			this.confirmResolve = resolve;
+		});
+	};
+
+	public resolveConfirm = (confirmed: boolean) => {
+		this.confirmVisible.value = false;
+		const resolve = this.confirmResolve;
+		this.confirmResolve = null;
+		resolve?.(confirmed);
+	};
+
 	public deleteBackupKey = async (keyName: string, backupId: any) => {
-		if (!confirm(this.t('apiKeys.backupDeleteConfirm', { name: keyName }))) return;
+		if (!(await this.requestConfirm(this.t('apiKeys.backupDeleteConfirm', { name: keyName })))) return;
 		try {
 			await apiAdminDeleteApiKeyBackup(keyName, backupId);
 			if (FRONTEND_RUNTIME_KEY_NAMES.has(keyName)) clearRuntimeMapTokensCache();
@@ -315,7 +348,7 @@ export class Instance {
 	};
 
 	public deleteKey = async (keyName: string) => {
-		if (!confirm(this.t('apiKeys.keyDeleteConfirm', { name: keyName }))) return;
+		if (!(await this.requestConfirm(this.t('apiKeys.keyDeleteConfirm', { name: keyName })))) return;
 		try {
 			await apiAdminDeleteApiKey(keyName);
 			if (FRONTEND_RUNTIME_KEY_NAMES.has(keyName)) clearRuntimeMapTokensCache();

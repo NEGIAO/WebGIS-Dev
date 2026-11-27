@@ -2,7 +2,9 @@
  * 游客身份签名 token 本地存储（叶子模块，零依赖，供 client.ts 拦截器与身份服务共用）。
  *
  * V3.7.6 游客身份治理：token 由后端 POST /api/auth/guest/session 签发（HMAC），
- * localStorage 持久化（跨标签页共享、24h 有效），请求经 `X-Guest-Token` 头携带。
+ * localStorage 持久化（跨标签页共享，有效期上限 4h），请求经 `X-Guest-Token` 头携带。
+ * 到期**不静默续签**：签名有效但已过期/被撤销时后端返回 401 SESSION_EXPIRED，
+ * 前端统一清 token 并强制跳 /register（撤销必须立即生效）。
  * 与登录态（sessionStorage webgis_auth_token）完全隔离：guest token 永远不进入
  * Authorization 头，登录会话也永远不写入本 key。
  */

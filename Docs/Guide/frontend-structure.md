@@ -487,7 +487,8 @@ frontend/src/
 │   │   │   │   ├── useChatAgentConfig.ts  # 工厂入口（装配四组方法到同一 reactive）
 │   │   │   │   └── useChatSession.ts
 │   │   │   ├── constants/
-│   │   │   │   └── agentToolsSchema.ts  # Agent Function Calling 工具声明
+│   │   │   │   ├── agentToolsSchema.ts  # Agent Function Calling 工具声明与 System Prompt
+│   │   │   │   └── tileIntentPresets.ts  # 瓦片语义预设表（自然语言→presetId/URL，禁模型拼参数）
 │   │   │   └── stores/
 │   │   │       └── useChatStore.ts  # Chat 状态
 │   │   ├── command-bus/
@@ -685,6 +686,7 @@ frontend/src/
 │   │   │   ├── geo/
 │   │   │   │   └── index.ts  # 路由与守卫
 │   │   │   └── services/
+│   │   │       ├── autoLocationMark.ts  # 进入系统自动 IP 定位并标记 loc=ip（失败静默）
 │   │   │       ├── userLocationContext.ts  # 用户定位上下文
 │   │   │       └── userPositionCache.ts  # 用户位置缓存
 │   │   ├── map-adapter/
@@ -714,15 +716,19 @@ frontend/src/
 │   │   │   └── runtimeMapTokens.ts  # 运行时地图 token 池（纯基础设施，仅依赖 @/api/backend，自 ol 域迁入）
 │   │   ├── ui/
 │   │   │   ├── index.ts  # 路由与守卫
-│   │   │   └── loading.ts  # 全局 loading 控制（文案由调用方 t('loading.*')）
+│   │   │   ├── loading.ts  # 全局 loading 控制（文案由调用方 t('loading.*')）
+│   │   │   ├── ThemedSelect.ts  # 系统主题下拉控件逻辑（替代原生 select）
+│   │   │   └── ThemedSelect.vue  # 系统主题下拉控件视图
 │   │   ├── url-state/
 │   │   │   ├── codec/  # 短码编解码分片
 │   │   │   │   ├── cesiumPose.ts  # Cesium 相机位姿编解码
 │   │   │   │   └── positions.ts  # 经纬度/罗盘状态编解码（含共享位宽常量）
+│   │   │   ├── appVersionQuery.ts  # 首页 URL ?v= 版本参数注入（幂等、replaceState）
 │   │   │   ├── compassThemeCode.ts  # 五种罗盘主题 cid ↔ cs 主题编号共享映射
 │   │   │   ├── crypto.ts  # URL 状态短码编解码入口（re-export codec/*）
 │   │   │   ├── index.ts  # 路由与守卫
 │   │   │   ├── urlConstants.ts  # URL 常量
+│   │   │   ├── urlParamSanitizer.ts  # URL 占位参数清洗（s/loc/p/cs 空值剔除）
 │   │   │   ├── urlQueryReader.ts  # hash/query 参数统一读取
 │   │   │   ├── useBasemapUrlMapping.ts  # 底图 URL 参数映射
 │   │   │   ├── useMapViewUrlState.ts  # 地图视图 URL 状态（2D/3D 切换）

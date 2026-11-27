@@ -194,7 +194,7 @@
     font-weight: 700;
     padding: 9px 10px;
     cursor: pointer;
-    transition: all 0.2s ease;
+    transition: background, border-color, color 0.2s ease;
 }
 
 .point-btn:hover {

@@ -487,7 +487,7 @@
 }
 
 .icon-toggle:active {
-    transform: scale(0.92);
+    transform: scale(0.96);
 }
 
 .icon-toggle.hd-on,
@@ -823,7 +823,7 @@
 }
 
 .custom-url-btn:active {
-    transform: scale(0.94);
+    transform: scale(0.96);
 }
 
 .detected-format-hint {
@@ -963,7 +963,7 @@
 }
 
 .close-panel-btn:active {
-    transform: scale(0.9);
+    transform: scale(0.96);
 }
 
 .layer-list {
@@ -1051,7 +1051,7 @@
 }
 
 .visibility-btn:active {
-    transform: scale(0.9);
+    transform: scale(0.96);
 }
 
 .visibility-btn.off {

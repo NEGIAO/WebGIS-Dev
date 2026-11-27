@@ -450,3 +450,7 @@ Sprint 3（穿插）：P3-1 容器二轮（O1/O2 交替）→ P2-1 bundle 分析
   - [ ] (建议) 若确认无需支持 search 形式，在 README/Guide 明确「参数一律走 hash」；否则改为 `${pathname}${search}#${hash}` 并在删除 `cs` 时同时清理 search 中的同名 key。
 
 
+
+- [ ] **历史源码注释中的 V3.7.15 曾用号残留**（2026-11-26 · 暂存区 Code Review / 版本归并时发现，按 Force_command §2.5 只记不改，日志 [2026-11-26-staged-code-review-version-merge.md](../LLM_record/26-11/2026-11-26/2026-11-26-staged-code-review-version-merge.md)）：
+  - [ ] (现象) `backend/api/agent_chat/db.py:649` 注释写「V3.7.15：运行时 clamp 上限对齐 schema」，但该号已被 2026-11-22 归并进 V3.7.8（见 CHANGELOG 归并注），属历史曾用号；本次版本统一目标为 V3.7.14，该注释与本批暂存区无关。
+  - [ ] (建议) 作为独立 L1 注释订正任务处理；不要在 IP 地理中枢批次中顺手改动。

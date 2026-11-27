@@ -11,7 +11,8 @@
  * 在线判定（V3.5.25 重构，统计逻辑完全由后端承担）：
  * - 唯一主动信号 = SSE 长连接本身。后端以"连接是否存活"计数在线（引用计数，
  *   同身份多标签页不误杀），并以读路径 disconnect 探测及时感知半开连接，
- *   见 backend/api/realtime_stats.py。前端正常态零轮询、零心跳请求。
+ *   见 backend/api/realtime_stats.py。前端保留 30s 轻量对账拉取，防止 SSE
+ *   事件丢失后界面数字长期停留在旧值；presence ping 每 25s 显式续期。
  * - SSE 不可达期间，后端以"普通鉴权 API 请求的搭车活跃记录"判定是否仍在
  *   线（浏览页面必然伴随 API 活动，前端无需为此发送任何额外请求）；
  *   心跳过期由后端扫描协程即时剔除并广播，下线显示不再有长静默期。
@@ -46,15 +47,19 @@ import {
     getOrCreateGuestDeviceId,
     getPresenceClientId,
 } from '@common/user/services/auth';
+import { getGuestToken } from '@common/user/services/guestTokenStore';
 
 const SSE_ENDPOINT = '/api/statistics/stream';
 const TICKET_ENDPOINT = '/api/statistics/ticket';
 const PRESENCE_PING_ENDPOINT = '/api/statistics/presence/ping';
 const PRESENCE_OFFLINE_ENDPOINT = '/api/statistics/presence/offline';
+const REALTIME_ENDPOINT = '/api/statistics/realtime';
 const INITIAL_RETRY_MS = 2000;
 const MAX_RETRY_MS = 30000;
-/** SSE 断开时的轻量保活间隔（仅内存 tracker，不查统计 DB） */
+/** presence 客户端存活心跳间隔（SSE 连接期也持续发送，仅内存 tracker） */
 const FALLBACK_PING_MS = 25000;
+/** SSE 事件丢失时，30s 对账拉取一次实时统计，避免界面数字长期陈旧 */
+const STATS_REFRESH_MS = 30000;
 /** 后端每 30s 周期广播：若超过 65s 仍无事件到达（如休眠/半开断网），切回前台时强制重连 */
 const SILENT_STALL_MS = 65000;
 
@@ -68,6 +73,7 @@ let _dead = false;
 let _connecting = false;
 let _connectionGeneration = 0;
 let _fallbackPingTimer: any = null;
+let _statsRefreshTimer: any = null;
 let _offlineBeaconBound = false;
 let _offlineBeaconSent = false;
 let _lastStatsEventAt = 0;
@@ -80,6 +86,8 @@ const _callbacks = new Set<(data: any) => void>();
 
 // ─── 回前台消息积压合并（rAF 合并同一渲染帧内的连续更新）───
 let _pendingData: any = null;
+let _pendingAt = 0;
+let _lastNotifyAt = 0;
 let _notifyScheduled = false;
 let _notifyHandle: any = null;
 let _notifyUsesAnimationFrame = false;
@@ -89,8 +97,13 @@ function _flushNotify() {
     _notifyHandle = null;
     if (_pendingData) {
         const d = _pendingData;
+        const at = _pendingAt;
         _pendingData = null;
-        _notify(d);
+        _pendingAt = 0;
+        if (at >= _lastNotifyAt) {
+            _lastNotifyAt = at;
+            _notify(d);
+        }
     }
 }
 
@@ -106,8 +119,12 @@ function _notify(data: any) {
 }
 
 /** 合并多次同步到达的 online_stats 为下一帧一次更新（回前台积压防护） */
-function _scheduleNotify(data: any) {
+function _scheduleNotify(data: any, at: number = Date.now()) {
+    // 旧连接事件 / 旧对账快照不得覆盖新快照。
+    if (at <= _lastNotifyAt) return;
+    if (_notifyScheduled && at <= _pendingAt) return;
     _pendingData = data;
+    _pendingAt = at;
     if (_notifyScheduled) return;
     _notifyScheduled = true;
     if (typeof requestAnimationFrame === 'function') {
@@ -152,6 +169,17 @@ function _buildPresenceHeaders(
                 : '';
     if (token) {
         headers.Authorization = `Bearer ${token}`;
+    } else {
+        // 游客身份与登录同口径（V3.7.12）：presence ping 携带已验签 guest token，
+        // 后端才能把游客按真实在线用户统计，不再依赖 /auth/me 搭车保活。
+        try {
+            const guestToken = getGuestToken();
+            if (guestToken) {
+                headers['X-Guest-Token'] = guestToken;
+            }
+        } catch {
+            /* storage 不可用时忽略 */
+        }
     }
     try {
         const deviceId = getOrCreateGuestDeviceId();
@@ -247,28 +275,62 @@ function _stopFallbackPing() {
     }
 }
 
+/** 单次显式在线续期：服务端只认该请求作为 liveness，SSE 写出不作为存活证据。 */
+async function _sendPresencePingOnce() {
+    if (_dead) return;
+    try {
+        const clientId = typeof getPresenceClientId === 'function' ? getPresenceClientId() : '';
+        let deviceId = '';
+        try {
+            deviceId = getOrCreateGuestDeviceId();
+        } catch {
+            /* ignore */
+        }
+        await backendAPI.post(
+            PRESENCE_PING_ENDPOINT,
+            { client_id: clientId || undefined, guest_device_id: deviceId || undefined },
+            { headers: _buildPresenceHeaders() },
+        );
+    } catch {
+        /* 保活失败交给 SSE 重试 */
+    }
+}
+
 function _startFallbackPing() {
     _stopFallbackPing();
     if (_dead) return;
-    _fallbackPingTimer = setInterval(async () => {
-        if (_dead || connected.value) return;
-        try {
-            const clientId = typeof getPresenceClientId === 'function' ? getPresenceClientId() : '';
-            let deviceId = '';
-            try {
-                deviceId = getOrCreateGuestDeviceId();
-            } catch {
-                /* ignore */
-            }
-            await backendAPI.post(
-                PRESENCE_PING_ENDPOINT,
-                { client_id: clientId || undefined, guest_device_id: deviceId || undefined },
-                { headers: _buildPresenceHeaders() },
-            );
-        } catch {
-            /* 保活失败交给 SSE 重试 */
-        }
+    // V3.7.11：SSE 连接期也必须显式心跳。服务端已将“写出成功”从存活判据中移除，
+    // 若这里仍只在断线时发 ping，代理下半开 SSE 会一直被误判为在线。
+    // 首包立即发送，避免“换取 ticket 成功但尚未到第一个 25s 周期”窗口内被判离线；
+    // ticket/realtime 等只读端点现已不再反向标活。
+    void _sendPresencePingOnce();
+    _fallbackPingTimer = setInterval(() => {
+        void _sendPresencePingOnce();
     }, FALLBACK_PING_MS);
+}
+
+function _stopStatsRefresh() {
+    if (_statsRefreshTimer) {
+        clearInterval(_statsRefreshTimer);
+        _statsRefreshTimer = null;
+    }
+}
+
+/** SSE 为主、30s 对账为辅：即使 online_stats 事件丢失，界面人数也能收敛到后端真值。 */
+function _startStatsRefresh() {
+    _stopStatsRefresh();
+    if (_dead) return;
+    _statsRefreshTimer = setInterval(async () => {
+        if (_dead) return;
+        try {
+            // backendAPI 自动附加 X-Presence-Client-Id；不会触发无 client_id 的匿名活跃误判。
+            const resp = await backendAPI.get(REALTIME_ENDPOINT);
+            const payload = resp?.data ?? resp;
+            if (payload && typeof payload === 'object') _scheduleNotify(payload);
+        } catch {
+            /* SSE 仍在重试；对账失败静默 */
+        }
+    }, STATS_REFRESH_MS);
 }
 
 function _closeActiveEventSourceOnUnload() {
@@ -311,12 +373,12 @@ async function _syncAuthStateAndReconnectIfChanged() {
     try {
         // 先等待旧身份 offline 上送完成，再重建新身份 SSE：消除同 client_id 下的并发竞态，
         // 避免滞后到达的旧 offline 误杀刚建连的新连接，或旧 session 心跳滞留。
-        if (prevToken) {
-            await _sendPresenceBeacon(PRESENCE_OFFLINE_ENDPOINT, {
-                tokenOverride: prevToken,
-                force: true,
-            });
-        }
+        // V3.7.17：即使 prevToken 为空（登录前游客态），也必须上送旧身份 offline。
+        // 否则游客 SSE 会跨登录存活，登录后再多出 1~2 个游客 presence。
+        await _sendPresenceBeacon(PRESENCE_OFFLINE_ENDPOINT, {
+            tokenOverride: prevToken || '',
+            force: true,
+        });
         if (_dead) return;
         reconnect();
         // 异步窗口内若再次切换了 token，由下一轮继续对齐
@@ -350,6 +412,9 @@ function _watchAuthChanges() {
 function _handleVisibilityChange() {
     if (typeof document !== 'undefined' && document.hidden) return;
     if (_dead) return;
+    // 回前台立即续期：后台标签页定时器会被浏览器节流到 ~60s，
+    // 依赖 25s 周期心跳可能在弱网/深度节流下跨过服务端 150s 窗口。
+    void _sendPresencePingOnce();
     if (!connected.value && !_eventSource && !_connecting) {
         _retryMs = INITIAL_RETRY_MS;
         if (_retryTimer) {
@@ -370,7 +435,17 @@ function _handleVisibilityChange() {
 
 function _handleNetworkOnline() {
     if (_dead) return;
+    void _sendPresencePingOnce();
     if (!connected.value && !_connecting) {
+        reconnect();
+        return;
+    }
+    // 网络恢复时 connected 可能为旧状态；静默超时同样强制重连。
+    if (
+        connected.value &&
+        _lastStatsEventAt > 0 &&
+        Date.now() - _lastStatsEventAt > SILENT_STALL_MS
+    ) {
         reconnect();
     }
 }
@@ -412,6 +487,7 @@ async function connect() {
     _bindVisibilityListener();
     _bindOfflineBeacon();
     _watchAuthChanges();
+    _startStatsRefresh();
 
     const baseUrl = _buildUrl();
     if (!baseUrl) {
@@ -459,14 +535,16 @@ async function connect() {
         connected.value = true;
         _retryMs = INITIAL_RETRY_MS; // 连接成功后重置退避
         _lastStatsEventAt = Date.now();
-        _stopFallbackPing();
+        // SSE 已连接也要保持 presence ping：它是服务端刷新 SSE last_seen 的唯一依据。
+        _startFallbackPing();
     };
 
     es.addEventListener('online_stats', (event) => {
+        if (_dead || generation !== _connectionGeneration || _eventSource !== es) return;
         try {
             const data = JSON.parse(event.data);
             _lastStatsEventAt = Date.now();
-            _scheduleNotify(data); // rAF 合并，防护回前台积压爆发
+            _scheduleNotify(data, _lastStatsEventAt); // rAF 合并 + 新旧时序判定
         } catch (_e) {
             // 解析失败静默跳过
         }
@@ -477,7 +555,7 @@ async function connect() {
         connected.value = false;
         es.close();
         _eventSource = null;
-        // 断线：指数退避重连；SSE 不可用期间用页面打开时的 presence ping 兜底
+        // 断线：指数退避重连；presence ping 持续发送，作为 tracker 的客户端存活证据
         // （仅内存 tracker，非 HF keep-alive）。
         _startFallbackPing();
         _scheduleRetry();
@@ -506,6 +584,7 @@ function _disconnect() {
         clearTimeout(_retryTimer);
         _retryTimer = null;
     }
+    _stopStatsRefresh();
 }
 
 function disconnect(options: { sendOffline?: boolean } = {}) {

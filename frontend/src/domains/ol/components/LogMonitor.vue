@@ -144,7 +144,7 @@
     cursor: pointer;
     border-radius: 2px;
     font-weight: 700;
-    transition: all 0.2s;
+    transition: background, color 0.2s;
 }
 
 .type-btn.active {
@@ -280,7 +280,7 @@
     font-size: 11px;
     border-radius: 4px;
     cursor: pointer;
-    transition: all 0.2s;
+    transition: background, color 0.2s;
     border: 1px solid transparent;
     white-space: nowrap;
     /* 防止按钮文字换行 */
@@ -380,7 +380,7 @@
     height: 8px;
     border-radius: 50%;
     background: #3f3f46;
-    transition: all 0.3s;
+    transition: background, box-shadow 0.3s;
 }
 
 .status-dot.active {
@@ -413,7 +413,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    transition: all 0.2s;
+    transition: background, border-color 0.2s;
 }
 
 .custom-checkbox.checked {

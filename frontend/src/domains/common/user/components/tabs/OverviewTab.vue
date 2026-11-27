@@ -524,7 +524,7 @@
     font-weight: 600;
     color: var(--text-primary);
     cursor: pointer;
-    transition: all 0.15s;
+    transition: background, border-radius, color, font-size, font-weight, gap, padding 0.15s;
     text-align: right;
 }
 
@@ -581,7 +581,7 @@
     justify-content: center;
     gap: 8px;
     box-shadow: 0 3px 10px rgba(var(--brand-primary-rgb), 0.28);
-    transition: all 0.18s ease;
+    transition: background, border-radius, box-shadow, color, font-size, font-weight, gap, height, margin-top 0.18s ease;
     margin-top: 8px;
 }
 

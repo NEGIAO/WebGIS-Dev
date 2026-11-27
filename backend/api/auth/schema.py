@@ -228,10 +228,47 @@ def init_auth_tables_sync(conn) -> None:
         _safe_execute(conn, "ALTER TABLE sessions ADD COLUMN last_seen_at TEXT NOT NULL DEFAULT ''")
         # 存量回填 created_at：僵尸会话 created_at 久远 → 判离线；活跃旧会话首次请求即被心跳刷新
         _safe_execute(conn, "UPDATE sessions SET last_seen_at = created_at WHERE last_seen_at = ''")
+    # V3.7.14：统一 IP 地理中枢落库列——签发时解析一次，多处复用（历史行为留空）
+    for geo_col in ("ip_city", "ip_region", "ip_country"):
+        if geo_col not in session_columns:
+            _safe_execute(conn, f"ALTER TABLE sessions ADD COLUMN {geo_col} TEXT NOT NULL DEFAULT ''")
     _safe_execute(conn, "CREATE INDEX IF NOT EXISTS idx_sessions_last_seen ON sessions(last_seen_at)")
     _safe_execute(conn, "CREATE INDEX IF NOT EXISTS idx_sessions_username ON sessions(username)")
     _safe_execute(conn, "CREATE INDEX IF NOT EXISTS idx_sessions_expires_at ON sessions(expires_at)")
     _safe_execute(conn, "CREATE INDEX IF NOT EXISTS idx_sessions_guest_uid ON sessions(guest_uid)")
+
+    # 表：expired_sessions（V3.7.12 会话历史归档）
+    # 只存历史副本，任何鉴权路径都不读取；用于回源排查「这个 token 何时被签发/为何失效」。
+    _safe_execute(conn, """
+        CREATE TABLE IF NOT EXISTS expired_sessions (
+            token TEXT PRIMARY KEY,
+            username TEXT NOT NULL DEFAULT '',
+            role TEXT NOT NULL DEFAULT '',
+            guest_uid TEXT,
+            guest_device_id TEXT,
+            ip TEXT,
+            user_agent TEXT,
+            requires_email_binding INTEGER NOT NULL DEFAULT 0,
+            created_at TEXT NOT NULL DEFAULT '',
+            expires_at TEXT NOT NULL DEFAULT '',
+            last_seen_at TEXT NOT NULL DEFAULT '',
+            ip_city TEXT NOT NULL DEFAULT '',
+            ip_region TEXT NOT NULL DEFAULT '',
+            ip_country TEXT NOT NULL DEFAULT '',
+            archived_at TEXT NOT NULL,
+            archive_reason TEXT NOT NULL DEFAULT ''
+        )
+    """)
+    expired_columns = {
+        str(dict(row).get("name") or "")
+        for row in conn.execute("PRAGMA table_info(expired_sessions)").fetchall()
+    }
+    for geo_col in ("ip_city", "ip_region", "ip_country"):
+        if geo_col not in expired_columns:
+            _safe_execute(conn, f"ALTER TABLE expired_sessions ADD COLUMN {geo_col} TEXT NOT NULL DEFAULT ''")
+    _safe_execute(conn, "CREATE INDEX IF NOT EXISTS idx_expired_sessions_archived_at ON expired_sessions(archived_at)")
+    _safe_execute(conn, "CREATE INDEX IF NOT EXISTS idx_expired_sessions_username ON expired_sessions(username)")
+    _safe_execute(conn, "CREATE INDEX IF NOT EXISTS idx_expired_sessions_guest_uid ON expired_sessions(guest_uid)")
 
     # 表：user_metrics
     _safe_execute(conn, """
@@ -505,6 +542,43 @@ def init_auth_tables_sync(conn) -> None:
     _safe_execute(conn, "CREATE INDEX IF NOT EXISTS idx_email_codes_email ON email_verification_codes(email)")
     _safe_execute(conn, "CREATE INDEX IF NOT EXISTS idx_email_codes_expires ON email_verification_codes(expires_at)")
     _safe_execute(conn, "CREATE INDEX IF NOT EXISTS idx_email_codes_purpose ON email_verification_codes(purpose)")
+
+    # 三类身份（admin / registered / guest）统一由 sessions 表承载会话真值：
+    # 游客 HMAC token 签发时同样写入 sessions，管理员删行即失效，不再另建撤销表。
+    # idx_sessions_guest_uid 已在 sessions 建表段创建，此处只补 role 索引（避免重复建索引）
+    _safe_execute(conn, "CREATE INDEX IF NOT EXISTS idx_sessions_role ON sessions(role)")
+
+    # 管理员实时在线镜像表：只保留当前在线身份，由后台任务按内存 tracker 动态刷新。
+    # 该表是“展示视图”，不参与在线判定；在线真值始终以 tracker 的显式心跳为准。
+    _safe_execute(conn, """
+        CREATE TABLE IF NOT EXISTS admin_online_presence (
+            presence_id TEXT PRIMARY KEY,
+            display_name TEXT NOT NULL DEFAULT '',
+            role TEXT NOT NULL DEFAULT 'guest',
+            identity_type TEXT NOT NULL DEFAULT 'guest',
+            guest_uid TEXT NOT NULL DEFAULT '',
+            guest_device_id TEXT NOT NULL DEFAULT '',
+            device_presence_id TEXT NOT NULL DEFAULT '',
+            client_ids TEXT NOT NULL DEFAULT '[]',
+            session_count INTEGER NOT NULL DEFAULT 0,
+            sse_connections INTEGER NOT NULL DEFAULT 0,
+            ip TEXT NOT NULL DEFAULT '',
+            ip_city TEXT NOT NULL DEFAULT '',
+            ip_region TEXT NOT NULL DEFAULT '',
+            ip_country TEXT NOT NULL DEFAULT '',
+            latitude REAL,
+            longitude REAL,
+            coord_source TEXT NOT NULL DEFAULT 'unknown',
+            user_agent TEXT NOT NULL DEFAULT '',
+            first_seen_at TEXT NOT NULL DEFAULT '',
+            last_seen_at TEXT NOT NULL DEFAULT '',
+            last_heartbeat_at TEXT NOT NULL DEFAULT '',
+            refreshed_at TEXT NOT NULL DEFAULT ''
+        )
+    """)
+    _safe_execute(conn, "CREATE INDEX IF NOT EXISTS idx_admin_online_presence_role ON admin_online_presence(role)")
+    _safe_execute(conn, "CREATE INDEX IF NOT EXISTS idx_admin_online_presence_last_seen ON admin_online_presence(last_seen_at)")
+    _safe_execute(conn, "CREATE INDEX IF NOT EXISTS idx_admin_online_presence_ip ON admin_online_presence(ip)")
 
     # Persist corruption/recovery audit events. Failed attempts are first written as
     # JSON manifests and are synchronized here once a usable database is available.

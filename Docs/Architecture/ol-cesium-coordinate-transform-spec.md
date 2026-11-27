@@ -63,6 +63,11 @@ olZoom = someConstant2 - Math.log2(cesiumHeight)
 
 这种设计不可靠。
 
+代码校准：这里禁止的是建立**固定常数比例**映射，不是禁止同名 API。项目仍保留
+`olZoomToCesiumHeight` / `cesiumHeightToOlZoom` 两个兼容接口
+（`viewScale/compat.ts:59,80`），但内部走 canonical 链路，不是上面的硬编码公式；
+详见 §30。
+
 原因：
 
 Cesium 的 camera.height 并不唯一决定屏幕上的地面尺度。
@@ -342,53 +347,43 @@ export function groundResolutionToWebMercatorResolution(
 必须限制：
 
 ```text
--85.05112878 <= latitude <= 85.05112878
+-85.0511287798 <= latitude <= 85.0511287798
 ```
+
+代码校准：唯一常量来源是 `viewScale/constants.ts:11` 的
+`WEB_MERCATOR_MAX_LATITUDE = 85.0511287798`；换算函数内部通过
+`clampWebMercatorLatitude`（`webMercator.ts:53`）钳制纬度，调用方不要硬编码近似值。
 
 ---
 
 # 8. 统一视图状态 ViewState
 
-建立独立的数据结构，例如：
+代码校准：全库没有 `UnifiedViewState` 这个命名类型（仅 `conversion.ts:4` 的注释提及）。
+实现没有建立独立的 `UnifiedViewState` 接口，而是由两类对象承载同一份状态：
+
+1. 宿主运行时快照 `RuntimeMapState`
+   （`frontend/src/domains/common/chat/agent/mapCommand/shared.ts:19`），
+   携带 `center`、`ol.zoom`、`ol.resolution`、`viewportWidth` / `viewportHeight` 等字段；
+2. 转换函数返回的局部对象字面量（`conversion.ts` 的 `olViewToCanonical` /
+   `cesiumViewToCanonical`），形状由 JSDoc 描述。例如 `olViewToCanonical` 返回：
 
 ```ts
-export interface UnifiedViewState {
-  center: {
-    longitude: number;
-    latitude: number;
-    height?: number;
-  };
-
-  scale: {
-    canonicalResolution: number;
-  };
-
-  ol: {
-    zoom: number;
-    resolution: number;
-  };
-
-  cesium: {
-    height: number;
-    heading: number;
-    pitch: number;
-    roll: number;
-    fovY: number;
-  };
-
-  viewport: {
-    width: number;
-    height: number;
-  };
+{
+  center: { longitude: number; latitude: number };
+  canonicalResolution: number;
+  ol: { zoom: number | null; resolution: number };
+  cesium: { height: number; heading: number; pitch: number; roll: number };
 }
 ```
 
+因此本文后续凡涉及“统一视图状态”，均指上述数据流，而非某个名为 `UnifiedViewState` 的类型。
+
 注意：
 
-真正的 canonical 真值是：
+真正的 canonical 真值是返回值中的：
 
 ```js
-scale.canonicalResolution
+canonicalResolution
 ```
 
 而：
@@ -446,10 +441,10 @@ const canonicalResolution =
   );
 ```
 
-保存：
+保存为 `olViewToCanonical(...)` 返回对象的：
 
 ```js
-UnifiedViewState.scale.canonicalResolution
+canonicalResolution
 ```
 
 ---
@@ -503,19 +498,15 @@ camera.getPickRay(...)
 scene.globe.pick(ray, scene)
 ```
 
-如果项目场景存在 Terrain，必须优先获得真实 Terrain 地面的交点。
+如果项目场景存在 Terrain，`globe.pick` 会优先命中地形表面，无需切换接口。
 
-如果 terrain 不可用，再退化到：
-
-```js
-viewer.camera.pickEllipsoid(...)
-```
-
-或者：
-
-```js
-rayEllipsoid
-```
+代码校准（原“退化到 `pickEllipsoid` / `rayEllipsoid`”属于未实现的建议）：
+`viewScale` 链路只走 `scene.globe.pick`（注入为 `globePick`，见 `browserAdapter.ts:53-59`
+与 `cesiumScale.ts:174-221`）；单次命中失败返回 `null`，按候选点回退后仍全部失败则返回 `null`。
+`camera.pickEllipsoid` 仅用于绘制/测量等模块（如
+`frontend/src/domains/cesium/composables/draw/scenePicker.ts`），不参与视图尺度测量。
+浏览器端射线完全无法求交时回退到解析模型
+（`cesiumCameraToGroundResolution` / `measureNadirSphereChord`），而不是椭球拾取。
 
 ---
 
@@ -570,7 +561,7 @@ meters / screen pixel
 1. viewport center
 2. viewport center + 小范围偏移
 3. 多个候选点取有效结果
-4. 如果完全无法求交，使用 camera 高度 + FOV 的退化方案
+4. 如果完全无法求交，退化到 camera 高度 + FOV 的解析模型
 ```
 
 候选点例如：
@@ -584,6 +575,9 @@ meters / screen pixel
   [0.4, 0.5]
 ]
 ```
+
+代码校准：`cesiumScale.ts:181-187` 的默认 `candidatePoints` 正是以上五个归一化坐标；
+`deltaPixel` 默认 1（见 §14），两者均可通过 `getCesiumGroundResolution` 的选项注入覆盖。
 
 ---
 
@@ -745,10 +739,10 @@ $$
 代码：
 
 ```js
-export function groundResolutionToCameraHeight({
+export function groundResolutionToCesiumHeight({
   groundResolution,
-  viewportHeight,
-  fovY
+  fovY,
+  viewportHeight
 }) {
   return (
     groundResolution * viewportHeight
@@ -758,6 +752,10 @@ export function groundResolutionToCameraHeight({
   );
 }
 ```
+
+代码校准：实际导出名为 `groundResolutionToCesiumHeight`
+（`viewScale/cesiumScale.ts:45`），公式与本一致；`fovY`、视口高度缺省时
+模块内有兜底值（`DEFAULT_FOVY_RAD`、`DEFAULT_VIEWPORT_HEIGHT`）。
 
 注意：
 
@@ -855,42 +853,46 @@ groundResolution ↑
 
 # 21. 任意 pitch 使用二分法求相机高度
 
-推荐：
+代码校准：实际导出名为 `solveCameraHeightBinary`（`viewScale/cesiumScale.ts:239`）。
+它不直接依赖 Cesium，而是要求注入 `setCameraHeight` 与 `measure` 回调；
+容差采用相对量 `toleranceRatio`（默认 1e-6），而非固定米数。
+该函数目前只是备用数值求解器，2D ⇄ 3D 切换流程（`useHomeEngineSwitch.ts`）未调用，
+切换流程实际采用 §34 的单次比例校正。
 
 ```js
-function solveCameraHeight({
+function solveCameraHeightBinary({
   targetGroundResolution,
-  minHeight,
-  maxHeight,
-  tolerance,
-  maxIterations
+  setCameraHeight,
+  measure,
+  minHeight = 1,
+  maxHeight = 50000000,
+  toleranceRatio = 1e-6,
+  maxIterations = 60
 }) {
   let low = minHeight;
   let high = maxHeight;
+  let best = null;
 
   for (let i = 0; i < maxIterations; i++) {
     const mid = (low + high) / 2;
-
     setCameraHeight(mid);
+    const measured = measure();
 
-    const measured =
-      getCesiumGroundResolution();
-
-    if (
-      Math.abs(measured - targetGroundResolution)
-      <= tolerance
-    ) {
+    if (typeof measured !== 'number' ||
+        !Number.isFinite(measured) || measured <= 0) {
+      high = mid; // 该分支不可测：收缩到下半区继续
+      continue;
+    }
+    if (Math.abs(measured - targetGroundResolution)
+        <= targetGroundResolution * toleranceRatio) {
       return mid;
     }
-
-    if (measured < targetGroundResolution) {
-      low = mid;
-    } else {
-      high = mid;
-    }
+    if (measured < targetGroundResolution) low = mid;
+    else high = mid;
+    best = (low + high) / 2;
   }
 
-  return (low + high) / 2;
+  return best;
 }
 ```
 
@@ -932,7 +934,13 @@ screen ray → terrain intersection
 
 直接通过当前 Cesium viewport 的真实地面尺度获得 OL zoom。
 
-这是最稳定的方案。
+这是最稳定的方案（Precision 模式）。
+
+代码校准：Realtime 模式确实提供了一个受限的解析逆解
+`groundResolutionToTiltedCameraHeight`（`cesiumScale.ts:86`）：平面近似下
+θ = |pitch + 90°| 被钳制在 60° 以内（斜距 h/cosθ），正俯视且 `earthModel='sphere'`
+时再对球面弦长做两次比例迭代（`c0→h1`、`c1→h2`）。它用于初值/无需渲染的快速估算，不能取代 §11–§14
+的射线实测；超出 θ≤60° 或存在 Terrain 时仍以实测为准。
 
 ---
 
@@ -1104,96 +1112,131 @@ height = 500.5 * Math.pow(2, 5.32 - zoom);
 
 项目最终实现不能依赖固定比例。
 
+代码校准：`viewScale/compat.ts` 中同名的 `olZoomToCesiumHeight` /
+`cesiumHeightToOlZoom` 仍存在且被调用（如 `useHomeEngineSwitch.ts:721`），
+它们内部逐层经过 resolution 与 groundResolution 换算，没有缓存
+`ZOOM_HEIGHT_RATIO` 常量。禁止的是固定比例/硬编码数值，不是禁止这些兼容接口本身。
+
 ---
 
 # 28. 需要封装独立模块
 
-建议创建：
+代码校准：实际目录为 `frontend/src/domains/common/utils/viewScale/`，共 10 个 `.ts` 文件，
+没有 `canonicalScale` 模块（§3 的 canonical resolution 作为字段/中间量散布在各模块中）：
 
 ```text
-src/
-  utils/
-    viewScale/
-      constants.js
-      webMercator.js
-      openlayersScale.js
-      cesiumScale.js
-      canonicalScale.js
-      conversion.js
-      precision.js
-      index.js
+frontend/src/domains/common/utils/viewScale/
+  constants.ts                 # 常量 SSOT（纬度上限、像素步长、容差、求解参数）
+  precision.ts                 # nearlyEqual / normalizeNegativeZero / clamp*
+  constants-and-precision.ts   # 上述两者的兼容聚合入口
+  webMercator.ts               # zoom ↔ resolution、纬度修正（§6/§7）
+  openlayersScale.ts           # OL 尺度解析：显式 resolution 优先（§5/§9）
+  cesiumScale.ts               # 解析模型 + 射线测量 + 二分求解（§10–§14/§18–§21）
+  browserAdapter.ts            # 浏览器适配：注入 pickRay / globe.pick / distance（§11）
+  conversion.ts                # olViewToCanonical / cesiumViewToCanonical 等高层接口（§31/§32）
+  compat.ts                    # olZoomToCesiumHeight / cesiumHeightToOlZoom 兼容别名
+  index.ts                     # 桶式导出（§30）
 ```
+
+`viewScale/index.ts:8-23` 为对外入口：`constants`、`precision`、`webMercator`、
+`openlayersScale`、`cesiumScale` 全量导出，`conversion.ts` 的六个转换函数具名导出，
+再从 `compat.ts` 导出两个兼容别名。`browserAdapter.ts` 由旧入口
+`frontend/src/domains/common/utils/viewScaleConverter.ts` 单独再导出。
 
 ---
 
-# 29. constants.js
+# 29. constants.ts
 
-至少提供：
+代码校准：常量 SSOT 为 `viewScale/constants.ts`，实际内容（含 §7 的纬度上限）：
 
-```js
+```ts
 export const EARTH_RADIUS = 6378137;
-
 export const DEFAULT_TILE_SIZE = 256;
-
-export const WEB_MERCATOR_MAX_LATITUDE =
-  85.0511287798;
-
+export const WEB_MERCATOR_MAX_LATITUDE = 85.0511287798;
 export const DEFAULT_PIXEL_DELTA = 1;
-
 export const DEFAULT_ABSOLUTE_TOLERANCE = 1e-10;
-
 export const DEFAULT_RELATIVE_TOLERANCE = 1e-10;
+
+export const WEB_MERCATOR_INITIAL_RESOLUTION =
+  (2 * Math.PI * EARTH_RADIUS) / DEFAULT_TILE_SIZE;
+export const DEFAULT_FOVY_RAD = Math.PI / 3;
+export const DEFAULT_VIEWPORT_HEIGHT = 768;
+
+export const MIN_CAMERA_HEIGHT = 1;
+export const MAX_CAMERA_HEIGHT = 50_000_000;
+export const MIN_CESIUM_HEIGHT = MIN_CAMERA_HEIGHT;   // 兼容别名
+export const MAX_CESIUM_HEIGHT = MAX_CAMERA_HEIGHT;   // 兼容别名
+export const MIN_OL_ZOOM = 0;
+export const MAX_OL_ZOOM = 22;
+
+export const SOLVE_MIN_HEIGHT = MIN_CAMERA_HEIGHT;
+export const SOLVE_MAX_HEIGHT = MAX_CAMERA_HEIGHT;
+export const SOLVE_TOLERANCE_RATIO = 1e-6;
+export const SOLVE_MAX_ITERATIONS = 60;
 ```
+
+该模块不读取项目版本号；版本信息以根 `README.md` 为唯一来源，本文不硬编码版本号。
 
 ---
 
 # 30. API 设计
 
-提供：
+代码校准：以下为 `viewScale` 模块对外提供的实际名称（桶入口 `viewScale/index.ts`、
+旧入口 `viewScaleConverter.ts`；原文档旧名已更正）。
+
+投影与纬度（§6/§7，`webMercator.ts`）：
 
 ```js
 olZoomToResolution(...)
-```
-
-```js
 olResolutionToZoom(...)
+webMercatorResolutionToGroundResolution(...)   // 原 resolutionToGroundResolution
+groundResolutionToWebMercatorResolution(...)   // 原 groundResolutionToResolution
+clampWebMercatorLatitude(...)
 ```
 
-```js
-resolutionToGroundResolution(...)
-```
+OL 侧（`openlayersScale.ts`）与 Cesium 侧解析（`cesiumScale.ts`）：
 
 ```js
-groundResolutionToResolution(...)
+resolveOlScale(...)
+cesiumNadirHeightToGroundResolution(...)
+groundResolutionToCesiumHeight(...)            // 原 groundResolutionToCameraHeight
+cesiumCameraToGroundResolution(...)
+groundResolutionToTiltedCameraHeight(...)      // 受限解析逆解，θ≤60°
+measureNadirSphereChord(...)
+solveCameraHeightBinary(...)                   // 原 solveCameraHeight，需注入回调
 ```
+
+射线实测（`browserAdapter.ts`，由 `viewScaleConverter.ts` 再导出）：
 
 ```js
 getCesiumGroundResolution(...)
+measureCesiumGroundResolutionFromRays(...)
 ```
 
-```js
-groundResolutionToCesiumHeight(...)
-```
+高层转换（`conversion.ts`）：
 
 ```js
-cesiumCameraToGroundResolution(...)
-```
-
-```js
-olViewToCanonicalScale(...)
-```
-
-```js
-cesiumViewToCanonicalScale(...)
-```
-
-```js
-canonicalScaleToOlView(...)
-```
-
-```js
+olViewToCanonical(...)                          // 原 olViewToCanonicalScale
+cesiumViewToCanonical(...)                      // 原 cesiumViewToCanonicalScale
 canonicalScaleToCesiumView(...)
+canonicalScaleToOlView(...)
+convertOlViewToCesium(...)
+convertCesiumViewToOl(...)
 ```
+
+兼容别名（`compat.ts`，仍被 `useHomeEngineSwitch.ts:721`、`CesiumAdapter.ts`、
+`useCesiumSceneFacade.ts` 等调用）：
+
+```js
+olZoomToCesiumHeight(...)
+cesiumHeightToOlZoom(...)
+```
+
+注意：§1/§2.1/§27/§49/§51 禁止的是**用固定常数把 zoom 与 height 直接互转**，
+不是禁止这两个同名接口。它们内部已改为走 canonical 链路
+（zoom → resolution → groundResolution → height 及其逆），
+与 `convertOlViewToCesium` / `convertCesiumViewToOl` 尺度一致；
+任何新代码仍不得内联 `500.5 * 2^(z-...)` 这类一元映射。
 
 ---
 
@@ -1325,9 +1368,13 @@ OL center
 9. 等待 Cesium 渲染
 10. 再次测量实际 groundResolution
 11. 检查与 target 是否满足 tolerance
-12. 如果误差过大，进行一次校正
+12. 如果误差过大，按 curH × (targetG / measured) 做一次比例校正
 13. 完成同步
 ```
+
+代码校准：步骤 12 的实际实现见 `useHomeEngineSwitch.ts:547-549`：读取当前高度 `curH`
+与射线实测 `measured`，计算 `correctedH = curH * (targetG / measured)`，
+通过 `setCameraHeightKeepOrientation` 回写；只校正一次，不做迭代（与 §21 的备用二分器不同）。
 
 ---
 
@@ -1352,7 +1399,8 @@ OL center
 
 # 36. 2D → 3D → 2D 验证
 
-必须建立自动测试：
+自动测试待建：前端 `package.json` 没有 `test` 脚本，`backend/tests/` 中没有 viewScale
+相关测试。以下为拟定测试方案，不代表已存在可执行的自动化测试：
 
 ```js
 const originalZoom = 5.32;
@@ -1587,6 +1635,12 @@ requestAnimationFrame(() => {
 }
 ```
 
+代码校准：当前实现（`useHomeEngineSwitch.ts:552-565`）输出的是上述报告的子集，
+且 `sourceResolution` **固定写 `null`**（未从 OL 侧读取 resolution），
+另有 `analyticCameraHeight`、`correctedCameraHeight` 两个字段。
+该报告通过 `console.info('[ViewScale][Report]', ...)` 常驻输出，不受 debug 开关门控；
+`recoveredZoom` / `zoomError` 等字段尚未由这次校正报告覆盖。
+
 ---
 
 # 45. 重要：不要为了“5.32 → 500.5 → 5.32”硬编码数值
@@ -1791,7 +1845,7 @@ pitch = -90°
 2D → 3D → 2D
 ```
 
-自动精度测试。
+自动精度测试（待建，见 §36）。
 
 ## Phase 7
 
@@ -1801,7 +1855,7 @@ pitch = -90°
 3D → 2D → 3D
 ```
 
-自动精度测试。
+自动精度测试（待建，见 §36）。
 
 ---
 
@@ -2025,90 +2079,65 @@ Canonical Ground Resolution
 
 ---
 
-# 52. Agent 的具体执行要求
+# 52. 实现现状说明（原“Agent 的具体执行要求”）
 
-请直接检查项目现有代码后完成以下工作：
+本节原为 20 条任务书式执行要求；以当前工作区代码为准，落实情况如下。
 
-1. 找到 OpenLayers View 创建位置。
-2. 找到当前 OL zoom / resolution 获取与设置逻辑。
-3. 找到 Cesium Viewer 创建位置。
-4. 找到 Cesium Camera 同步逻辑。
-5. 找到当前 2D → 3D 切换代码。
-6. 找到当前 3D → 2D 切换代码。
-7. 找到所有现存的 zoom → height、height → zoom 计算。
-8. 删除或废弃现有不可靠的固定比例映射。
-9. 建立独立 `viewScale` 工具模块。
-10. 建立 `canonicalResolution`。
-11. 建立 OL ↔ canonical 转换。
-12. 建立 Cesium → canonical 实际地面尺度计算。
-13. 建立 canonical → Cesium 相机尺度计算。
-14. 接入现有 2D → 3D。
-15. 接入现有 3D → 2D。
-16. 不改变项目已有的其他地图功能。
-17. 不改变已有 URL、图层、瓦片加载、中心点等业务逻辑。
-18. 对现有同步流程进行最小侵入式修改。
-19. 增加 debug 信息与误差检测。
-20. 增加至少一组自动双向精度测试。
+## 已完成
+
+1. OL View 与 zoom / resolution 的读取、Cesium Viewer / Camera 同步逻辑均已接入；
+   2D → 3D 与 3D → 2D 切换在 `useHomeEngineSwitch.ts` 中实现，URL / 图层 / 中心点
+   仍由既有 query patch 逻辑处理（这部分未纳入本次逐项核对）。
+2. 已建立独立 `viewScale` 工具模块（10 个 `.ts` 文件，见 §28），
+   旧入口 `viewScaleConverter.ts` 改为兼容再导出。
+3. 已建立 `canonicalResolution` 及 OL ↔ canonical、Cesium → canonical、
+   canonical → Cesium 的转换（§30）。
+4. Cesium → canonical 的射线实测通过注入 `globe.pick` 实现（§11–§14），
+   解析模型用于 Realtime；canonical → Cesium 提供正俯视与受限倾斜解析解（§18–§21）。
+5. 旧固定比例映射已迁到走 canonical 链路的兼容接口
+   （`viewScaleConverter.ts:6-7` 注释、`compat.ts:59,80`），没有 `ZOOM_HEIGHT_RATIO` 常量。
+6. 切换流程接入了一次比例校正（§34）与常驻误差报告（§44）。
+
+## 待建 / 未完成
+
+1. 自动双向精度测试：前端 `package.json` 无 `test` 脚本，
+   `backend/tests/` 无 viewScale 测试（见 §36）。
+2. 误差报告的 `sourceResolution` 目前固定为 `null`，未接入真实 OL resolution（见 §44）。
+3. `solveCameraHeightBinary` 仅为备用求解器，切换流程未调用（见 §21）。
 
 ---
 
-# 53. Agent 完成后的必须回报内容
+# 53. 实现现状说明（原“Agent 完成后的必须回报内容”）
 
-修改完成后必须明确说明：
+本节原为完成后的 12 条回报清单；按当前代码逐项说明如下，不再作为待办任务书：
 
-```text
-1. 修改了哪些文件
-2. 每个文件修改了什么
-3. 当前统一尺度变量叫什么
-4. OL → Cesium 使用什么公式
-5. Cesium → OL 使用什么公式
-6. Cesium groundResolution 如何计算
-7. 是否支持任意 pitch
-8. 是否支持 Terrain
-9. 浮点误差 tolerance 设置是多少
-10. 2D → 3D → 2D 测试结果
-11. 3D → 2D → 3D 测试结果
-12. 是否还有已知限制
-```
+1. **改动文件**：坐标变换能力集中在
+   `frontend/src/domains/common/utils/viewScale/*.ts`（10 个文件，见 §28）；
+   接入点在 `frontend/src/app/composables/useHomeEngineSwitch.ts`；旧入口
+   `frontend/src/domains/common/utils/viewScaleConverter.ts` 保留兼容再导出。
+2. **统一尺度变量**：`canonicalResolution`（米/像素），由转换函数返回；
+   不存在名为 `UnifiedViewState` 的类型（见 §8）。
+3. **OL → Cesium**：`olZoomToResolution` → `webMercatorResolutionToGroundResolution`
+   （纬度修正）→ `groundResolutionToCesiumHeight` /
+   `groundResolutionToTiltedCameraHeight`（§18、§22）。
+4. **Cesium → OL**：射线实测 `getCesiumGroundResolution`（`globe.pick`，中心 + 四邻候选点）
+   或 Realtime 解析模型 → canonical → `groundResolutionToWebMercatorResolution`
+   → `olResolutionToZoom`。
+5. **Cesium groundResolution 计算**：屏幕中心与右移 1 像素两条 pick ray 的地面交点距离
+   （`measureCesiumGroundResolutionFromRays`，`deltaPixel = 1`）；全部候选点未命中返回 `null`。
+6. **任意 pitch**：Realtime 提供 θ ≤ 60° 的平面近似解析解；Precision 以射线实测为真值。
+7. **Terrain**：`globe.pick` 内部优先命中地形；开/关 Terrain 自动生效，无单独接口。
+8. **浮点容差**：`nearlyEqual` 默认绝对/相对容差均为 1e-10；
+   备用求解器 `solveCameraHeightBinary` 默认相对容差 1e-6（切换流程未调用）。
+9. **往返测试**：尚未建立自动测试。原 z=4 往返方案保留为**待建验收方案**：
+   OL 默认 z=4 → 转 Cesium 得到相机高度 → 再转回 OL 得到 z →
+   反复执行且不引入其它干扰，观察 z 是否变化；若出现任何变化即判失败并需继续排查，
+   直到多次往返后 z 保持不变才算达标。当前前端 `package.json` 无 test 脚本、
+   `backend/tests/` 无 viewScale 测试，因此不能视为已达标（见 §36）。
+10. **已知限制**：误差报告的 `sourceResolution` 固定为 `null`（见 §44）；
+    倾斜解析解受 θ ≤ 60° 平面假设约束；射线测量失败时回退解析模型而非椭球拾取；
+    校正只做一次比例修正，不做二分迭代。
 
-最终代码必须保证：
-
-```text
-OL 5.32
-    ↓
-Cesium
-    ↓
-OL
-```
-
-能够稳定恢复：
-
-```text
-≈ 5.32
-```
-
-而不能依赖：
-
-```text
-固定经验常数
-```
-
-或：
-
-```text
-zoom ↔ camera.height
-```
-
-的一元硬编码映射。
-
-有一个测试方案，需要通过了才行，才算是达标：
-1、ol中的z默认为4
-2、将ol引擎转换为cesium，z转换为对应的高度值
-3、cesium 转换为ol，得到ol中的z值；
-
-4、反复进行2、3步骤且不进行其它干扰操作，观察ol中的z是否有变化，是否可逆；
-5、若z出现任何变化，则说明失败，需要重新debug，优化
-
-6、反复进行4、5，直到满足要求，经过ol与cesium的多次转换，z仍然不变，则说明测试成功
-
-针对这个md文档的
+最终仍以 §1/§2/§51 的原则为准：转换必须经由 canonical 中间层与纬度修正，
+不得依赖固定经验常数或一元 zoom ↔ height 硬编码映射；往返稳定性
+（例如 `OL 5.32 → Cesium → OL ≈ 5.32`）待自动测试建立后验证。

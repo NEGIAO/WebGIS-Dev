@@ -124,7 +124,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    transition: all 0.15s;
+    transition: background, border-radius, color, height, width 0.15s;
 }
 
 .header-controls .icon-btn:hover {

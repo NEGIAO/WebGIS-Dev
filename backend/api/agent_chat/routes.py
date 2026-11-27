@@ -11,9 +11,9 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 
 from api.auth import (
     normalize_role,
+    require_account,
     require_admin,
     require_api_access_or_guest_noconsume,
-    require_login,
     resolve_quota_subject,
 )
 from api.auth.quota import (
@@ -211,8 +211,10 @@ async def agent_chat_completions(
         if ip_location:
             location_context = ip_location
 
+    # V3.7.16：优先使用前端构建的完整工具提示词；缺省时回退运行时配置。
+    user_system_prompt = str(payload.system_prompt or "").strip()
     system_prompt = _build_agent_system_prompt(
-        str(runtime.get("system_prompt") or DEFAULT_AGENT_SYSTEM_PROMPT),
+        user_system_prompt or str(runtime.get("system_prompt") or DEFAULT_AGENT_SYSTEM_PROMPT),
         location_context,
         payload.map_context,
     )
@@ -843,8 +845,10 @@ async def agent_chat_completions_stream(
         if ip_location:
             location_context = ip_location
 
+    # V3.7.16：优先使用前端构建的完整工具提示词；缺省时回退运行时配置。
+    user_system_prompt = str(payload.system_prompt or "").strip()
     system_prompt = _build_agent_system_prompt(
-        str(runtime.get("system_prompt") or DEFAULT_AGENT_SYSTEM_PROMPT),
+        user_system_prompt or str(runtime.get("system_prompt") or DEFAULT_AGENT_SYSTEM_PROMPT),
         location_context,
         payload.map_context,
     )
@@ -979,9 +983,9 @@ async def get_agent_user_config(
 @router.post("/user-config")
 async def update_agent_user_config(
     payload: AgentUserConfigUpdateRequest,
-    session: Dict[str, Any] = Depends(require_login),
+    session: Dict[str, Any] = Depends(require_account),
 ) -> Dict[str, Any]:
-    """更新当前用户的个人 Agent 配置。"""
+    """更新当前用户的个人 Agent 配置（账号级：游客 403）。"""
     username = str(session.get("username") or "")
     updates = _model_dump_compat(payload, exclude_unset=True)
 

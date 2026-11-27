@@ -70,7 +70,7 @@
         0 10px 30px rgba(0, 0, 0, 0.5),
         inset 0 0 15px rgba(0, 255, 255, 0.1);
     backdrop-filter: blur(6px);
-    transition: all 0.4s cubic-bezier(0.25, 0.8, 0.25, 1);
+    transition: background, border-color, box-shadow 0.4s cubic-bezier(0.25, 0.8, 0.25, 1);
 }
 
 /* 霓虹底色流光 */
@@ -279,7 +279,7 @@
    ========================================================================== */
 .nav-guide-fade-enter-active,
 .nav-guide-fade-leave-active {
-    transition: all 0.4s cubic-bezier(0.19, 1, 0.22, 1);
+    transition: filter, opacity, transform 0.4s cubic-bezier(0.19, 1, 0.22, 1);
 }
 
 /* 展开动效：进入时伴随轻微缩小和向上平移，模拟平视显示器初始化挂载 */

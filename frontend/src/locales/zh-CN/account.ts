@@ -46,6 +46,7 @@ export default {
             prefsSaved: '偏好设置已保存',
             prefsSaveFailed: '偏好设置保存失败',
             loggedOut: '已退出登录',
+            sessionExpired: '会话过期，请重新登陆',
             passwordRequired: '请完整填写密码信息',
             passwordChanged: '密码已修改，请重新登录',
             passwordChangeFailed: '密码修改失败，请稍后重试',

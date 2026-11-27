@@ -48,6 +48,7 @@ backend/
 │   │   ├── routes.py                              # 认证路由（邮箱注册/登录/绑定/重置/OAuth/游客身份签发）
 │   │   ├── schema.py                              # DDL、邮箱账号迁移与数据库维护事件同步
 │   │   ├── session.py                             # 会话管理、邮箱与受限绑定 session
+│   │   ├── session_archive.py                     # 过期/被取代/被撤销会话归档到 expired_sessions + 30min 清理任务（V3.7.12）
 │   │   ├── system_config.py                       # 系统配置
 │   │   ├── throttle.py                            # 登录失败节流（进程内滑动窗口，账号维度优先）
 │   │   ├── user.py                                # 用户 CRUD + 游客名由 guest_uid 派生（防撞名）
@@ -81,7 +82,8 @@ backend/
 ├── services/                                      # 共享业务服务
 │   ├── __init__.py
 │   ├── historical_imagery.py                      # ESRI Wayback 历史影像元数据同步与持久化（表创建 + 原子替换 + 每日/启动调度）
-│   └── ip_geo.py                                  # IP 地理定位统一服务
+│   ├── ip_geo.py                                  # IP 地理定位统一服务（四级降级 + TTL 缓存）
+│   └── request_geo.py                             # 统一 IP 地理中枢（请求级缓存 + 私网跳过，一处解析多处复用）
 │
 ├── scripts/                                       # 运维/辅助脚本
 │   ├── fetch_wayback_layers.py                    # ESRI Wayback 目录拉取 CLI（--json/--code/--urls/--pure-urls）

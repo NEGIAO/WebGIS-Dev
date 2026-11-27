@@ -4,6 +4,7 @@
 
 import asyncio
 import json
+import logging
 import re
 import sqlite3
 from datetime import datetime, timedelta, timezone
@@ -16,11 +17,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
 
 from api.auth import get_auth_db_connection, require_admin
-from core.secret_masking import (
-    MASKED_WRITEBACK_DETAIL,
-    assert_no_masked_writeback,
-    mask_sensitive_row,
-)
+from api.auth.guest_token import revoke_guest_uid
 from api.auth.system_config import (
     _get_default_basemap_index_sync,
     _set_default_basemap_index_sync,
@@ -28,6 +25,8 @@ from api.auth.system_config import (
     _set_system_config_value_sync,
 )
 from config import get_settings, l3_status_flags
+
+logger = logging.getLogger(__name__)
 
 IDENTIFIER_PATTERN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
@@ -181,11 +180,11 @@ def _list_table_rows_sync(
             (*params, safe_limit, safe_offset),
         ).fetchall()
 
-    # V3.7.6：敏感列（token / password_hash / key_value 等）逐行掩码后下发，
-    # 表浏览器不再裸 dump 会话令牌与密钥明文
+    # V3.7.11：按用户明确指令，管理员接口返回真实值，便于直接管理 API key 与数据库。
+    # 该接口受 require_admin 保护；不再做敏感列掩码。
     return {
         "total": total,
-        "rows": [mask_sensitive_row(dict(row)) for row in rows],
+        "rows": [dict(row) for row in rows],
     }
 
 
@@ -222,15 +221,6 @@ def _insert_row_sync(table_name: str, row: Dict[str, Any]) -> int:
             detail="插入数据不能为空",
         )
 
-    # V3.7.6：掩码占位值不得写回（防 UI 把掩码读值误当明文保存造成静默污染）
-    try:
-        assert_no_masked_writeback(row)
-    except ValueError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(exc),
-        )
-
     keys = [_validate_identifier(k) for k in row.keys()]
     cols = ", ".join(_quote_identifier(k) for k in keys)
     holders = ", ".join(["?"] * len(keys))
@@ -254,15 +244,6 @@ def _update_rows_sync(table_name: str, where: Dict[str, Any], values_payload: Di
 
     safe_table = _quote_identifier(table_name)
     where_sql = _build_where_clause(where)
-
-    # V3.7.6：掩码占位值不得写回（同 insert 守卫）
-    try:
-        assert_no_masked_writeback(values_payload)
-    except ValueError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(exc),
-        )
 
     set_parts: List[str] = []
     set_values: List[Any] = []
@@ -297,6 +278,45 @@ def _delete_rows_sync(table_name: str, where: Dict[str, Any]) -> int:
         cursor = conn.execute(sql, where_sql["values"])
         conn.commit()
         return int(cursor.rowcount or 0)
+
+
+def _collect_guest_contexts_before_delete_sync(
+    table_name: str, where: Dict[str, Any]
+) -> List[Dict[str, str]]:
+    """删除 sessions / guest_identity_records 前收集受影响游客的 uid 与设备 ID。
+
+    游客 token 签发时已写入 sessions（role=guest），删行即可让浏览器端失效；
+    这里同时取 guest_device_id，才能按设备派生的 presence_id 撤销在线状态。
+    """
+    if table_name not in {"sessions", "guest_identity_records"}:
+        return []
+    where_sql = _build_where_clause(where)
+    try:
+        with _db_connection() as conn:
+            rows = conn.execute(
+                f"SELECT guest_uid, username, guest_device_id FROM {_quote_identifier(table_name)} "
+                f"WHERE {where_sql['sql']}",
+                where_sql["values"],
+            ).fetchall()
+    except sqlite3.Error as exc:
+        logger.warning("收集待撤销游客身份失败 (%s): %s", table_name, exc)
+        return []
+    contexts: List[Dict[str, str]] = []
+    seen: set[str] = set()
+    for row in rows:
+        data = dict(row)
+        uid = str(data.get("guest_uid") or "").strip()
+        if not uid:
+            username = str(data.get("username") or "").strip()
+            if username.startswith("guest_"):
+                uid = username
+        if not uid.startswith("guest_") or uid in seen:
+            continue
+        seen.add(uid)
+        contexts.append(
+            {"guest_uid": uid, "guest_device_id": str(data.get("guest_device_id") or "")}
+        )
+    return contexts
 
 
 def _publish_announcement_sync(message: str, admin_username: str) -> int:
@@ -451,11 +471,29 @@ async def delete_table_rows(
     payload: DeleteRowRequest,
     _session: Dict[str, Any] = Depends(require_admin),
 ) -> Dict[str, Any]:
+    contexts = await asyncio.to_thread(
+        _collect_guest_contexts_before_delete_sync, table_name, payload.where
+    )
     affected = await asyncio.to_thread(_delete_rows_sync, table_name, payload.where)
+    revoked_uids: List[str] = []
+    if affected:
+        for context in contexts:
+            uid = context["guest_uid"]
+            revoked_uids.append(uid)
+            await asyncio.to_thread(revoke_guest_uid, uid, f"admin-delete-{table_name}")
+            device_id = context.get("guest_device_id", "")
+            if not device_id:
+                continue
+            try:
+                from api.realtime_stats import device_presence_id, get_online_tracker
+
+                get_online_tracker().drop_presence(device_presence_id(device_id))
+            except Exception:
+                pass
     return {
         "status": "success",
         "message": "删除完成",
-        "data": {"affected": affected},
+        "data": {"affected": affected, "revoked_guest_uids": revoked_uids},
     }
 
 

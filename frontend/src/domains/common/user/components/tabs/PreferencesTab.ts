@@ -6,6 +6,7 @@
 import { computed, defineComponent, type ExtractPropTypes, type PropType, type SetupContext } from 'vue';
 import { ASSET_BASE_URL } from '@/config/publicRuntime';
 import { detectSystemLanguage, useLocale } from '@common/app/useLocale';
+import ThemedSelect from '@common/ui/ThemedSelect.vue';
 
 const LANGUAGE_OPTIONS = Object.freeze([
     { value: 'zh-CN', labelKey: 'preferences.languages.zh' },
@@ -150,6 +151,7 @@ export type PreferencesTabProps = ExtractPropTypes<typeof propDefine>;
 
 export default defineComponent({
     name: 'PreferencesTab',
+    components: { ThemedSelect },
     props: propDefine,
     emits: [
         'update:preference-draft',
@@ -178,6 +180,11 @@ export class Instance {
     public preferenceHint;
     public basemapOptions;
     public modelOptions;
+    /** 系统主题下拉选项（由原生 select 迁移，文案统一走 i18n） */
+    public themedBasemapOptions;
+    public themedLanguageOptions;
+    public themedUnitOptions;
+    public themedModelOptions;
     public selectedBasemapUnavailable;
     public selectedModelUnavailable;
     public thirdPartyAvatarUrl;
@@ -235,6 +242,47 @@ export class Instance {
                     seen.add(modelId);
                     return true;
                 });
+        });
+
+        this.themedBasemapOptions = computed(() => {
+            const options = [
+                { value: '', label: this.t('preferences.followSystem') },
+                ...this.basemapOptions.value,
+            ];
+            const current = String(this.draftPreferences.value.default_basemap || '');
+            if (current && !options.some((opt) => String(opt.value) === current)) {
+                options.push({
+                    value: current,
+                    label: this.t('preferences.outsideList', { value: current }),
+                });
+            }
+            return options;
+        });
+        this.themedLanguageOptions = computed(() =>
+            LANGUAGE_OPTIONS.map((option) => ({
+                value: option.value,
+                label: this.t(option.labelKey),
+            })),
+        );
+        this.themedUnitOptions = computed(() =>
+            UNIT_OPTIONS.map((option) => ({
+                value: option.value,
+                label: this.t(option.labelKey),
+            })),
+        );
+        this.themedModelOptions = computed(() => {
+            const options = [
+                { value: '', label: this.t('preferences.autoDispatch') },
+                ...this.modelOptions.value.map((id) => ({ value: id, label: id })),
+            ];
+            const current = String(this.draftPreferences.value.preferred_agent_model || '');
+            if (current && !options.some((opt) => String(opt.value) === current)) {
+                options.push({
+                    value: current,
+                    label: this.t('preferences.outsideList', { value: current }),
+                });
+            }
+            return options;
         });
 
         this.selectedBasemapUnavailable = computed(() => {
@@ -311,6 +359,11 @@ export class Instance {
     public handleSelectChange = (key: string, event: Event) => {
         const target = event.target as HTMLSelectElement | null;
         this.updateDraftField(key, target?.value ?? '');
+    };
+
+    /** 系统主题下拉回调：直接接收选项值，不再依赖浏览器 select 的 event.target */
+    public handleThemedSelectChange = (key: string, value: string | number) => {
+        this.updateDraftField(key, String(value ?? ''));
     };
 
     public handleSavePreferences = () => {

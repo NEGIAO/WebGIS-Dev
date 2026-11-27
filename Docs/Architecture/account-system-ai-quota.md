@@ -49,7 +49,7 @@
 
 | 文件 | 职责 |
 |------|------|
-| `frontend/src/api/backend/client.js` | axios 实例 + 请求拦截器（自动附加 `Authorization: Bearer`、游客 `X-Share-Mode` / `X-Guest-Device-Id`） |
+| `frontend/src/api/backend/client.ts` | axios 实例 + 请求拦截器（登录令牌从 `sessionStorage` 读取并附加 `Authorization: Bearer`；游客设备 ID 与签名 guest token 均持久化在 `localStorage`（`guestTokenStore.ts`），另附 `X-Share-Mode` / `X-Guest-Device-Id` / `X-Guest-Token`） |
 | `frontend/src/domains/common/user/stores/useAuthStore.ts` | Pinia 认证状态：`ensureValidSession` 校验 token、`requiresEmailBinding` 计算属性 |
 | `frontend/src/app/RegisterView.vue` | 注册页面：邮箱 + 验证码 + 密码 + 昵称 |
 | `frontend/src/domains/common/user/components/` | 用户中心面板：`FloatingAccountPanel.vue`、`AdminControlPanel.vue`、`ApiKeysManagementPanel.vue` |
@@ -77,7 +77,7 @@ flowchart LR
 
 | 角色 | 常量 | 来源 | 日限额 |
 |------|------|------|--------|
-| 访客 | `ROLE_GUEST = "guest"` | 游客登录（`user/123`）或无 token 自动创建临时 session | 100 次 |
+| 访客 | `ROLE_GUEST = "guest"` | 游客登录（用户名 `user` + L1 配置 `GUEST_PASSWORD`，不硬编码明文）；临时 session 仅由 `require_api_access_or_guest` 为无 token 请求铸造 | 100 次 |
 | 注册用户 | `ROLE_REGISTERED = "registered"` | 邮箱注册 + 验证码 | 1000 次 |
 | 管理员 | `ROLE_ADMIN = "admin"` | 用户名 `admin` + `SUPER_USER` 环境变量密码 | 不限 |
 
@@ -104,7 +104,7 @@ def normalize_role(raw_role: Optional[str], username: Optional[str]) -> str:
 
 `resolve_quota_subject` 决定配额计量的唯一标识：
 
-- 访客：使用 `guest_uid`（由 IP + User-Agent + 设备 ID 的 SHA-256 前 16 位构成），保证同一设备/浏览器共享配额。
+- 访客：无 token 时 `guest_uid = H(XFF 末跳 IP|UA)`（设备 ID 不参与桶派生，前端自报 `X-Client-IP` 已停用）；持签名 guest token 时验签取 uid（`dependencies.py:108-122`）。两者保证同一身份稳定共享配额。
 - 注册用户 / 管理员：使用 `username`。
 
 ## 4. 注册登录与会话管理
@@ -133,7 +133,7 @@ sequenceDiagram
 
 `POST /api/auth/login` 根据凭证分三条路径：
 
-1. **游客**：用户名 `"user"` + 密码 `"123"` → 生成 `guest_uid` → 分配递增用户名（`user_1`, `user_2`...）→ 创建 guest session。
+1. **游客**：用户名 `"user"` + 密码取自 L1 配置项 `GUEST_PASSWORD`（部署值见配置，不硬编码明文，`constants.py:29`）→ 生成 `guest_uid` → 分配递增用户名 → 创建 guest session。
 2. **管理员**：用户名 `"admin"` → 读取 `SUPER_USER` 环境变量 → `hmac.compare_digest` 比对 → 创建 admin session。若 `SUPER_USER` 未设置且非开发环境，返回 **HTTP 503**（管理员登录被禁用）。
 3. **注册用户**：邮箱 + 密码 → 查询 `users` 表 → 校验 `email_verified=1` + 密码哈希 → 创建 registered session。
 
@@ -144,15 +144,15 @@ sequenceDiagram
 ### 4.4 会话机制
 
 - **存储**：`sessions` 表，token 为 `secrets.token_urlsafe(32)`。
-- **有效期**：`SESSION_EXPIRE_HOURS = 72`（环境变量 `AUTH_SESSION_EXPIRE_HOURS` 可覆盖）。
+- **有效期**：`SESSION_EXPIRE_HOURS = 4`（环境变量 `AUTH_SESSION_EXPIRE_HOURS` 可覆盖，硬上限 4 小时）。
 - **读取时自动维护**：`_get_session_sync` 在每次读取时执行 `normalize_role` 修正 role、同步 `requires_email_binding` 状态、过期自动删除并记录在线时长到 `user_metrics`。
-- **无 token 游客降级**：`require_login` 在请求携带 `X-Share-Mode: 1` 或 `?s=1` 时，自动创建 2 小时临时 guest session（`is_temporary=True`），不返回 401。
+- **无 token 直接拒绝（V3.7.6 fail-closed）**：`require_login` 不再凭 `X-Share-Mode` / `?s=1` / 设备头铸造临时会话；无 token 一律返回 **401 `LOGIN_REQUIRED`**（`dependencies.py:161-167`）。2 小时临时 guest session（`is_temporary=True`）改由 `require_api_access_or_guest` 为游客可达端点铸造（`dependencies.py:290`）。
 
 ### 4.5 依赖注入层级
 
 ```mermaid
 flowchart TD
-    LOGIN["require_login<br/>校验 token 有效（或游客降级）"]
+    LOGIN["require_login<br/>校验 token 有效（无 token → 401 LOGIN_REQUIRED）"]
     API["require_api_access<br/>+ 拒绝未绑定邮箱 + 消耗通用配额"]
     API_GUEST["require_api_access_or_guest<br/>+ 无 token 自动创建 guest session"]
     ADMIN["require_admin<br/>+ normalize_role == admin"]
@@ -186,7 +186,7 @@ flowchart TD
 |------|--------|------|
 | 天气、搜索等通用 API | 1 次 | `require_api_access` / `require_api_access_or_guest` |
 | `POST /api/agent/chat/completions` | 1 次 | `require_api_access_or_guest` → `_consume_api_quota_sync` |
-| `POST /api/download_xyz/submit` | `ceil(tile_count / tiles_per_unit)` | 预扣 + 完成后多退少补 |
+| `GET /api/auth/download-quota/estimate` | 仅估算，不消耗 | `require_api_access_or_guest_noconsume`，返回 cost / remaining / sufficient（`routes.py:1492-1516`）；全仓已无下载提交预扣路由 |
 | `POST /api/agent/chat/proxy` | 不消耗平台配额 | 用户个人 Key 模式，仅记录调用日志 |
 | `POST /api/agent/chat/default-proxy` | 不消耗平台配额 | 使用管理员配置的默认 AI Key |
 
@@ -307,7 +307,7 @@ sequenceDiagram
 | `/api/admin/api-keys/{key_name}/backups` | POST | 追加一个备用 token |
 | `/api/admin/api-keys/{key_name}/backups/{backup_id}` | DELETE | 删除指定备用 token |
 
-支持的 `key_name`：`amap_key`、`agent_api_key`、`agent_token`、`tianditu_tk`、`cesium_ion_token`。
+支持的 `key_name`（`ALLOWED_API_KEYS` 白名单，`api_keys_management.py:32-38`）：`amap_key`、`agent_api_key`、`tianditu_tk`、`cesium_ion_token`、`ovital_tdtkey`。不再包含 `agent_token`。
 
 ## 9. 管理员安全加固
 
@@ -315,15 +315,11 @@ sequenceDiagram
 
 ```python
 def _get_admin_password() -> str:
-    configured = os.getenv("SUPER_USER", "").strip()
-    if configured:
-        return configured
-
-    if os.getenv("APP_ENV", "").strip().lower() == "development":
-        return DEV_DEFAULT_ADMIN_PASSWORD  # "123456"，仅本地开发
-
-    return ""  # 生产环境未配置 → 管理员登录被禁用
+    """获取管理员密码：统一委托配置 loader。"""
+    return get_settings().get_admin_password()
 ```
+
+优先级：L3 `SUPER_USER`（HF Secrets / 本地未提交 `.env`）→ 开发环境回退 `DEV_DEFAULT_ADMIN_PASSWORD` → 其余返回空串（管理员登录禁用）。实现见 `constants.py:504-512`。
 
 - 生产环境**必须**通过 `SUPER_USER` 环境变量注入管理员密码。
 - 未设置时 `_get_admin_password` 返回空字符串，登录路由返回 **HTTP 503**（`"管理员密码未配置，请联系运维设置 SUPER_USER 环境变量"`）。
@@ -343,7 +339,7 @@ def _get_admin_password() -> str:
 
 ## 10. 数据库 Schema 概览
 
-认证与配额相关核心表（由 `init_auth_tables_sync` 幂等创建）：
+认证与配额相关核心表（除下列两张外均由 `init_auth_tables_sync` 幂等创建）：
 
 | 表名 | 用途 |
 |------|------|
@@ -353,8 +349,8 @@ def _get_admin_password() -> str:
 | `agent_user_config` | 用户个人 Agent 配置（api_key, base_url, model, temperature 等） |
 | `user_preferences` | 用户偏好（default_basemap, language, unit_system, preferred_agent_model） |
 | `system_config` | 全局 KV 动态配置 |
-| `api_keys` | 主 API 密钥（key_name, key_value） |
-| `api_key_backups` | 备用密钥池（key_name, key_value, priority, enabled） |
+| `api_keys` | 主 API 密钥（key_name, key_value）——由 API 密钥模块 `api_keys_management.py:83` 创建 |
+| `api_key_backups` | 备用密钥池（key_name, key_value, priority, enabled）——由 `api_keys_management.py:93` 创建 |
 | `email_verification_codes` | 邮箱验证码（email, code, purpose, expires_at, used） |
 | `user_metrics` | 用户统计（login_count, total_login_seconds, total_api_calls） |
 | `guest_identity_records` | 游客身份记录（guest_uid, visit_count, last_seen_at） |
@@ -363,7 +359,7 @@ def _get_admin_password() -> str:
 
 ## 11. 前端集成要点
 
-- **请求拦截**：`client.js` 自动从 `localStorage` 读取 token 附加 `Authorization: Bearer`；无 token 且 URL 含 `?s=1` 时附加 `X-Share-Mode: 1` + `X-Guest-Device-Id`。
+- **请求拦截**：`client.ts` 自动从 `sessionStorage` 读取登录 token 附加 `Authorization: Bearer`；游客设备 ID 与签名 guest token 存 `localStorage`（`guestTokenStore.ts:12,25`），无登录态另附 `X-Guest-Token`；URL 含 `?s=1` 时附加 `X-Share-Mode: 1` + `X-Guest-Allow: 1`（`client.ts:66-90`）。
 - **会话校验**：`useAuthStore.ts` 的 `ensureValidSession` 调用 `GET /api/auth/me` 验证 token 有效性，超时 8 秒自动清除失效 session。
 - **邮箱绑定拦截**：`requiresEmailBinding` 计算属性为 `true` 时，前端阻止用户进入 AI 对话等功能，引导至邮箱绑定流程。
 - **配额展示**：`ChatPanelContent.vue` 从 `/api/agent/chat/config` 获取当日配额快照并展示剩余次数。
@@ -410,7 +406,7 @@ def _get_admin_password() -> str:
 
 1. **按次计量，非按 token**：配额仅统计调用次数，不区分短问短答与长文生成的资源消耗差异。
 2. **SQLite 并发瓶颈**：高并发场景下 SQLite 写锁可能成为配额递增的性能瓶颈（当前 WAL 模式已缓解，但未做连接池）。
-3. **游客配额易绕过**：`guest_uid` 基于 IP + UA + 设备 ID 哈希，清除浏览器存储或更换网络即可重置配额。
+3. **游客配额仍有边界**：无 token 桶已改 `H(XFF 末跳 IP|UA)` 并叠加签名 guest token（签发限频 6 次/小时）；前端不再能靠伪造 `X-Client-IP` / 轮换设备 ID 续杯，但更换网络出口仍可换桶。
 4. **单管理员模型**：仅支持一个 `admin` 账号，无多管理员、RBAC 细粒度权限。
 5. **密钥轮询策略简单**：备用 key 仅在主 key 返回 503 + "key/rate-limit" 时切换，不处理上游 429 直接返回的场景（上游 429 被映射为 503 但 detail 为 "rate-limited upstream"，可触发轮询）。
 6. **无审计日志**：管理员配置变更无独立审计追踪（仅 `updated_at` / `updated_by` 字段）。

@@ -56,6 +56,10 @@ def _generate_account_username_sync(conn, email: str, display_name: str) -> str:
     if len(base) < 3:
         base = f"user_{base}"
     base = base[:18].strip("._-") or "user"
+    # V3.7.12 Code Review：guest_ 前缀专属于游客身份（username = guest_<id>），
+    # OAuth 昵称若恰为 guest_xxx 会撞名并污染按前缀识别游客的管理路径。
+    if base.startswith("guest_"):
+        base = f"user{base[5:]}"
 
     for index in range(20):
         suffix = secrets.token_hex(3) if index == 0 else secrets.token_hex(4)
@@ -160,11 +164,64 @@ def _guest_username_from_uid(guest_uid: str) -> str:
     return compact or "guest_anon"
 
 
+def _guest_visible_username(row_id: int) -> str:
+    """游客的可读用户名：guest_<guest_identity_records.id>。
+
+    与前端 getUserDisplayName 的 guest_<no> 同口径，DB 内不再出现
+    guest_<hex16> 这类无法人工区分的标识。
+
+    ⚠️ 仅用于**展示/关联**的 username；guest_uid（设备/IP 派生的 hex）
+    仍是 HMAC token 验签、在线 presence 去重与配额桶的稳定主键，不得替换。
+    """
+    try:
+        resolved_id = int(row_id or 0)
+    except (TypeError, ValueError):
+        resolved_id = 0
+    return f"guest_{resolved_id}" if resolved_id > 0 else "guest_anon"
+
+
+def _sync_guest_session_usernames(conn: sqlite3.Connection, guest_uid: str, visible: str) -> None:
+    """把同一游客的历史会话 username 对齐为展示名，避免 DB 内两套标识并存。
+
+    尽力而为：老库可能缺 guest_uid 列，测试用内存库可能缺 sessions 表，
+    任一失败都不影响身份主流程。历史归档表 expired_sessions 不改写（保留审计原貌）。
+    """
+    try:
+        conn.execute(
+            "UPDATE sessions SET username = ? WHERE guest_uid = ? AND role = 'guest' AND username != ?",
+            (visible, guest_uid, visible),
+        )
+        conn.commit()
+    except Exception:
+        pass
+
+
+def _canonicalize_guest_username(conn: sqlite3.Connection, guest_uid: str, row_id: int) -> str:
+    """把 guest_identity_records.username 规范化为 guest_<id> 并同步会话。
+
+    采用懒迁移：只在游客下次访问时改一行，不做全表 UPDATE，
+    避免生产库一次性写入造成锁表或破坏历史审计快照。
+    """
+    visible = _guest_visible_username(row_id)
+    try:
+        conn.execute(
+            "UPDATE guest_identity_records SET username = ? WHERE id = ? AND username != ?",
+            (visible, row_id, visible),
+        )
+        conn.commit()
+    except Exception:
+        pass
+    _sync_guest_session_usernames(conn, guest_uid, visible)
+    return visible
+
+
 def _get_or_create_guest_username_sync(guest_uid: str) -> Dict[str, Any]:
     """
     获取或创建游客记录，返回用户名与展示序号。
 
-    - username：由 guest_uid 确定性派生（同设备恒同、不同设备不撞名）；
+    - username：规范化为 guest_<id>（guest_identity_records.id），与用户中心展示一致；
+      插入时仍先用 guest_uid 派生的临时值占位（此时 id 未知），随后在同一连接内
+      用数据库分配的 autoincrement id 回写——不会重现旧版 MAX(id)+1 并发撞名。
     - no：guest_identity_records.id 自增列，即该游客在库内的真序号，
       登录 payload 以 guest_no 回传，前端展示为 guest_<no>。
     """
@@ -178,7 +235,12 @@ def _get_or_create_guest_username_sync(guest_uid: str) -> Dict[str, Any]:
         ).fetchone()
         if existing:
             row = dict(existing)
-            return {"username": str(row.get("username") or resolved), "no": int(row.get("id") or 0)}
+            row_id = int(row.get("id") or 0)
+            stored = str(row.get("username") or "")
+            visible = _guest_visible_username(row_id)
+            if stored != visible:
+                visible = _canonicalize_guest_username(conn, guest_uid, row_id)
+            return {"username": visible, "no": row_id}
 
         try:
             conn.execute(
@@ -206,7 +268,12 @@ def _get_or_create_guest_username_sync(guest_uid: str) -> Dict[str, Any]:
         ).fetchone()
         if row:
             data = dict(row)
-            return {"username": str(data.get("username") or resolved), "no": int(data.get("id") or 0)}
+            row_id = int(data.get("id") or 0)
+            stored = str(data.get("username") or "")
+            visible = _guest_visible_username(row_id)
+            if stored != visible:
+                visible = _canonicalize_guest_username(conn, guest_uid, row_id)
+            return {"username": visible, "no": row_id}
         return {"username": resolved, "no": 0}
 
 

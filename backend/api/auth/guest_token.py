@@ -4,7 +4,7 @@
 设计要点（方案 Docs/TODO/guest-identity-governance-plan.md §3.2）：
 - token = gt1_<b64url(uid|exp)>.<b64url(HMAC-SHA256)>，密钥 GUEST_TOKEN_SECRET（L3）；
 - secret 未配置时签发通道整体关闭（端点 503），验签路径自然回落确定性派生桶；
-- 签发限频按 (XFF末跳IP, UA哈希) 进程内滑动窗口，与 LOGIN_THROTTLE 同为单 worker 语义；
+- 签发限频按 (身份IP, UA哈希) 进程内滑动窗口，与 LOGIN_THROTTLE 同为单 worker 语义；
 - 限频键刻意不含 device_id：轮换设备头无法绕开新身份铸造上限。
 """
 
@@ -15,7 +15,7 @@ import logging
 import threading
 import time
 from collections import deque
-from typing import Deque, Dict, Optional, Tuple
+from typing import Any, Deque, Dict, Optional, Tuple
 
 from config import get_int, get_str
 
@@ -68,9 +68,10 @@ def sign_guest_token(guest_uid: str, ttl_hours: Optional[int] = None) -> Optiona
         return None
 
     ttl = int(ttl_hours) if ttl_hours is not None else get_int(
-        "GUEST_TOKEN_TTL_HOURS", 24, minimum=1, maximum=24 * 90
+        "GUEST_TOKEN_TTL_HOURS", 4, minimum=1, maximum=4
     )
-    ttl = max(1, min(int(ttl), 24 * 90))  # 双保险：硬上限 90 天
+    # 会话/身份 token 统一硬上限 4 小时；这里再钳一次防止调用方显式传大值。
+    ttl = max(1, min(int(ttl), 4))
     exp = int(time.time()) + ttl * 3600
 
     payload = f"{guest_uid}|{exp}".encode("utf-8")
@@ -78,12 +79,8 @@ def sign_guest_token(guest_uid: str, ttl_hours: Optional[int] = None) -> Optiona
     return f"{GUEST_TOKEN_PREFIX}{_b64url_encode(payload)}.{_b64url_encode(signature)}"
 
 
-def verify_guest_token(token: str) -> Optional[str]:
-    """验签并返回游客 uid；任何失败（格式/签名/过期）一律返回 None，不抛异常。
-
-    验签失败属于正常业务路径（token 过期/客户端伪造），依赖方应静默回落
-    确定性派生桶，而非将请求拒之门外。
-    """
+def _decode_guest_token(token: str, *, ignore_expiry: bool = False) -> Optional[str]:
+    """验签并返回游客 uid；任何失败（格式/签名，默认含过期）返回 None。"""
     raw = str(token or "").strip()
     if not raw.startswith(GUEST_TOKEN_PREFIX) or len(raw) > _MAX_TOKEN_LENGTH:
         return None
@@ -115,9 +112,23 @@ def verify_guest_token(token: str) -> Optional[str]:
 
     if not guest_uid.startswith("guest_") or len(guest_uid) > 128:
         return None
-    if exp < int(time.time()):
+    if not ignore_expiry and exp < int(time.time()):
         return None
     return guest_uid
+
+
+def verify_guest_token(token: str) -> Optional[str]:
+    """验签并返回未过期游客 uid；过期/伪造一律返回 None。"""
+    return _decode_guest_token(token)
+
+
+def peek_guest_token_uid(token: str) -> Optional[str]:
+    """仅验签、忽略过期时间，取回原游客 uid。
+
+    用途：token 过期续期时必须复用原身份，只重签 token，不能给同一浏览器
+    分配新的 guest_uid（否则配额桶、历史统计和在线 presence 全部断裂）。
+    """
+    return _decode_guest_token(token, ignore_expiry=True)
 
 
 def guest_token_expiry_seconds(token: str) -> Optional[int]:
@@ -133,6 +144,131 @@ def guest_token_expiry_seconds(token: str) -> Optional[int]:
     except (ValueError, UnicodeDecodeError):
         return None
     return exp - int(time.time())
+
+
+# ─── 游客会话统一落在 sessions 表 ───
+# 三类身份（admin / registered / guest）共用 sessions 作为唯一会话真值：
+# 游客 HMAC token 签发时同时写一行 role='guest' 的 sessions 记录；
+# 管理员删行即失效，验签路径按 token 查表，不再维护第二张撤销表/内存集合。
+
+
+def _guest_session_expiry_iso(token: str) -> str:
+    """把 token 内的 exp 转成与 sessions.expires_at 同格式的本地 ISO 字符串。"""
+    from datetime import datetime
+
+    from .db import _iso
+
+    remaining = guest_token_expiry_seconds(token)
+    if remaining is None:
+        remaining = 0
+    exp_ts = int(time.time()) + max(0, int(remaining))
+    return _iso(datetime.fromtimestamp(exp_ts).astimezone())
+
+
+def register_guest_session(
+    token: str,
+    guest_uid: str,
+    ip: str = "",
+    user_agent: str = "",
+    guest_device_id: str = "",
+    geo: Optional[Any] = None,
+) -> None:
+    """游客 token 签发后同步登记 sessions 行（管理员可在一张表里维护/删除）。
+
+    V3.7.12：登记新 token 前先归档并删除同一 `guest_uid` 的旧 token，
+    sessions 表只保留该游客当前唯一有效 token（历史回源见 expired_sessions）。
+    """
+    from .db import _iso, _utc_now, get_auth_db_connection
+    from .session_archive import supersede_sessions_locked
+
+    uid = str(guest_uid or "").strip()
+    if not token or not uid:
+        return
+    now_iso = _iso(_utc_now())
+    try:
+        with get_auth_db_connection() as conn:
+            supersede_sessions_locked(conn, keep_token=token, guest_uid=uid)
+            conn.execute(
+                """
+                INSERT OR REPLACE INTO sessions (
+                    token, username, role, guest_uid, guest_device_id, ip,
+                    user_agent, requires_email_binding, created_at, expires_at, last_seen_at,
+                    ip_city, ip_region, ip_country
+                ) VALUES (?, ?, 'guest', ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    token,
+                    uid,
+                    uid,
+                    str(guest_device_id or "")[:128],
+                    str(ip or "")[:128],
+                    str(user_agent or "")[:512],
+                    now_iso,
+                    _guest_session_expiry_iso(token),
+                    now_iso,
+                    str(getattr(geo, "city", "") or "") if geo is not None else "",
+                    str(getattr(geo, "region", "") or "") if geo is not None else "",
+                    str(getattr(geo, "country", "") or "") if geo is not None else "",
+                ),
+            )
+            conn.commit()
+    except Exception as exc:
+        logger.warning("登记游客 session 失败: %s", exc)
+
+
+def revoke_guest_uid(guest_uid: str, reason: str = "") -> None:
+    """撤销游客身份：归档并删除该 uid 的全部 sessions 行（含续签产生的多条 token）。"""
+    from .db import get_auth_db_connection
+    from .session_archive import (
+        ARCHIVE_REASON_REVOKED,
+        _row_to_session_dict,
+    )
+
+    uid = str(guest_uid or "").strip()
+    if not uid:
+        return
+    try:
+        with get_auth_db_connection() as conn:
+            rows = conn.execute(
+                "SELECT token, username, role, guest_uid, guest_device_id, ip, user_agent, "
+                "requires_email_binding, created_at, expires_at, last_seen_at "
+                "FROM sessions WHERE role = 'guest' AND (guest_uid = ? OR username = ?)",
+                (uid, uid),
+            ).fetchall()
+            archived_rows = [_row_to_session_dict(row) for row in rows]
+            if archived_rows:
+                from .session_archive import archive_session_rows_locked
+
+                archive_session_rows_locked(conn, archived_rows, ARCHIVE_REASON_REVOKED)
+                conn.executemany(
+                    "DELETE FROM sessions WHERE token = ?",
+                    [(str(row.get("token") or ""),) for row in archived_rows],
+                )
+            conn.commit()
+    except Exception as exc:
+        logger.warning("撤销游客 session 失败: %s", exc)
+
+
+def verify_guest_token_active(token: str) -> Optional[str]:
+    """验签 + 有效期 + sessions 表存在性；删行即失效，无第二套状态。"""
+    uid = verify_guest_token(token)
+    if not uid:
+        return None
+    try:
+        from .db import _iso, _utc_now, get_auth_db_connection
+
+        with get_auth_db_connection() as conn:
+            row = conn.execute(
+                "SELECT 1 FROM sessions WHERE token = ? AND role = 'guest' "
+                "AND expires_at > ? LIMIT 1",
+                (token, _iso(_utc_now())),
+            ).fetchone()
+    except Exception as exc:
+        # DB 暂时不可用时 fail-open 到签名有效身份，避免全体游客被误踢；
+        # 管理员删行后的失效在 DB 恢复的下一次请求即生效。
+        logger.warning("校验游客 session 失败: %s", exc)
+        return uid
+    return uid if row else None
 
 
 class GuestIssueLimiter:
@@ -189,7 +325,8 @@ class GuestIssueLimiter:
 
 
 def issue_limit_key(identity_ip: str, user_agent: str) -> str:
-    """构造限频键：哈希(末跳IP | UA)。刻意不含 device_id。"""
+    """构造限频键：哈希(身份IP | UA)。刻意不含 device_id。身份 IP 为
+    `_extract_identity_ip` 的结果（XFF 最右侧公网跳）。"""
     digest = hashlib.sha256(f"{identity_ip}|{user_agent}".encode("utf-8")).hexdigest()
     return f"issue_{digest[:24]}"
 

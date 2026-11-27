@@ -2,12 +2,13 @@
 
 日期：2026-08-02
 
-适用范围：`frontend/src/domains/ol/services/runtimeMapTokens.js`（核心）、
-`frontend/src/domains/ol/composables/useRuntimeMapTokenPool.js`（轮换）、
-`frontend/src/api/backend/runtime.js`（拉取）、
+适用范围：`frontend/src/domains/common/services/runtimeMapTokens.ts`（核心）、
+`frontend/src/domains/ol/composables/useRuntimeMapTokenPool.ts`（轮换）、
+`frontend/src/api/backend/runtime.ts`（拉取）、
 `backend/api/api_keys_management.py`（后端接口）。
 
-本文说明天地图 `tianditu_tk` 从"管理员在面板录入"到"浏览器直连天地图 API"的全链路：
+本文说明运行时地图密钥（天地图 `tianditu_tk`、Cesium Ion `cesium_ion_token`、高德 `amap_key`、
+奥维 `ovital_tdtkey`）从"管理员在面板录入"到"浏览器直连各地图服务"的全链路：
 拉取、缓存、分发、消费、轮换、刷新。
 
 ---
@@ -19,10 +20,10 @@
 | 点 | 说明 |
 |---|---|
 | **一次性拉取 + 内存缓存** | 启动时拉一次，后续全读模块级变量，零网络开销。对高频场景（底图瓦片每秒数十次请求）至关重要——不可能每次拼 URL 都去查库 |
-| **多 token 池 + 本地轮换** | 支持主 token + 多个备用 token，失败时毫秒级切换，用户无感。比"失败了再问后端拉下一个"快得多 |
+| **4 个 token 池 + 本地轮换** | 天地图 / Cesium Ion / 高德 / 奥维各自维护主 token + 备用数组，失败时毫秒级切换，用户无感。比"失败了再问后端拉下一个"快得多 |
 | **响应式 ref 桥接** | 非响应式的 `cachedTokens` 通过 `tiandituTkRef` 桥接到 Vue 响应式系统，token 切换后组件自动感知 |
 | **SSOT 清晰** | 前端只有一个读取点 `getRuntimeMapTokensSync()`，后端只有一个出口 `get_runtime_map_tokens`，没有散落各处的 `import.meta.env.VITE_TIANDITU_TK` |
-| **后端聚合候选列表** | 后端一次性返回主 token + 备份池，前端无需多次请求拼凑 |
+| **后端聚合候选列表** | 后端按 `FRONTEND_RUNTIME_KEYS` 一次性批量返回 4 个主 token + 各自候选池，前端无需多次请求拼凑 |
 
 ### 可改进的
 
@@ -30,7 +31,7 @@
 |---|---|
 | **轮换无衰减与回退** | 当前是顺序下标递增，永远回不到主 token。如果主 token 只是短暂限流（非封禁），会长期卡在备用 token。建议：失败后记录时间戳，N 分钟后尝试回主 token |
 | **缓存无 TTL** | `cachedTokens` 在内存中直到页面关闭或强制刷新。如果管理员在后台换了 token，已打开的页面不会感知，必须手动触发 `force: true`。建议：对高频应用加一个 5–10 分钟的软过期 |
-| **多 token 池无优先级感知** | 池内 token 平等轮换，无法表达"主 token 优先、备用仅应急"的语义。当前主 token 只是 `tiandituTokens[0]`，与备用无区别 |
+| **token 池无优先级感知** | 池内 token 平等轮换，无法表达"主 token 优先、备用仅应急"的语义。各池主 token 仅为数组首项，与备用无区别 |
 | **失败判定粒度过粗** | `markRuntimeMapTokenFailed` 被调用时并不区分"这个 token 被封"和"网络临时抖动"。一次网络抖动就可能把健康的备用 token 也轮换掉 |
 | **无跨标签页同步** | 多个标签页各自维护独立缓存，A 页轮换到 token2 后，B 页仍用 token1（可能继续失败并重复轮换）。建议：`storage` 事件或 BroadcastChannel 同步轮换状态 |
 
@@ -46,7 +47,7 @@
 ```mermaid
 flowchart TB
     subgraph ADMIN["管理员操作"]
-        PANEL["ApiKeysManagementPanel<br/>录入 / 编辑 / 删除 tianditu_tk"]
+        PANEL["ApiKeysManagementPanel<br/>录入 / 编辑 / 删除 4 类运行时 key"]
     end
 
     subgraph DB["SQLite"]
@@ -55,19 +56,19 @@ flowchart TB
     end
 
     subgraph BE["后端 backend/api/api_keys_management.py"]
-        GRT["get_runtime_map_tokens()<br/>聚合主 token + 候选池"]
+        GRT["get_runtime_map_tokens()<br/>FRONTEND_RUNTIME_KEYS 批量聚合<br/>4 主 token + 候选池"]
     end
 
-    subgraph FE_CORE["前端核心 runtimeMapTokens.js（模块级缓存）"]
+    subgraph FE_CORE["前端核心 runtimeMapTokens.ts（模块级缓存）"]
         LRT["loadRuntimeMapTokens()<br/>启动时拉取一次"]
-        CACHED["cachedTokens<br/>{ tiandituTk, tiandituTokens[] }"]
+        CACHED["cachedTokens<br/>tiandituTk/Tokens · cesiumIonToken/Tokens<br/>amapKey/Keys · ovitalTdtkey/Tdtkeys"]
         GRS["getRuntimeMapTokensSync()<br/>同步读缓存（零网络）"]
-        FAIL["markRuntimeMapTokenFailed()<br/>池内顺序轮换"]
+        FAIL["markRuntimeMapTokenFailed(keyName)<br/>keyName 归一化 → 按池顺序轮换"]
     end
 
     subgraph FE_REACT["响应式桥接"]
         POOL["useRuntimeMapTokenPool<br/>hydrate / retry / 轮换"]
-        REF["tiandituTkRef<br/>Vue 响应式 ref"]
+        REF["tiandituTkRef / ovitalTdtkeyRef<br/>Vue 响应式 ref"]
     end
 
     subgraph FE_CONSUMERS["消费方（6 大场景）"]
@@ -83,7 +84,7 @@ flowchart TB
     PANEL -- "写入" --> AB
     AK --> GRT
     AB --> GRT
-    GRT -- "GET /api/runtime-config/map-tokens<br/>{ tianditu_tk, token_pools }" --> LRT
+    GRT -- "GET /api/runtime-config/map-tokens<br/>{ 4 主 token, token_pools(4), is_set, note }" --> LRT
     LRT --> CACHED
     CACHED --> GRS
     GRS --> POOL
@@ -110,26 +111,31 @@ flowchart TB
 ```mermaid
 sequenceDiagram
     participant APP as 应用启动
-    participant RMT as runtimeMapTokens.js
+    participant RMT as runtimeMapTokens.ts
     participant BE as 后端 API
     participant DB as SQLite
 
     APP->>RMT: loadRuntimeMapTokens()
     RMT->>BE: GET /api/runtime-config/map-tokens
-    BE->>DB: SELECT key_value FROM api_keys WHERE key_name='tianditu_tk'
-    BE->>DB: SELECT key_value FROM api_key_backups WHERE key_name='tianditu_tk'
-    DB-->>BE: 主 token + 备用列表
-    BE-->>RMT: { data: { tianditu_tk, token_pools: { tianditu_tk: [t1, t2] } } }
-    RMT->>RMT: normalizeRuntimeTokenPayload()<br/>cachedTokens.tiandituTk = t1<br/>cachedTokens.tiandituTokens = [t1, t2]
+    BE->>DB: _get_api_keys_sync(FRONTEND_RUNTIME_KEYS)<br/>批量取 4 个 key_name（不再单查 tianditu_tk）
+    BE->>DB: _get_api_key_candidates_sync(key_name)<br/>逐池取候选（api_keys + api_key_backups）
+    DB-->>BE: 4 主 token + 各自备用列表
+    BE-->>RMT: { data: { tianditu_tk, cesium_ion_token, amap_key, ovital_tdtkey,<br/>token_pools(4), is_set, note } }
+    RMT->>RMT: normalizeRuntimeTokenPayload()<br/>4 组 activeTokenIndexes + cachedTokens 各池数组
     RMT-->>APP: 完成（后续全读内存）
 ```
 
-**关键代码**（`runtimeMapTokens.js`）：
+**关键代码**（`runtimeMapTokens.ts`）：
 
-```js
-// 模块级缓存（非响应式，纯内存）
-let cachedTokens = { tiandituTk: '', tiandituTokens: [] };
-let activeTokenIndexes = { tianditu_tk: 0 };
+```ts
+// 模块级缓存（非响应式，纯内存）——4 个池，各含主 token + 数组
+let cachedTokens = {
+    tiandituTk: '', cesiumIonToken: '', amapKey: '', ovitalTdtkey: '',
+    tiandituTokens: [], cesiumIonTokens: [], amapKeys: [], ovitalTdtkeys: [],
+};
+let activeTokenIndexes = {
+    tianditu_tk: 0, cesium_ion_token: 0, amap_key: 0, ovital_tdtkey: 0,
+};
 
 export async function loadRuntimeMapTokens({ force = false } = {}) {
     if (hasLoadedRuntimeTokens && !force) return getRuntimeMapTokensSync();
@@ -162,31 +168,47 @@ const tk = resolveTiandituToken(); // 内部调 getRuntimeMapTokensSync()
 sequenceDiagram
     participant BASEMAP as 底图瓦片
     participant POOL as useRuntimeMapTokenPool
-    participant RMT as runtimeMapTokens.js
-    participant TDT as 天地图 API
+    participant RMT as runtimeMapTokens.ts
+    participant SVC as 地图服务 API
 
-    BASEMAP->>TDT: 请求瓦片 tk=t1
-    TDT-->>BASEMAP: 403（token 被封）
-    BASEMAP->>POOL: retryTiandituLayersWithNextToken()
-    POOL->>RMT: markRuntimeMapTokenFailed('tianditu_tk')
-    RMT->>RMT: activeTokenIndexes.tianditu_tk += 1<br/>cachedTokens.tiandituTk = t2
-    RMT-->>RMT: { switched: true }
-    RMT-->>POOL: 新 token
-    POOL->>POOL: 更新 tiandituTkRef（响应式）
-    BASEMAP->>TDT: 重试瓦片 tk=t2
-    TDT-->>BASEMAP: 200 OK
+    BASEMAP->>SVC: 请求瓦片 tk=t1
+    SVC-->>BASEMAP: 403（token 失效）
+    BASEMAP->>POOL: retryRuntimeTokenLayersWithNextToken({ layerId, reason })
+    POOL->>POOL: resolveLayerTokenPools(layerId)<br/>按 needsContext 判定所属池（天地图 / 奥维）
+    POOL->>RMT: markRuntimeMapTokenFailed(poolKey)
+    RMT->>RMT: keyName 归一化 → activeTokenIndexes[池] += 1<br/>cachedTokens[主 token 字段] = 下一个 token
+    RMT-->>POOL: { switched, tokens }
+    POOL->>POOL: applyRuntimeMapTokens + 更新响应式 ref
+    BASEMAP->>SVC: 重试瓦片 tk=t2
+    SVC-->>BASEMAP: 200 OK
 ```
 
-**关键代码**（`runtimeMapTokens.js`）：
+**关键代码**（`runtimeMapTokens.ts:128-158`）：
 
-```js
-export function markRuntimeMapTokenFailed(keyName) {
-    const tokens = cachedTokens.tiandituTokens;
-    if (tokens.length <= 1) return { switched: false }; // 池内仅 1 个，无法轮换
-    const nextIndex = Math.min(activeTokenIndexes.tianditu_tk + 1, tokens.length - 1);
-    activeTokenIndexes.tianditu_tk = nextIndex;
-    cachedTokens.tiandituTk = tokens[nextIndex];
-    return { switched: true };
+```ts
+export function markRuntimeMapTokenFailed(keyName: any) {
+    const normalizedKey = normalizeRuntimeKeyName(keyName); // 别名归一化（tianditu / gaode / ovital 等）
+    if (!normalizedKey) return { switched: false, tokens: getRuntimeMapTokensSync() };
+
+    const poolKey = normalizedKey === 'cesium_ion_token' ? 'cesiumIonTokens'
+        : normalizedKey === 'amap_key' ? 'amapKeys'
+        : normalizedKey === 'ovital_tdtkey' ? 'ovitalTdtkeys'
+        : 'tiandituTokens';
+    const activeKey = normalizedKey === 'cesium_ion_token' ? 'cesiumIonToken'
+        : normalizedKey === 'amap_key' ? 'amapKey'
+        : normalizedKey === 'ovital_tdtkey' ? 'ovitalTdtkey'
+        : 'tiandituTk';
+    const tokens = cachedTokens[poolKey] || [];
+    if (tokens.length <= 1) return { switched: false, tokens: getRuntimeMapTokensSync() };
+
+    const nextIndex = Math.min((activeTokenIndexes[normalizedKey] || 0) + 1, tokens.length - 1);
+    if (nextIndex === activeTokenIndexes[normalizedKey]) {
+        return { switched: false, tokens: getRuntimeMapTokensSync() }; // 已到末位：提前返回
+    }
+
+    activeTokenIndexes[normalizedKey] = nextIndex;
+    cachedTokens = { ...cachedTokens, [activeKey]: tokens[nextIndex] || '' };
+    return { switched: true, tokens: getRuntimeMapTokensSync() };
 }
 ```
 
@@ -196,7 +218,7 @@ export function markRuntimeMapTokenFailed(keyName) {
 sequenceDiagram
     participant USER as 管理员
     participant PANEL as ApiKeysManagementPanel
-    participant RMT as runtimeMapTokens.js
+    participant RMT as runtimeMapTokens.ts
     participant BE as 后端
 
     USER->>PANEL: 保存新 token
@@ -220,12 +242,11 @@ sequenceDiagram
 | OL 底图（影像） | `basemapConfig.ts` | 同上 | 同上 |
 | OL 底图（矢量） | `basemapConfig.ts` | 同上 | 同上 |
 | OL 底图（矢量注记） | `basemapConfig.ts` | 同上 | 同上 |
-| Cesium 底图 | `useCesiumLayers.js` | `UrlTemplateImageryProvider.url` | `CesiumContainer → useCesiumLayers` |
-| 地名/POI 搜索 | `locationSearch.js` | `fetch(\`...&tk=${tiandituTk}\`)` | `SidePanel → MapPointPickerCard` |
-| 逆地理编码 | `geocoding.js` | `axios.get('/geocoder', { params: { tk } })` | `TOCPanel / usePositionCodeTool / useSharedEntryResolver` |
-| 天气模块 | `useWeatherData.js` | 逆编码城市名 | `SidePanel → WeatherPanel` |
-| 驾车路径规划 | `DrivingPlannerPanel.vue` | `fetch(\`...drive?tk=${token}...\`)` | `SidePanel → DrivingPlannerPanel` |
-| 公交路径规划 | `BusPlannerPanel.vue` | 天地图 transit API | `SidePanel → BusPlannerPanel` |
+| Cesium 底图 | `useCesiumLayers.ts` | `UrlTemplateImageryProvider.url` | `CesiumContainer → useCesiumLayers` |
+| 地名/POI 搜索 | `locationSearch.ts` | `fetch(\`...&tk=${tiandituTk}\`)` | `SidePanel → MapPointPickerCard` |
+| 逆地理编码 | `geocoding.ts` | `axios.get('/geocoder', { params: { tk } })` | `TOCPanel / usePositionCodeTool / useSharedEntryResolver` |
+| 天气模块 | `useWeatherData.ts` | 逆编码城市名 | `SidePanel → WeatherPanel` |
+| 路径规划（驾车/公交） | `RoutePlannerPanel.vue` / `.ts` | 驾车 `fetch(\`...drive?tk=${token}...\`)`；公交天地图 transit API | `SidePanel → RoutePlannerPanel`（按 `mode` 分派；旧 `DrivingPlannerPanel` / `BusPlannerPanel` 已合并） |
 | 地图下载器 | `MapDownloader.vue` | `refreshLayerConfigs(tiandituTk)` | `MapContainer → MapDownloader` |
 
 ---
@@ -240,17 +261,26 @@ sequenceDiagram
     "data": {
         "tianditu_tk": "主 token 或空字符串",
         "cesium_ion_token": "...",
+        "amap_key": "...",
+        "ovital_tdtkey": "...",
         "token_pools": {
             "tianditu_tk": ["主 token", "备用1", "备用2"],
-            "cesium_ion_token": ["..."]
+            "cesium_ion_token": ["..."],
+            "amap_key": ["..."],
+            "ovital_tdtkey": ["..."]
         },
         "is_set": {
             "tianditu_tk": true,
-            "cesium_ion_token": true
-        }
+            "cesium_ion_token": true,
+            "amap_key": true,
+            "ovital_tdtkey": true
+        },
+        "note": "These browser runtime tokens are returned once so the frontend can call Tianditu, Cesium, Amap, and Ovital directly."
     }
 }
 ```
+
+后端实现见 `api_keys_management.py:723-750`：`FRONTEND_RUNTIME_KEYS = ("tianditu_tk", "cesium_ion_token", "amap_key", "ovital_tdtkey")` 批量取 4 个主值（`:40,729`），再逐池取候选（`:730-733`），最后附 `note` 字段。
 
 - 权限：`require_api_access_or_guest`（登录用户或 guest）
 - 来源：`api_keys` 表主 token + `api_key_backups` 表备用（按 `enabled=1` 过滤，主 token 在前）
@@ -262,16 +292,16 @@ sequenceDiagram
 
 | 文件 | 职责 |
 |---|---|
-| `frontend/src/domains/ol/services/runtimeMapTokens.js` | **核心**：缓存、拉取、同步读、轮换 |
-| `frontend/src/domains/ol/composables/useRuntimeMapTokenPool.js` | 响应式桥接：hydrate / retry / 轮换 |
-| `frontend/src/api/backend/runtime.js` | HTTP 客户端：`apiGetRuntimeMapTokens()` |
+| `frontend/src/domains/common/services/runtimeMapTokens.ts` | **核心**：4 池缓存、拉取、同步读、keyName 归一化轮换 |
+| `frontend/src/domains/ol/composables/useRuntimeMapTokenPool.ts` | 响应式桥接：hydrate / retry / 按 needsContext 多池轮换 |
+| `frontend/src/api/backend/runtime.ts` | HTTP 客户端：`apiGetRuntimeMapTokens()` |
 | `frontend/src/domains/ol/components/MapContainer.vue` | 根组件：初始化 token ref、订阅轮换 |
-| `frontend/src/domains/ol/composables/useSharedEntryResolver.js` | 分享链接入口：消费 token 做逆编码 |
-| `frontend/src/api/geocoding.js` | 逆地理编码：`resolveTiandituToken()` |
-| `frontend/src/api/locationSearch.js` | 地名搜索：`searchWithTianditu()` |
+| `frontend/src/domains/ol/composables/useSharedEntryResolver.ts` | 分享链接入口：消费 token 做逆编码 |
+| `frontend/src/api/geocoding.ts` | 逆地理编码：`resolveTiandituToken()` |
+| `frontend/src/api/locationSearch.ts` | 地名搜索：`searchWithTianditu()` |
 | `frontend/src/domains/ol/basemap/constants/basemapConfig.ts` | 底图：`buildTiandituUrl()` |
-| `frontend/src/domains/cesium/composables/layers/useCesiumLayers.js` | Cesium 底图 |
-| `frontend/src/domains/common/weather/composables/useWeatherData.js` | 天气 |
+| `frontend/src/domains/cesium/composables/layers/useCesiumLayers.ts` | Cesium 底图 |
+| `frontend/src/domains/common/weather/composables/useWeatherData.ts` | 天气 |
 | `backend/api/api_keys_management.py` | 后端：聚合 token 池 |
 | `frontend/src/domains/common/user/components/ApiKeysManagementPanel.vue` | 管理面板：写入触发刷新 |
 
