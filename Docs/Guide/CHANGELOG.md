@@ -6,6 +6,10 @@
 
 ## 版本记录
 
+### V3.7.18 (2026-11-27) — 访客身份 IP 提取修复 · XFF 最右侧公网跳（L2）
+
+`_extract_identity_ip` 改为从右向左取第一个公网 IP：修复 HF 部署下 XFF 末跳取到容器内网代理 IP `10.16.1.43`，导致全站用户共用身份 IP、同 UA 撞进同一配额桶、轮换 UA 绕过签发限频（6/小时）的问题。签发、游客登录、无 token 兜底三条路径自动受益；`sessions.ip` 与地理位置解析首次拿到真实公网 IP。新增 7 个 `_extract_identity_ip` 单测（HF 实测链、链首伪造、直连、全私网链、非法跳、IPv6），`test_guest_identity.py` 29 passed。详见 [guest-identity-ip-fix](../LLM_record/26-11/2026-11-26/2026-11-26-guest-identity-ip-fix.md)。
+
 ### V3.7.17 (2026-11-26) — Agent 提示词瘦身 · intent 本地解析（L2）
 
 System Prompt 从 9,779 字符 / 17,767 字节压缩到 962 字符 / 1,840 字节（字符降幅 90.16%）。移除前置的 20 条工具签名、18 条瓦片规则和长篇风水规则，改为在 `switch_basemap(intent=用户原话)` 调用时由本地规则表解析 presetId/URL。OL/Cesium 共用 `validateBasemapArg`，保留明确的服务商边界：高德水系/湖泊请求不会被静默改判成 Google。详见 [prompt-slimming](../LLM_record/26-11/2026-11-26/2026-11-26-agent-prompt-slimming.md)。

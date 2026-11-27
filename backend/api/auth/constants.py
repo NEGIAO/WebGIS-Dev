@@ -189,11 +189,11 @@ def _build_guest_uid(ip: str, user_agent: str, guest_device_id: str) -> str:
 
 
 def _derive_uid_from_ip_ua(ip: str, user_agent: str) -> str:
-    """无 token 请求的确定性配额桶：H(末跳IP | UA)。
+    """无 token 请求的确定性配额桶：H(身份IP | UA)。
 
     V3.7.6 游客身份治理核心派生：device_id **不参与**桶派生——轮换
     X-Guest-Device-Id 不再产生新桶；伪造成本抬升为「需同时轮换出口 IP 与 UA」。
-    IP 须传 `_extract_identity_ip` 的结果（XFF 末跳），不要传展示用首跳。
+    IP 须传 `_extract_identity_ip` 的结果（XFF 最右侧公网跳），不要传展示用首跳。
     """
     digest = hashlib.sha256(
         f"guestip|{str(ip or '').strip()}|{str(user_agent or '').strip()}".encode("utf-8")
@@ -202,20 +202,36 @@ def _derive_uid_from_ip_ua(ip: str, user_agent: str) -> str:
 
 
 def _extract_identity_ip(request: Request) -> str:
-    """身份派生用客户端 IP：取 X-Forwarded-For **末跳**（可信反代 HF 追加）。
+    """身份派生用客户端 IP：取 X-Forwarded-For **最右侧公网跳**。
+
+    部署链：客户端 → HF 边缘代理 → 容器内网代理 → uvicorn。XFF 按经过的
+    代理从左向右追加：HF 边缘追加真实用户 IP，内网代理再追加一跳后末跳
+    就变成内网 IP——取末跳等于取「离容器最近的代理」，不是用户（V3.7.18
+    修复：此前取末跳导致全站用户共用身份 IP 10.16.1.43，同 UA 撞桶、
+    轮换 UA 绕过签发限频）。
+    因此从右向左跳过私网/保留/回环等非公网跳，取第一个公网 IP：
+    客户端只能在链首塞假 IP（左侧），最右侧公网跳是最后一个可信代理
+    追加的真实用户 IP，无法由请求方伪造。
+
+    回退顺序：XFF 最右侧公网跳 → request.client.host（仅当其为公网 IP，
+    覆盖无代理直连）→ ""（全链皆私网/无可用 IP 时返回空串，调用方
+    不再把内网代理 IP 当作身份；生产 HF 链恒有公网跳）。
 
     与展示用 `_extract_client_ip` 的区别：不读客户端可写的 `X-Client-IP`，
-    不取 XFF 首跳（可被请求方任意塞值）。仅用于游客桶派生 / 签发限频键等
-    反滥用场景；展示、审计仍走 `_extract_client_ip`。
+    不取 XFF 首跳。仅用于游客桶派生 / 签发限频键等反滥用场景；展示、审计
+    仍走 `_extract_client_ip`。
     """
     forwarded = str(request.headers.get("X-Forwarded-For") or "")
     if forwarded:
         hops = [hop.strip() for hop in forwarded.split(",") if hop.strip()]
         for hop in reversed(hops):
             valid_ip = _first_valid_ip(hop)
-            if valid_ip:
+            if valid_ip and not is_private_client_ip(valid_ip):
                 return valid_ip
-    return str(getattr(request.client, "host", "") or "")
+    direct = _first_valid_ip(str(getattr(request.client, "host", "") or ""))
+    if direct and not is_private_client_ip(direct):
+        return direct
+    return ""
 
 
 # ─── 角色标准化 ───

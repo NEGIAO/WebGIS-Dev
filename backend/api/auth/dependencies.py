@@ -109,7 +109,7 @@ async def _build_temporary_guest_session_async(request: Request) -> Dict[str, An
         or request.query_params.get("guest_device_id")
     )
     # V3.7.6 游客身份治理：身份优先取已验签 guest token（签发通道下发）；
-    # 无 token 时按确定性桶 H(XFF末跳IP|UA) 派生。device_id 不再参与无 token
+    # 无 token 时按确定性桶 H(身份IP|UA) 派生。device_id 不再参与无 token
     # 场景的桶派生——轮换设备头无法绕过配额（展示/在线去重仍用 device_id）。
     presented_token = _extract_guest_token(request)
     guest_uid = verify_guest_token_active(presented_token) if presented_token else None
