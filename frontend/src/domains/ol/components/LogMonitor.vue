@@ -144,7 +144,8 @@
     cursor: pointer;
     border-radius: 2px;
     font-weight: 700;
-    transition: all 0.2s;
+
+    transition: background 0.2s, color 0.2s;
 }
 
 .type-btn.active {
@@ -216,6 +217,7 @@
 
 .legend-icon {
     color: #52525b;
+
     transition: color 0.2s;
 }
 
@@ -280,7 +282,8 @@
     font-size: 11px;
     border-radius: 4px;
     cursor: pointer;
-    transition: all 0.2s;
+
+    transition: background 0.2s, color 0.2s;
     border: 1px solid transparent;
     white-space: nowrap;
     /* 防止按钮文字换行 */
@@ -322,6 +325,7 @@
     gap: 12px;
     line-height: 1.6;
     font-size: 12px;
+
     transition: background 0.1s;
 }
 
@@ -380,7 +384,8 @@
     height: 8px;
     border-radius: 50%;
     background: #3f3f46;
-    transition: all 0.3s;
+
+    transition: background 0.3s, box-shadow 0.3s;
 }
 
 .status-dot.active {
@@ -413,7 +418,8 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    transition: all 0.2s;
+
+    transition: background 0.2s, border-color 0.2s;
 }
 
 .custom-checkbox.checked {

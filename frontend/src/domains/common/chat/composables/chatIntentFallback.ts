@@ -7,6 +7,8 @@
  */
 
 import { DEFAULT_SEARCH_ZOOM } from '@common/utils/mapDefaults';
+import { resolveTileBasemapArg } from '@common/chat/constants/tileIntentPresets';
+import { TILE_PROXY_BASE_URL } from '@/config/publicRuntime';
 
 /**
  * 底图关键词 → 稳定预设 ID
@@ -169,6 +171,18 @@ export function detectGISIntent(userMsg: any) {
         const match = msg.match(pattern);
         if (!match?.[1]) continue;
         const target = match[1].trim().toLowerCase();
+
+        // V3.7.27：先走规则表（SSOT）——单要素切片语义（水系/土地利用/卫星等）
+        // 由 tileIntentPresets 统一裁决；规则表未覆盖的品牌（天地图/ESRI/OSM 等）
+        // 再退回下方品牌映射字典。避免两表对同一语义给出不同 presetId。
+        const resolved = resolveTileBasemapArg(target, TILE_PROXY_BASE_URL);
+        if (!resolved.error && (resolved.presetId || resolved.url)) {
+            return {
+                name: 'switch_basemap',
+                arguments: resolved.presetId ? { presetId: resolved.presetId } : { url: resolved.url },
+            };
+        }
+
         for (const { keyword, preset } of BASEMAP_MAPPING_ENTRIES) {
             if (target.includes(keyword)) {
                 return {

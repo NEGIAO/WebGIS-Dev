@@ -1,9 +1,10 @@
 /**
  * ChatInputBar.vue 实例逻辑（对话输入栏）
  */
-import { computed, defineComponent, nextTick, ref, type ComputedRef, type Ref, type WritableComputedRef } from 'vue';
-import { SendHorizontal, Square } from '@lucide/vue';
+import { computed, defineComponent, nextTick, onBeforeUnmount, ref, type ComputedRef, type Ref, type WritableComputedRef } from 'vue';
+import { Layers3, SendHorizontal, Square } from '@lucide/vue';
 import { useLocale } from '@common/app/useLocale';
+import { BASEMAP_QUICK_GROUPS, type BasemapQuickCommand } from '@common/chat/constants/basemapQuickCommands';
 
 export class Instance {
     public props: any;
@@ -12,6 +13,13 @@ export class Instance {
     public textareaRef: Ref<HTMLTextAreaElement | null>;
     public text: WritableComputedRef<string>;
     public sendDisabled: ComputedRef<boolean>;
+    public quickOpen: Ref<boolean>;
+    public quickGroups = BASEMAP_QUICK_GROUPS;
+    private onDocClick = (event: MouseEvent) => {
+        if (!this.quickOpen.value) return;
+        const target = event.target as HTMLElement | null;
+        if (!target?.closest?.('.chat-footer')) this.quickOpen.value = false;
+    };
 
     constructor(props: any, emit: any) {
         this.props = props;
@@ -20,6 +28,11 @@ export class Instance {
         this.t = t;
 
         this.textareaRef = ref<HTMLTextAreaElement | null>(null);
+        this.quickOpen = ref(false);
+        if (typeof document !== 'undefined') document.addEventListener('click', this.onDocClick);
+        onBeforeUnmount(() => {
+            if (typeof document !== 'undefined') document.removeEventListener('click', this.onDocClick);
+        });
 
         this.text = computed({
             get: () => props.modelValue,
@@ -49,11 +62,24 @@ export class Instance {
         this.emit('send');
         nextTick(this.autoResize);
     };
+
+    /** 打开/关闭底图切片预设面板 */
+    public toggleQuick = () => {
+        this.quickOpen.value = !this.quickOpen.value;
+    };
+
+    /** 选中预设命令：关闭面板并交给上层本地解析执行（不经 LLM） */
+    public pickQuick = (cmd: BasemapQuickCommand) => {
+        if (this.props.isLoading) return;
+        this.quickOpen.value = false;
+        this.emit('quick-command', cmd);
+    };
 }
 
 export default defineComponent({
     name: 'ChatInputBar',
     components: {
+        Layers3,
         SendHorizontal,
         Square,
     },
@@ -63,7 +89,7 @@ export default defineComponent({
         disabled: { type: Boolean, default: false },
         isLoading: { type: Boolean, default: false },
     },
-    emits: ['update:modelValue', 'send', 'stop'],
+    emits: ['update:modelValue', 'send', 'stop', 'quick-command'],
     setup(props, { emit }) {
         return new Instance(props, emit);
     },

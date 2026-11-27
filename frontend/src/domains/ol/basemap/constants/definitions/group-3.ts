@@ -17,6 +17,26 @@ import {
 import { bd2wgsProxyUrl, gcj2wgsProxyUrl } from '@/config/publicRuntime';
 import type { LayerSourceDefinition } from '../basemapCore';
 
+function createAmapXYZDefinition(
+    definition: Pick<LayerSourceDefinition, 'id' | 'name' | 'url' | 'tilePixelRatio'>,
+): LayerSourceDefinition {
+    return {
+        ...definition,
+        category: 'vector',
+        group: '矢量',
+        serviceType: 'xyz',
+        createSource: () =>
+            prioritizeTileSourceRequest(
+                new XYZ({
+                    url: definition.url,
+                    ...(definition.tilePixelRatio === undefined
+                        ? {}
+                        : { tilePixelRatio: definition.tilePixelRatio }),
+                }),
+            ),
+    };
+}
+
 /**
  * OpenFreeMap 矢量瓦片源。
  * 使用官方稳定别名 /planet/latest/{z}/{x}/{y}.pbf —— 自动指向最新版本、瓦片非空，
@@ -416,6 +436,36 @@ const definitions: LayerSourceDefinition[] = [
                 }),
             ),
     },
+    createAmapXYZDefinition({
+        id: 'vector_amap_clean_hd',
+        name: '高德简洁电子(512 GCJ)',
+        // scl=2 returns 512px tiles; tilePixelRatio keeps them on the standard 256px XYZ grid.
+        url: 'https://webrd01.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&ltype=1&scl=2&x={x}&y={y}&z={z}',
+        tilePixelRatio: 2,
+    }),
+    createAmapXYZDefinition({
+        id: 'vector_amap_clean_roads',
+        name: '高德简洁有路(GCJ)',
+        // ltype=3 keeps landform and roads, while scl=2 serves 512px tiles.
+        url: 'https://webrd01.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&ltype=3&scl=2&x={x}&y={y}&z={z}',
+        tilePixelRatio: 2,
+    }),
+    createAmapXYZDefinition({
+        id: 'vector_amap_clean_wgs',
+        name: '高德简洁电子(WGS)',
+        // gcj2wgs rectification outputs native 256px tiles.
+        url: gcj2wgsProxyUrl(
+            'https://webrd01.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&ltype=1&x={x}&y={y}&z={z}',
+        ),
+    }),
+    createAmapXYZDefinition({
+        id: 'vector_amap_roads_wgs',
+        name: '高德纯道路(WGS)',
+        // style=8 with ltype=2 is a transparent road-only overlay; rectification outputs 256px tiles.
+        url: gcj2wgsProxyUrl(
+            'https://webst01.is.autonavi.com/appmaptile?lang=zh_cn&style=8&ltype=2&x={x}&y={y}&z={z}',
+        ),
+    }),
     {
         id: 'vector_baidu_wgs',
         name: '百度地图(WGS)',

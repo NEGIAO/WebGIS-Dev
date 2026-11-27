@@ -98,9 +98,11 @@ class AgentMapContextTests(unittest.TestCase):
         self.assertIn("Use only declared GIS tools for map changes", prompt)
 
     def test_system_prompt_without_map_context(self):
-        """When no map_context is provided, the prompt should equal the base."""
+        """V3.7.15：无 map_context 时 base prompt 仍保留，且追加后端固定安全底线。"""
         prompt = _build_agent_system_prompt("base-prompt", None, None)
-        self.assertEqual(prompt, "base-prompt")
+        self.assertTrue(prompt.startswith("base-prompt"))
+        self.assertIn("[Application-enforced rules", prompt)
+        self.assertIn("Use only the GIS tools declared", prompt)
 
     def test_pitch_range_is_bounded(self):
         """Pitch must be clamped to [-90, 90] per Cesium physics."""

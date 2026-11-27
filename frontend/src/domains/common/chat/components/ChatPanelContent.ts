@@ -43,7 +43,11 @@ import { createCompassAgentTool } from '@common/chat/agent/agentCompassTool';
 import { useCompassStore } from '@/stores';
 import { readUserPositionFromCache } from '@common/map-view/services/userPositionCache';
 import { getGlobalUserLocationContext } from '@common/map-view/services/userLocationContext';
-import { AGENT_TOOLS, buildSystemPromptWithTools } from '@common/chat/constants/agentToolsSchema';
+import { buildSystemPromptWithTools } from '@common/chat/constants/agentToolsSchema';
+import { selectToolsForMessage } from '@common/chat/constants/agentToolRouter';
+import { resolveTileBasemapArg } from '@common/chat/constants/tileIntentPresets';
+import { TILE_PROXY_BASE_URL } from '@/config/publicRuntime';
+import type { BasemapQuickCommand } from '@common/chat/constants/basemapQuickCommands';
 import { useChatStore } from '@common/chat/stores/useChatStore';
 
 // 一、Emits
@@ -570,7 +574,13 @@ export class Instance {
 		this.config.lastCallCost = 0;
 
 		try {
-			const systemPrompt = buildSystemPromptWithTools();
+			// V3.7.19：按本轮用户意图选择工具子集，首轮与后续编排轮次复用同一集合。
+			// 避免中途工具集变化导致模型引用不存在工具；空消息由路由返回全量兜底。
+			const activeTools = selectToolsForMessage(userMsg);
+			// V3.7.27：System Prompt 按工具集生成——罗盘机制段仅在含 enable_compass 时注入
+			const systemPrompt = buildSystemPromptWithTools(
+				new Set(activeTools.map((t: any) => t.function.name))
+			);
 
 			const firstRound = await this.config.callLLM({
 				message: userMsg,
@@ -578,7 +588,7 @@ export class Instance {
 				locationContext: locationContextText,
 				mapContext,
 				systemPrompt,
-				tools: AGENT_TOOLS,
+				tools: activeTools,
 				// V3.7.7 批次 E：默认 AI 通道走流式——增量直接写入消息列表渐进渲染
 				onDelta: (accumulated: string) => {
 					if (seq !== this.requestSeq) return;
@@ -685,7 +695,8 @@ export class Instance {
 							mapContext: pendingMapContext,
 							// 每轮都带完整系统提示词：约束（先 list_layers、不得伪称成功）必须跨轮一致
 							systemPrompt: systemPrompt,
-							tools: AGENT_TOOLS,
+							// V3.7.19：复用首轮工具集，中途不重新筛选（防止模型引用不存在工具）
+							tools: activeTools,
 							onDelta: (accumulated: string) => {
 								if (seq !== this.requestSeq) return;
 								list[finalIdx].content = accumulated;
@@ -832,6 +843,67 @@ export class Instance {
 	public handleSuggest = (text: string) => {
 		if (this.isLoading.value) return;
 		this.dispatchSend(text);
+	};
+
+	/**
+	 * V3.7.20：底图切片预设快捷命令——本地解析 + 直接执行，零 LLM 调用。
+	 * intent 文本取自规则表原文，解析仍走 tileIntentPresets（SSOT），
+	 * 执行复用 executeToolsAndUpdateUI（TOC 注册、工具状态回显、地图上下文快照）。
+	 */
+	public handleQuickCommand = async (cmd: BasemapQuickCommand) => {
+		if (this.isLoading.value || !cmd) return;
+
+		// 1. 本地解析（与 switch_basemap(intent) 完全同一路径）
+		const resolved = resolveTileBasemapArg(cmd.intent, TILE_PROXY_BASE_URL);
+		if (resolved.error) {
+			this.message.warning(`${this.t('chat.quickCommandFailed')}：${resolved.error}`);
+			return;
+		}
+		if (!this.agentExecutor.value) {
+			this.message.warning(this.t('chat.quickCommandFailed'));
+			return;
+		}
+
+		// 2. 用户可见的命令回执：打 isQuickCommand 标记，
+		//    buildEconomyContext / userTurnsCount 均排除，不污染 LLM 历史与轮次计数
+		const label = this.t(cmd.labelKey);
+		this.session.pushUser(label, { isQuickCommand: true });
+
+		// 3. 直接执行 switch_basemap(intent)，复用工具链与结果回显
+		//    V3.7.15：复用 requestSeq 守卫，避免"停止生成"后旧流程继续写消息
+		const seq = ++this.requestSeq;
+		this.isLoading.value = true;
+		const assistantIdx = this.session.pushAssistant('');
+		try {
+			const { userResultSummary } = await this.executeToolsAndUpdateUI(
+				[{ name: 'switch_basemap', arguments: { intent: cmd.intent } }],
+				assistantIdx
+			);
+			if (seq !== this.requestSeq) return;
+			// 取最后一条工具状态消息，避免误匹配历史中旧的 switch_basemap 回执
+			const messages = this.session.messages.value;
+			let statusMsg: any = null;
+			for (let i = messages.length - 1; i >= 0; i--) {
+				if (messages[i]?.role === 'assistant' && messages[i]?.isToolStatus) {
+					statusMsg = messages[i];
+					break;
+				}
+			}
+			if (statusMsg?.toolCalls?.[0]?.status === 'success') {
+				this.message.success(`${this.t('chat.quickCommandDone')}：${label}`);
+			} else {
+				this.message.warning(`${this.t('chat.quickCommandFailed')}：${userResultSummary}`);
+			}
+		} catch (err) {
+			if (seq !== this.requestSeq) return;
+			this.message.warning(`${this.t('chat.quickCommandFailed')}：${(err as Error)?.message || ''}`);
+		} finally {
+			if (seq === this.requestSeq) {
+				this.isLoading.value = false;
+				this.session.schedulePersist();
+				this.messageListRef.value?.scrollToBottom(false);
+			}
+		}
 	};
 
 	/** 重新生成最后一条回复 */

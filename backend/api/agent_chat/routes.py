@@ -211,8 +211,10 @@ async def agent_chat_completions(
         if ip_location:
             location_context = ip_location
 
+    # V3.7.16：优先使用前端构建的完整工具提示词；缺省时回退运行时配置。
+    user_system_prompt = str(payload.system_prompt or "").strip()
     system_prompt = _build_agent_system_prompt(
-        str(runtime.get("system_prompt") or DEFAULT_AGENT_SYSTEM_PROMPT),
+        user_system_prompt or str(runtime.get("system_prompt") or DEFAULT_AGENT_SYSTEM_PROMPT),
         location_context,
         payload.map_context,
     )
@@ -843,8 +845,10 @@ async def agent_chat_completions_stream(
         if ip_location:
             location_context = ip_location
 
+    # V3.7.16：优先使用前端构建的完整工具提示词；缺省时回退运行时配置。
+    user_system_prompt = str(payload.system_prompt or "").strip()
     system_prompt = _build_agent_system_prompt(
-        str(runtime.get("system_prompt") or DEFAULT_AGENT_SYSTEM_PROMPT),
+        user_system_prompt or str(runtime.get("system_prompt") or DEFAULT_AGENT_SYSTEM_PROMPT),
         location_context,
         payload.map_context,
     )

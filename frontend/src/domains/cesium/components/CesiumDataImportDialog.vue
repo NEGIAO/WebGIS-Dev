@@ -218,6 +218,7 @@
     color: #f6fffb;
     font-size: 14px;
     font-variant-numeric: tabular-nums;
+
     transition: border-color 0.18s ease;
 }
 
@@ -273,7 +274,8 @@
     cursor: pointer;
     font-size: 13px;
     font-weight: 700;
-    transition: all 0.18s ease;
+
+    transition: border-radius 0.18s ease, font-size 0.18s ease, font-weight 0.18s ease, gap 0.18s ease, height 0.18s ease;
 }
 
 .cancel-btn {

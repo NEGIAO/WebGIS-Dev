@@ -314,7 +314,8 @@
     gap: 8px;
     cursor: pointer;
     box-shadow: 0 6px 20px rgba(var(--brand-primary-rgb), 0.18);
-    transition: all 0.25s ease;
+
+    transition: backdrop-filter 0.25s ease, background 0.25s ease, border-radius 0.25s ease, box-shadow 0.25s ease, color 0.25s ease, gap 0.25s ease, height 0.25s ease, min-height 0.25s ease, padding 0.25s ease;
     position: relative;
 }
 
@@ -375,6 +376,7 @@
     font-size: 12px;
     color: var(--brand-primary-dark);
     opacity: 0.75;
+
     transition: transform 0.3s ease;
     margin-left: 2px;
 }
@@ -401,7 +403,8 @@
     flex-direction: column;
     overflow: hidden;
     transform-origin: bottom left;
-    transition: all 0.3s ease;
+
+    transition: border-radius 0.3s ease;
 }
 
 /* ── 头部：品牌渐变横幅 ── */
@@ -537,7 +540,8 @@
     align-items: center;
     justify-content: center;
     cursor: pointer;
-    transition: all 0.2s ease;
+
+    transition: background 0.2s ease, border-radius 0.2s ease, box-shadow 0.2s ease, color 0.2s ease, font-size 0.2s ease, height 0.2s ease, width 0.2s ease;
     font-size: 13px;
     flex-shrink: 0;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.18);
@@ -648,6 +652,7 @@
     font-weight: 600;
     color: var(--text-secondary);
     cursor: pointer;
+
     transition: color 0.2s ease, background 0.2s ease;
     position: relative;
     display: flex;
@@ -741,7 +746,8 @@
     align-items: center;
     justify-content: center;
     gap: 8px;
-    transition: all 0.2s ease;
+
+    transition: background 0.2s ease, border-radius 0.2s ease, color 0.2s ease, font-size 0.2s ease, font-weight 0.2s ease, gap 0.2s ease, height 0.2s ease, width 0.2s ease;
 }
 
 .btn-logout:hover:not(:disabled) {
@@ -816,7 +822,7 @@
 /* ========== 过渡动画 ========== */
 .account-panel-transition-enter-active,
 .account-panel-transition-leave-active {
-    transition: all 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+    transition: opacity 0.3s cubic-bezier(0.22, 1, 0.36, 1), transform 0.3s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .account-panel-transition-enter-from,

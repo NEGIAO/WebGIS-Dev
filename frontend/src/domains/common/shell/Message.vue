@@ -130,7 +130,13 @@
     border: 1px solid rgba(255, 255, 255, 0.08);
     background: #000000;
     max-width: 100%;
-    transition: all 0.4s var(--island-spring-bouncy);
+    /* 空态切换只改这四项；显式声明避免全属性过渡牵动布局属性。
+       容器反复挂载，150ms ease-out 比 400ms 回弹更少注意力成本。 */
+    transition:
+        background-color 0.15s ease-out,
+        border-color 0.15s ease-out,
+        box-shadow 0.15s ease-out,
+        backdrop-filter 0.15s ease-out;
 }
 
 /* 空态（所有 toast 已离场）：岛体背景/边框/阴影收敛为 0，避免零内容时
@@ -157,8 +163,14 @@
     transform-origin: center top;
     max-height: 150px;
     box-sizing: border-box;
-    will-change: transform, opacity, max-height, padding, filter;
     background-color: transparent;
+}
+
+/* will-change 只在进出场期间挂载：常规态不占用合成层，
+   且只保留 GPU 可合成的 transform / opacity。 */
+.toast-item.toast-enter-active,
+.toast-item.toast-leave-active {
+    will-change: transform, opacity;
 }
 
 /* Internal borders for segmented look when multiple messages */
@@ -168,6 +180,7 @@
 
 .toast-item.clickable {
     cursor: pointer;
+
     transition: background-color 0.2s;
 }
 
@@ -286,7 +299,9 @@
     justify-content: center;
     font-size: 14px;
     cursor: pointer;
-    transition: all 0.2s ease;
+    transition:
+        background-color 0.2s ease,
+        color 0.2s ease;
     margin-left: auto;
 }
 

@@ -359,7 +359,7 @@ CONFIG_CATALOG: Dict[str, ConfigMeta] = {
         "layer": "L2",
         "default": 6,
         "secret": False,
-        "description": "每 (XFF末跳IP, UA) 每小时允许新签发游客身份次数（签发限频，不约束持 token 续期）",
+        "description": "每 (身份IP, UA) 每小时允许新签发游客身份次数（签发限频，不约束持 token 续期）",
     },
     "GUEST_IDENTITY_RETENTION_DAYS": {
         "layer": "L2",

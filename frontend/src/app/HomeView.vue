@@ -493,6 +493,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
+
     transition: background 0.2s;
 }
 
@@ -557,6 +558,7 @@
     display: flex;
     flex-direction: column;
     gap: 2px;
+
     transition: border-color 0.2s;
 }
 
@@ -590,7 +592,7 @@
 /* 动画 */
 .query-panel-fade-enter-active,
 .query-panel-fade-leave-active {
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    transition: opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1), transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .query-panel-fade-enter-from,
@@ -610,14 +612,21 @@
     flex-direction: column;
     transition:
         width 0.3s ease,
-        height 0.3s ease;
+        height 0.3s ease,
+        box-shadow 0.3s ease;
+    box-shadow: var(--shadow-float);
     z-index: 2;
     min-width: 200px;
+}
+
+.side-panel-wrapper:not(.is-dragging):hover {
+    box-shadow: var(--shadow-float-hover);
 }
 
 .side-panel-wrapper.collapsed {
     width: 0px;
     min-width: 0;
+
     transition: width 0.3s ease, min-width 0.3s ease;
 }
 
@@ -641,8 +650,11 @@
     justify-content: center;
     cursor: pointer;
     background: linear-gradient(135deg, rgba(24, 144, 255, 0.05) 0%, rgba(24, 144, 255, 0.15) 100%);
-    border-left: 3px solid rgba(24, 144, 255, 0.3);
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    border-left: 3px solid rgba(24, 144, 255, 0.55);
+    border-radius: 0 10px 10px 0;
+    box-shadow: var(--shadow-float);
+
+    transition: background 0.3s cubic-bezier(0.4, 0, 0.2, 1), height 0.3s cubic-bezier(0.4, 0, 0.2, 1), width 0.3s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     position: relative;
     overflow: hidden;
 }
@@ -655,6 +667,7 @@
     width: 100%;
     height: 100%;
     background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3), transparent);
+
     transition: left 0.6s ease;
 }
 
@@ -669,7 +682,7 @@
 }
 
 .panel-placeholder:active {
-    transform: scale(0.98);
+    transform: scale(0.96);
 }
 
 .placeholder-content {
@@ -684,7 +697,8 @@
     width: 28px;
     height: 28px;
     color: var(--info);
-    transition: all 0.3s ease;
+
+    transition: color 0.3s ease, filter 0.3s ease, height 0.3s ease, width 0.3s ease;
     filter: drop-shadow(0 2px 4px rgba(24, 144, 255, 0.2));
 }
 
@@ -701,7 +715,8 @@
     color: var(--info);
     letter-spacing: 2px;
     text-shadow: 0 1px 2px rgba(24, 144, 255, 0.1);
-    transition: all 0.3s ease;
+
+    transition: color 0.3s ease, font-size 0.3s ease, font-weight 0.3s ease, letter-spacing 0.3s ease, text-shadow 0.3s ease;
 }
 
 .panel-placeholder:hover .placeholder-text {

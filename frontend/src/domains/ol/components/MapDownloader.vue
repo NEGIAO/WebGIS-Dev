@@ -422,7 +422,7 @@
 }
 
 .mini-icon-btn:active {
-    transform: scale(0.92);
+    transform: scale(0.96);
 }
 
 .head-subtitle {
@@ -612,6 +612,7 @@
     border: 1px dashed rgba(153, 195, 170, 0.55);
     border-radius: 9px;
     cursor: pointer;
+
     transition: background 0.15s ease;
 }
 
@@ -697,7 +698,8 @@
     height: 14px;
     border-radius: 50%;
     border: 1.5px solid rgba(153, 195, 170, 0.7);
-    transition: all 0.15s ease;
+
+    transition: border-radius 0.15s ease, height 0.15s ease, width 0.15s ease;
 }
 
 .mode-card.active .radio-indicator {
@@ -894,6 +896,7 @@
     cursor: pointer;
     border-radius: 999px;
     padding: 2px 8px;
+
     transition: background 0.15s ease;
 }
 
@@ -920,6 +923,7 @@
     height: 100%;
     border-radius: 999px;
     background: var(--brand-gradient);
+
     transition: width 0.4s ease;
 }
 

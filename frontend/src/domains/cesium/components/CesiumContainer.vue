@@ -278,6 +278,7 @@
         inset 0 1px 0 rgba(255, 255, 255, 0.6);
     user-select: none;
     max-width: calc(100vw - 48px);
+
     transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
@@ -306,7 +307,7 @@
 }
 
 .coord-toggle-btn:active {
-    transform: scale(0.94);
+    transform: scale(0.96);
 }
 
 .coord-toggle-btn svg {
@@ -337,6 +338,7 @@
     font: inherit;
     text-align: left;
     cursor: pointer;
+
     transition: background 0.25s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
@@ -349,6 +351,7 @@
     flex-shrink: 0;
     color: var(--toc-text-secondary);
     opacity: 0;
+
     transition: opacity 0.15s ease, color 0.15s ease;
 }
 
@@ -487,7 +490,7 @@
 }
 
 .home-btn:active {
-    transform: scale(0.94);
+    transform: scale(0.96);
 }
 
 @media (pointer: coarse) {

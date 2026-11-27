@@ -271,8 +271,8 @@ export function createChatSession() {
     }
 
     /** 追加用户消息（默认标题时按首条用户消息自动命名） */
-    function pushUser(content: any) {
-        messages.value.push(withTime({ role: 'user', content }));
+    function pushUser(content: any, extra: any = {}) {
+        messages.value.push(withTime({ role: 'user', content, ...extra }));
         const current = activeSession();
         if (current && current.title === DEFAULT_SESSION_TITLE) {
             const auto = String(content || '').trim().slice(0, AUTO_TITLE_LEN);
@@ -330,15 +330,15 @@ export function createChatSession() {
         return messages.value
             .filter((_, idx) => idx !== 0)
             .filter((m) => m.role === 'user' || m.role === 'assistant')
-            .filter((m) => !m.isToolStatus)
+            .filter((m) => !m.isToolStatus && !m.isQuickCommand)
             .filter((m) => m.content && m.content.trim())
             .map((m) => ({ role: m.role, content: compactText(m.content) }))
             .slice(-MAX_CONTEXT_MESSAGES);
     }
 
-    /** 用户轮次计数 */
+    /** 用户轮次计数（快捷命令回执不计入，避免提前触发自动精简） */
     function userTurnsCount() {
-        return messages.value.filter((m) => m.role === 'user').length;
+        return messages.value.filter((m) => m.role === 'user' && !m.isQuickCommand).length;
     }
 
     /** 超过阈值时自动精简历史（保留欢迎语 + 最近一轮） */
@@ -351,7 +351,12 @@ export function createChatSession() {
         const recentDialogue = messages.value
             .filter((_, idx) => idx !== 0)
             .filter(
-                (m) => (m.role === 'user' || m.role === 'assistant') && m.content && m.content.trim(),
+                (m) =>
+                    (m.role === 'user' || m.role === 'assistant') &&
+                    !m.isToolStatus &&
+                    !m.isQuickCommand &&
+                    m.content &&
+                    m.content.trim(),
             )
             .slice(-2);
 
@@ -392,7 +397,10 @@ export function createChatSession() {
      * @returns {string} 最后一条用户消息内容；无则返回空串
      */
     function prepareRegenerate() {
-        const lastUserIdx = messages.value.map((m) => m.role).lastIndexOf('user');
+        // V3.7.15：快捷命令回执不是用户真实提问，不能作为重新生成目标
+        const lastUserIdx = messages.value.findLastIndex(
+            (m) => m.role === 'user' && !m.isQuickCommand,
+        );
         if (lastUserIdx < 0) return '';
         const content = String(messages.value[lastUserIdx].content || '');
         messages.value.splice(lastUserIdx + 1);

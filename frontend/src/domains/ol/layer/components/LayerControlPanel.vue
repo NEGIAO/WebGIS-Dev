@@ -487,7 +487,7 @@
 }
 
 .icon-toggle:active {
-    transform: scale(0.92);
+    transform: scale(0.96);
 }
 
 .icon-toggle.hd-on,
@@ -599,6 +599,7 @@
     flex-shrink: 0;
     margin-left: auto;
     color: var(--toc-text-secondary);
+
     transition: transform 0.25s ease;
 }
 
@@ -644,6 +645,7 @@
     color: var(--toc-text-primary);
     cursor: pointer;
     font-size: 12px;
+
     transition: background var(--toc-transition-fast);
 }
 
@@ -739,6 +741,7 @@
     cursor: pointer;
     font-size: 12px;
     font-weight: 700;
+
     transition: background var(--toc-transition-fast);
 }
 
@@ -748,6 +751,7 @@
 
 .year-chevron {
     color: var(--toc-text-light);
+
     transition: transform var(--toc-transition-normal);
 }
 
@@ -823,7 +827,7 @@
 }
 
 .custom-url-btn:active {
-    transform: scale(0.94);
+    transform: scale(0.96);
 }
 
 .detected-format-hint {
@@ -963,7 +967,7 @@
 }
 
 .close-panel-btn:active {
-    transform: scale(0.9);
+    transform: scale(0.96);
 }
 
 .layer-list {
@@ -1051,7 +1055,7 @@
 }
 
 .visibility-btn:active {
-    transform: scale(0.9);
+    transform: scale(0.96);
 }
 
 .visibility-btn.off {

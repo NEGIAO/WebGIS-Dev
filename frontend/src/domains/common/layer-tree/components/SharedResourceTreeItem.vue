@@ -82,6 +82,7 @@
     gap: 6px;
     padding: 2px 6px 2px calc(4px + (var(--node-level, 0) * 16px));
     border-radius: var(--toc-radius-md);
+
     transition: background var(--toc-transition-fast);
 }
 
@@ -135,6 +136,7 @@
     flex-shrink: 0;
     color: var(--brand-primary);
     opacity: 0.85;
+
     transition: opacity var(--toc-transition-fast), transform var(--toc-transition-normal);
 }
 
@@ -173,7 +175,7 @@
 }
 
 .shared-tree-file-btn:active {
-    transform: scale(0.98);
+    transform: scale(0.96);
 }
 
 .shared-tree-type {
@@ -189,6 +191,7 @@
     text-align: center;
     font-weight: 700;
     font-variant-numeric: tabular-nums;
+
     transition: box-shadow var(--toc-transition-fast);
 }
 

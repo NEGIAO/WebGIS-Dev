@@ -258,6 +258,7 @@
     align-items: center;
     gap: 4px;
     box-shadow: 0 1px 3px rgba(34, 50, 38, 0.04);
+
     transition: transform 0.2s ease, box-shadow 0.2s ease;
 }
 
@@ -350,6 +351,7 @@
     height: 100%;
     border-radius: 999px;
     background: linear-gradient(90deg, var(--brand-primary-light), var(--brand-primary));
+
     transition: width 0.4s ease;
 }
 
@@ -474,6 +476,7 @@
     color: var(--text-muted);
     text-decoration: none;
     white-space: nowrap;
+
     transition: color 0.18s ease;
 }
 
@@ -524,7 +527,8 @@
     font-weight: 600;
     color: var(--text-primary);
     cursor: pointer;
-    transition: all 0.15s;
+
+    transition: background 0.15s, border-radius 0.15s, color 0.15s, font-size 0.15s, font-weight 0.15s, gap 0.15s, padding 0.15s;
     text-align: right;
 }
 
@@ -553,6 +557,7 @@
     resize: vertical;
     color: var(--text-primary);
     background: var(--bg-secondary);
+
     transition: border-color 0.15s, box-shadow 0.15s, background 0.15s;
 }
 
@@ -581,7 +586,8 @@
     justify-content: center;
     gap: 8px;
     box-shadow: 0 3px 10px rgba(var(--brand-primary-rgb), 0.28);
-    transition: all 0.18s ease;
+
+    transition: background 0.18s ease, border-radius 0.18s ease, box-shadow 0.18s ease, color 0.18s ease, font-size 0.18s ease, font-weight 0.18s ease, gap 0.18s ease, height 0.18s ease, margin-top 0.18s ease;
     margin-top: 8px;
 }
 
@@ -622,6 +628,7 @@
     border-radius: 10px;
     background: var(--bg-secondary);
     padding: 8px 11px;
+
     transition: border-color 0.15s ease, background 0.15s ease;
 }
 

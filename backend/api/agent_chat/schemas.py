@@ -7,6 +7,10 @@ from typing import Annotated, Any, Dict, List, Literal, Optional, Union
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+# System Prompt 与对话历史分开限制：工具清单 + 选型规则 + 瓦片语义预设约 9.8k 字符，
+# _history.content_ 仍保持 8000，避免把系统指令伪装成用户消息。
+MAX_AGENT_SYSTEM_PROMPT_CHARS = 16000
+
 
 class AgentChatHistoryItem(BaseModel):
     role: str = Field(..., pattern="^(user|assistant|tool)$")
@@ -143,7 +147,7 @@ class AgentChatRequest(BaseModel):
     # V3.7.11：默认通道此前缺此字段，前端 buildSystemPromptWithTools() 构建的工具清单/
     # 选型规则/约束被 Pydantic 静默丢弃，模型只看到 tools 声明 → 不知道该先 list_layers
     # 再操作图层，只能猜 layerId 导致 LAYER_NOT_FOUND。与 AgentChatProxyRequest 对齐。
-    system_prompt: Optional[str] = Field(default=None, max_length=8000)
+    system_prompt: Optional[str] = Field(default=None, max_length=MAX_AGENT_SYSTEM_PROMPT_CHARS)
     tools: Optional[List[Dict[str, Any]]] = Field(default=None, description="Function Calling 工具声明（OpenAI 格式）")
     # tool_choice 支持字符串 ("auto"/"none"/"required") 或对象 ({"type":"function","function":{"name":"xxx"}})
     tool_choice: Optional[Union[str, Dict[str, Any]]] = Field(default=None, description="工具选择策略")
@@ -158,7 +162,7 @@ class AgentChatProxyRequest(BaseModel):
     api_key: str = Field(..., min_length=1, max_length=5000)
     base_url: str = Field(..., min_length=1, max_length=240)
     model: str = Field(..., min_length=1, max_length=160)
-    system_prompt: Optional[str] = Field(default=None, max_length=8000)
+    system_prompt: Optional[str] = Field(default=None, max_length=MAX_AGENT_SYSTEM_PROMPT_CHARS)
     timeout_seconds: int = Field(default=45, ge=5, le=180)
     max_tokens: int = Field(default=65536, ge=1, le=131072)
     temperature: float = Field(default=1.0, ge=0.0, le=2.0)

@@ -916,7 +916,8 @@ textarea.key-input {
     font-size: 12px;
     font-weight: 500;
     cursor: pointer;
-    transition: all 0.3s ease;
+
+    transition: border-radius 0.3s ease, font-size 0.3s ease, font-weight 0.3s ease, min-height 0.3s ease, padding 0.3s ease;
     min-width: 0;
     min-height: 36px;
     white-space: normal;

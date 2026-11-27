@@ -198,6 +198,7 @@
     cursor: pointer;
     padding: 4px 6px;
     border-radius: 4px;
+
     transition: background 0.2s, color 0.2s;
 }
 
@@ -239,7 +240,8 @@
     display: flex;
     flex-direction: column;
     gap: 8px;
-    transition: all 0.2s ease-in-out;
+
+    transition: background-color 0.2s ease-in-out, border-color 0.2s ease-in-out, box-shadow 0.2s ease-in-out, color 0.2s ease-in-out, opacity 0.2s ease-in-out, transform 0.2s ease-in-out;
 }
 
 .task-card:hover {
@@ -316,7 +318,8 @@
     background: #ffffff;
     color: #64748b;
     cursor: pointer;
-    transition: all 0.2s;
+
+    transition: background 0.2s, border-radius 0.2s, color 0.2s, height 0.2s, width 0.2s;
 }
 
 .icon-btn:hover {
@@ -375,6 +378,7 @@
     height: 100%;
     background: #0284c7;
     border-radius: 3px;
+
     transition: width 0.3s ease;
 }
 
@@ -430,7 +434,8 @@
     background: #ffffff;
     color: #475569;
     cursor: pointer;
-    transition: all 0.2s;
+
+    transition: background 0.2s, border-color 0.2s, color 0.2s;
 }
 
 .action-btn:hover {

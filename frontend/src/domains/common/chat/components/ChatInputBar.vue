@@ -12,6 +12,17 @@
                 @keydown="onKeydown"
                 @input="autoResize"
             ></textarea>
+            <!-- V3.7.20：底图切片预设快捷命令（本地解析+执行，零 LLM 调用） -->
+            <button
+                class="round-btn quick-btn"
+                :class="{ 'is-open': quickOpen }"
+                :title="t('chat.quickCommandsTitle')"
+                :aria-expanded="quickOpen"
+                :disabled="isLoading"
+                @click="toggleQuick"
+            >
+                <Layers3 :size="16" />
+            </button>
             <button
                 v-if="isLoading"
                 class="round-btn stop-btn"
@@ -33,6 +44,36 @@
                 <SendHorizontal :size="15" />
             </button>
         </div>
+
+        <!-- 预设命令面板：分组列出高德/Google 切片配置 -->
+        <Transition name="quick-pop">
+            <div
+                v-if="quickOpen"
+                class="quick-panel"
+                @click.stop
+            >
+                <div class="quick-panel-title">{{ t('chat.quickCommandsTitle') }}</div>
+                <div
+                    v-for="group in quickGroups"
+                    :key="group.id"
+                    class="quick-group"
+                >
+                    <div class="quick-group-title">{{ t(group.labelKey) }}</div>
+                    <div class="quick-grid">
+                        <button
+                            v-for="cmd in group.commands"
+                            :key="cmd.id"
+                            class="quick-item"
+                            :title="cmd.intent"
+                            @click="pickQuick(cmd)"
+                        >
+                            {{ t(cmd.labelKey) }}
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </Transition>
+
         <div class="footer-hint">{{ t('chat.enterSend') }}</div>
     </div>
 </template>
@@ -58,6 +99,7 @@
     border-radius: 16px;
     background: #fbfdfb;
     padding: 4px 4px 4px 12px;
+
     transition: border-color 0.18s, box-shadow 0.18s, background 0.18s;
 }
 
@@ -122,7 +164,8 @@ textarea::placeholder {
     align-items: center;
     justify-content: center;
     flex-shrink: 0;
-    transition: all 0.18s ease;
+
+    transition: background 0.18s ease, border-color 0.18s ease, border-radius 0.18s ease, box-shadow 0.18s ease, color 0.18s ease, filter 0.18s ease, height 0.18s ease, transform 0.18s ease, width 0.18s ease;
 }
 
 .send-btn {
@@ -159,6 +202,99 @@ textarea::placeholder {
     50% { box-shadow: 0 2px 12px rgba(var(--danger-rgb), 0.55); }
 }
 
+/* V3.7.20：底图切片预设快捷命令 */
+.quick-btn {
+    background: transparent;
+    color: var(--text-muted);
+    border: 1px solid transparent;
+}
+
+.quick-btn:hover:not(:disabled),
+.quick-btn.is-open {
+    color: var(--brand-primary);
+    background: rgba(var(--brand-primary-rgb), 0.08);
+    border-color: rgba(var(--brand-primary-rgb), 0.2);
+}
+
+.quick-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
+.quick-panel {
+    position: absolute;
+    bottom: calc(100% - 4px);
+    left: 14px;
+    right: 14px;
+    max-height: min(52vh, 420px);
+    overflow-y: auto;
+    z-index: 20;
+    padding: 12px;
+    border: 1px solid var(--border-light, #e3ece7);
+    border-radius: 14px;
+    background: #fff;
+    box-shadow: 0 -8px 28px rgba(0, 0, 0, 0.12);
+}
+
+.quick-panel-title {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 8px;
+}
+
+.quick-group + .quick-group {
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px solid var(--border-light, #eef2ef);
+}
+
+.quick-group-title {
+    font-size: 10.5px;
+    color: var(--text-muted);
+    margin-bottom: 6px;
+}
+
+.quick-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(132px, 1fr));
+    gap: 6px;
+}
+
+.quick-item {
+    padding: 7px 9px;
+    min-height: 32px;
+    border: 1px solid var(--border-light, #e3ece7);
+    border-radius: 8px;
+    background: #fbfdfb;
+    color: var(--text-primary);
+    font-size: 11.5px;
+    text-align: left;
+    cursor: pointer;
+
+    transition: background 0.16s, border-color 0.16s;
+}
+
+.quick-item:hover {
+    background: rgba(var(--brand-primary-rgb), 0.08);
+    border-color: rgba(var(--brand-primary-rgb), 0.35);
+}
+
+.quick-pop-enter-active,
+.quick-pop-leave-active {
+    transition: opacity 0.16s ease, transform 0.16s ease;
+}
+
+.quick-pop-enter-from,
+.quick-pop-leave-to {
+    opacity: 0;
+    transform: translateY(6px);
+}
+
+.chat-footer {
+    position: relative;
+}
+
 /* 快捷键提示：常驻高度保留（避免出现/消失时输入区跳动），
    默认淡出，聚焦或悬停时淡入 —— 熟悉后不再长期占用视觉注意力 */
 .footer-hint {
@@ -170,6 +306,7 @@ textarea::placeholder {
     color: var(--text-muted);
     user-select: none;
     opacity: 0;
+
     transition: opacity 0.18s ease;
 }
 
@@ -196,6 +333,20 @@ textarea::placeholder {
     /* 触屏无 hover，提示常显 */
     .footer-hint {
         opacity: 1;
+    }
+
+    .quick-item {
+        min-height: 40px;
+        font-size: 12px;
+    }
+}
+
+/* 触屏能力基线：不依赖宽度断点，命中区 ≥40px */
+@media (pointer: coarse) {
+    .quick-btn,
+    .quick-item {
+        min-width: 40px;
+        min-height: 40px;
     }
 }
 </style>

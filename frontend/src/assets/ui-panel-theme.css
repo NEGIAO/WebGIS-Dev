@@ -120,8 +120,18 @@
 .ui-avatar img {
     width: 100%;
     height: 100%;
-    border-radius: 10px; /* 外框 12px − 2px 边框 */
+    border-radius: 10px; /* 外框 12px − 2px 边框：同心圆角 */
     object-fit: cover;
+    /* 低透明度中性描边给位图一致 depth；outline 不占布局，负 offset 内收。
+       纯黑/纯白，不用带色中性或品牌色，避免边缘显脏。 */
+    outline: 1px solid oklch(0 0 0 / 0.1);
+    outline-offset: -1px;
+}
+
+@media (prefers-color-scheme: dark) {
+    .ui-avatar img {
+        outline-color: oklch(1 0 0 / 0.1);
+    }
 }
 
 .ui-profile-info {
@@ -176,11 +186,13 @@
 .ui-header-btns {
     display: flex;
     flex-direction: row;
-    gap: 6px;
+    /* 10px 间距 = 30px 按钮 + 40px 命中区：相邻命中区恰好相接而不重叠 */
+    gap: 10px;
     flex-shrink: 0;
 }
 
 .ui-icon-btn {
+    position: relative;
     background: rgba(255, 255, 255, 0.92);
     border: 1px solid rgba(255, 255, 255, 0.6);
     color: var(--brand-primary-dark);
@@ -191,10 +203,25 @@
     align-items: center;
     justify-content: center;
     cursor: pointer;
-    transition: all 0.2s ease;
+    transition:
+        background-color 0.2s ease,
+        box-shadow 0.2s ease,
+        transform 0.2s ease,
+        scale 0.15s ease-out;
     font-size: 12px;
     flex-shrink: 0;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.18);
+}
+
+/* 视觉保持 30px，命中区扩到 40×40；靠父级 gap 保证不与邻钮重叠 */
+.ui-icon-btn::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 40px;
+    height: 40px;
+    transform: translate(-50%, -50%);
 }
 
 .ui-icon-btn:hover:not(:disabled) {
@@ -209,7 +236,7 @@
 }
 
 .ui-icon-btn:active {
-    transform: scale(0.95);
+    scale: 0.96;
 }
 
 /* ── 速览条：浅绿渐变底 + 白色胶囊指标 ── */
@@ -267,6 +294,7 @@
     font-family: inherit;
     color: var(--text-secondary);
     cursor: pointer;
+
     transition: color 0.2s ease, background 0.2s ease;
     position: relative;
     display: flex;
@@ -334,10 +362,13 @@
 /* ── 内容卡片：白色圆角块（body 内的信息分组） ── */
 .ui-card {
     background: #fff;
-    border: 1px solid rgba(var(--brand-primary-rgb), 0.14);
     border-radius: 12px;
     padding: 14px 16px;
-    box-shadow: 0 1px 2px rgba(20, 45, 25, 0.04);
+    /* 原本用带品牌色的发丝 border 伪造层次；换成透明分层阴影，
+       任意底色上都不会析出脏边，且与 --shadow-float 令牌同构 */
+    box-shadow:
+        0 0 0 1px rgba(var(--shadow-rgb), 0.06),
+        0 1px 2px -1px rgba(var(--shadow-rgb), 0.08);
     display: flex;
     flex-direction: column;
     gap: 10px;
@@ -386,7 +417,10 @@
     align-items: center;
     justify-content: center;
     gap: 8px;
-    transition: all 0.2s ease;
+    transition:
+        background-color 0.2s ease,
+        border-color 0.2s ease,
+        transform 0.2s ease;
 }
 
 .ui-btn-danger:hover:not(:disabled) {

@@ -1208,7 +1208,8 @@
     border: 1px solid rgba(var(--brand-primary-rgb), 0.14);
     border-radius: 8px;
     background: #fff;
-    transition: all 0.2s ease;
+
+    transition: background 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
 /* 与 .module-card 统一：点击展开后菜单级高亮 */
@@ -1299,7 +1300,8 @@
     cursor: pointer;
     font-size: 11px;
     font-weight: 600;
-    transition: all 0.15s ease;
+
+    transition: background 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease, color 0.15s ease;
 }
 
 .option-card:hover:not(:disabled) {
@@ -1566,7 +1568,8 @@
     border-radius: 7px;
     background: #fff;
     overflow: hidden;
-    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+
+    transition: background 0.2s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.2s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .overlay-card:hover {
@@ -1603,7 +1606,8 @@
     border-radius: 50%;
     background: rgba(15, 23, 42, 0.18);
     flex-shrink: 0;
-    transition: all 0.2s ease;
+
+    transition: background 0.2s ease, box-shadow 0.2s ease;
 }
 
 .overlay-status-dot.active {
@@ -1653,7 +1657,8 @@
     background: rgba(var(--brand-primary-rgb), 0.05);
     color: rgba(var(--ctp-ice-text-rgb), 0.6);
     cursor: pointer;
-    transition: all 0.15s ease;
+
+    transition: background 0.15s ease, border-radius 0.15s ease, color 0.15s ease, height 0.15s ease, width 0.15s ease;
 }
 
 .overlay-action-btn:hover {
@@ -1678,6 +1683,7 @@
     background: rgba(var(--ctp-ice-rgb), 0.2);
     display: flex;
     align-items: center;
+
     transition: background 0.2s ease;
 }
 
@@ -1686,6 +1692,7 @@
     height: 14px;
     border-radius: 50%;
     background: var(--ctp-thumb);
+
     transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
@@ -1740,6 +1747,7 @@
     border-radius: 50%;
     background: var(--ctp-green);
     cursor: pointer;
+
     transition: transform 0.12s ease;
 }
 
@@ -1766,7 +1774,8 @@
     border-radius: 8px;
     background: rgba(var(--brand-primary-rgb), 0.05);
     cursor: pointer;
-    transition: all 0.2s ease;
+
+    transition: background 0.2s ease, border-radius 0.2s ease;
 }
 
 .data-upload-area:hover {
@@ -1823,6 +1832,7 @@
 .sample-chevron {
     margin-left: auto;
     opacity: 0.6;
+
     transition: transform 0.15s ease;
 }
 
@@ -1857,6 +1867,7 @@
     font-weight: 600;
     text-align: left;
     cursor: pointer;
+
     transition: background 0.12s ease;
 }
 
@@ -1873,6 +1884,7 @@
 .scene-sample-chevron {
     margin-left: auto;
     opacity: 0.6;
+
     transition: transform 0.18s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
@@ -1923,6 +1935,7 @@
     font-weight: 600;
     text-align: left;
     cursor: pointer;
+
     transition: background 0.14s ease, color 0.14s ease, transform 0.14s ease;
 }
 
@@ -1937,7 +1950,7 @@
 }
 
 .scene-sample-menu-item:active {
-    transform: translateX(2px) scale(0.98);
+    transform: translateX(2px) scale(0.96);
 }
 
 
@@ -1995,6 +2008,7 @@
     background: #fff;
     box-shadow: 0 1px 2px rgba(20, 45, 25, 0.04);
     overflow: hidden;
+
     transition: border-color 0.2s cubic-bezier(0.16, 1, 0.3, 1),
                 background 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 }

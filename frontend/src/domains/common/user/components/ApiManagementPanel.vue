@@ -525,6 +525,7 @@
     background: linear-gradient(90deg, var(--brand-primary-light), var(--brand-primary));
     opacity: 0;
     transform: scaleX(0.45);
+
     transition: opacity 0.22s ease, transform 0.22s ease;
 }
 
@@ -664,6 +665,7 @@
     color: var(--text-primary);
     outline: none;
     box-sizing: border-box;
+
     transition: border-color 0.2s;
 }
 
@@ -682,7 +684,8 @@
     cursor: pointer;
     font-weight: 500;
     font-size: 13px;
-    transition: all 0.3s ease;
+
+    transition: background 0.3s ease, border-radius 0.3s ease, box-shadow 0.3s ease, color 0.3s ease, font-size 0.3s ease, font-weight 0.3s ease, padding 0.3s ease;
     box-shadow: 0 2px 6px rgba(58, 129, 76, 0.2);
 }
 
@@ -728,6 +731,7 @@
 .sortable-th {
     cursor: pointer;
     user-select: none;
+
     transition: background 0.15s;
 }
 
@@ -749,6 +753,7 @@
 .sort-icon {
     font-size: 11px;
     opacity: 0.5;
+
     transition: opacity 0.15s;
 }
 
@@ -927,7 +932,8 @@
     cursor: pointer;
     font-weight: 500;
     color: var(--acc-text-strong, #214a31);
-    transition: all 0.2s ease;
+
+    transition: background 0.2s ease, border-radius 0.2s ease, color 0.2s ease, font-weight 0.2s ease, padding 0.2s ease;
 }
 
 .btn-paging:hover:not(:disabled) {
@@ -959,7 +965,8 @@
     border: 1px solid rgba(var(--brand-primary-rgb), 0.2);
     border-radius: 12px;
     padding: 20px;
-    transition: all 0.3s ease;
+
+    transition: background 0.3s ease, border-radius 0.3s ease, box-shadow 0.3s ease, padding 0.3s ease;
     box-shadow: 0 4px 12px rgba(49, 111, 69, 0.05);
     min-width: 0;
     box-sizing: border-box;
@@ -1233,7 +1240,8 @@
     border-radius: 6px;
     font-size: 13px;
     cursor: pointer;
-    transition: all 0.2s;
+
+    transition: background 0.2s, border-radius 0.2s, color 0.2s, font-size 0.2s, padding 0.2s;
 }
 
 .btn-edit:hover {
@@ -1249,6 +1257,7 @@
     border-radius: 6px;
     font-size: 14px;
     cursor: pointer;
+
     transition: background 0.2s;
 }
 
@@ -1269,6 +1278,7 @@
     border-radius: 6px;
     font-size: 14px;
     cursor: pointer;
+
     transition: background 0.2s;
 }
 

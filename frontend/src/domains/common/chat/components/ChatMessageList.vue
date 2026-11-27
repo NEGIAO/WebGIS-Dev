@@ -476,6 +476,7 @@
     margin-top: 4px;
     padding-left: 2px;
     opacity: 0;
+
     transition: opacity 0.15s ease;
 }
 
@@ -500,7 +501,8 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    transition: all 0.15s;
+
+    transition: background 0.15s, border-radius 0.15s, color 0.15s, height 0.15s, width 0.15s;
 }
 
 .action-btn:hover {
@@ -665,7 +667,8 @@
     padding: 6px 12px;
     font-size: 12px;
     cursor: pointer;
-    transition: all 0.15s;
+
+    transition: background 0.15s, border-radius 0.15s, color 0.15s, font-size 0.15s, padding 0.15s;
 }
 
 .suggestion-chip:hover {
@@ -695,7 +698,8 @@
     color: var(--text-secondary);
     cursor: pointer;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.14);
-    transition: all 0.15s;
+
+    transition: backdrop-filter 0.15s, background 0.15s, border-radius 0.15s, bottom 0.15s, box-shadow 0.15s, color 0.15s, height 0.15s, right 0.15s, width 0.15s;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -768,6 +772,7 @@
     font-weight: 500;
     color: var(--text-secondary);
     padding: 6px 12px;
+
     transition: color 0.2s;
     width: 100%;
     box-sizing: border-box;
@@ -787,6 +792,7 @@
 
 .think-chevron {
     margin-left: auto;
+
     transition: transform 0.2s ease;
 }
 
@@ -871,6 +877,7 @@
     text-decoration: none;
     font-weight: 500;
     border-bottom: 1px dashed var(--brand-primary);
+
     transition: color 0.2s;
 }
 .markdown-body a:hover {
@@ -1082,7 +1089,8 @@
     font-weight: 500;
     line-height: 1.4;
     cursor: pointer;
-    transition: all 0.2s;
+
+    transition: background 0.2s, border-radius 0.2s, color 0.2s, font-size 0.2s, font-weight 0.2s, line-height 0.2s, opacity 0.2s, padding 0.2s, right 0.2s, top 0.2s;
     opacity: 0;
     z-index: 2;
     box-sizing: border-box;

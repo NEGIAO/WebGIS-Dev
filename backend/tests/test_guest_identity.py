@@ -143,6 +143,59 @@ class GuestUidDerivationTests(unittest.TestCase):
         self.assertNotEqual(device_uid, ip_ua_uid)
 
 
+class ExtractIdentityIpTests(unittest.TestCase):
+    """V3.7.18：身份 IP 取 XFF 最右侧公网跳（此前取末跳，HF 下取到内网代理 IP）。"""
+
+    def _req(self, xff=None, host="10.16.1.43"):
+        from types import SimpleNamespace
+
+        headers = {"X-Forwarded-For": xff} if xff else {}
+        return SimpleNamespace(headers=headers, client=SimpleNamespace(host=host))
+
+    def test_hf_chain_returns_real_client_ip(self):
+        # HF 实测链：真实用户公网 IP + 内网代理末跳 → 取真实 IP，不取 10.16.1.43
+        req = self._req("8.8.8.8, 10.16.1.43")
+        self.assertEqual(auth_constants._extract_identity_ip(req), "8.8.8.8")
+
+    def test_spoofed_first_hop_is_ignored(self):
+        # 链首可由客户端任意塞值：取最右侧公网跳（可信代理追加），不取链首伪造值
+        req = self._req("1.2.3.4, 114.114.114.114, 10.16.1.43")
+        self.assertEqual(auth_constants._extract_identity_ip(req), "114.114.114.114")
+
+    def test_direct_connection_uses_client_host(self):
+        # 无代理直连：XFF 缺失时回退 request.client.host（公网才取）
+        req = self._req(None, host="223.5.5.5")
+        self.assertEqual(auth_constants._extract_identity_ip(req), "223.5.5.5")
+
+    def test_all_private_chain_returns_empty(self):
+        # 全链皆私网且直连也是私网：返回 ""，不再把内网代理 IP 当作身份
+        req = self._req("10.16.1.43, 172.19.0.1")
+        self.assertEqual(auth_constants._extract_identity_ip(req), "")
+        req = self._req(None, host="127.0.0.1")
+        self.assertEqual(auth_constants._extract_identity_ip(req), "")
+
+    def test_invalid_hops_are_skipped(self):
+        req = self._req("garbage, 8.8.4.4, 10.0.0.1")
+        self.assertEqual(auth_constants._extract_identity_ip(req), "8.8.4.4")
+
+    def test_ipv6_public_and_private(self):
+        req = self._req("2606:4700:4700::1111, fd00::1")
+        self.assertEqual(auth_constants._extract_identity_ip(req), "2606:4700:4700::1111")
+        req = self._req("fd00::1, fe80::1")
+        self.assertEqual(auth_constants._extract_identity_ip(req), "")
+
+    def test_same_ua_different_users_no_longer_collide(self):
+        # 回归：修复前两用户同 UA 撞进同一 guest_uid（身份 IP 恒为 10.16.1.43）
+        ua = "Mozilla/5.0"
+        uid_a = auth_constants._derive_uid_from_ip_ua(
+            auth_constants._extract_identity_ip(self._req("8.8.8.8, 10.16.1.43")), ua
+        )
+        uid_b = auth_constants._derive_uid_from_ip_ua(
+            auth_constants._extract_identity_ip(self._req("114.114.114.114, 10.16.1.43")), ua
+        )
+        self.assertNotEqual(uid_a, uid_b)
+
+
 class _TempAuthDbMixin(unittest.TestCase):
     """为 purge 测试提供临时 auth 库（替换 _db_connection）。"""
 

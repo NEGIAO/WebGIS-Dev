@@ -733,8 +733,8 @@ async def create_guest_session(request: Request, payload: Optional[GuestSessionR
 
     核心逻辑：
     - 携带有效 guest token（X-Guest-Token 头 / webgis_guest Cookie）→ 原身份续期，不计限频；
-    - 否则按 (XFF末跳IP, UA哈希) 限频后新签发：有 device_id → H(guest|device_id)
-      （与历史游客 uid 同构，统计口径连续）；无 device_id → H(末跳IP|UA) 确定性桶；
+    - 否则按 (身份IP, UA哈希) 限频后新签发：有 device_id → H(guest|device_id)
+      （与历史游客 uid 同构，统计口径连续）；无 device_id → H(身份IP|UA) 确定性桶；
     - 响应体镜像登录响应结构（token + user），便于前端统一解析；
       同时尽力写入 SameSite=None Cookie（同源部署后自动成为服务端信任锚）。
     - GUEST_TOKEN_SECRET 未配置 → 503（签发通道关闭，依赖解析回落确定性派生桶）。
@@ -797,7 +797,7 @@ async def create_guest_session(request: Request, payload: Optional[GuestSessionR
             detail=_auth_error_detail("GUEST_ISSUANCE_DISABLED", "游客身份签发未启用"),
         )
     # 三类身份统一：游客 token 也登记进 sessions 表，管理员一张表即可维护/删除。
-    # V3.7.14：按身份 IP（XFF 末跳）单独解析，不复用展示 IP 的 request.state 缓存；
+    # V3.7.14：按身份 IP（XFF 最右侧公网跳）单独解析，不复用展示 IP 的 request.state 缓存；
     # 进程级 TTL 缓存仍保证同一 IP 只解析一次。
     from services.request_geo import resolve_ip_geo
 
@@ -894,7 +894,7 @@ async def login_user(payload: LoginRequest, request: Request) -> Dict[str, Any]:
         request_user_agent = str(request.headers.get("User-Agent", "unknown"))
         guest_device_id = _normalize_guest_device_id(payload.guest_device_id)
         # V3.7.6 游客身份治理：游客登录的配额桶同样收敛为「验签 token 优先，
-        # 否则确定性 H(末跳IP|UA)」——轮换 device_id 不再铸造新桶；
+        # 否则确定性 H(身份IP|UA)」——轮换 device_id 不再铸造新桶；
         # device_id 仅随会话保留用于在线去重。
         presented_token = _extract_guest_token(request)
         guest_uid = verify_guest_token_active(presented_token) if presented_token else None

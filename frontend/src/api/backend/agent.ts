@@ -55,6 +55,10 @@ function buildDefaultProxyBody(payload: any = {}): Record<string, any> {
         if (mapContext) body.map_context = mapContext;
     }
 
+    // V3.7.29 修复：System Prompt 必须走专用字段。旧版遗漏本行，
+    // 默认 AI 通道实际使用后端默认提示词，前端能力边界与罗盘协议段全部失效。
+    if (payload.system_prompt) body.system_prompt = String(payload.system_prompt).trim();
+
     if (payload.override_model) body.override_model = String(payload.override_model).trim();
     if (typeof payload.override_timeout_seconds !== 'undefined' && payload.override_timeout_seconds !== null)
         body.override_timeout_seconds = Number(payload.override_timeout_seconds);
@@ -319,6 +323,10 @@ function buildAgentCompletionsBody(payload: any = {}): Record<string, any> {
         const mapContext = sanitizeMapContext(payload.map_context);
         if (mapContext) body.map_context = mapContext;
     }
+
+    // V3.7.29 修复：与 buildAgentProxyBody 对齐。旧版遗漏本行，
+    // 后端代理通道实际使用后端默认提示词，前端组装的能力边界未生效。
+    if (payload.system_prompt) body.system_prompt = String(payload.system_prompt).trim();
 
     // 传递用户配置面板中尚未保存的参数覆盖
     if (payload.override_base_url) {

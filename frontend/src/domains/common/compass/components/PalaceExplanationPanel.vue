@@ -152,7 +152,7 @@ $feng-shui-green: #2d5016;
 // 过渡动画
 .panel-fade-enter-active,
 .panel-fade-leave-active {
-    transition: all 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+    transition: opacity 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55), transform 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55);
 }
 
 .panel-fade-enter-from,
@@ -260,7 +260,10 @@ $feng-shui-green: #2d5016;
         font-size: 24px;
         cursor: pointer;
         opacity: 0.7;
-        transition: all 0.3s ease;
+        transition:
+            opacity 0.3s ease,
+            transform 0.3s ease,
+            color 0.3s ease;
         width: 32px;
         height: 32px;
         display: flex;
@@ -344,7 +347,9 @@ $feng-shui-green: #2d5016;
     background: rgba($feng-shui-gold, 0.05);
     border-left: 3px solid $feng-shui-gold;
     border-radius: 6px;
-    transition: all 0.3s ease;
+    transition:
+        background 0.3s ease,
+        box-shadow 0.3s ease;
 
     &:hover {
         background: rgba($feng-shui-gold, 0.08);
@@ -432,7 +437,10 @@ $feng-shui-green: #2d5016;
         border: 1px solid rgba($feng-shui-gold, 0.45);
         border-radius: 6px;
         cursor: pointer;
-        transition: all 0.3s ease;
+        transition:
+            color 0.3s ease,
+            border-color 0.3s ease,
+            background 0.3s ease;
 
         .ask-icon {
             font-size: 13px;

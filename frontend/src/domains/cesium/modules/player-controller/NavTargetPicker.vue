@@ -329,7 +329,8 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+
+    transition: background 0.2s cubic-bezier(0.4, 0, 0.2, 1), border-radius 0.2s cubic-bezier(0.4, 0, 0.2, 1), color 0.2s cubic-bezier(0.4, 0, 0.2, 1), height 0.2s cubic-bezier(0.4, 0, 0.2, 1), padding 0.2s cubic-bezier(0.4, 0, 0.2, 1), width 0.2s cubic-bezier(0.4, 0, 0.2, 1);
     padding: 0;
     border-radius: 2px;
 }
@@ -342,6 +343,7 @@
     border: 1px solid #00ffff;
     border-radius: 2px;
     opacity: 0;
+
     transition: opacity 0.2s;
 }
 
@@ -349,6 +351,7 @@
     font-size: 16px;
     line-height: 1;
     font-weight: bold;
+
     transition: transform 0.3s ease;
 }
 
@@ -427,7 +430,8 @@
     align-items: center;
     justify-content: center;
     cursor: pointer;
-    transition: all 0.2s;
+
+    transition: background 0.2s, border-color 0.2s, border-radius 0.2s, box-shadow 0.2s, color 0.2s, height 0.2s, padding 0.2s, width 0.2s;
 }
 
 .nav-dialog-close:hover {
@@ -459,7 +463,8 @@
     color: #e8f6ff;
     cursor: pointer;
     text-align: left;
-    transition: all 0.25s cubic-bezier(0.25, 0.8, 0.25, 1);
+
+    transition: background 0.25s cubic-bezier(0.25, 0.8, 0.25, 1), border-radius 0.25s cubic-bezier(0.25, 0.8, 0.25, 1), color 0.25s cubic-bezier(0.25, 0.8, 0.25, 1), gap 0.25s cubic-bezier(0.25, 0.8, 0.25, 1), padding 0.25s cubic-bezier(0.25, 0.8, 0.25, 1), width 0.25s cubic-bezier(0.25, 0.8, 0.25, 1);
 }
 
 /* 选项卡左侧呼吸边条 */
@@ -473,6 +478,7 @@
     height: 0;
     background: #00e5ff;
     box-shadow: 0 0 8px #00e5ff;
+
     transition: height 0.2s ease;
 }
 
@@ -500,7 +506,8 @@
     background: rgba(0, 210, 255, 0.08);
     border: 1px solid rgba(0, 210, 255, 0.15);
     color: #00d2ff;
-    transition: all 0.2s;
+
+    transition: background 0.2s, border-radius 0.2s, color 0.2s, font-size 0.2s, height 0.2s, width 0.2s;
 }
 
 .nav-option:hover .nav-option-icon {
@@ -537,7 +544,8 @@
     border-top: 2px solid rgba(0, 210, 255, 0.4);
     border-right: 2px solid rgba(0, 210, 255, 0.4);
     transform: rotate(45deg);
-    transition: all 0.2s;
+
+    transition: height 0.2s, transform 0.2s, width 0.2s;
 }
 
 .nav-option:hover .nav-option-arrow {
@@ -550,15 +558,15 @@
    ========================================================================== */
 .nav-dialog-fade-enter-active,
 .nav-dialog-fade-leave-active {
-    transition: all 0.3s cubic-bezier(0.19, 1, 0.22, 1);
+    transition: opacity 0.3s cubic-bezier(0.19, 1, 0.22, 1);
 }
 
 .nav-dialog-fade-enter-active .nav-dialog {
-    transition: all 0.3s cubic-bezier(0.19, 1, 0.22, 1);
+    transition: background-color 0.3s cubic-bezier(0.19, 1, 0.22, 1), border-color 0.3s cubic-bezier(0.19, 1, 0.22, 1), box-shadow 0.3s cubic-bezier(0.19, 1, 0.22, 1), color 0.3s cubic-bezier(0.19, 1, 0.22, 1), opacity 0.3s cubic-bezier(0.19, 1, 0.22, 1), transform 0.3s cubic-bezier(0.19, 1, 0.22, 1);
 }
 
 .nav-dialog-fade-leave-active .nav-dialog {
-    transition: all 0.2s cubic-bezier(0.19, 1, 0.22, 1);
+    transition: background-color 0.2s cubic-bezier(0.19, 1, 0.22, 1), border-color 0.2s cubic-bezier(0.19, 1, 0.22, 1), box-shadow 0.2s cubic-bezier(0.19, 1, 0.22, 1), color 0.2s cubic-bezier(0.19, 1, 0.22, 1), opacity 0.2s cubic-bezier(0.19, 1, 0.22, 1), transform 0.2s cubic-bezier(0.19, 1, 0.22, 1);
 }
 
 /* 结合了透明度和缩放（Scale）的入场，极具大屏系统展开感 */

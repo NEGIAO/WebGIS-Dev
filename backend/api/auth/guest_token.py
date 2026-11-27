@@ -4,7 +4,7 @@
 设计要点（方案 Docs/TODO/guest-identity-governance-plan.md §3.2）：
 - token = gt1_<b64url(uid|exp)>.<b64url(HMAC-SHA256)>，密钥 GUEST_TOKEN_SECRET（L3）；
 - secret 未配置时签发通道整体关闭（端点 503），验签路径自然回落确定性派生桶；
-- 签发限频按 (XFF末跳IP, UA哈希) 进程内滑动窗口，与 LOGIN_THROTTLE 同为单 worker 语义；
+- 签发限频按 (身份IP, UA哈希) 进程内滑动窗口，与 LOGIN_THROTTLE 同为单 worker 语义；
 - 限频键刻意不含 device_id：轮换设备头无法绕开新身份铸造上限。
 """
 
@@ -325,7 +325,8 @@ class GuestIssueLimiter:
 
 
 def issue_limit_key(identity_ip: str, user_agent: str) -> str:
-    """构造限频键：哈希(末跳IP | UA)。刻意不含 device_id。"""
+    """构造限频键：哈希(身份IP | UA)。刻意不含 device_id。身份 IP 为
+    `_extract_identity_ip` 的结果（XFF 最右侧公网跳）。"""
     digest = hashlib.sha256(f"{identity_ip}|{user_agent}".encode("utf-8")).hexdigest()
     return f"issue_{digest[:24]}"
 

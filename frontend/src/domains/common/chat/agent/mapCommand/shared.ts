@@ -10,6 +10,8 @@ import type View from 'ol/View';
 import type Cesium from 'cesium';
 import { toLonLat } from 'ol/proj';
 import { normalizeCustomXyzUrl } from '@domains/cesium/composables/layers/layerUtils';
+import { TILE_PROXY_BASE_URL } from '@/config/publicRuntime';
+import { resolveTileBasemapArg } from '@common/chat/constants/tileIntentPresets';
 import { isAgentBasemapPresetId } from '../agentMapPresets';
 
 export const DEFAULT_TRANSITION_DURATION_MS = 700;
@@ -230,7 +232,15 @@ export function captureOlState(map: Map | null | undefined, getRuntimeState?: Ge
  * 校验底图切换参数：presetId 走白名单，url 走标准 XYZ 模板校验（二选一）
  * @param args presetId 或 url
  */
-export function validateBasemapArg({ presetId, url }: { presetId?: string; url?: string } = {}): ValidatedBasemapArg {
+export function validateBasemapArg({ presetId, url, intent }: { presetId?: string; url?: string; intent?: string } = {}): ValidatedBasemapArg {
+    const intentValue = String(intent || '').trim();
+    if (intentValue && !presetId && !url) {
+        const resolved = resolveTileBasemapArg(intentValue, TILE_PROXY_BASE_URL);
+        if (resolved.error) return { error: resolved.error };
+        if (resolved.presetId) return validateBasemapArg({ presetId: resolved.presetId });
+        if (resolved.url) return validateBasemapArg({ url: resolved.url });
+    }
+
     const urlValue = String(url || '').trim();
     if (urlValue) {
         const config = normalizeCustomXyzUrl(urlValue);

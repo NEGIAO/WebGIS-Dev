@@ -243,7 +243,8 @@
     min-height: 60px;
     /* 使用 min-height 确保高度 */
     cursor: pointer;
-    transition: all 0.3s ease;
+
+    transition: background 0.3s ease, box-shadow 0.3s ease, color 0.3s ease;
     border-radius: var(--panel-radius);
     color: var(--brand-accent-muted);
 }
@@ -340,6 +341,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
+
     transition: background 0.2s;
 }
 
@@ -376,7 +378,8 @@
     background: white;
     color: var(--brand-accent-muted);
     cursor: pointer;
-    transition: all 0.2s;
+
+    transition: background 0.2s, border-radius 0.2s, color 0.2s, font-size 0.2s, font-weight 0.2s, padding 0.2s, width 0.2s;
     font-weight: 500;
 }
 
@@ -420,7 +423,8 @@
     font-weight: 600;
     font-size: 13px;
     cursor: pointer;
-    transition: all 0.2s;
+
+    transition: background 0.2s, border-color 0.2s, box-shadow 0.2s, color 0.2s;
 }
 
 .mode-btn:hover {
@@ -450,7 +454,8 @@
     font-size: 13px;
     font-weight: 600;
     cursor: pointer;
-    transition: all 0.2s;
+
+    transition: border-radius 0.2s, font-size 0.2s, font-weight 0.2s, padding 0.2s;
 }
 
 .cancel-btn {

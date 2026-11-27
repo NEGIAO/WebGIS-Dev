@@ -487,7 +487,11 @@ frontend/src/
 │   │   │   │   ├── useChatAgentConfig.ts  # 工厂入口（装配四组方法到同一 reactive）
 │   │   │   │   └── useChatSession.ts
 │   │   │   ├── constants/
-│   │   │   │   └── agentToolsSchema.ts  # Agent Function Calling 工具声明
+│   │   │   │   ├── agentCapabilityRegistry.ts  # 工具能力注册表 SSOT（分组/触发词/罗盘机制段，派生 router 与 Prompt）
+│   │   │   │   ├── agentToolsSchema.ts  # Agent Function Calling 工具声明与 System Prompt（机制段按需注入）
+│   │   │   │   ├── agentToolRouter.ts  # 按用户意图筛选工具子集（从注册表派生触发词）
+│   │   │   │   ├── basemapQuickCommands.ts  # 底图切片预设快捷命令（含规则表一致性校验）
+│   │   │   │   └── tileIntentPresets.ts  # 瓦片语义预设表（自然语言→presetId/URL，禁模型拼参数）
 │   │   │   └── stores/
 │   │   │       └── useChatStore.ts  # Chat 状态
 │   │   ├── command-bus/

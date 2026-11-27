@@ -454,3 +454,46 @@ Sprint 3（穿插）：P3-1 容器二轮（O1/O2 交替）→ P2-1 bundle 分析
 - [ ] **历史源码注释中的 V3.7.15 曾用号残留**（2026-11-26 · 暂存区 Code Review / 版本归并时发现，按 Force_command §2.5 只记不改，日志 [2026-11-26-staged-code-review-version-merge.md](../LLM_record/26-11/2026-11-26/2026-11-26-staged-code-review-version-merge.md)）：
   - [ ] (现象) `backend/api/agent_chat/db.py:649` 注释写「V3.7.15：运行时 clamp 上限对齐 schema」，但该号已被 2026-11-22 归并进 V3.7.8（见 CHANGELOG 归并注），属历史曾用号；本次版本统一目标为 V3.7.14，该注释与本批暂存区无关。
   - [ ] (建议) 作为独立 L1 注释订正任务处理；不要在 IP 地理中枢批次中顺手改动。
+
+## 2026-11-27 暂存区全量 Code Review（92 文件，报告：Docs/LLM_record/26-11/2026-11-27/2026-11-27-staged-code-review.md）
+
+- [x] ~~**【阻断 B1】CSS transition 简写语法错误，约 89 处动效失效**（2026-11-27 Code Review）：~~（V3.7.30 已修复）
+  - [x] (现象) 大量写成 `transition: background, border-radius, color, height, width 0.15s;`，时长只作用于最后一项（CSS 规范），前面属性 duration=0s 无过渡。代表：`app/HomeView.vue:593`、`cesium/modules/player-controller/NavGuideHUD.vue:282`、`common/user/components/FloatingAccountPanel.vue:819`、`common/compass/components/PalaceExplanationPanel.vue:155`、`ol/components/AdministrativeDivisionPanel.vue:302`。
+  - [x] (影响) Vue `<Transition>` 淡入淡出失效、hover/按压动效消失；改动初衷是性能优化，实际是全局动效退化。
+  - [x] (建议) 每项独立带时长，或改用 `transition-property` + `transition-duration` 分离写法；剔除 height/width/padding/gap 等布局属性。
+
+- [x] ~~**【阻断 B2】README 版本演进表 17 行，违反「恒定 3 行」硬规范**（2026-11-27 Code Review）：~~（V3.7.30 已修复）
+  - [x] (现象) `README.md:622-638`，§5 要求恒定 3 行，本次插入 15 行只删 1 行，现存 17 行（V3.7.29→V3.7.13）。
+  - [x] (影响) README 与 CHANGELOG 大量重复，SSOT 破坏；§5「缺一即视为未完成」。
+  - [x] (建议) 只保留最新 3 条（V3.7.29/28/27），其余已在 CHANGELOG。
+
+- [x] ~~**【重要 I1】高德底图默认版本反转：规则表 GCJ-02 vs 品牌映射 WGS**（2026-11-27 Code Review）：~~（V3.7.30 已修复）
+  - [x] (现象) `tileIntentPresets.ts:38-43,108-112` 把「高德地图/卫星」映射为 GCJ-02 原始版，`chatIntentFallback.ts:41-45` 映射为 WGS 纠偏版。V3.7.27「规则表优先」后全部走原始版。
+  - [x] (影响) 底图瓦片与 WGS-84 中心坐标错位；同一句在 V3.7.26/27 结果不同；V3.7.21 类双表不同步复发。
+  - [x] (建议) 规则表两条改 WGS 纠偏版，校验函数加 presetId 交叉断言。
+
+- [x] ~~**【重要 I2】罗盘 Cesium 半径六档映射丢失**（2026-11-27 Code Review）：~~（V3.7.30 已修复）
+  - [x] (现象) `agentCapabilityRegistry.ts:126` 把 V3.7.23 恢复的六档 cameraHeight 边界压成「同量级换算」，OL 七档完整；`agentToolsSchema.ts:437` 注释称「逐字保留」与事实不符。
+  - [x] (影响) 3D 下模型缺档位，可能估算过小半径致罗盘不可见（V3.7.23 修过的回归）。
+  - [x] (建议) 补回六档阈值或至少五个边界值。
+
+- [x] ~~**【重要 I3】宫位知识问答指引随工具集按需注入而丢失**（2026-11-27 Code Review）：~~（V3.7.30 已修复）
+  - [x] (现象) `COMPASS_MECHANISM_PROMPT` 同时含交互协议与「宫位释义不拒绝、引用严谨」指引，但注入条件是工具集含 enable_compass；「坎宫是什么含义」不命中 compass 触发词，整段指引不注入。
+  - [x] (影响) 纯知识问答回退到 V3.7.23 修复前的拒绝行为。
+  - [x] (建议) 拆出 `COMPASS_KNOWLEDGE_PROMPT` 常驻注入，或扩充触发词覆盖宫位/山向/干支。
+
+- [x] ~~**【重要 I4】快捷命令回执污染 LLM 历史**（2026-11-27 Code Review）：~~（V3.7.30 已修复）
+  - [x] (现象) `ChatPanelContent.ts:867-869` 注释称「不作为 LLM 历史」，但 `pushUser(label)` 无标记，`useChatSession.ts:329-336` 只过滤 isToolStatus；`userTurnsCount` 也按其计数。
+  - [x] (影响) LLM 上下文被污染；会话轮次虚高致提前裁剪。
+  - [x] (建议) 回执打 `isQuickCommand` 标记，两个过滤点一并排除。
+
+- [x] ~~**【一般 G1】handleQuickCommand 缺请求序号与中断保护**（2026-11-27 Code Review）：`ChatPanelContent.ts:853-899` 无 requestSeq/AbortController，停止生成时异步竞态。建议复用 dispatchSend 机制。~~（V3.7.30 已修复）
+- [x] ~~**【一般 G2】身份 IP 为空时静默共用配额桶**：`auth/constants.py:204-234` 全私网 XFF 边界返回空串，同 UA 撞桶。建议告警 + fail-closed。~~（V3.7.30 已修复）
+- [x] ~~**【一般 G3】is_private_client_ip docstring 与安全用途脱节**：`auth/constants.py:144-161` 仍写「不作鉴权依据」，现为身份判定核心。建议更新文档契约。~~（V3.7.30 已修复）
+- [x] ~~**【一般 G4】客户端完全控制系统提示词**：`routes.py:214-220,848-854` 后端安全规则可能被整体替换。建议固定安全段 + 前端工具清单拼接。~~（V3.7.30 已修复）
+- [x] ~~**【一般 G5】规则一致性校验未接线**：`basemapQuickCommands.ts:11-13,88-100` 文件头称「模块加载时校验」，文件尾称「不自动执行」，且 `validateQuickCommandsAgainstRules()` 无调用方。建议接入回归脚本并修正注释。~~（V3.7.30 已修复）
+- [x] ~~**【一般 G6】新增架构文档未登记唯一权威树**：`Docs/Guide/project-structure.md:94-119` 缺 `agent-capability-system.md`；README 却自行加了索引。建议补登记。~~（V3.7.30 已修复）
+- [x] ~~**【一般 G7】两篇日志章节编号重复**：`markdown-emphasis-fix.md:91,98`、`prompt-autonomy-fix.md:87,94` 均有两个「四、」。建议重编号。~~（V3.7.30 已修复）
+- [x] ~~**【一般 G8】CHANGELOG 链接文字错误**：`CHANGELOG.md:49` 链接文字 `prompt-slimming` 指向 `prompt-autonomy-fix.md`。建议改文字。~~（V3.7.30 已修复）
+- [x] ~~**【一般 G9】7 篇日志缺「变更文件清单」章节**：§6 必含，仅 `2026-11-26-guest-identity-ip-fix.md` 具备。建议补齐。~~（V3.7.30 已修复）
+- [x] ~~**【一般 G10】README 文档计数严重失准**：`README.md:150` 称 550 篇，磁盘实测 761 篇（Guide 14、Architecture 23+3 decisions）。建议核实口径修正。~~（V3.7.30 已修复）

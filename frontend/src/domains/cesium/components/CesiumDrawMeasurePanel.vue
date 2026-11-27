@@ -255,6 +255,7 @@
     background: rgba(255, 255, 255, 0.2);
     color: #fff;
     cursor: pointer;
+
     transition: background 0.2s;
 }
 
@@ -307,7 +308,8 @@
     background: #fff;
     color: var(--brand-accent-muted);
     cursor: pointer;
-    transition: all 0.2s;
+
+    transition: background 0.2s, border-color 0.2s, box-shadow 0.2s, color 0.2s;
 }
 
 .tool-btn:hover {
@@ -410,7 +412,8 @@
     color: var(--text-brand, #374151);
     font-size: 11px;
     cursor: pointer;
-    transition: all 0.2s;
+
+    transition: background 0.2s, border-radius 0.2s, color 0.2s, font-size 0.2s, gap 0.2s, padding 0.2s;
 }
 
 .mini-btn:hover {
@@ -504,7 +507,8 @@
     font-size: 11px;
     font-weight: 500;
     cursor: pointer;
-    transition: all 0.2s;
+
+    transition: background 0.2s, border-radius 0.2s, color 0.2s, font-size 0.2s, font-weight 0.2s, gap 0.2s, padding 0.2s;
 }
 
 .action-btn:hover {

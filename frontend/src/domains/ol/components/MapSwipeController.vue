@@ -178,6 +178,7 @@
     border-right: 1px solid rgba(var(--brand-accent-light-rgb), 0.3);
     pointer-events: auto;
     box-shadow: 0 0 8px rgba(var(--brand-accent-light-rgb), 0.2);
+
     transition: box-shadow 0.2s ease-out;
     touch-action: none;
 }
@@ -304,7 +305,8 @@
     border-radius: 4px;
     backdrop-filter: blur(8px);
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
-    transition: all 0.2s ease-out;
+
+    transition: backdrop-filter 0.2s ease-out, background 0.2s ease-out, border-radius 0.2s ease-out, box-shadow 0.2s ease-out, color 0.2s ease-out, height 0.2s ease-out, width 0.2s ease-out;
     color: var(--text-on-brand);
 }
 
@@ -344,7 +346,8 @@
     border-radius: 4px;
     color: var(--text-on-brand);
     cursor: pointer;
-    transition: all 0.2s ease-out;
+
+    transition: backdrop-filter 0.2s ease-out, background 0.2s ease-out, border-radius 0.2s ease-out, box-shadow 0.2s ease-out, color 0.2s ease-out, height 0.2s ease-out, margin-bottom 0.2s ease-out, padding 0.2s ease-out, width 0.2s ease-out;
     backdrop-filter: blur(8px);
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
     touch-action: manipulation;
@@ -416,7 +419,8 @@
     font-size: 14px;
     font-weight: 600;
     cursor: pointer;
-    transition: all 0.2s ease-out;
+
+    transition: background 0.2s ease-out, border-color 0.2s ease-out, box-shadow 0.2s ease-out;
     touch-action: manipulation;
     -webkit-tap-highlight-color: transparent;
 }

@@ -333,6 +333,7 @@
     margin-left: auto;
     flex-shrink: 0;
     color: var(--text-muted);
+
     transition: transform 0.18s ease;
 }
 
@@ -378,7 +379,8 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    transition: all 0.15s;
+
+    transition: background 0.15s, border-radius 0.15s, color 0.15s, height 0.15s, width 0.15s;
 }
 
 .cfg-head-btn:hover:not(:disabled) {
@@ -464,6 +466,7 @@
     color: var(--text-primary);
     background: #fbfdfb;
     box-sizing: border-box;
+
     transition: border-color 0.15s, box-shadow 0.15s, background 0.15s;
 }
 
@@ -503,7 +506,8 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    transition: all 0.15s;
+
+    transition: background 0.15s, border-radius 0.15s, color 0.15s, height 0.15s, right 0.15s, width 0.15s;
 }
 
 .cfg-input-btn:hover {
@@ -532,6 +536,7 @@
     box-sizing: border-box;
     resize: vertical;
     min-height: 62px;
+
     transition: border-color 0.15s, box-shadow 0.15s, background 0.15s;
 }
 
@@ -584,6 +589,7 @@
     padding: 7px 10px;
     font-size: 12px;
     cursor: pointer;
+
     transition: background 0.12s;
 }
 
@@ -644,7 +650,8 @@
     font-weight: 600;
     cursor: pointer;
     box-shadow: 0 2px 8px rgba(var(--brand-primary-rgb), 0.3);
-    transition: all 0.15s;
+
+    transition: background 0.15s, border-radius 0.15s, box-shadow 0.15s, color 0.15s, font-size 0.15s, font-weight 0.15s, gap 0.15s, padding 0.15s;
 }
 
 .cfg-primary-btn:hover:not(:disabled) {
@@ -668,7 +675,8 @@
     color: var(--text-secondary);
     font-size: 11.5px;
     cursor: pointer;
-    transition: all 0.15s;
+
+    transition: background 0.15s, border-radius 0.15s, color 0.15s, font-size 0.15s, gap 0.15s, padding 0.15s;
 }
 
 .cfg-text-btn:hover:not(:disabled) {

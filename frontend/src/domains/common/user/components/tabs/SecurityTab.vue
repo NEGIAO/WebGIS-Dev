@@ -228,6 +228,7 @@
     height: 4px;
     border-radius: 999px;
     background: var(--border-light);
+
     transition: background 0.2s ease;
 }
 
@@ -287,7 +288,8 @@
     text-align: left;
     font-size: 13px;
     font-weight: 600;
-    transition: all 0.18s ease;
+
+    transition: background 0.18s ease, border-color 0.18s ease, color 0.18s ease;
     box-shadow: 0 1px 3px rgba(34, 50, 38, 0.04);
 }
 
@@ -356,6 +358,7 @@
     color: var(--text-muted);
     font-size: 13px;
     pointer-events: none;
+
     transition: color 0.15s;
 }
 
@@ -372,6 +375,7 @@
     font-size: 13px;
     color: var(--text-primary);
     background: var(--bg-secondary);
+
     transition: border-color 0.15s, box-shadow 0.15s, background 0.15s;
     box-sizing: border-box;
 }
@@ -402,7 +406,8 @@
     align-items: center;
     justify-content: center;
     font-size: 12px;
-    transition: all 0.15s;
+
+    transition: background 0.15s, border-radius 0.15s, color 0.15s, font-size 0.15s, height 0.15s, right 0.15s, width 0.15s;
 }
 
 .pwd-toggle:hover {
@@ -450,7 +455,8 @@
     justify-content: center;
     gap: 8px;
     box-shadow: 0 3px 10px rgba(var(--brand-primary-rgb), 0.28);
-    transition: all 0.18s ease;
+
+    transition: background 0.18s ease, border-radius 0.18s ease, box-shadow 0.18s ease, color 0.18s ease, font-size 0.18s ease, font-weight 0.18s ease, gap 0.18s ease, height 0.18s ease;
 }
 
 .btn-primary:hover:not(:disabled) {

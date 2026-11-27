@@ -953,6 +953,7 @@ button:focus-visible {
     background-clip: content-box;
     /* 静默态：贴近不可见的品牌色薄纱，不打扰首屏阅读 */
     background-color: rgba(var(--brand-primary-rgb), 0.16);
+
     transition: background-color 0.25s ease;
 }
 
@@ -1147,6 +1148,7 @@ button:focus-visible {
     white-space: nowrap;
     /* 供 .nav-link::after 下划线定位 */
     position: relative;
+
     transition: color 0.16s ease, background-color 0.16s ease;
 }
 
@@ -1181,6 +1183,7 @@ button:focus-visible {
     /* 用 transform 而非 width 做展开：不触发回流，且与文字等宽 */
     transform: scaleX(0);
     transform-origin: center;
+
     transition: transform 0.24s cubic-bezier(0.22, 0.7, 0.3, 1);
     pointer-events: none;
 }
@@ -1226,6 +1229,7 @@ button:focus-visible {
     background: transparent;
     cursor: pointer;
     flex-shrink: 0;
+
     transition: background-color 0.16s ease;
 }
 
@@ -1268,6 +1272,7 @@ button:focus-visible {
     /* 无框后横线是唯一形状，用正文色保证对比（旧版 --text-secondary 在
        去掉边框后显得发灰、像禁用态） */
     background: var(--text-primary);
+
     transition: transform 0.25s ease, opacity 0.2s ease;
 }
 
@@ -1301,6 +1306,7 @@ button:focus-visible {
     font-weight: 600;
     line-height: 1;
     flex-shrink: 0;
+
     transition: background-color 0.16s ease, color 0.16s ease;
 }
 
@@ -1370,6 +1376,7 @@ button:focus-visible {
     border-radius: 6px;
     cursor: pointer;
     white-space: nowrap;
+
     transition: background-color 0.16s ease, color 0.16s ease;
 }
 
@@ -1420,6 +1427,7 @@ button:focus-visible {
     letter-spacing: 0.01em;
     /* 与左侧幽灵控件留一道视觉分组，避免主按钮「粘」在语言切换上 */
     margin-left: 6px;
+
     transition: background-color 0.18s ease, transform 0.18s ease;
     /* 窄屏上 .nav-actions 是 flex、按钮又是唯一可压缩项：不锁 nowrap +
        shrink:0，它会被压到 min-content，"登录 / 注册" 在按钮里折成两三行，
@@ -2072,6 +2080,8 @@ button:focus-visible {
     font-size: 1.05rem;
     line-height: 1.8;
     color: var(--text-secondary);
+    /* 中短段落：避免末行孤字，不使用有行数上限的 balance */
+    text-wrap: pretty;
 }
 
 .hero-actions {
@@ -2106,6 +2116,7 @@ button:focus-visible {
     font-size: 0.85rem;
     font-weight: 600;
     text-decoration: none;
+
     transition: background-color 0.2s ease, color 0.2s ease;
 }
 
@@ -2183,7 +2194,11 @@ button:focus-visible {
     text-decoration: none;
     font-weight: 600;
     font-size: 1rem;
-    transition: all 0.2s ease;
+    transition:
+        color 0.2s ease,
+        filter 0.2s ease,
+        box-shadow 0.2s ease,
+        transform 0.2s ease;
 }
 
 .btn-large {
@@ -2271,6 +2286,7 @@ button:focus-visible {
     /* 圆币本身就是形状，描边是多余的；靠投影与底色区分 */
     border: 0;
     box-shadow: 0 4px 14px rgba(20, 45, 25, 0.07);
+
     transition: box-shadow 0.25s ease;
 }
 
@@ -2281,6 +2297,7 @@ button:focus-visible {
     inset: 7px;
     border-radius: 50%;
     border: 1px dashed rgba(var(--brand-primary-rgb), 0.22);
+
     transition: border-color 0.25s ease;
 }
 
@@ -2309,6 +2326,7 @@ button:focus-visible {
 .stat-label {
     font-size: 0.78rem;
     color: var(--text-muted);
+
     transition: color 0.25s ease;
 }
 
@@ -2443,6 +2461,7 @@ button:focus-visible {
     .reveal-pending {
         opacity: 0;
         transform: translateY(18px);
+
         transition: opacity 0.7s ease, transform 0.7s cubic-bezier(0.22, 0.61, 0.36, 1);
     }
 
@@ -2520,6 +2539,7 @@ button:focus-visible {
     .features-reveal.in-view .feature-card {
         opacity: 1;
         transform: none;
+
         transition: opacity 0.6s ease, transform 0.6s ease;
     }
 
@@ -2709,7 +2729,8 @@ button:focus-visible {
     box-shadow:
         0 1px 2px rgba(20, 45, 25, 0.03),
         0 12px 28px -24px rgba(20, 45, 25, 0.5);
-    transition: box-shadow 0.25s ease, transform 0.25s ease, background-color 0.25s ease;
+
+        transition: box-shadow 0.25s ease, transform 0.25s ease, background-color 0.25s ease;
     position: relative;
     overflow: hidden;
 }
@@ -2761,6 +2782,7 @@ button:focus-visible {
     height: 3px;
     background: linear-gradient(90deg, var(--brand-primary), var(--brand-primary-light));
     opacity: 0;
+
     transition: opacity 0.25s ease;
 }
 
@@ -2849,6 +2871,7 @@ button:focus-visible {
     font-size: 20px;
     color: var(--brand-primary-dark);
     margin-bottom: 1rem;
+
     transition: background 0.25s ease, color 0.25s ease, border-color 0.25s ease,
         box-shadow 0.25s ease;
 }
@@ -2861,6 +2884,7 @@ button:focus-visible {
     border: 1px dashed rgba(var(--brand-primary-rgb), 0.42);
     opacity: 0;
     transform: scale(0.8);
+
     transition: opacity 0.3s ease, transform 0.3s ease;
 }
 
@@ -2941,6 +2965,7 @@ button:focus-visible {
         0 1px 2px rgba(20, 45, 25, 0.03),
         0 12px 28px -24px rgba(20, 45, 25, 0.5);
     overflow: hidden;
+
     transition: box-shadow 0.25s ease, transform 0.25s ease;
 }
 
@@ -2956,6 +2981,7 @@ button:focus-visible {
     height: 3px;
     background: linear-gradient(90deg, var(--brand-primary), var(--brand-primary-light));
     opacity: 0;
+
     transition: opacity 0.25s ease;
 }
 
@@ -2977,6 +3003,7 @@ button:focus-visible {
     );
     transform: scaleX(0);
     transform-origin: left center;
+
     transition: transform 0.8s cubic-bezier(0.22, 0.61, 0.36, 1);
     pointer-events: none;
 }
@@ -3169,6 +3196,7 @@ button:focus-visible {
     color: var(--text-secondary);
     font-size: 0.85rem;
     font-weight: 600;
+
     transition: background-color 0.2s ease, color 0.2s ease;
 }
 
@@ -3214,6 +3242,7 @@ button:focus-visible {
     /* 已有淡品牌底，边框属重复强调，去掉 */
     border: 0;
     background: rgba(var(--brand-primary-rgb), 0.05);
+
     transition: background-color 0.2s ease, color 0.2s ease;
 }
 
@@ -3282,7 +3311,8 @@ button:focus-visible {
     box-shadow:
         0 1px 2px rgba(20, 45, 25, 0.03),
         0 16px 32px -26px rgba(20, 45, 25, 0.5);
-    transition: box-shadow 0.25s ease, transform 0.25s ease;
+
+        transition: box-shadow 0.25s ease, transform 0.25s ease;
 }
 
 .oss-chart-link:hover {
@@ -3370,7 +3400,11 @@ button:focus-visible {
     font-weight: 600;
     font-size: 0.9rem;
     text-decoration: none;
-    transition: all 0.2s ease;
+    transition:
+        color 0.2s ease,
+        filter 0.2s ease,
+        box-shadow 0.2s ease,
+        transform 0.2s ease;
 }
 
 /* 数值小徽章：绿色实心按钮内用半透明白，描边按钮内用浅灰底 */
@@ -3549,6 +3583,7 @@ button:focus-visible {
     font-size: 1.6rem;
     font-weight: 700;
     color: var(--text-primary);
+    text-wrap: balance;
 }
 
 .cta-card p {
@@ -3558,6 +3593,7 @@ button:focus-visible {
     font-size: 0.95rem;
     line-height: 1.7;
     color: var(--text-secondary);
+    text-wrap: pretty;
 }
 
 .btn-cta {
@@ -3573,7 +3609,10 @@ button:focus-visible {
     font-weight: 700;
     font-size: 1rem;
     box-shadow: 0 4px 16px rgba(var(--brand-primary-rgb), 0.35);
-    transition: all 0.2s ease;
+    transition:
+        filter 0.2s ease,
+        box-shadow 0.2s ease,
+        transform 0.2s ease;
 }
 
 .btn-cta:hover {
@@ -3821,6 +3860,7 @@ button:focus-visible {
 .footer-links a {
     color: var(--text-secondary);
     text-decoration: none;
+
     transition: color 0.2s;
     display: inline-flex;
     align-items: center;
@@ -3859,6 +3899,7 @@ button:focus-visible {
     opacity: 0;
     visibility: hidden;
     pointer-events: none;
+
     transition: opacity 0.2s ease, transform 0.2s ease, visibility 0.2s;
     /* 将 hover 悬浮提示框层级置顶 */
     z-index: 999;
@@ -3905,6 +3946,7 @@ button:focus-visible {
     border-radius: 999px;
     background: transparent;
     cursor: pointer;
+
     transition: height 0.3s ease, background 0.3s ease, border-color 0.3s ease;
 }
 
@@ -4018,6 +4060,7 @@ button:focus-visible {
     font-size: 0;
     line-height: 0;
     cursor: pointer;
+
     transition: color 0.2s ease, background-color 0.2s ease, transform 0.2s ease;
 }
 
@@ -4102,6 +4145,7 @@ button:focus-visible {
     text-align: left;
     text-decoration: none;
     cursor: pointer;
+
     transition: color 0.2s ease, background-color 0.2s ease;
 }
 
@@ -4116,6 +4160,7 @@ button:focus-visible {
     flex: none;
     margin-left: auto;
     color: var(--text-muted);
+
     transition: transform 0.2s ease, color 0.2s ease;
 }
 
@@ -4178,6 +4223,7 @@ button:focus-visible {
     line-height: 1.4;
     text-align: left;
     cursor: pointer;
+
     transition: color 0.2s ease, transform 0.2s ease;
 }
 
@@ -4241,6 +4287,7 @@ button:focus-visible {
     font-weight: 700;
     text-decoration: none;
     box-shadow: 0 8px 20px -14px rgba(var(--brand-primary-rgb), 0.7);
+
     transition: background-color 0.2s ease, transform 0.2s ease;
 }
 
@@ -4283,6 +4330,7 @@ button:focus-visible {
     color: var(--text-secondary);
     font-size: 0.85rem;
     text-decoration: none;
+
     transition: color 0.2s ease;
 }
 

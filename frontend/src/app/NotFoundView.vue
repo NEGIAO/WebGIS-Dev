@@ -477,7 +477,8 @@
   outline: none;
   overflow: hidden;
   border-radius: 6px;
-  transition: all 0.3s ease;
+
+  transition: background 0.3s ease, border-radius 0.3s ease, padding 0.3s ease;
 }
 
 .btn-text {
@@ -487,7 +488,8 @@
   font-size: 0.88rem;
   font-weight: 700;
   letter-spacing: 2px;
-  transition: all 0.3s ease;
+
+  transition: color 0.3s ease, font-size 0.3s ease, font-weight 0.3s ease, letter-spacing 0.3s ease;
 }
 
 .btn-glow {
@@ -499,7 +501,8 @@
   background: rgba(0, 255, 102, 0.1);
   border-radius: 50%;
   transform: translate(-50%, -50%);
-  transition: all 0.4s ease;
+
+  transition: background 0.4s ease, border-radius 0.4s ease, height 0.4s ease, left 0.4s ease, top 0.4s ease, transform 0.4s ease, width 0.4s ease;
   z-index: 1;
 }
 

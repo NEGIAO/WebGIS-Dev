@@ -72,6 +72,7 @@
             :is-loading="isLoading"
             @send="sendMessage"
             @stop="stopGeneration"
+            @quick-command="handleQuickCommand"
         />
     </div>
 </template>
@@ -124,7 +125,8 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    transition: all 0.15s;
+
+    transition: background 0.15s, border-radius 0.15s, color 0.15s, height 0.15s, width 0.15s;
 }
 
 .header-controls .icon-btn:hover {

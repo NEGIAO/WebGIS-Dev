@@ -421,6 +421,7 @@
     align-items: center;
     justify-content: center;
     cursor: pointer;
+
     transition: background 0.2s;
 }
 
@@ -446,7 +447,8 @@
     background: white;
     color: var(--brand-accent-muted);
     cursor: pointer;
-    transition: all 0.2s;
+
+    transition: background 0.2s, border-color 0.2s, box-shadow 0.2s, color 0.2s;
     text-align: left;
 }
 
@@ -524,6 +526,7 @@
     background: white;
     color: var(--brand-accent-muted);
     box-sizing: border-box;
+
     transition: border-color 0.2s;
 }
 
@@ -563,7 +566,8 @@
     color: var(--brand-accent-muted);
     font-size: 11px;
     cursor: pointer;
-    transition: all 0.2s;
+
+    transition: background 0.2s, border-radius 0.2s, color 0.2s, font-size 0.2s, gap 0.2s, margin-top 0.2s, padding 0.2s;
 }
 
 .fetch-bbox-btn:hover:not(:disabled) {
@@ -591,7 +595,8 @@
     font-size: 12px;
     font-weight: 500;
     cursor: pointer;
-    transition: all 0.2s;
+
+    transition: background 0.2s, border-color 0.2s, box-shadow 0.2s, color 0.2s;
 }
 
 .mode-btn:hover {
@@ -619,7 +624,8 @@
     font-size: 13px;
     font-weight: 600;
     cursor: pointer;
-    transition: all 0.2s;
+
+    transition: background 0.2s, border-radius 0.2s, color 0.2s, font-size 0.2s, font-weight 0.2s, gap 0.2s, padding 0.2s;
 }
 
 .run-btn:hover:not(:disabled) {

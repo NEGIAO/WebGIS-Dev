@@ -705,7 +705,7 @@ svg {
 }
 
 .mini-icon-btn:active {
-    transform: scale(0.9);
+    transform: scale(0.96);
 }
 
 /* 绘图工具磁贴：图标在上、文字在下 */
@@ -755,7 +755,7 @@ svg {
 }
 
 .eco-tool-tile:active:not(.active) {
-    transform: scale(0.94);
+    transform: scale(0.96);
 }
 
 .eco-tool-tile.active {
@@ -821,6 +821,7 @@ svg {
     align-items: center;
     padding-left: 11px;
     color: var(--toc-text-light);
+
     transition: color var(--toc-transition-normal);
 }
 
@@ -892,7 +893,7 @@ svg {
 }
 
 .eco-btn-reverse:active {
-    transform: scale(0.98);
+    transform: scale(0.96);
 }
 
 /* 错误提示条 */
@@ -1011,7 +1012,8 @@ svg {
     box-shadow:
         0 4px 12px rgba(36, 125, 72, 0.32),
         inset 0 1px 0 rgba(255, 255, 255, 0.28);
-    transition: left 0.32s cubic-bezier(0.34, 1.2, 0.44, 1);
+
+        transition: left 0.32s cubic-bezier(0.34, 1.2, 0.44, 1);
 }
 
 .tab {
@@ -1031,6 +1033,7 @@ svg {
     white-space: nowrap;
     cursor: pointer;
     color: var(--toc-tab-text);
+
     transition: color 0.22s ease, transform 0.15s ease;
 }
 
@@ -1255,6 +1258,7 @@ svg {
     height: 100%;
     width: 0;
     background: linear-gradient(90deg, var(--toc-primary-lighter) 0%, var(--toc-primary) 100%);
+
     transition: width 0.24s ease;
 }
 
@@ -1296,6 +1300,7 @@ svg {
     padding: 8px 4px;
     background: transparent;
     cursor: pointer;
+
     transition: background-color 0.15s ease;
 }
 
@@ -1540,7 +1545,8 @@ svg {
     background: transparent;
     color: var(--toc-text-secondary);
     cursor: pointer;
-    transition: all 0.15s;
+
+    transition: background 0.15s, border-radius 0.15s, color 0.15s, height 0.15s, width 0.15s;
 }
 
 .toc-icon-btn:hover {
@@ -1549,7 +1555,7 @@ svg {
 }
 
 .toc-icon-btn:active {
-    transform: scale(0.92);
+    transform: scale(0.96);
 }
 
 .ghost-btn,
@@ -1573,7 +1579,8 @@ svg {
     padding: 6px 8px;
     font-size: 12px;
     cursor: pointer;
-    transition: all 0.15s ease;
+
+    transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease, font-weight 0.15s ease;
 }
 
 .draw-tool-btn:hover {
@@ -1685,7 +1692,7 @@ svg {
 }
 
 .tpl-swatch:active {
-    transform: scale(0.94);
+    transform: scale(0.96);
 }
 
 .swatch-dot {
@@ -1840,6 +1847,7 @@ svg {
     background: #ffffff;
     border: 2px solid var(--brand-primary);
     box-shadow: 0 1px 4px rgba(var(--brand-primary-dark-rgb), 0.32);
+
     transition: transform 0.15s ease;
 }
 
@@ -1909,7 +1917,8 @@ svg {
     font-size: 12px;
     font-weight: 600;
     cursor: pointer;
-    transition: all 0.15s ease;
+
+    transition: opacity 0.15s ease;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -1983,7 +1992,7 @@ svg {
 }
 
 .apply-btn:active {
-    transform: scale(0.98);
+    transform: scale(0.96);
 }
 
 .hint {

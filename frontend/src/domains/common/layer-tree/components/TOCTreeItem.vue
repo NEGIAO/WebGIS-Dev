@@ -291,7 +291,8 @@
     gap: var(--toc-spacing-sm);
     border-radius: var(--toc-radius-md);
     padding: var(--toc-spacing-xs) var(--toc-spacing-md) var(--toc-spacing-xs) calc(6px + (var(--node-level, 0) * 18px));
-    transition: all var(--toc-transition-normal);
+
+    transition: background var(--toc-transition-normal), background-color var(--toc-transition-normal), box-shadow var(--toc-transition-normal);
     cursor: pointer;
     user-select: none;
 }
@@ -365,6 +366,7 @@
     padding: 0;
     cursor: pointer;
     color: var(--toc-text-secondary);
+
     transition: color var(--toc-transition-normal);
     border-radius: var(--toc-radius-sm);
 }
@@ -393,6 +395,7 @@
     color: var(--toc-text-light);
     opacity: 0;
     cursor: grab;
+
     transition: opacity var(--toc-transition-normal);
 }
 
@@ -439,7 +442,7 @@
 }
 
 .visibility-btn:active {
-    transform: scale(0.9);
+    transform: scale(0.96);
 }
 
 .visibility-btn.off {
@@ -456,7 +459,8 @@
     display: flex;
     align-items: center;
     gap: 7px;
-    transition: all var(--toc-transition-normal);
+
+    transition: gap var(--toc-transition-normal);
 }
 
 .name {
@@ -465,6 +469,7 @@
     white-space: nowrap;
     font-size: var(--toc-font-sm);
     color: var(--toc-text-dark);
+
     transition: color var(--toc-transition-normal);
 }
 
@@ -496,7 +501,8 @@
     border-radius: 999px;
     padding: 1px 7px;
     line-height: 14px;
-    transition: all var(--toc-transition-normal);
+
+    transition: background var(--toc-transition-normal), border-radius var(--toc-transition-normal), color var(--toc-transition-normal), font-size var(--toc-transition-normal), line-height var(--toc-transition-normal), padding var(--toc-transition-normal);
 }
 
 .toc-row:hover .feature-badge {
@@ -539,7 +545,7 @@
 }
 
 .more-btn:active {
-    transform: scale(0.92);
+    transform: scale(0.96);
 }
 
 .toc-row:hover .more-btn,
@@ -556,6 +562,7 @@
 /* 图层行：干净透明，靠 hover/激活态反馈 */
 .toc-row.is-leaf {
     background-color: transparent;
+
     transition: background-color var(--toc-transition-slow);
 }
 
@@ -566,6 +573,7 @@
         rgba(var(--brand-primary-rgb), 0.13) 0%,
         rgba(var(--brand-primary-rgb), 0.04) 100%
     );
+
     transition: background-color var(--toc-transition-slow);
 }
 
@@ -621,12 +629,14 @@
     padding: var(--toc-spacing-md) 10px;
     font-size: var(--toc-font-sm);
     cursor: pointer;
-    transition: all var(--toc-transition-fast);
+
+    transition: background var(--toc-transition-fast), color var(--toc-transition-fast);
 }
 
 .menu-icon {
     flex-shrink: 0;
     color: var(--toc-text-secondary);
+
     transition: color var(--toc-transition-fast);
 }
 
@@ -640,7 +650,7 @@
 }
 
 .menu-item:active {
-    transform: scale(0.98);
+    transform: scale(0.96);
 }
 
 .menu-item.danger {

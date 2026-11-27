@@ -194,7 +194,8 @@
     font-weight: 700;
     padding: 9px 10px;
     cursor: pointer;
-    transition: all 0.2s ease;
+
+    transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease;
 }
 
 .point-btn:hover {
@@ -241,6 +242,7 @@
     background: #fff;
     color: #1f2937;
     outline: none;
+
     transition: border-color 0.2s;
 }
 
@@ -293,6 +295,7 @@
     display: flex;
     justify-content: space-between;
     gap: 6px;
+
     transition: background 0.15s;
 }
 

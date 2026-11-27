@@ -337,6 +337,7 @@
 /* --- 底图互动变暗 --- */
 .map-container.gis-upload-dragging #map {
     filter: brightness(0.6) saturate(0.8);
+
     transition: filter 0.3s ease;
 }
 
@@ -708,7 +709,6 @@
     padding: 20px 0 0;
     border: none !important;
     background: transparent !important;
-    will-change: contents, width;
 }
 
 /* line 模式兜底（bar:false） */

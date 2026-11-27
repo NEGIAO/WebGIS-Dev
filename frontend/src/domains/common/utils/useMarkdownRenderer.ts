@@ -186,6 +186,82 @@ const HLJS_ALIAS_MAP: Record<string, string> = {
 };
 
 /**
+ * 归一化 LLM 常见的加粗瑕疵：** text**（星号内侧多空格）。
+ *
+ * CommonMark 规定 `**` 后紧跟空白不构成强调，故 `** favorable**` 会原样输出。
+ * 但 LLM 高频产出这种格式（尤其中英混排时），需在 marked 解析前修正。
+ *
+ * 同时处理边界瑕疵：
+ * - 左：`词字符**加粗**`（CommonMark 强调开符左侧不能是 word char，CJK 也算）；
+ * - 右：`**加粗**词字符`（闭符右侧紧贴词字符同样导致配对失败）。
+ * 例：「放在**“汇聚智慧”**而非**“征服自然”**」两个加粗都因此失效。
+ *
+ * 实现方式：逐行扫描 `**` 并按出现顺序两两配对（状态机），在每一对内部做归一化。
+ * 早期版本用两个贪婪正则猜配对，会把「**A：** 文字，**B**」中 A 的闭符与 B 的开符
+ * 误配成一对，反而破坏原本正常的加粗——故改为确定性配对。
+ *
+ * 安全约束：
+ * - 只在已经过 extractMathExpressions 的文本上调用，公式已是占位符，不受影响；
+ * - 先提取 fenced / inline code 为占位符，代码内的 `**` 保持原样（如 Python 幂运算）；
+ * - 奇数个 `**` 时最后一个视为流式未闭合，跳过不处理，避免逐字渲染时文本漂移；
+ * - 逐行处理，不跨行配对。
+ *
+ * @param {string} text - 已提取数学公式的 markdown 文本
+ * @returns {string} 归一化后的 markdown 文本
+ */
+function normalizeEmphasisSpacing(text: string): string {
+    if (!text || !text.includes('**')) return text;
+
+    // 1. 保护代码块：fenced (```...```) 与 inline (`...`) 提取为占位符
+    const codeBlocks: string[] = [];
+    const CODE_TOKEN = 'CODEEMPHASISTOKEN';
+    const mask = (code: string) => {
+        codeBlocks.push(code);
+        return `${CODE_TOKEN}${codeBlocks.length - 1}END`;
+    };
+    let masked = text.replace(/```[\s\S]*?```/g, (m) => mask(m));
+    masked = masked.replace(/`[^`\n]+`/g, (m) => mask(m));
+
+    // 2. 逐行、按顺序两两配对 `**`，在每对内部归一化
+    const isWordChar = (ch: string) => /[\u4e00-\u9fff\w]/.test(ch);
+    const normalized = masked.split('\n').map((line) => {
+        const marks: number[] = [];
+        const re = /\*\*/g;
+        let m: RegExpExecArray | null;
+        while ((m = re.exec(line)) !== null) marks.push(m.index);
+
+        // 奇数个：最后一个未闭合（流式中间态），不参与配对
+        const pairCount = Math.floor(marks.length / 2);
+        if (pairCount === 0) return line;
+
+        let out = '';
+        let cursor = 0;
+        for (let i = 0; i < pairCount; i++) {
+            const open = marks[i * 2];
+            const close = marks[i * 2 + 1];
+            const leftChar = open > 0 ? line[open - 1] : '';
+            const rightChar = close + 2 < line.length ? line[close + 2] : '';
+            // 去内侧空格：`** word**` / `**word **` → `**word**`
+            const inner = line.slice(open + 2, close).replace(/^[ \t]+/, '').replace(/[ \t]+$/, '');
+
+            out += line.slice(cursor, open);
+            if (isWordChar(leftChar)) out += ' ';
+            out += `**${inner}**`;
+            if (isWordChar(rightChar)) out += ' ';
+            cursor = close + 2;
+        }
+        return out + line.slice(cursor);
+    }).join('\n');
+
+    // 3. 还原代码块
+    let result = normalized;
+    codeBlocks.forEach((code, idx) => {
+        result = result.split(`${CODE_TOKEN}${idx}END`).join(code);
+    });
+    return result;
+}
+
+/**
  * 将语言别名规范化为 highlight.js 能识别的语言名
  * @param {string} lang - 原始语言标识
  * @returns {string} 规范化后的语言名，无法识别时返回 ''
@@ -460,7 +536,10 @@ function renderAnswerHtml(rawContent: any) {
             // 数学公式提取 → marked 解析 → DOMPurify 消毒 → KaTeX 渲染回代
             // 顺序：KaTeX 渲染在 sanitize 之后，避免其 output 的 style/mathML 标签被误杀
             const ctx = createMathContext();
-            const preprocessed = extractMathExpressions(trimmed, ctx);
+            const mathMasked = extractMathExpressions(trimmed, ctx);
+            // V3.7.24：LLM 常在加粗星号内侧多打空格（如 `** favorable**`），
+            // CommonMark 不认这种语法；在 marked 解析前归一化（公式已遮蔽、代码受保护）
+            const preprocessed = normalizeEmphasisSpacing(mathMasked);
             const parsed = markedLib.value.parse(preprocessed);
             // 先消毒（占位符是纯文本，安全通过）
             html = sanitizeHtml(parsed);
@@ -494,7 +573,8 @@ function renderThinkHtml(rawContent: any) {
         try {
             // 数学公式提取 → marked 解析 → DOMPurify 消毒 → KaTeX 渲染回代
             const ctx = createMathContext();
-            const preprocessed = extractMathExpressions(think, ctx);
+            const mathMasked = extractMathExpressions(think, ctx);
+            const preprocessed = normalizeEmphasisSpacing(mathMasked);
             const parsed = markedLib.value.parse(preprocessed);
             // 先消毒（占位符是纯文本，安全通过）
             let html = sanitizeHtml(parsed);

@@ -855,7 +855,8 @@
     color: var(--text-secondary);
     cursor: pointer;
     text-align: left;
-    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+
+    transition: background 0.2s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.2s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.2s cubic-bezier(0.16, 1, 0.3, 1), color 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .tab-btn:hover {
@@ -1129,6 +1130,7 @@
     color: var(--text-primary);
     font-size: 13px;
     box-sizing: border-box;
+
     transition: border-color 0.15s ease, box-shadow 0.15s ease;
     outline: none;
 }
@@ -1200,7 +1202,8 @@
     font-size: 12px;
     font-weight: 600;
     cursor: pointer;
-    transition: all 0.15s ease;
+
+    transition: border-radius 0.15s ease, font-size 0.15s ease, font-weight 0.15s ease, gap 0.15s ease, padding 0.15s ease;
     border: 1px solid transparent;
     white-space: nowrap;
 }
@@ -1231,7 +1234,8 @@
     color: var(--text-primary);
     font-size: 12px;
     cursor: pointer;
-    transition: all 0.15s ease;
+
+    transition: background 0.15s ease, border-radius 0.15s ease, color 0.15s ease, font-size 0.15s ease, height 0.15s ease, padding 0.15s ease, width 0.15s ease;
 }
 .btn-icon:hover { background: var(--bg-hover); }
 

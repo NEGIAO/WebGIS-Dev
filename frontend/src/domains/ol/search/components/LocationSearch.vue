@@ -21,7 +21,7 @@
                     <span class="btn-icon">
                         <search-icon
                             :size="17"
-                            :stroke-width="3"
+                            :stroke-width="2"
                         />
                     </span>
                 </button>
@@ -169,7 +169,7 @@
 }
 
 .search-btn:active {
-    transform: scale(0.94);
+    transform: scale(0.96);
 }
 
 .service-menu {
