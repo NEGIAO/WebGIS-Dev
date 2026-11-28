@@ -85,8 +85,9 @@ for (const d of defs) {
         if (!['ol', 'cesium'].includes(engine.slice(1, -1))) failures.push(`${d.id} 的 engines 含非法值：${engine}`);
     }
 }
-if (noneCount > 0) warnings.push(`url 为 'None' 的占位条目共 ${noneCount} 条（已知既有问题，见 Docs/TODO/bugfix-optimization-plan.md）`);
-expect(noneCount <= 2, `url 为 'None' 的占位条目新增至 ${noneCount} 条（基线 2 条）`);
+if (noneCount > 0) warnings.push(`url 为 'None' 的占位条目共 ${noneCount} 条（2026-11-28 遗留项 A1 已清零；回潮即失败，见重构日志遗留节）`);
+// 2026-11-28 遗留项 A1：基线由 2 条收紧为 0 条（orders 94/95 已修正为真实 URL），防占位回潮。
+expect(noneCount === 0, `url 为 'None' 的占位条目回潮至 ${noneCount} 条（基线 0 条）`);
 
 // 定义层零引擎依赖：不得出现旧工厂 / 旧类型 / 代理包装调用
 //（用 `createSource:` / `serviceType:` 属性形态匹配，文件头注释里提及旧名不算违规）

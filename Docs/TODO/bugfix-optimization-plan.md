@@ -455,13 +455,17 @@ Sprint 3（穿插）：P3-1 容器二轮（O1/O2 交替）→ P2-1 bundle 分析
   - [ ] (现象) `backend/api/agent_chat/db.py:649` 注释写「V3.7.15：运行时 clamp 上限对齐 schema」，但该号已被 2026-11-22 归并进 V3.7.8（见 CHANGELOG 归并注），属历史曾用号；本次版本统一目标为 V3.7.14，该注释与本批暂存区无关。
   - [ ] (建议) 作为独立 L1 注释订正任务处理；不要在 IP 地理中枢批次中顺手改动。
 
-- [ ] **底图定义 url `'None'` 占位条目**（2026-11-28 · V3.7.16 瓦片底图定义重构会话发现，按 Force_command §2.5 只记不改，日志 [2026-11-27-basemap-definition-refactor](../LLM_record/26-11/2026-11-27/2026-11-27-basemap-definition-refactor.md)）：
-  - [ ] (现象) orders 94/95（`vector_amap_clean_wgs` / `vector_amap_roads_wgs`）的 `url` 与旧 `createSource` 均为字面量 `'None'`，无法加载任何瓦片；迁移时原样保留，未修。
-  - [ ] (建议) 确认这两条是预留占位还是应删除/补真实 URL；若删除需同步处理 `l` 序号契约（orders 1–174 连续，删除会移位）。
+- [x] ~~**底图定义 url `'None'` 占位条目**（2026-11-28 · V3.7.16 瓦片底图定义重构会话发现，按 Force_command §2.5 只记不改，日志 [2026-11-27-basemap-definition-refactor](../LLM_record/26-11/2026-11-27/2026-11-27-basemap-definition-refactor.md)）~~：**✅ 2026-11-28 遗留项 A1 已解决**——orders 94/95（`vector_amap_clean_wgs` / `vector_amap_roads_wgs`）的 url 由字面量 `'None'` 修正为 30042a9 之前 group-3.ts 里 gcj2wgs 代理包装的真实 URL（原样解包）并补 `correction: 'gcj2wgs'`，coord 保持 WGS84、order 未动；迁移校验脚本以 `INTENTIONAL_DEVIATIONS` 记录偏离，`check-layer-definitions.mjs` 的 `'None'` 基线收紧为 0 条。
+  - [x] (现象) orders 94/95 的 `url` 与旧 `createSource` 均为字面量 `'None'`，无法加载任何瓦片；迁移时原样保留，未修。
+  - [x] (建议) 确认这两条是预留占位还是应删除/补真实 URL；若删除需同步处理 `l` 序号契约（orders 1–174 连续，删除会移位）。
 
-- [ ] **底图定义 coord 语义不一致**（2026-11-28 · V3.7.16 瓦片底图定义重构会话发现，按 Force_command §2.5 只记不改，日志同上）：
-  - [ ] (现象) `coord` 实际描述的是纠偏后输出坐标系而非源坐标系：gcj2wgs 的 26 条中 2 条 `coord=GCJ02`、24 条 `coord=WGS84`；wgs2gcj 6 条 `coord=GCJ02`；bd2wgs 1 条 `coord=WGS84`。与类型注释「coord=源坐标系」的说法不符。
-  - [ ] (建议) 统一 `coord` 的语义定义（源坐标系 vs 纠偏后输出坐标系）并逐条核对修正；改动涉及 33 条纠偏定义，需另立任务，不在重构批次中顺手改。
+- [x] ~~**底图定义 coord 语义不一致**（2026-11-28 · V3.7.16 瓦片底图定义重构会话发现，按 Force_command §2.5 只记不改，日志同上）~~：**✅ 2026-11-28 遗留项 A2 已解决**——语义定为 (b) coord = 纠偏后输出坐标系；只改 order 5 `label_minedata` 与 order 6 `amap_label`（coord `GCJ02`→`WGS84` + description 同步），其余 31 条纠偏定义不动；`types.ts` 注释重写，`validate.ts` 新增 correction→coord 输出侧不变量防回归。
+  - [x] (现象) `coord` 实际描述的是纠偏后输出坐标系而非源坐标系：gcj2wgs 的 26 条中 2 条 `coord=GCJ02`、24 条 `coord=WGS84`；wgs2gcj 6 条 `coord=GCJ02`；bd2wgs 1 条 `coord=WGS84`。与类型注释「coord=源坐标系」的说法不符。
+  - [x] (建议) 统一 `coord` 的语义定义（源坐标系 vs 纠偏后输出坐标系）并逐条核对修正；改动涉及 33 条纠偏定义，需另立任务，不在重构批次中顺手改。
+
+- [ ] **底图定义 orders 146/150 纠偏方向存疑**（2026-11-28 · V3.7.16 遗留项 A2 实施时顺带发现，按 Force_command §2.5 只记不改，日志 [2026-11-27-basemap-definition-refactor](../LLM_record/26-11/2026-11-27/2026-11-27-basemap-definition-refactor.md) 遗留节）：
+  - [ ] (现象) order 146 `vector_google_combo_clean_terrain_no_road_gcj`（`category-terrain.ts`，coord GCJ02，correction `wgs2gcj`）与 order 150 `vector_Google_clean`（`category-electronic.ts`，coord WGS84，correction `gcj2wgs`）的 URL 模板逐字节相同（`https://mt0.google.com/vt/lyrs=p&x={x}&y={y}&z={z}&s=Ga&apistyle=...`），但纠偏方向相反——同一上游模板不可能既是 GCJ02 源又是 WGS84 源，必有一条 correction 错了。两条均满足新不变量（correction 输出侧与 coord 一致），故静态校验抓不到，必须实测。
+  - [ ] (核查方法) 实测两条图层分别加载后与已知正确底图叠加比对偏移方向（或查旧 `group-*.ts` 里两条的原始包装函数），再定哪条改 correction；未核实前禁止猜测性改动。
 
 ## 2026-11-27 暂存区全量 Code Review（92 文件，报告：Docs/LLM_record/26-11/2026-11-27/2026-11-27-staged-code-review.md）
 

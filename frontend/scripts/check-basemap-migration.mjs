@@ -247,17 +247,39 @@ const SPOTLIGHT = {
 };
 const spotlightResults = [];
 
+// ---------- 有意偏离清单（2026-11-28 遗留项 A1/A2，有文档说明的例外） ----------
+// 以下 4 条的新定义与旧定义逐条比对时允许偏离；除所列字段外，其余字段仍逐条
+// 比对，不得静默放宽。证据见重构日志
+// Docs/LLM_record/26-11/2026-11-27/2026-11-27-basemap-definition-refactor.md 遗留节。
+// - vector_amap_clean_wgs / vector_amap_roads_wgs（orders 94/95，A1）：旧 url 与
+//   旧 createSource 均为字面量 'None'（无法加载）；新 url 填 30042a9 之前
+//   group-3.ts 里 gcj2wgsProxyUrl(...) 包裹的真实 URL（原样解包），并补
+//   correction='gcj2wgs'；url / correction / OL URL / Cesium URL 四项免比对。
+//   交叉核对：与同文件 orders 100/102（同款 ltype=1/2 的 _wgs 孪生条目）URL 逐字节相同。
+// - label_minedata / amap_label（orders 5/6，A2）：coord 按语义 (b) 统一为纠偏后
+//   输出坐标系，GCJ02→WGS84（correction='gcj2wgs' 不变）；coord 与 description
+//   （描述串内嵌 coord 值）两项免比对。其余 31 条纠偏定义未动。
+const INTENTIONAL_DEVIATIONS = {
+    vector_amap_clean_wgs: new Set(['url', 'correction', 'olUrl', 'cesiumUrl']),
+    vector_amap_roads_wgs: new Set(['url', 'correction', 'olUrl', 'cesiumUrl']),
+    label_minedata: new Set(['coord', 'description']),
+    amap_label: new Set(['coord', 'description']),
+};
+
 for (const oldDef of oldDefs) {
     const d = newById.get(oldDef.id);
     if (!d) continue;
     const tag = `${oldDef.id} (order ${oldDef.order})`;
+    // 有意偏离清单内的字段跳过比对（其余字段仍逐条比对）
+    const devFields = INTENTIONAL_DEVIATIONS[oldDef.id] || new Set();
     for (const key of ['order', 'name', 'catalogCategory', 'provider', 'coord', 'description', 'category', 'group', 'date', 'styleUrl']) {
+        if (devFields.has(key)) continue;
         expect(String(d[key] ?? '') === String(oldDef[key] ?? ''), `${tag} 的 ${key} 不一致：旧=${oldDef[key]} 新=${d[key]}`);
     }
     expect(d.method === oldDef.method, `${tag} 的 method 不一致：旧=${oldDef.method} 新=${d.method}`);
-    expect(d.correction === oldDef.correction, `${tag} 的 correction 不一致：旧=${oldDef.correction} 新=${d.correction}`);
+    if (!devFields.has('correction')) expect(d.correction === oldDef.correction, `${tag} 的 correction 不一致：旧=${oldDef.correction} 新=${d.correction}`);
     expect(d.proxy === oldDef.proxy, `${tag} 的 proxy 不一致：旧=${oldDef.proxy} 新=${d.proxy}`);
-    expect(d.url === (oldDef.urlRawFull ?? ''), `${tag} 的 url 不一致：旧=${oldDef.urlRawFull} 新=${d.url}`);
+    if (!devFields.has('url')) expect(d.url === (oldDef.urlRawFull ?? ''), `${tag} 的 url 不一致：旧=${oldDef.urlRawFull} 新=${d.url}`);
     expect(d.skipHighResTile === oldDef.skipHighResTile, `${tag} 的 skipHighResTile 不一致`);
     expect(d.nonStandardAdapter === oldDef.nonStandardAdapter, `${tag} 的 nonStandardAdapter 不一致`);
     expect(JSON.stringify(d.engines ?? null) === JSON.stringify(oldDef.engines ?? null), `${tag} 的 engines 不一致`);
@@ -277,14 +299,15 @@ for (const oldDef of oldDefs) {
     }
 
     // URL 等价：新 resolveTileUrl（真函数） vs 旧 createSource / url 字段求值
-    if (d.method !== 'custom' && d.method !== 'osm' && oldDef.olUrl !== undefined && oldDef.olUrl !== null) {
+    //（有意偏离清单内的条目：旧 URL 本就是 'None' 占位，无等价可言，跳过）
+    if (!devFields.has('olUrl') && d.method !== 'custom' && d.method !== 'osm' && oldDef.olUrl !== undefined && oldDef.olUrl !== null) {
         const newOlUrl = resolveTileUrl(
             { method: d.method, url: d.url, correction: d.correction, proxy: d.proxy },
             CTX,
         ).replace('t{s}.tianditu.gov.cn', 't0.tianditu.gov.cn');
         expect(newOlUrl === oldDef.olUrl, `${tag} 的 OL URL 不一致：\n  旧=${oldDef.olUrl}\n  新=${newOlUrl}`);
     }
-    if (d.method !== 'custom' && oldDef.cesiumUrl !== undefined) {
+    if (!devFields.has('cesiumUrl') && d.method !== 'custom' && oldDef.cesiumUrl !== undefined) {
         const newCesiumUrl = resolveTileUrl(
             { method: d.method, url: d.url, correction: d.correction, proxy: d.proxy },
             CTX,
@@ -315,4 +338,4 @@ if (failures.length) {
     if (failures.length > 30) console.error(`  ... 另 ${failures.length - 30} 项`);
     process.exit(1);
 }
-console.log(`[migration] OK  174 条定义逐条等价（元数据/method/correction/proxy/OL URL/Cesium URL）`);
+console.log(`[migration] OK  174 条定义逐条等价（元数据/method/correction/proxy/OL URL/Cesium URL；另有 4 条按 INTENTIONAL_DEVIATIONS 有意偏离：orders 94/95 url 修正、orders 5/6 coord 修正）`);

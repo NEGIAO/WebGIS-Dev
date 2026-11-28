@@ -72,8 +72,8 @@ const definitions: TileLayerDefinition[] = [
         name: 'MineMap注记',
         catalogCategory: 'electronic',
         provider: 'MineMap',
-        coord: 'GCJ02',
-        description: 'MineMap注记 · MineMap / GCJ02',
+        coord: 'WGS84',
+        description: 'MineMap注记 · MineMap / WGS84',
         category: 'label',
         group: '注记',
         
@@ -94,8 +94,8 @@ const definitions: TileLayerDefinition[] = [
         name: '高德注记无偏',
         catalogCategory: 'electronic',
         provider: 'AMAP',
-        coord: 'GCJ02',
-        description: '高德注记无偏 · AMAP / GCJ02',
+        coord: 'WGS84',
+        description: '高德注记无偏 · AMAP / WGS84',
         group: '注记',
         url: 'http://wprd02.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}',
         method: 'xyz',
@@ -517,8 +517,10 @@ const definitions: TileLayerDefinition[] = [
         description: '高德简洁电子(WGS) · AMAP / WGS84',
         category: 'vector',
         group: '矢量',
-        url: 'None',
+        // URL 来源：30042a9 之前 group-3.ts 里 gcj2wgs 代理包装的实参（原样解包为原始 URL + correction）。
+        url: 'https://webrd01.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&ltype=1&x={x}&y={y}&z={z}',
         method: 'xyz',
+        correction: 'gcj2wgs',
     },
     {
         order: 95,
@@ -530,8 +532,10 @@ const definitions: TileLayerDefinition[] = [
         description: '高德纯道路(WGS) · AMAP / WGS84',
         category: 'vector',
         group: '矢量',
-        url: 'None',
+        // URL 来源：30042a9 之前 group-3.ts 里 gcj2wgs 代理包装的实参（原样解包为原始 URL + correction）。
+        url: 'https://webst01.is.autonavi.com/appmaptile?lang=zh_cn&style=8&ltype=2&x={x}&y={y}&z={z}',
         method: 'xyz',
+        correction: 'gcj2wgs',
     },
     {
         order: 96,

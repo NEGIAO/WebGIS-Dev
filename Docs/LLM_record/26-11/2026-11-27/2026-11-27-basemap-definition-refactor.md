@@ -6,6 +6,22 @@
 - **分支**：`muse/dev-basemap-refactor`（全新克隆 `~/workspace/webgis-refactor-work`，基线 `origin/main` `bcf0eaa64de703ab5d0aae4dd63c157aeffe4c21`；工作树只改，不 commit/push/merge，由父 agent 推送与提 PR）
 - **本次版本**：V3.7.16
 
+## 2026-11-28 追加：遗留项 A 实施摘要（L2，不另升版本、不另开 PR）
+
+- **日期与时间**：2026-11-28 上午（CST；任务下达 09:19）
+- **任务等级**：L2（遗留项收尾）；仍属未合并的 V3.7.16 同一 PR #74，版本号不动。
+- **改动文件**：
+  - `frontend/src/domains/common/basemap/definitions/category-electronic.ts`——A1：orders 94/95 url 由 `'None'` 占位修正为 30042a9 之前 group-3.ts 的真实 URL + `correction: 'gcj2wgs'`；A2：orders 5/6 coord `GCJ02`→`WGS84` + description 同步；其余 order 值一律未动。
+  - `frontend/src/domains/common/basemap/definitions/types.ts`——A2：coord 语义定为 (b) 纠偏后输出坐标系，文件头注释与字段注释重写，删旧“只记录不改”段。
+  - `frontend/src/domains/common/basemap/definitions/validate.ts`——A2：新增 correction→coord 输出侧不变量（gcj2wgs→WGS84、wgs2gcj→GCJ02、bd2wgs→WGS84、wgs2bd→BD09；none 不约束）；`'None'` 警告分支保留防回潮，头注释订正。
+  - `frontend/scripts/check-basemap-migration.mjs`——新增有文档说明的 `INTENTIONAL_DEVIATIONS` 例外清单（orders 94/95 的 url/correction/OL URL/Cesium URL、orders 5/6 的 coord/description），其余字段仍逐条比对。
+  - `frontend/scripts/check-layer-definitions.mjs`——`'None'` 基线由 ≤2 条收紧为 0 条（防占位回潮）。
+  - `Docs/TODO/bugfix-optimization-plan.md`——url `'None'` 与 coord 语义两项标记已解决；新增 orders 146/150 异常条目。
+  - 本日志——遗留节改写（见下）。
+- **门禁结果（全绿）**：`check-basemap-migration.mjs` ✅（174 条逐条等价 + 4 条有意偏离）；`check-layer-definitions.mjs` ✅（174 definitions，orders 1..174）；`npx vue-tsc --noEmit` ✅ 0 错误；`npm run build` ✅ 54.84s（基线 59.5s，快约 4.7s；dist 94,894,793 字节 / 1356 文件，产物大小基线未记录过，无基线可比）；`CheckStructureTree.py` ✅ 767/767；`CheckConfigRegistry.py` ✅ 全部通过；§11.2 红线自查 ✅（仅已知假阳性 `maxRayDistance`，逐条核对属误报；生产基线无命中）。`manifest.json` 构建副作用已恢复，`package-lock.json` 未动。
+- **A3 结论**：WMTS 保持 XYZ GetTile 现状，不做真标准化（理由见遗留节）。
+- **遗留**：orders 146/150（同款 Google URL 模板，纠偏方向相反）必有一条 correction 错了，需实测核查，不在本次范围，已记入 TODO；首屏与瓦片加载时延是线上实测，留给用户。
+
 ## 问题分析
 
 ### 核心症状
@@ -175,7 +191,16 @@ flowchart TB
 3. 打开一例 MVT（`vector_tianditu_mvt`），确认 OL 下矢量瓦片正常；切换到 Cesium，确认该图层按既有降级映射出栅格（MVT 本身在 Cesium 不可用是旧行为）。
 4. 地址栏 `?l=1` 与 `?l=174`（及任一中间序号）逐一对照：图层编号与重构前一致（`l` 契约未变）。
 5. 3D/2D 切换一次，确认底图不丢失（与本次重构无关的既有问题若复现，属旧 bug，不归本次）。
-6. 打开浏览器控制台：不应出现定义加载校验错误（`'None'` 占位 2 条仅为 warn）。
+6. 打开浏览器控制台：不应出现定义加载校验错误（`'None'` 占位已于 2026-11-28 遗留项 A1 清零，校验基线收紧为 0 条）。
+
+### 2026-11-28 追加（遗留项 A）· Agent 已执行
+
+- **迁移等价校验** `node scripts/check-basemap-migration.mjs`：**通过**——174 条逐条等价，另有 4 条按 `INTENTIONAL_DEVIATIONS` 有意偏离（orders 94/95 url 修正、orders 5/6 coord 修正）；7 项抽查全 OK。
+- **定义校验** `node scripts/check-layer-definitions.mjs`：**通过**——174 definitions，orders 1..174，stacks resolve；`'None'` 占位 0 条。
+- **类型检查** `npx vue-tsc --noEmit`：**0 错误**。
+- **构建** `npm run build`：**通过**（54.84s；仅 chunk > 300 kB 既有警告）；dist 94,894,793 字节 / 1356 文件；`manifest.json` 构建副作用已恢复，`package-lock.json` 未动。
+- **结构树** `CheckStructureTree.py`：**通过**——767/767；**配置登记** `CheckConfigRegistry.py`：**全部通过**；**§11.2 红线自查**：仅已知假阳性 `maxRayDistance`，生产基线无命中。
+- **实施中抓到的真实缺口**：A1 第二次编辑曾误删 order 96 条目头（`{`/`order: 96`/`id: 'vector_baidu_wgs'`），致 orders 覆盖缺 96——由 order 覆盖扫描当场发现并补回，补回后 174 条无缺口无重复；另 A1 注释原文含 `gcj2wgsProxyUrl(...)` 字面量触发 `check-layer-definitions.mjs` 的旧耦合扫描失败，已改写注释措辞后重跑通过。
 
 ## 变更文件清单
 
@@ -219,13 +244,14 @@ flowchart TB
 
 ## 遗留与风险
 
-- **url `'None'` 占位条目（既有问题，只记录不改）**：orders 94/95（`vector_amap_clean_wgs` / `vector_amap_roads_wgs`）的 url 与旧 createSource 均为字面量 `'None'`，无法加载瓦片；迁移时原样保留。已记入 `Docs/TODO/bugfix-optimization-plan.md`“顺带发现登记”节。删除需同步处理 `l` 序号契约（orders 连续，删除会移位）。
-- **coord 语义不一致（既有问题，只记录不改）**：`coord` 实际描述纠偏后输出坐标系，与类型注释“coord=源坐标系”不符——gcj2wgs 26 条中 2 条 `coord=GCJ02`、24 条 `coord=WGS84`；wgs2gcj 6 条 `coord=GCJ02`；bd2wgs 1 条 `coord=WGS84`。已记入 TODO 同节；统一语义需另立任务。
-- **WMTS 仍走 XYZ 形态（有意偏差）**：与方案 §4 的“WMTS→WMTS”要求不同。旧工厂 wmts 分支实际走 XYZ（GetTile 模板），同步工厂无法拉 Capabilities、手写 tileGrid 属猜测；本次只搬不改，orders 38/39 行为与旧一致。若未来要真 WMTS，需异步 Capabilities 方案，另立任务。
+- **~~url `'None'` 占位条目（既有问题，只记录不改）~~ ✅ 已解决（2026-11-28 遗留项 A1）**：orders 94/95（`vector_amap_clean_wgs` / `vector_amap_roads_wgs`）的 url 由字面量 `'None'` 修正为 30042a9 之前 `group-3.ts` 里 `gcj2wgs` 代理包装的真实 URL（原样解包）并补 `correction: 'gcj2wgs'`；coord 保持 WGS84 不动，order 值未动。证据：`git show 30042a9^:.../group-3.ts` 第 453–468 行两条原始写法与线索逐字节一致；且与同文件 orders 100/102（同款 ltype=1/2 的 `_wgs` 孪生条目）URL 逐字节相同。迁移校验脚本以 `INTENTIONAL_DEVIATIONS` 例外清单记录该偏离；`check-layer-definitions.mjs` 的 `'None'` 基线由 ≤2 条收紧为 0 条。TODO 同项已标记已解决。
+- **~~coord 语义不一致（既有问题，只记录不改）~~ ✅ 已解决（2026-11-28 遗留项 A2）**：语义定为 (b) coord = 纠偏后输出坐标系（瓦片渲染时对齐的坐标系）；只改 2 条：order 5 `label_minedata` 与 order 6 `amap_label` 的 coord 由 `GCJ02` 改为 `WGS84`，description 内嵌 coord 值同步改写；其余 31 条纠偏定义不动。`types.ts` 文件头注释与字段注释按新语义重写，删旧“只记录不改”段；`validate.ts` 新增不变量（gcj2wgs→WGS84、wgs2gcj→GCJ02、bd2wgs→WGS84、wgs2bd→BD09；none 不约束）——全量扫描确认新不变量除 orders 5/6 外无其他违反项，修正后 174 条全过。TODO 同项已标记已解决。
+- **WMTS 仍走 XYZ 形态（有意偏差，保持现状，2026-11-28 遗留项 A3 结论：不做）**：与方案 §4 的“WMTS→WMTS”要求不同。理由：真 WMTS 需要 tileGrid 五要素（原点、19 级分辨率、matrixIds、瓦片尺寸、级数），定义里一项都没有，手写即猜测；`createOlSource` 是同步函数，无法 await 带 10s 超时的 `createWmtsSourceStrict` 真 WMTS 分支；Cesium 侧已是真 provider 且请求与 XYZ 路径逐字节相同，改 OL 无用户可见收益。orders 38/39 行为与旧一致。若未来要真 WMTS，需异步 Capabilities 方案，另立任务。
+- **orders 146/150 纠偏方向存疑（2026-11-28 顺带发现，只记不改）**：`vector_google_combo_clean_terrain_no_road_gcj`（order 146，`category-terrain.ts`，coord GCJ02，correction `wgs2gcj`）与 `vector_Google_clean`（order 150，`category-electronic.ts`，coord WGS84，correction `gcj2wgs`）的 URL 模板逐字节相同（`https://mt0.google.com/vt/lyrs=p&x={x}&y={y}&z={z}&s=Ga&apistyle=...`），但纠偏方向相反——同一上游模板不可能既是 GCJ02 源又是 WGS84 源，必有一条 correction 错了。核查方法：实测两条图层分别加载后与已知正确底图叠加比对偏移方向（或查旧 `group-*.ts` 里两条的原始包装函数），再定哪条改。本次未动两条数据。已记入 `Docs/TODO/bugfix-optimization-plan.md`“顺带发现登记”节。
 - **天地图定义未声明 `needsContext`（既有缺失，保持原样）**：仅 2 条奥维定义声明 `needsContext`，天地图定义未声明（`resolveRuntimeTokenPoolKey` 对天地图返回 null）；迁移保持原样。
 - **order 5 `label_minedata` maxZoom 归一（有意行为变化）**：字段 18 旧时未传入 OL XYZ；本次加载器统一以字段为准，OL 与 Cesium 均 cap 在 18。属本次唯一行为变化点，实机验证时留意该图层最大缩放。
 - **V3.7.16 版本号复用**：V3.7.16 曾作为 V3.7.15 整合批的内部迭代号（V3.7.16 ~ V3.7.30）被宣告废弃；本次按任务指令复用为正式版本号。此后 V3.7.16 唯一指代本条重构；CHANGELOG 已写明复用说明。若父 agent 另有编号安排，以父 agent 为准。
-- **`Docs/Guide/handover.md` 第 84 行“加底图源经 basemapConfig.ts”已过时**：不在任务指定文档清单内，未改，记入此处。
-- **性能未实测**：构建 59.5s、首屏与瓦片加载时延均未实测（属结构重构，运行时只多一次纯函数调用）；待用户实机验证时一并观察。
+- **~~`Docs/Guide/handover.md` 第 84 行“加底图源经 basemapConfig.ts”已过时~~ ✅ 已解决（遗留项 A4，2026-11-28 前已完成）**：第 84 行已改为新路径 `domains/common/basemap/definitions/category-*.ts`（本次核实确认，未重复改）。
+- **性能未实测**：构建 59.5s（重构当日）、首屏与瓦片加载时延均未实测（属结构重构，运行时只多一次纯函数调用）；待用户实机验证时一并观察。2026-11-28 遗留项 A 追加构建 54.84s（vite 报告；wall 57.56s），dist 94,894,793 字节 / 1356 文件（产物大小基线未记录过，无基线可比）；首屏与瓦片时延仍是线上实测，留给用户。
 - **实机验证未做**：Agent 只做了代码级验证（脚本断言 + 类型检查 + 构建 + 门禁）；线上行为（瓦片实载、纠偏实效、3D 切换）须用户按「测试方案·待用户实机验证」逐项确认。
 - **Devin 安全注记未决（与本次无关，沿用）**：2026-11-27 01:46Z Devin 指出内网请求无 HF 边缘时自报 XFF 可控速率限制 IP——决策待定（V3.7.16 修 vs 接受风险），本次未动该处。

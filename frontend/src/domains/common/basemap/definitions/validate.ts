@@ -5,8 +5,10 @@
  * - 错误（error）：id/order 唯一且 order 覆盖 1..N；必填字段齐全；
  *   method 取值合法；correction != 'none' 时 proxy 不得为 'direct'；
  *   wms/wmts 方法缺少必需参数；nonStandardAdapter 只允许 method='xyz'。
- * - 警告（warning）：url 为 'None' 占位（order 94/95 已知既有问题，只记录不改，
- *   见 Docs/TODO/bugfix-optimization-plan.md）——不阻断启动。
+ * - 警告（warning）：url 为 'None' 占位（orders 94/95 已于 2026-11-28 遗留项 A1
+ *   修正为 30042a9 之前的真实 URL；警告分支保留，防占位回潮）。
+ * - 错误（error）：correction 与 coord 不一致（2026-11-28 遗留项 A2 新增不变量：
+ *   gcj2wgs→WGS84、wgs2gcj→GCJ02、bd2wgs→WGS84、wgs2bd→BD09；none 时不约束）。
  *
  * 由 definitions/index.ts 在模块加载时调用：警告打印 console.warn，
  * 错误直接抛错（定义损坏必须启动即暴露，不得静默带病运行）。
@@ -89,6 +91,19 @@ export function validateTileLayerDefinitions(
         }
         if (correction !== 'none' && proxy === 'direct') {
             errors.push(`${tag} 纠偏 ${correction} 只能在 VPS 代理上做，proxy 不得为 'direct'`);
+        }
+
+        // 不变量（2026-11-28 遗留项 A2）：coord = 纠偏后输出坐标系，须与 correction
+        // 的输出侧一致；correction 缺省/为 'none' 时不约束。
+        const EXPECTED_OUTPUT_COORD: Record<string, string> = {
+            gcj2wgs: 'WGS84',
+            wgs2gcj: 'GCJ02',
+            bd2wgs: 'WGS84',
+            wgs2bd: 'BD09',
+        };
+        const expectedCoord = EXPECTED_OUTPUT_COORD[correction];
+        if (expectedCoord && def.coord !== expectedCoord) {
+            errors.push(`${tag} 的 coord 与 correction 不一致：correction=${correction} 要求 coord=${expectedCoord}，实际=${def.coord}`);
         }
 
         if (def.method === 'wms' && !def.wms?.layers) {

@@ -6,11 +6,10 @@
  * 其 createSource 工厂已由 ol/basemap/loaders/createOlSource.ts 接管。
  *
  * 两字段各司其职，不可合并：
- * - coord = 源坐标系是什么（事实描述，供目录/筛选/UI 用）；
+ * - coord = 纠偏后输出坐标系，即瓦片渲染时对齐的坐标系（供目录分组/筛选/UI 用）；
+ *   源坐标系不由 coord 记录，由 correction 的左侧推导（gcj2wgs 源为 GCJ02、
+ *   wgs2gcj 源为 WGS84、bd2wgs 源为 BD09；correction 缺省/为 none 时源 = coord）。
  * - correction = 引擎要做什么变换（行为指令，供加载用）。
- * 注意：现存 174 条定义的 coord 并不严格等于源坐标系——带 *_wgs 后缀的
- * 纠偏版图层 coord 填的是纠偏后输出坐标系（WGS84），属已知既有不一致，
- * 本次迁移只记录不改（见 Docs/TODO/bugfix-optimization-plan.md）。
  */
 
 import type {
@@ -70,7 +69,7 @@ export interface TileLayerDefinition {
     /** 统一目录分类：每条源定义显式声明，不再由运行时推断 */
     catalogCategory: BasemapCategory;
     provider: BasemapProvider;
-    /** 源坐标系（描述事实）；见文件头注：现存数据有 *_wgs 例外未纠正 */
+    /** 纠偏后输出坐标系（渲染对齐用）；源坐标系见 correction */
     coord: BasemapCoord;
     description: string;
     /** 旧字段，仅兼容 */
