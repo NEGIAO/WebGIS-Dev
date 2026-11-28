@@ -131,7 +131,7 @@
 
 ## 🎯 项目简介
 
-**NEGIAO's WebGIS** 是一个功能完整、架构清晰的前后端分离 WebGIS 平台（当前版本 V3.7.15），前端托管于 GitHub Pages（正式域名 webgis.negiao.cn），后端以 Docker 部署在 Hugging Face Spaces，通过 RESTful API 通信，支持独立扩展。
+**NEGIAO's WebGIS** 是一个功能完整、架构清晰的前后端分离 WebGIS 平台（当前版本 V3.7.16），前端托管于 GitHub Pages（正式域名 webgis.negiao.cn），后端以 Docker 部署在 Hugging Face Spaces，通过 RESTful API 通信，支持独立扩展。
 
 > 📚 本 README 仅保留核心概览与导航。完整文档已模块化至 [`Docs/Guide/`](Docs/Guide/)，详见下方「文档导航」。
 >
@@ -620,9 +620,9 @@ tiles.negiao.cc.cd"]
 
 | 版本 | 日期 | 概要 |
 |------|------|------|
+| **V3.7.16** | 2026-11-28 | **瓦片底图定义重构（层定义驱动，OL/Cesium 共享）**。174 条图源定义由 OL 域迁入 `common/basemap/definitions/`（`TileLayerDefinition`：method/correction/proxy + 占位符/纠偏/代理纯函数 `resolveTileUrl`），定义层零引擎依赖；OL 经新建 `loaders/createOlSource.ts` 建源、Cesium 经 `basemapProviderFactory` 按 method 分支，全走 `resolveTileUrl`；`getDescriptorById` 改为定义本身全量透传；删除 `basemapConfig.ts`/`basemapCore.ts` 与旧分片；`l` 序号契约与 148 预设 stack 不变。方案：`~/workspace/tile-basemap-refactor-plan.md`（工作区文件，未入仓）· 日志：[2026-11-27-basemap-definition-refactor](Docs/LLM_record/26-11/2026-11-27/2026-11-27-basemap-definition-refactor.md) |
 | **V3.7.15** | 2026-11-27 | **Agent 能力系统整合（本批统一版本）**。暂存区多次开发迭代整合为单一版本：新增能力注册表（工具层 SSOT，分组/触发词/罗盘协议按需注入）、底图切片 18 条预设快捷命令（零 LLM 直执）、瓦片语义规则表 19 条（高德/Google 单要素）；修复 System Prompt 传输缺口（默认 AI/后端代理通道此前未发送前端提示词）；提示词回归「给判断依据、放手推理」，罗盘三段式交互协议完整保留；表格/流式加粗渲染修复（状态机配对）；Markdown 渲染与 CSS transition 规范化；临时身份 IP 提取修复、后端不可覆盖安全底线；Code Review 16 项问题全修。架构文档 [`agent-capability-system.md`](Docs/Architecture/agent-capability-system.md) 反映最新能力。 |
 | **V3.7.14** | 2026-11-26 | **统一 IP 地理中枢 · 会话持久化城市 · 暂存区 Code Review 修复 · 架构文档核查**。新增 `services/request_geo.py`（请求级 + 进程级双层缓存），`sessions` 加 `ip_city/ip_region/ip_country`；在线表优先读会话城市；25 份架构文档逐份核实、24 份修订。详见[完整更新日志](Docs/Guide/CHANGELOG.md) |
-| **V3.7.13** | 2026-11-25 | **URL 参数治理 · 会话签发收敛 · 在线统计治理 · 身份唯一性**。首页 `?v=` 版本号、`s/loc/p` 占位清理；landing 零签发零心跳；在线镜像 display_name 同口径、网关 IP 过滤；同一身份全局唯一 token（单端登录）。 |
 
 
 ---
@@ -645,6 +645,6 @@ tiles.negiao.cc.cd"]
 |:------:|:--------:|:--------:|
 | [GitHub](https://github.com/NEGIAO/WebGIS-Dev) | [webgis.negiao.cn](https://webgis.negiao.cn)（正式域名，GitHub Pages 托管） | [Hugging Face](https://NEGIAO-WebGIS.hf.space) |
 
-<sub>V3.7.15 · 开发中 · 最后更新 2026-11-27</sub>
+<sub>V3.7.16 · 开发中 · 最后更新 2026-11-28</sub>
 
 </div>

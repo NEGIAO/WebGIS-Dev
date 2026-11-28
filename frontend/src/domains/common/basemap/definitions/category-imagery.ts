@@ -2,18 +2,13 @@
  * 底图定义：影像底图
  *
  * 每条定义自带完整 URL 与显式属性；order 用于恢复原始定义顺序。
+ * V3.7.16 自 ol/basemap/constants/definitions 迁入 common 定义层：
+ * 定义只声明原始 URL + method/correction/proxy，createSource 工厂已移至
+ * ol/basemap/loaders/createOlSource.ts；本文件零引擎依赖。
  */
-import XYZ from 'ol/source/XYZ';
-import {
-    buildTiandituUrl,
-} from '../basemapCore';
-import {
-    prioritizeTileSourceRequest,
-} from '@ol/tile-source';
-import { gcj2wgsProxyUrl, wgs2gcjProxyUrl } from '@/config/publicRuntime';
-import type { LayerSourceDefinition } from '../basemapCore';
+import type { TileLayerDefinition } from './types';
 
-const definitions: LayerSourceDefinition[] = [
+const definitions: TileLayerDefinition[] = [
     {
         order: 11,
         id: 'imagery_tianditu',
@@ -25,16 +20,7 @@ const definitions: LayerSourceDefinition[] = [
         category: 'imagery',
         group: '影像',
         url: 'https://t{s}.tianditu.gov.cn/img_w/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=img&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&tk={tiandituTk}',
-        serviceType: 'xyz',
-        createSource: ({ tiandituTk }) =>
-            prioritizeTileSourceRequest(
-                new XYZ({
-                    url: buildTiandituUrl(
-                        '/img_w/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=img&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}',
-                        tiandituTk,
-                    ),
-                }),
-            ),
+        method: 'xyz',
     },
     {
         order: 12,
@@ -47,13 +33,7 @@ const definitions: LayerSourceDefinition[] = [
         category: 'imagery',
         group: '影像',
         url: 'https://tiles.geovisearth.com/base/v1/img/{z}/{x}/{y}?token=0aeb02f29320b060c2e2d0c04eb4887c6b8d5a8ed479b3aacff2b6a273b0d38d',
-        serviceType: 'xyz',
-        createSource: () =>
-            prioritizeTileSourceRequest(
-                new XYZ({
-                    url: 'https://tiles.geovisearth.com/base/v1/img/{z}/{x}/{y}?token=0aeb02f29320b060c2e2d0c04eb4887c6b8d5a8ed479b3aacff2b6a273b0d38d',
-                }),
-            ),
+        method: 'xyz',
     },
     {
         order: 13,
@@ -66,13 +46,7 @@ const definitions: LayerSourceDefinition[] = [
         category: 'imagery',
         group: '影像',
         url: 'https://webst01.is.autonavi.com/appmaptile?style=6&x={x}&y={y}&z={z}',
-        serviceType: 'xyz',
-        createSource: () =>
-            prioritizeTileSourceRequest(
-                new XYZ({
-                    url: 'https://webst01.is.autonavi.com/appmaptile?style=6&x={x}&y={y}&z={z}',
-                }),
-            ),
+        method: 'xyz',
     },
     {
         order: 14,
@@ -84,16 +58,9 @@ const definitions: LayerSourceDefinition[] = [
         description: '高德影像(WGS) · AMAP / WGS84',
         category: 'imagery',
         group: '影像',
-        url: gcj2wgsProxyUrl('http://webst01.is.autonavi.com/appmaptile?style=6&x={x}&y={y}&z={z}'),
-        serviceType: 'xyz',
-        createSource: () =>
-            prioritizeTileSourceRequest(
-                new XYZ({
-                    url: gcj2wgsProxyUrl(
-                        'http://webst01.is.autonavi.com/appmaptile?style=6&x={x}&y={y}&z={z}',
-                    ),
-                }),
-            ),
+        url: 'http://webst01.is.autonavi.com/appmaptile?style=6&x={x}&y={y}&z={z}',
+        method: 'xyz',
+        correction: 'gcj2wgs',
     },
     {
         order: 15,
@@ -106,14 +73,8 @@ const definitions: LayerSourceDefinition[] = [
         category: 'imagery',
         group: '影像',
         url: 'https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}',
-        serviceType: 'xyz',
-        createSource: () =>
-            prioritizeTileSourceRequest(
-                new XYZ({
-                    url: 'https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}',
-                    maxZoom: 20,
-                }),
-            ),
+        method: 'xyz',
+        maxZoom: 20,
     },
     {
         order: 16,
@@ -126,14 +87,8 @@ const definitions: LayerSourceDefinition[] = [
         category: 'imagery',
         group: '影像',
         url: 'https://gac-geo.googlecnapps.club/maps/vt?lyrs=s&x={x}&y={y}&z={z}',
-        serviceType: 'xyz',
-        createSource: () =>
-            prioritizeTileSourceRequest(
-                new XYZ({
-                    url: 'https://gac-geo.googlecnapps.club/maps/vt?lyrs=s&x={x}&y={y}&z={z}',
-                    maxZoom: 20,
-                }),
-            ),
+        method: 'xyz',
+        maxZoom: 20,
     },
     {
         order: 18,
@@ -146,13 +101,7 @@ const definitions: LayerSourceDefinition[] = [
         category: 'imagery',
         group: '影像',
         url: 'https://mt0.google.com/vt/lyrs=m&x={x}&y={y}&z={z}&s=Ga',
-        serviceType: 'xyz',
-        createSource: () =>
-            prioritizeTileSourceRequest(
-                new XYZ({
-                    url: 'https://mt0.google.com/vt/lyrs=m&x={x}&y={y}&z={z}&s=Ga',
-                }),
-            ),
+        method: 'xyz',
     },
     {
         order: 19,
@@ -164,18 +113,9 @@ const definitions: LayerSourceDefinition[] = [
         description: 'Google水系(WGS) · Google / WGS84',
         category: 'imagery',
         group: '影像',
-        url: gcj2wgsProxyUrl(
-            'https://mt0.google.com/vt/lyrs=m&x={x}&y={y}&z={z}&hl=zh-CN&apistyle=s.t:0%7Cp.v:off,s.t:6%7Cp.v:on',
-        ),
-        serviceType: 'xyz',
-        createSource: () =>
-            prioritizeTileSourceRequest(
-                new XYZ({
-                    url: gcj2wgsProxyUrl(
-                        'https://mt0.google.com/vt/lyrs=m&x={x}&y={y}&z={z}&hl=zh-CN&apistyle=s.t:0%7Cp.v:off,s.t:6%7Cp.v:on',
-                    ),
-                }),
-            ),
+        url: 'https://mt0.google.com/vt/lyrs=m&x={x}&y={y}&z={z}&hl=zh-CN&apistyle=s.t:0%7Cp.v:off,s.t:6%7Cp.v:on',
+        method: 'xyz',
+        correction: 'gcj2wgs',
     },
     {
         order: 20,
@@ -188,13 +128,7 @@ const definitions: LayerSourceDefinition[] = [
         category: 'imagery',
         group: '影像',
         url: 'https://api.mapbox.com/styles/v1/mapbox/satellite-v9/tiles/{z}/{x}/{y}?access_token=pk.eyJ1IjoieGVyb2MiLCJhIjoiY21lenIyeWk4MXRuOTJrcTVjMWIwMXc3dCJ9.nMoRkxxiCpnFxmZ1H-ScwQ',
-        serviceType: 'xyz',
-        createSource: () =>
-            prioritizeTileSourceRequest(
-                new XYZ({
-                    url: 'https://api.mapbox.com/styles/v1/mapbox/satellite-v9/tiles/{z}/{x}/{y}?access_token=pk.eyJ1IjoieGVyb2MiLCJhIjoiY21lenIyeWk4MXRuOTJrcTVjMWIwMXc3dCJ9.nMoRkxxiCpnFxmZ1H-ScwQ',
-                }),
-            ),
+        method: 'xyz',
     },
     {
         order: 21,
@@ -207,11 +141,7 @@ const definitions: LayerSourceDefinition[] = [
         category: 'imagery',
         group: '影像',
         url: 'https://sat02.maps.yandex.net/tiles?l=sat&x={x}&y={y}&z={z}',
-        serviceType: 'xyz',
-        createSource: () =>
-            prioritizeTileSourceRequest(
-                new XYZ({ url: 'https://sat02.maps.yandex.net/tiles?l=sat&x={x}&y={y}&z={z}' }),
-            ),
+        method: 'xyz',
     },
     {
         order: 22,
@@ -224,13 +154,7 @@ const definitions: LayerSourceDefinition[] = [
         category: 'imagery',
         group: '影像',
         url: 'https://api.maptiler.com/maps/satellite-v4/{z}/{x}/{y}.png?key=osLOujcXk1GJrGk5oaDz',
-        serviceType: 'xyz',
-        createSource: () =>
-            prioritizeTileSourceRequest(
-                new XYZ({
-                    url: 'https://api.maptiler.com/maps/satellite-v4/{z}/{x}/{y}.png?key=osLOujcXk1GJrGk5oaDz',
-                }),
-            ),
+        method: 'xyz',
     },
     {
         order: 23,
@@ -243,17 +167,8 @@ const definitions: LayerSourceDefinition[] = [
         category: 'imagery',
         group: '影像',
         url: 'https://api.maptiler.com/maps/satellite-v4/{z}/{x}/{y}@2x.jpg?key=osLOujcXk1GJrGk5oaDz',
-        serviceType: 'xyz',
-        createSource: () =>
-            prioritizeTileSourceRequest(
-                new XYZ({
-                    url: 'https://api.maptiler.com/maps/satellite-v4/{z}/{x}/{y}@2x.jpg?key=osLOujcXk1GJrGk5oaDz',
-                    
-                    
-                    
-                    tilePixelRatio: 2,
-                }),
-            ),
+        method: 'xyz',
+        tilePixelRatio: 2,
     },
     {
         order: 24,
@@ -266,13 +181,7 @@ const definitions: LayerSourceDefinition[] = [
         category: 'imagery',
         group: '影像',
         url: 'https://tiles.stadiamaps.com/tiles/alidade_satellite/{z}/{x}/{y}.jpg?api_key=e5abf577-33b9-47f0-92b2-bd60f88d8c8d',
-        serviceType: 'xyz',
-        createSource: () =>
-            prioritizeTileSourceRequest(
-                new XYZ({
-                    url: 'https://tiles.stadiamaps.com/tiles/alidade_satellite/{z}/{x}/{y}.jpg?api_key=e5abf577-33b9-47f0-92b2-bd60f88d8c8d',
-                }),
-            ),
+        method: 'xyz',
     },
     {
         order: 44,
@@ -285,13 +194,7 @@ const definitions: LayerSourceDefinition[] = [
         category: 'theme',
         group: 'Ocean',
         url: 'https://services.arcgisonline.com/arcgis/rest/services/Ocean/World_Ocean_Base/MapServer/tile/{z}/{y}/{x}',
-        serviceType: 'xyz',
-        createSource: () =>
-            prioritizeTileSourceRequest(
-                new XYZ({
-                    url: 'https://services.arcgisonline.com/arcgis/rest/services/Ocean/World_Ocean_Base/MapServer/tile/{z}/{y}/{x}',
-                }),
-            ),
+        method: 'xyz',
     },
     {
         order: 45,
@@ -304,13 +207,7 @@ const definitions: LayerSourceDefinition[] = [
         category: 'theme',
         group: 'Ocean',
         url: 'https://services.arcgisonline.com/arcgis/rest/services/Ocean/World_Ocean_Reference/MapServer/tile/{z}/{y}/{x}',
-        serviceType: 'xyz',
-        createSource: () =>
-            prioritizeTileSourceRequest(
-                new XYZ({
-                    url: 'https://services.arcgisonline.com/arcgis/rest/services/Ocean/World_Ocean_Reference/MapServer/tile/{z}/{y}/{x}',
-                }),
-            ),
+        method: 'xyz',
     },
     {
         order: 46,
@@ -323,13 +220,7 @@ const definitions: LayerSourceDefinition[] = [
         category: 'imagery',
         group: 'Polar',
         url: 'https://services.arcgisonline.com/arcgis/rest/services/Polar/Antarctic_Imagery/MapServer/tile/{z}/{y}/{x}',
-        serviceType: 'xyz',
-        createSource: () =>
-            prioritizeTileSourceRequest(
-                new XYZ({
-                    url: 'https://services.arcgisonline.com/arcgis/rest/services/Polar/Antarctic_Imagery/MapServer/tile/{z}/{y}/{x}',
-                }),
-            ),
+        method: 'xyz',
     },
     {
         order: 47,
@@ -342,13 +233,7 @@ const definitions: LayerSourceDefinition[] = [
         category: 'imagery',
         group: 'Polar',
         url: 'https://services.arcgisonline.com/arcgis/rest/services/Polar/Arctic_Imagery/MapServer/tile/{z}/{y}/{x}',
-        serviceType: 'xyz',
-        createSource: () =>
-            prioritizeTileSourceRequest(
-                new XYZ({
-                    url: 'https://services.arcgisonline.com/arcgis/rest/services/Polar/Arctic_Imagery/MapServer/tile/{z}/{y}/{x}',
-                }),
-            ),
+        method: 'xyz',
     },
     {
         order: 48,
@@ -361,13 +246,7 @@ const definitions: LayerSourceDefinition[] = [
         category: 'theme',
         group: 'Polar',
         url: 'https://services.arcgisonline.com/arcgis/rest/services/Polar/Arctic_Ocean_Base/MapServer/tile/{z}/{y}/{x}',
-        serviceType: 'xyz',
-        createSource: () =>
-            prioritizeTileSourceRequest(
-                new XYZ({
-                    url: 'https://services.arcgisonline.com/arcgis/rest/services/Polar/Arctic_Ocean_Base/MapServer/tile/{z}/{y}/{x}',
-                }),
-            ),
+        method: 'xyz',
     },
     {
         order: 49,
@@ -380,13 +259,7 @@ const definitions: LayerSourceDefinition[] = [
         category: 'label',
         group: 'Polar',
         url: 'https://services.arcgisonline.com/arcgis/rest/services/Polar/Arctic_Ocean_Reference/MapServer/tile/{z}/{y}/{x}',
-        serviceType: 'xyz',
-        createSource: () =>
-            prioritizeTileSourceRequest(
-                new XYZ({
-                    url: 'https://services.arcgisonline.com/arcgis/rest/services/Polar/Arctic_Ocean_Reference/MapServer/tile/{z}/{y}/{x}',
-                }),
-            ),
+        method: 'xyz',
     },
     {
         order: 68,
@@ -399,13 +272,7 @@ const definitions: LayerSourceDefinition[] = [
         category: 'theme',
         group: 'Ocean',
         url: 'https://api.maptiler.com/maps/ocean-v4/{z}/{x}/{y}.png?key=osLOujcXk1GJrGk5oaDz',
-        serviceType: 'xyz',
-        createSource: () =>
-            prioritizeTileSourceRequest(
-                new XYZ({
-                    url: 'https://api.maptiler.com/maps/ocean-v4/{z}/{x}/{y}.png?key=osLOujcXk1GJrGk5oaDz',
-                }),
-            ),
+        method: 'xyz',
     },
     {
         order: 69,
@@ -418,13 +285,7 @@ const definitions: LayerSourceDefinition[] = [
         category: 'theme',
         group: '专题',
         url: 'https://tiles.stadiamaps.com/tiles/stamen_watercolor/{z}/{x}/{y}.jpg?api_key=e5abf577-33b9-47f0-92b2-bd60f88d8c8d',
-        serviceType: 'xyz',
-        createSource: () =>
-            prioritizeTileSourceRequest(
-                new XYZ({
-                    url: 'https://tiles.stadiamaps.com/tiles/stamen_watercolor/{z}/{x}/{y}.jpg?api_key=e5abf577-33b9-47f0-92b2-bd60f88d8c8d',
-                }),
-            ),
+        method: 'xyz',
     },
     {
         order: 121,
@@ -437,13 +298,7 @@ const definitions: LayerSourceDefinition[] = [
         category: 'vector',
         group: '矢量',
         url: 'https://mt0.google.com/vt/lyrs=y&hl=zh-CN&x={x}&y={y}&z={z}',
-        serviceType: 'xyz',
-        createSource: () =>
-            prioritizeTileSourceRequest(
-                new XYZ({
-                    url: 'https://mt0.google.com/vt/lyrs=y&hl=zh-CN&x={x}&y={y}&z={z}',
-                }),
-            ),
+        method: 'xyz',
     },
     {
         order: 122,
@@ -455,14 +310,9 @@ const definitions: LayerSourceDefinition[] = [
         description: 'Google混合影像(WGS) · Google / WGS84',
         category: 'vector',
         group: '矢量',
-        url: gcj2wgsProxyUrl('https://mt0.google.com/vt/lyrs=y&hl=zh-CN&x={x}&y={y}&z={z}'),
-        serviceType: 'xyz',
-        createSource: () =>
-            prioritizeTileSourceRequest(
-                new XYZ({
-                    url: gcj2wgsProxyUrl('https://mt0.google.com/vt/lyrs=y&hl=zh-CN&x={x}&y={y}&z={z}'),
-                }),
-            ),
+        url: 'https://mt0.google.com/vt/lyrs=y&hl=zh-CN&x={x}&y={y}&z={z}',
+        method: 'xyz',
+        correction: 'gcj2wgs',
     },
     {
         order: 137,
@@ -475,13 +325,7 @@ const definitions: LayerSourceDefinition[] = [
         category: 'vector',
         group: '矢量',
         url: 'https://mt0.google.com/vt/lyrs=s&x={x}&y={y}&z={z}',
-        serviceType: 'xyz',
-        createSource: () =>
-            prioritizeTileSourceRequest(
-                new XYZ({
-                    url: 'https://mt0.google.com/vt/lyrs=s&x={x}&y={y}&z={z}',
-                }),
-            ),
+        method: 'xyz',
     },
     {
         order: 138,
@@ -493,14 +337,9 @@ const definitions: LayerSourceDefinition[] = [
         description: 'Google纯卫星(GCJ) · Google / GCJ02',
         category: 'vector',
         group: '矢量',
-        url: wgs2gcjProxyUrl('https://mt0.google.com/vt/lyrs=s&x={x}&y={y}&z={z}'),
-        serviceType: 'xyz',
-        createSource: () =>
-            prioritizeTileSourceRequest(
-                new XYZ({
-                    url: wgs2gcjProxyUrl('https://mt0.google.com/vt/lyrs=s&x={x}&y={y}&z={z}'),
-                }),
-            ),
+        url: 'https://mt0.google.com/vt/lyrs=s&x={x}&y={y}&z={z}',
+        method: 'xyz',
+        correction: 'wgs2gcj',
     },
 ];
 

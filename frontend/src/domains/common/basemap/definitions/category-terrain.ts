@@ -2,20 +2,13 @@
  * 底图定义：地形底图
  *
  * 每条定义自带完整 URL 与显式属性；order 用于恢复原始定义顺序。
+ * V3.7.16 自 ol/basemap/constants/definitions 迁入 common 定义层：
+ * 定义只声明原始 URL + method/correction/proxy，createSource 工厂已移至
+ * ol/basemap/loaders/createOlSource.ts；本文件零引擎依赖。
  */
-import XYZ from 'ol/source/XYZ';
-import {
-    buildOvitalUrl,
-    NON_STANDARD_XYZ_ADAPTERS,
-} from '../basemapCore';
-import {
-    createXYZSourceFromUrl,
-    prioritizeTileSourceRequest,
-} from '@ol/tile-source';
-import { wgs2gcjProxyUrl } from '@/config/publicRuntime';
-import type { LayerSourceDefinition } from '../basemapCore';
+import type { TileLayerDefinition } from './types';
 
-const definitions: LayerSourceDefinition[] = [
+const definitions: TileLayerDefinition[] = [
     {
         order: 9,
         id: 'terrain_gac',
@@ -27,13 +20,7 @@ const definitions: LayerSourceDefinition[] = [
         category: 'terrain',
         group: '地形',
         url: 'https://gac-geo.googlecnapps.club/maps/vt/pb=!1m4!1m3!1i{z}!2i{x}!3i{y}!2m1!1e5',
-        serviceType: 'xyz',
-        createSource: () =>
-            prioritizeTileSourceRequest(
-                new XYZ({
-                    url: 'https://gac-geo.googlecnapps.club/maps/vt/pb=!1m4!1m3!1i{z}!2i{x}!3i{y}!2m1!1e5',
-                }),
-            ),
+        method: 'xyz',
     },
     {
         order: 10,
@@ -46,13 +33,7 @@ const definitions: LayerSourceDefinition[] = [
         category: 'terrain',
         group: '地形',
         url: 'https://www.google.com/maps/vt/pb=!1m4!1m3!1i{z}!2i{x}!3i{y}!2m1!1e5',
-        serviceType: 'xyz',
-        createSource: () =>
-            prioritizeTileSourceRequest(
-                new XYZ({
-                    url: 'https://www.google.com/maps/vt/pb=!1m4!1m3!1i{z}!2i{x}!3i{y}!2m1!1e5',
-                }),
-            ),
+        method: 'xyz',
     },
     {
         order: 56,
@@ -65,13 +46,7 @@ const definitions: LayerSourceDefinition[] = [
         category: 'theme',
         group: 'World',
         url: 'https://services.arcgisonline.com/arcgis/rest/services/USA_Topo_Maps/MapServer/tile/{z}/{y}/{x}',
-        serviceType: 'xyz',
-        createSource: () =>
-            prioritizeTileSourceRequest(
-                new XYZ({
-                    url: 'https://services.arcgisonline.com/arcgis/rest/services/USA_Topo_Maps/MapServer/tile/{z}/{y}/{x}',
-                }),
-            ),
+        method: 'xyz',
     },
     {
         order: 58,
@@ -84,13 +59,7 @@ const definitions: LayerSourceDefinition[] = [
         category: 'theme',
         group: 'World',
         url: 'https://services.arcgisonline.com/arcgis/rest/services/World_Shaded_Relief/MapServer/tile/{z}/{y}/{x}',
-        serviceType: 'xyz',
-        createSource: () =>
-            prioritizeTileSourceRequest(
-                new XYZ({
-                    url: 'https://services.arcgisonline.com/arcgis/rest/services/World_Shaded_Relief/MapServer/tile/{z}/{y}/{x}',
-                }),
-            ),
+        method: 'xyz',
     },
     {
         order: 60,
@@ -103,13 +72,7 @@ const definitions: LayerSourceDefinition[] = [
         category: 'theme',
         group: 'World',
         url: 'https://services.arcgisonline.com/arcgis/rest/services/World_Terrain_Base/MapServer/tile/{z}/{y}/{x}',
-        serviceType: 'xyz',
-        createSource: () =>
-            prioritizeTileSourceRequest(
-                new XYZ({
-                    url: 'https://services.arcgisonline.com/arcgis/rest/services/World_Terrain_Base/MapServer/tile/{z}/{y}/{x}',
-                }),
-            ),
+        method: 'xyz',
     },
     {
         order: 61,
@@ -122,13 +85,7 @@ const definitions: LayerSourceDefinition[] = [
         category: 'theme',
         group: 'World',
         url: 'https://services.arcgisonline.com/arcgis/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}',
-        serviceType: 'xyz',
-        createSource: () =>
-            prioritizeTileSourceRequest(
-                new XYZ({
-                    url: 'https://services.arcgisonline.com/arcgis/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}',
-                }),
-            ),
+        method: 'xyz',
     },
     {
         order: 62,
@@ -141,13 +98,7 @@ const definitions: LayerSourceDefinition[] = [
         category: 'terrain',
         group: '专题',
         url: 'https://tiles.emodnet-bathymetry.eu/2020/baselayer/web_mercator/{z}/{x}/{y}.png',
-        serviceType: 'xyz',
-        createSource: () =>
-            prioritizeTileSourceRequest(
-                new XYZ({
-                    url: 'https://tiles.emodnet-bathymetry.eu/2020/baselayer/web_mercator/{z}/{x}/{y}.png',
-                }),
-            ),
+        method: 'xyz',
     },
     {
         order: 70,
@@ -160,13 +111,9 @@ const definitions: LayerSourceDefinition[] = [
         category: 'theme',
         group: '专题',
         url: 'https://maps-for-free.com/layer/water/z{z}/row{y}/{z}_{x}-{y}.gif',
-        adapters: NON_STANDARD_XYZ_ADAPTERS,
-        serviceType: 'xyz',
-        createSource: () =>
-            createXYZSourceFromUrl(
-                'https://maps-for-free.com/layer/water/z{z}/row{y}/{z}_{x}-{y}.gif',
-                { adapters: NON_STANDARD_XYZ_ADAPTERS },
-            ),
+        method: 'xyz',
+        nonStandardAdapter: 'maps-for-free-water',
+        engines: ['ol'],
     },
     {
         order: 71,
@@ -179,13 +126,9 @@ const definitions: LayerSourceDefinition[] = [
         category: 'theme',
         group: '专题',
         url: 'https://maps-for-free.com/layer/admin/z{z}/row{y}/{z}_{x}-{y}.gif',
-        adapters: NON_STANDARD_XYZ_ADAPTERS,
-        serviceType: 'xyz',
-        createSource: () =>
-            createXYZSourceFromUrl(
-                'https://maps-for-free.com/layer/admin/z{z}/row{y}/{z}_{x}-{y}.gif',
-                { adapters: NON_STANDARD_XYZ_ADAPTERS },
-            ),
+        method: 'xyz',
+        nonStandardAdapter: 'maps-for-free-admin',
+        engines: ['ol'],
     },
     {
         order: 72,
@@ -198,13 +141,9 @@ const definitions: LayerSourceDefinition[] = [
         category: 'theme',
         group: '专题',
         url: 'https://maps-for-free.com/layer/streets/z{z}/row{y}/{z}_{x}-{y}.gif',
-        adapters: NON_STANDARD_XYZ_ADAPTERS,
-        serviceType: 'xyz',
-        createSource: () =>
-            createXYZSourceFromUrl(
-                'https://maps-for-free.com/layer/streets/z{z}/row{y}/{z}_{x}-{y}.gif',
-                { adapters: NON_STANDARD_XYZ_ADAPTERS },
-            ),
+        method: 'xyz',
+        nonStandardAdapter: 'maps-for-free-streets',
+        engines: ['ol'],
     },
     {
         order: 73,
@@ -217,13 +156,9 @@ const definitions: LayerSourceDefinition[] = [
         category: 'theme',
         group: '专题',
         url: 'https://maps-for-free.com/layer/country/z{z}/row{y}/{z}_{x}-{y}.png',
-        adapters: NON_STANDARD_XYZ_ADAPTERS,
-        serviceType: 'xyz',
-        createSource: () =>
-            createXYZSourceFromUrl(
-                'https://maps-for-free.com/layer/country/z{z}/row{y}/{z}_{x}-{y}.png',
-                { adapters: NON_STANDARD_XYZ_ADAPTERS },
-            ),
+        method: 'xyz',
+        nonStandardAdapter: 'maps-for-free-country',
+        engines: ['ol'],
     },
     {
         order: 74,
@@ -236,13 +171,9 @@ const definitions: LayerSourceDefinition[] = [
         category: 'theme',
         group: '专题',
         url: 'https://maps-for-free.com/layer/crop/z{z}/row{y}/{z}_{x}-{y}.gif',
-        adapters: NON_STANDARD_XYZ_ADAPTERS,
-        serviceType: 'xyz',
-        createSource: () =>
-            createXYZSourceFromUrl(
-                'https://maps-for-free.com/layer/crop/z{z}/row{y}/{z}_{x}-{y}.gif',
-                { adapters: NON_STANDARD_XYZ_ADAPTERS },
-            ),
+        method: 'xyz',
+        nonStandardAdapter: 'maps-for-free-crop',
+        engines: ['ol'],
     },
     {
         order: 75,
@@ -255,13 +186,9 @@ const definitions: LayerSourceDefinition[] = [
         category: 'theme',
         group: '专题',
         url: 'https://maps-for-free.com/layer/grass/z{z}/row{y}/{z}_{x}-{y}.gif',
-        adapters: NON_STANDARD_XYZ_ADAPTERS,
-        serviceType: 'xyz',
-        createSource: () =>
-            createXYZSourceFromUrl(
-                'https://maps-for-free.com/layer/grass/z{z}/row{y}/{z}_{x}-{y}.gif',
-                { adapters: NON_STANDARD_XYZ_ADAPTERS },
-            ),
+        method: 'xyz',
+        nonStandardAdapter: 'maps-for-free-grass',
+        engines: ['ol'],
     },
     {
         order: 76,
@@ -274,13 +201,9 @@ const definitions: LayerSourceDefinition[] = [
         category: 'theme',
         group: '专题',
         url: 'https://maps-for-free.com/layer/forest/z{z}/row{y}/{z}_{x}-{y}.gif',
-        adapters: NON_STANDARD_XYZ_ADAPTERS,
-        serviceType: 'xyz',
-        createSource: () =>
-            createXYZSourceFromUrl(
-                'https://maps-for-free.com/layer/forest/z{z}/row{y}/{z}_{x}-{y}.gif',
-                { adapters: NON_STANDARD_XYZ_ADAPTERS },
-            ),
+        method: 'xyz',
+        nonStandardAdapter: 'maps-for-free-forest',
+        engines: ['ol'],
     },
     {
         order: 77,
@@ -293,13 +216,9 @@ const definitions: LayerSourceDefinition[] = [
         category: 'theme',
         group: '专题',
         url: 'https://maps-for-free.com/layer/tundra/z{z}/row{y}/{z}_{x}-{y}.gif',
-        adapters: NON_STANDARD_XYZ_ADAPTERS,
-        serviceType: 'xyz',
-        createSource: () =>
-            createXYZSourceFromUrl(
-                'https://maps-for-free.com/layer/tundra/z{z}/row{y}/{z}_{x}-{y}.gif',
-                { adapters: NON_STANDARD_XYZ_ADAPTERS },
-            ),
+        method: 'xyz',
+        nonStandardAdapter: 'maps-for-free-tundra',
+        engines: ['ol'],
     },
     {
         order: 78,
@@ -312,13 +231,9 @@ const definitions: LayerSourceDefinition[] = [
         category: 'theme',
         group: '专题',
         url: 'https://maps-for-free.com/layer/sand/z{z}/row{y}/{z}_{x}-{y}.gif',
-        adapters: NON_STANDARD_XYZ_ADAPTERS,
-        serviceType: 'xyz',
-        createSource: () =>
-            createXYZSourceFromUrl(
-                'https://maps-for-free.com/layer/sand/z{z}/row{y}/{z}_{x}-{y}.gif',
-                { adapters: NON_STANDARD_XYZ_ADAPTERS },
-            ),
+        method: 'xyz',
+        nonStandardAdapter: 'maps-for-free-sand',
+        engines: ['ol'],
     },
     {
         order: 79,
@@ -331,13 +246,9 @@ const definitions: LayerSourceDefinition[] = [
         category: 'theme',
         group: '专题',
         url: 'https://maps-for-free.com/layer/swamp/z{z}/row{y}/{z}_{x}-{y}.gif',
-        adapters: NON_STANDARD_XYZ_ADAPTERS,
-        serviceType: 'xyz',
-        createSource: () =>
-            createXYZSourceFromUrl(
-                'https://maps-for-free.com/layer/swamp/z{z}/row{y}/{z}_{x}-{y}.gif',
-                { adapters: NON_STANDARD_XYZ_ADAPTERS },
-            ),
+        method: 'xyz',
+        nonStandardAdapter: 'maps-for-free-swamp',
+        engines: ['ol'],
     },
     {
         order: 80,
@@ -350,13 +261,9 @@ const definitions: LayerSourceDefinition[] = [
         category: 'theme',
         group: '专题',
         url: 'https://maps-for-free.com/layer/ice/z{z}/row{y}/{z}_{x}-{y}.gif',
-        adapters: NON_STANDARD_XYZ_ADAPTERS,
-        serviceType: 'xyz',
-        createSource: () =>
-            createXYZSourceFromUrl(
-                'https://maps-for-free.com/layer/ice/z{z}/row{y}/{z}_{x}-{y}.gif',
-                { adapters: NON_STANDARD_XYZ_ADAPTERS },
-            ),
+        method: 'xyz',
+        nonStandardAdapter: 'maps-for-free-ice',
+        engines: ['ol'],
     },
     {
         order: 81,
@@ -369,13 +276,9 @@ const definitions: LayerSourceDefinition[] = [
         category: 'terrain',
         group: '专题',
         url: 'https://maps-for-free.com/layer/relief/z{z}/row{y}/{z}_{x}-{y}.jpg',
-        adapters: NON_STANDARD_XYZ_ADAPTERS,
-        serviceType: 'xyz',
-        createSource: () =>
-            createXYZSourceFromUrl(
-                'https://maps-for-free.com/layer/relief/z{z}/row{y}/{z}_{x}-{y}.jpg',
-                { adapters: NON_STANDARD_XYZ_ADAPTERS },
-            ),
+        method: 'xyz',
+        nonStandardAdapter: 'maps-for-free-relief',
+        engines: ['ol'],
     },
     {
         order: 82,
@@ -388,13 +291,7 @@ const definitions: LayerSourceDefinition[] = [
         category: 'terrain',
         group: '专题',
         url: 'https://api.maptiler.com/maps/landscape-v4/{z}/{x}/{y}.png?key=osLOujcXk1GJrGk5oaDz',
-        serviceType: 'xyz',
-        createSource: () =>
-            prioritizeTileSourceRequest(
-                new XYZ({
-                    url: 'https://api.maptiler.com/maps/landscape-v4/{z}/{x}/{y}.png?key=osLOujcXk1GJrGk5oaDz',
-                }),
-            ),
+        method: 'xyz',
     },
     {
         order: 83,
@@ -407,13 +304,7 @@ const definitions: LayerSourceDefinition[] = [
         category: 'terrain',
         group: '专题',
         url: 'https://api.maptiler.com/maps/topo-v4/{z}/{x}/{y}.png?key=osLOujcXk1GJrGk5oaDz',
-        serviceType: 'xyz',
-        createSource: () =>
-            prioritizeTileSourceRequest(
-                new XYZ({
-                    url: 'https://api.maptiler.com/maps/topo-v4/{z}/{x}/{y}.png?key=osLOujcXk1GJrGk5oaDz',
-                }),
-            ),
+        method: 'xyz',
     },
     {
         order: 84,
@@ -426,13 +317,7 @@ const definitions: LayerSourceDefinition[] = [
         category: 'terrain',
         group: '地形',
         url: 'https://tiles.stadiamaps.com/tiles/stamen_terrain/{z}/{x}/{y}.png?api_key=e5abf577-33b9-47f0-92b2-bd60f88d8c8d',
-        serviceType: 'xyz',
-        createSource: () =>
-            prioritizeTileSourceRequest(
-                new XYZ({
-                    url: 'https://tiles.stadiamaps.com/tiles/stamen_terrain/{z}/{x}/{y}.png?api_key=e5abf577-33b9-47f0-92b2-bd60f88d8c8d',
-                }),
-            ),
+        method: 'xyz',
     },
     {
         order: 85,
@@ -445,13 +330,7 @@ const definitions: LayerSourceDefinition[] = [
         category: 'terrain',
         group: '地形',
         url: 'https://tiles.stadiamaps.com/tiles/outdoors/{z}/{x}/{y}.png?api_key=e5abf577-33b9-47f0-92b2-bd60f88d8c8d',
-        serviceType: 'xyz',
-        createSource: () =>
-            prioritizeTileSourceRequest(
-                new XYZ({
-                    url: 'https://tiles.stadiamaps.com/tiles/outdoors/{z}/{x}/{y}.png?api_key=e5abf577-33b9-47f0-92b2-bd60f88d8c8d',
-                }),
-            ),
+        method: 'xyz',
     },
     {
         order: 139,
@@ -464,13 +343,7 @@ const definitions: LayerSourceDefinition[] = [
         category: 'vector',
         group: '矢量',
         url: 'https://mt0.google.com/vt/lyrs=t&x={x}&y={y}&z={z}',
-        serviceType: 'xyz',
-        createSource: () =>
-            prioritizeTileSourceRequest(
-                new XYZ({
-                    url: 'https://mt0.google.com/vt/lyrs=t&x={x}&y={y}&z={z}',
-                }),
-            ),
+        method: 'xyz',
     },
     {
         order: 140,
@@ -482,14 +355,9 @@ const definitions: LayerSourceDefinition[] = [
         description: 'Google纯地形(GCJ) · Google / GCJ02',
         category: 'vector',
         group: '矢量',
-        url: wgs2gcjProxyUrl('https://mt0.google.com/vt/lyrs=t&x={x}&y={y}&z={z}'),
-        serviceType: 'xyz',
-        createSource: () =>
-            prioritizeTileSourceRequest(
-                new XYZ({
-                    url: wgs2gcjProxyUrl('https://mt0.google.com/vt/lyrs=t&x={x}&y={y}&z={z}'),
-                }),
-            ),
+        url: 'https://mt0.google.com/vt/lyrs=t&x={x}&y={y}&z={z}',
+        method: 'xyz',
+        correction: 'wgs2gcj',
     },
     {
         order: 141,
@@ -502,13 +370,7 @@ const definitions: LayerSourceDefinition[] = [
         category: 'vector',
         group: '矢量',
         url: 'https://mt0.google.com/vt/lyrs=p&x={x}&y={y}&z={z}',
-        serviceType: 'xyz',
-        createSource: () =>
-            prioritizeTileSourceRequest(
-                new XYZ({
-                    url: 'https://mt0.google.com/vt/lyrs=p&x={x}&y={y}&z={z}',
-                }),
-            ),
+        method: 'xyz',
     },
     {
         order: 142,
@@ -520,14 +382,9 @@ const definitions: LayerSourceDefinition[] = [
         description: 'Google地形混合(GCJ) · Google / GCJ02',
         category: 'vector',
         group: '矢量',
-        url: wgs2gcjProxyUrl('https://mt0.google.com/vt/lyrs=p&x={x}&y={y}&z={z}'),
-        serviceType: 'xyz',
-        createSource: () =>
-            prioritizeTileSourceRequest(
-                new XYZ({
-                    url: wgs2gcjProxyUrl('https://mt0.google.com/vt/lyrs=p&x={x}&y={y}&z={z}'),
-                }),
-            ),
+        url: 'https://mt0.google.com/vt/lyrs=p&x={x}&y={y}&z={z}',
+        method: 'xyz',
+        correction: 'wgs2gcj',
     },
     {
         order: 143,
@@ -540,13 +397,7 @@ const definitions: LayerSourceDefinition[] = [
         category: 'vector',
         group: '矢量',
         url: 'https://mt0.google.com/vt/lyrs=p&x={x}&y={y}&z={z}&s=Ga&apistyle=s.e:l%7Cp.v:off,s.t:1%7Cs.e.g%7Cp.v:off,s.t:2%7Cs.e.g%7Cp.v:off',
-        serviceType: 'xyz',
-        createSource: () =>
-            prioritizeTileSourceRequest(
-                new XYZ({
-                    url: 'https://mt0.google.com/vt/lyrs=p&x={x}&y={y}&z={z}&s=Ga&apistyle=s.e:l%7Cp.v:off,s.t:1%7Cs.e.g%7Cp.v:off,s.t:2%7Cs.e.g%7Cp.v:off',
-                }),
-            ),
+        method: 'xyz',
     },
     {
         order: 144,
@@ -558,14 +409,9 @@ const definitions: LayerSourceDefinition[] = [
         description: 'Google干净地形(GCJ) · Google / GCJ02',
         category: 'vector',
         group: '矢量',
-        url: wgs2gcjProxyUrl('https://mt0.google.com/vt/lyrs=p&x={x}&y={y}&z={z}&s=Ga&apistyle=s.e:l%7Cp.v:off,s.t:1%7Cs.e.g%7Cp.v:off,s.t:2%7Cs.e.g%7Cp.v:off'),
-        serviceType: 'xyz',
-        createSource: () =>
-            prioritizeTileSourceRequest(
-                new XYZ({
-                    url: wgs2gcjProxyUrl('https://mt0.google.com/vt/lyrs=p&x={x}&y={y}&z={z}&s=Ga&apistyle=s.e:l%7Cp.v:off,s.t:1%7Cs.e.g%7Cp.v:off,s.t:2%7Cs.e.g%7Cp.v:off'),
-                }),
-            ),
+        url: 'https://mt0.google.com/vt/lyrs=p&x={x}&y={y}&z={z}&s=Ga&apistyle=s.e:l%7Cp.v:off,s.t:1%7Cs.e.g%7Cp.v:off,s.t:2%7Cs.e.g%7Cp.v:off',
+        method: 'xyz',
+        correction: 'wgs2gcj',
     },
     {
         order: 145,
@@ -578,13 +424,7 @@ const definitions: LayerSourceDefinition[] = [
         category: 'vector',
         group: '矢量',
         url: 'https://mt0.google.com/vt/lyrs=p&x={x}&y={y}&z={z}&s=Ga&apistyle=s.e:l%7Cp.v:off,s.t:1%7Cs.e.g%7Cp.v:off,s.t:2%7Cs.e.g%7Cp.v:off,s.t:3%7Cs.e.g%7Cp.v:off,s.t:4%7Cs.e.g%7Cp.v:off',
-        serviceType: 'xyz',
-        createSource: () =>
-            prioritizeTileSourceRequest(
-                new XYZ({
-                    url: 'https://mt0.google.com/vt/lyrs=p&x={x}&y={y}&z={z}&s=Ga&apistyle=s.e:l%7Cp.v:off,s.t:1%7Cs.e.g%7Cp.v:off,s.t:2%7Cs.e.g%7Cp.v:off,s.t:3%7Cs.e.g%7Cp.v:off,s.t:4%7Cs.e.g%7Cp.v:off',
-                }),
-            ),
+        method: 'xyz',
     },
     {
         order: 146,
@@ -596,14 +436,9 @@ const definitions: LayerSourceDefinition[] = [
         description: 'Google干净地形无路(GCJ) · Google / GCJ02',
         category: 'vector',
         group: '矢量',
-        url: wgs2gcjProxyUrl('https://mt0.google.com/vt/lyrs=p&x={x}&y={y}&z={z}&s=Ga&apistyle=s.e:l%7Cp.v:off,s.t:1%7Cs.e.g%7Cp.v:off,s.t:2%7Cs.e.g%7Cp.v:off,s.t:3%7Cs.e.g%7Cp.v:off,s.t:4%7Cs.e.g%7Cp.v:off'),
-        serviceType: 'xyz',
-        createSource: () =>
-            prioritizeTileSourceRequest(
-                new XYZ({
-                    url: wgs2gcjProxyUrl('https://mt0.google.com/vt/lyrs=p&x={x}&y={y}&z={z}&s=Ga&apistyle=s.e:l%7Cp.v:off,s.t:1%7Cs.e.g%7Cp.v:off,s.t:2%7Cs.e.g%7Cp.v:off,s.t:3%7Cs.e.g%7Cp.v:off,s.t:4%7Cs.e.g%7Cp.v:off'),
-                }),
-            ),
+        url: 'https://mt0.google.com/vt/lyrs=p&x={x}&y={y}&z={z}&s=Ga&apistyle=s.e:l%7Cp.v:off,s.t:1%7Cs.e.g%7Cp.v:off,s.t:2%7Cs.e.g%7Cp.v:off,s.t:3%7Cs.e.g%7Cp.v:off,s.t:4%7Cs.e.g%7Cp.v:off',
+        method: 'xyz',
+        correction: 'wgs2gcj',
     },
     {
         order: 147,
@@ -616,13 +451,7 @@ const definitions: LayerSourceDefinition[] = [
         category: 'vector',
         group: '矢量',
         url: 'https://www.google.com/maps/vt/pb=!1m4!1m3!1i{z}!2i{x}!3i{y}!2m1!1e5',
-        serviceType: 'xyz',
-        createSource: () =>
-            prioritizeTileSourceRequest(
-                new XYZ({
-                    url: 'https://www.google.com/maps/vt/pb=!1m4!1m3!1i{z}!2i{x}!3i{y}!2m1!1e5',
-                }),
-            ),
+        method: 'xyz',
     },
     {
         order: 148,
@@ -634,14 +463,9 @@ const definitions: LayerSourceDefinition[] = [
         description: 'GooglePB山体阴影(GCJ) · Google / GCJ02',
         category: 'vector',
         group: '矢量',
-        url: wgs2gcjProxyUrl('https://www.google.com/maps/vt/pb=!1m4!1m3!1i{z}!2i{x}!3i{y}!2m1!1e5'),
-        serviceType: 'xyz',
-        createSource: () =>
-            prioritizeTileSourceRequest(
-                new XYZ({
-                    url: wgs2gcjProxyUrl('https://www.google.com/maps/vt/pb=!1m4!1m3!1i{z}!2i{x}!3i{y}!2m1!1e5'),
-                }),
-            ),
+        url: 'https://www.google.com/maps/vt/pb=!1m4!1m3!1i{z}!2i{x}!3i{y}!2m1!1e5',
+        method: 'xyz',
+        correction: 'wgs2gcj',
     },
     {
         order: 164,
@@ -654,11 +478,7 @@ const definitions: LayerSourceDefinition[] = [
         category: 'terrain',
         group: '专题',
         url: 'https://tile.opentopomap.org/{z}/{x}/{y}.png',
-        serviceType: 'xyz',
-        createSource: () =>
-            prioritizeTileSourceRequest(
-                new XYZ({ url: 'https://tile.opentopomap.org/{z}/{x}/{y}.png' }),
-            ),
+        method: 'xyz',
     },
     {
         order: 165,
@@ -671,17 +491,8 @@ const definitions: LayerSourceDefinition[] = [
         category: 'terrain',
         group: '专题',
         url: 'https://omap.map-world.com.cn/dgx_w/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=dgx&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles&TILEMATRIX={z}&TILECOL={x}&TILEROW={y}&tdtkey={ovitalTdtkey}',
-        serviceType: 'xyz',
+        method: 'xyz',
         needsContext: ['ovitalTdtkey'],
-        createSource: ({ ovitalTdtkey }) =>
-            prioritizeTileSourceRequest(
-                new XYZ({
-                    url: buildOvitalUrl(
-                        '/dgx_w/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=dgx&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles&TILEMATRIX={z}&TILECOL={x}&TILEROW={y}',
-                        ovitalTdtkey,
-                    ),
-                }),
-            ),
     },
     {
         order: 166,
@@ -694,13 +505,7 @@ const definitions: LayerSourceDefinition[] = [
         category: 'terrain',
         group: 'Elevation',
         url: 'https://services.arcgisonline.com/arcgis/rest/services/Elevation/World_Hillshade/MapServer/tile/{z}/{y}/{x}',
-        serviceType: 'xyz',
-        createSource: () =>
-            prioritizeTileSourceRequest(
-                new XYZ({
-                    url: 'https://services.arcgisonline.com/arcgis/rest/services/Elevation/World_Hillshade/MapServer/tile/{z}/{y}/{x}',
-                }),
-            ),
+        method: 'xyz',
     },
     {
         order: 167,
@@ -713,13 +518,7 @@ const definitions: LayerSourceDefinition[] = [
         category: 'terrain',
         group: 'Elevation',
         url: 'https://services.arcgisonline.com/arcgis/rest/services/Elevation/World_Hillshade_Dark/MapServer/tile/{z}/{y}/{x}',
-        serviceType: 'xyz',
-        createSource: () =>
-            prioritizeTileSourceRequest(
-                new XYZ({
-                    url: 'https://services.arcgisonline.com/arcgis/rest/services/Elevation/World_Hillshade_Dark/MapServer/tile/{z}/{y}/{x}',
-                }),
-            ),
+        method: 'xyz',
     },
 ];
 

@@ -2,24 +2,13 @@
  * 底图定义：电子底图
  *
  * 每条定义自带完整 URL 与显式属性；order 用于恢复原始定义顺序。
+ * V3.7.16 自 ol/basemap/constants/definitions 迁入 common 定义层：
+ * 定义只声明原始 URL + method/correction/proxy，createSource 工厂已移至
+ * ol/basemap/loaders/createOlSource.ts；本文件零引擎依赖。
  */
-import XYZ from 'ol/source/XYZ';
-import OSM from 'ol/source/OSM';
-import {
-    buildTiandituUrl,
-    buildOvitalUrl,
-    NON_STANDARD_XYZ_ADAPTERS,
-} from '../basemapCore';
-import {
-    createConfiguredServiceSource,
-    createVectorTileSourceFromUrl,
-    prioritizeTileSourceRequest,
-} from '@ol/tile-source';
-import { gcj2wgsProxyUrl, bd2wgsProxyUrl, tileProxyUrl } from '@/config/publicRuntime';
-import { withSkipHighResTile } from '../basemapCore';
-import type { LayerSourceDefinition } from '../basemapCore';
+import type { TileLayerDefinition } from './types';
 
-const definitions: LayerSourceDefinition[] = [
+const definitions: TileLayerDefinition[] = [
     {
         order: 1,
         id: 'Omap_label',
@@ -31,19 +20,9 @@ const definitions: LayerSourceDefinition[] = [
         category: 'label',
         group: '注记',
         url: 'https://omap.map-world.com.cn/dia_w/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=dia&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles&TILEMATRIX={z}&TILECOL={x}&TILEROW={y}&tdtkey={ovitalTdtkey}',
-        serviceType: 'xyz',
+        method: 'xyz',
+        skipHighResTile: true,
         needsContext: ['ovitalTdtkey'],
-        createSource: ({ ovitalTdtkey }) =>
-            withSkipHighResTile(
-                prioritizeTileSourceRequest(
-                    new XYZ({
-                        url: buildOvitalUrl(
-                            '/dia_w/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=dia&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles&TILEMATRIX={z}&TILECOL={x}&TILEROW={y}',
-                            ovitalTdtkey,
-                        ),
-                    }),
-                ),
-            ),
     },
     {
         order: 2,
@@ -56,18 +35,8 @@ const definitions: LayerSourceDefinition[] = [
         category: 'label',
         group: '注记',
         url: 'https://t{s}.tianditu.gov.cn/cia_w/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=cia&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&tk={tiandituTk}',
-        serviceType: 'xyz',
-        createSource: ({ tiandituTk }) =>
-            withSkipHighResTile(
-                prioritizeTileSourceRequest(
-                    new XYZ({
-                        url: buildTiandituUrl(
-                            '/cia_w/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=cia&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}',
-                            tiandituTk,
-                        ),
-                    }),
-                ),
-            ),
+        method: 'xyz',
+        skipHighResTile: true,
     },
     {
         order: 3,
@@ -80,18 +49,8 @@ const definitions: LayerSourceDefinition[] = [
         category: 'label',
         group: '注记',
         url: 'https://t{s}.tianditu.gov.cn/cva_w/wmts?SERVICE=WMTS&VERSION=1.0.0&REQUEST=GetTile&LAYER=cva&STYLE=default&FORMAT=tiles&TILEMATRIXSET=w&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&tk={tiandituTk}',
-        serviceType: 'xyz',
-        createSource: ({ tiandituTk }) =>
-            withSkipHighResTile(
-                prioritizeTileSourceRequest(
-                    new XYZ({
-                        url: buildTiandituUrl(
-                            '/cva_w/wmts?SERVICE=WMTS&VERSION=1.0.0&REQUEST=GetTile&LAYER=cva&STYLE=default&FORMAT=tiles&TILEMATRIXSET=w&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}',
-                            tiandituTk,
-                        ),
-                    }),
-                ),
-            ),
+        method: 'xyz',
+        skipHighResTile: true,
     },
     {
         order: 4,
@@ -104,15 +63,8 @@ const definitions: LayerSourceDefinition[] = [
         category: 'label',
         group: '注记',
         url: 'https://tiles.geovisearth.com/base/v1/cia/{z}/{x}/{y}?token=0aeb02f29320b060c2e2d0c04eb4887c6b8d5a8ed479b3aacff2b6a273b0d38d',
-        serviceType: 'xyz',
-        createSource: () =>
-            withSkipHighResTile(
-                prioritizeTileSourceRequest(
-                    new XYZ({
-                        url: 'https://tiles.geovisearth.com/base/v1/cia/{z}/{x}/{y}?token=0aeb02f29320b060c2e2d0c04eb4887c6b8d5a8ed479b3aacff2b6a273b0d38d',
-                    }),
-                ),
-            ),
+        method: 'xyz',
+        skipHighResTile: true,
     },
     {
         order: 5,
@@ -130,23 +82,11 @@ const definitions: LayerSourceDefinition[] = [
         
         
         
-        url: gcj2wgsProxyUrl(
-            'https://map-api.minedata.cn/service/data/raster-label?style=standard&z={z}&x={x}&y={y}&key=5c6cb47b45c746de9e4e9135a725d857',
-        ),
-        serviceType: 'xyz',
+        url: 'https://map-api.minedata.cn/service/data/raster-label?style=standard&z={z}&x={x}&y={y}&key=5c6cb47b45c746de9e4e9135a725d857',
+        method: 'xyz',
+        correction: 'gcj2wgs',
+        skipHighResTile: true,
         maxZoom: 18,
-        
-        
-        createSource: () =>
-            withSkipHighResTile(
-                prioritizeTileSourceRequest(
-                    new XYZ({
-                        url: gcj2wgsProxyUrl(
-                            'https://map-api.minedata.cn/service/data/raster-label?style=standard&z={z}&x={x}&y={y}&key=5c6cb47b45c746de9e4e9135a725d857',
-                        ),
-                    }),
-                ),
-            ),
     },
     {
         order: 6,
@@ -157,21 +97,11 @@ const definitions: LayerSourceDefinition[] = [
         coord: 'GCJ02',
         description: '高德注记无偏 · AMAP / GCJ02',
         group: '注记',
-        url: gcj2wgsProxyUrl(
-            'http://wprd02.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}',
-        ),
-        serviceType: 'xyz',
+        url: 'http://wprd02.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}',
+        method: 'xyz',
+        correction: 'gcj2wgs',
+        skipHighResTile: true,
         category: 'label',
-        createSource: () =>
-            withSkipHighResTile(
-                prioritizeTileSourceRequest(
-                    new XYZ({
-                        url: gcj2wgsProxyUrl(
-                            'http://wprd02.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}',
-                        ),
-                    }),
-                ),
-            ),
     },
     {
         order: 7,
@@ -185,18 +115,8 @@ const definitions: LayerSourceDefinition[] = [
         group: '注记',
         
         url: 'https://t{s}.tianditu.gov.cn/DataServer?T=ibo_w&x={x}&y={y}&l={z}&tk={tiandituTk}',
-        serviceType: 'xyz',
-        createSource: ({ tiandituTk }) =>
-            withSkipHighResTile(
-                prioritizeTileSourceRequest(
-                    new XYZ({
-                        url: buildTiandituUrl(
-                            '/DataServer?T=ibo_w&x={x}&y={y}&l={z}',
-                            tiandituTk,
-                        ),
-                    }),
-                ),
-            ),
+        method: 'xyz',
+        skipHighResTile: true,
     },
     {
         order: 25,
@@ -209,15 +129,8 @@ const definitions: LayerSourceDefinition[] = [
         category: 'label',
         group: '注记',
         url: 'https://tiles.stadiamaps.com/tiles/stamen_toner_lines/{z}/{x}/{y}.png?api_key=e5abf577-33b9-47f0-92b2-bd60f88d8c8d',
-        serviceType: 'xyz',
-        createSource: () =>
-            withSkipHighResTile(
-                prioritizeTileSourceRequest(
-                    new XYZ({
-                        url: 'https://tiles.stadiamaps.com/tiles/stamen_toner_lines/{z}/{x}/{y}.png?api_key=e5abf577-33b9-47f0-92b2-bd60f88d8c8d',
-                    }),
-                ),
-            ),
+        method: 'xyz',
+        skipHighResTile: true,
     },
     {
         order: 26,
@@ -230,15 +143,8 @@ const definitions: LayerSourceDefinition[] = [
         category: 'label',
         group: '注记',
         url: 'https://tiles.stadiamaps.com/tiles/stamen_toner_labels/{z}/{x}/{y}.png?api_key=e5abf577-33b9-47f0-92b2-bd60f88d8c8d',
-        serviceType: 'xyz',
-        createSource: () =>
-            withSkipHighResTile(
-                prioritizeTileSourceRequest(
-                    new XYZ({
-                        url: 'https://tiles.stadiamaps.com/tiles/stamen_toner_labels/{z}/{x}/{y}.png?api_key=e5abf577-33b9-47f0-92b2-bd60f88d8c8d',
-                    }),
-                ),
-            ),
+        method: 'xyz',
+        skipHighResTile: true,
     },
     {
         order: 37,
@@ -251,25 +157,15 @@ const definitions: LayerSourceDefinition[] = [
         category: 'theme',
         group: '专题',
         url: 'https://guangdong.tianditu.gov.cn/geostar/gdsyjjbntbhtb_mercator/wms',
-        serviceType: 'wms',
-        createSource: () =>
-            createConfiguredServiceSource(
-                {
-                    id: 'theme_gd_basic_farmland_wms',
-                    name: '广东基本农田(WMS)',
-                    serviceType: 'wms',
-                    url: 'https://guangdong.tianditu.gov.cn/geostar/gdsyjjbntbhtb_mercator/wms',
-                    wms: {
-                        layers: '基本农田保护图斑_mercator',
-                        version: '1.1.1',
-                        srs: 'EPSG:3857',
-                        format: 'image/png',
-                        styles: '',
-                        transparent: true,
-                    },
-                },
-                { adapters: NON_STANDARD_XYZ_ADAPTERS },
-            ),
+        method: 'wms',
+        wms: {
+            layers: '基本农田保护图斑_mercator',
+            version: '1.1.1',
+            srs: 'EPSG:3857',
+            format: 'image/png',
+            styles: '',
+            transparent: true,
+        },
     },
     {
         order: 38,
@@ -282,24 +178,14 @@ const definitions: LayerSourceDefinition[] = [
         category: 'theme',
         group: '专题',
         url: 'https://www.hnsditu.cn/iserver/services/map-agscache-jibennongtian/wmts100?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=jibennongtian&STYLE=default&TILEMATRIXSET=GoogleMapsCompatible_jibennongtian&FORMAT=image/png&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}',
-        serviceType: 'wmts',
-        createSource: () =>
-            createConfiguredServiceSource(
-                {
-                    id: 'theme_hn_basic_farmland_wmts',
-                    name: '河南基本农田(WMTS)',
-                    serviceType: 'wmts',
-                    url: 'https://www.hnsditu.cn/iserver/services/map-agscache-jibennongtian/wmts100?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=jibennongtian&STYLE=default&TILEMATRIXSET=GoogleMapsCompatible_jibennongtian&FORMAT=image/png&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}',
-                    wmts: {
-                        layer: 'jibennongtian',
-                        style: 'default',
-                        matrixSet: 'GoogleMapsCompatible_jibennongtian',
-                        format: 'image/png',
-                        version: '1.0.0',
-                    },
-                },
-                { adapters: NON_STANDARD_XYZ_ADAPTERS },
-            ),
+        method: 'wmts',
+        wmts: {
+            layer: 'jibennongtian',
+            style: 'default',
+            matrixSet: 'GoogleMapsCompatible_jibennongtian',
+            format: 'image/png',
+            version: '1.0.0',
+        },
     },
     {
         order: 39,
@@ -312,24 +198,14 @@ const definitions: LayerSourceDefinition[] = [
         category: 'theme',
         group: '专题',
         url: 'https://www.hnsditu.cn/iserver/services/map-agscache-gengdi/wmts100?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=gengdi&STYLE=default&TILEMATRIXSET=GoogleMapsCompatible_gengdi&FORMAT=image/png&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}',
-        serviceType: 'wmts',
-        createSource: () =>
-            createConfiguredServiceSource(
-                {
-                    id: 'theme_hn_farmland_wmts',
-                    name: '河南耕地(WMTS)',
-                    serviceType: 'wmts',
-                    url: 'https://www.hnsditu.cn/iserver/services/map-agscache-gengdi/wmts100?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=gengdi&STYLE=default&TILEMATRIXSET=GoogleMapsCompatible_gengdi&FORMAT=image/png&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}',
-                    wmts: {
-                        layer: 'gengdi',
-                        style: 'default',
-                        matrixSet: 'GoogleMapsCompatible_gengdi',
-                        format: 'image/png',
-                        version: '1.0.0',
-                    },
-                },
-                { adapters: NON_STANDARD_XYZ_ADAPTERS },
-            ),
+        method: 'wmts',
+        wmts: {
+            layer: 'gengdi',
+            style: 'default',
+            matrixSet: 'GoogleMapsCompatible_gengdi',
+            format: 'image/png',
+            version: '1.0.0',
+        },
     },
     {
         order: 40,
@@ -342,13 +218,7 @@ const definitions: LayerSourceDefinition[] = [
         category: 'theme',
         group: 'Canvas',
         url: 'https://services.arcgisonline.com/arcgis/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}',
-        serviceType: 'xyz',
-        createSource: () =>
-            prioritizeTileSourceRequest(
-                new XYZ({
-                    url: 'https://services.arcgisonline.com/arcgis/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}',
-                }),
-            ),
+        method: 'xyz',
     },
     {
         order: 41,
@@ -361,13 +231,7 @@ const definitions: LayerSourceDefinition[] = [
         category: 'theme',
         group: 'Canvas',
         url: 'https://services.arcgisonline.com/arcgis/rest/services/Canvas/World_Dark_Gray_Reference/MapServer/tile/{z}/{y}/{x}',
-        serviceType: 'xyz',
-        createSource: () =>
-            prioritizeTileSourceRequest(
-                new XYZ({
-                    url: 'https://services.arcgisonline.com/arcgis/rest/services/Canvas/World_Dark_Gray_Reference/MapServer/tile/{z}/{y}/{x}',
-                }),
-            ),
+        method: 'xyz',
     },
     {
         order: 42,
@@ -380,13 +244,7 @@ const definitions: LayerSourceDefinition[] = [
         category: 'theme',
         group: 'Canvas',
         url: 'https://services.arcgisonline.com/arcgis/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}',
-        serviceType: 'xyz',
-        createSource: () =>
-            prioritizeTileSourceRequest(
-                new XYZ({
-                    url: 'https://services.arcgisonline.com/arcgis/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}',
-                }),
-            ),
+        method: 'xyz',
     },
     {
         order: 43,
@@ -399,13 +257,7 @@ const definitions: LayerSourceDefinition[] = [
         category: 'theme',
         group: 'Canvas',
         url: 'https://services.arcgisonline.com/arcgis/rest/services/Canvas/World_Light_Gray_Reference/MapServer/tile/{z}/{y}/{x}',
-        serviceType: 'xyz',
-        createSource: () =>
-            prioritizeTileSourceRequest(
-                new XYZ({
-                    url: 'https://services.arcgisonline.com/arcgis/rest/services/Canvas/World_Light_Gray_Reference/MapServer/tile/{z}/{y}/{x}',
-                }),
-            ),
+        method: 'xyz',
     },
     {
         order: 50,
@@ -418,13 +270,7 @@ const definitions: LayerSourceDefinition[] = [
         category: 'theme',
         group: 'Reference',
         url: 'https://services.arcgisonline.com/arcgis/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}',
-        serviceType: 'xyz',
-        createSource: () =>
-            prioritizeTileSourceRequest(
-                new XYZ({
-                    url: 'https://services.arcgisonline.com/arcgis/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}',
-                }),
-            ),
+        method: 'xyz',
     },
     {
         order: 51,
@@ -437,13 +283,7 @@ const definitions: LayerSourceDefinition[] = [
         category: 'theme',
         group: 'Reference',
         url: 'https://services.arcgisonline.com/arcgis/rest/services/Reference/World_Boundaries_and_Places_Alternate/MapServer/tile/{z}/{y}/{x}',
-        serviceType: 'xyz',
-        createSource: () =>
-            prioritizeTileSourceRequest(
-                new XYZ({
-                    url: 'https://services.arcgisonline.com/arcgis/rest/services/Reference/World_Boundaries_and_Places_Alternate/MapServer/tile/{z}/{y}/{x}',
-                }),
-            ),
+        method: 'xyz',
     },
     {
         order: 52,
@@ -456,13 +296,7 @@ const definitions: LayerSourceDefinition[] = [
         category: 'theme',
         group: 'Reference',
         url: 'https://services.arcgisonline.com/arcgis/rest/services/Reference/World_Reference_Overlay/MapServer/tile/{z}/{y}/{x}',
-        serviceType: 'xyz',
-        createSource: () =>
-            prioritizeTileSourceRequest(
-                new XYZ({
-                    url: 'https://services.arcgisonline.com/arcgis/rest/services/Reference/World_Reference_Overlay/MapServer/tile/{z}/{y}/{x}',
-                }),
-            ),
+        method: 'xyz',
     },
     {
         order: 53,
@@ -475,13 +309,7 @@ const definitions: LayerSourceDefinition[] = [
         category: 'theme',
         group: 'Reference',
         url: 'https://services.arcgisonline.com/arcgis/rest/services/Reference/World_Transportation/MapServer/tile/{z}/{y}/{x}',
-        serviceType: 'xyz',
-        createSource: () =>
-            prioritizeTileSourceRequest(
-                new XYZ({
-                    url: 'https://services.arcgisonline.com/arcgis/rest/services/Reference/World_Transportation/MapServer/tile/{z}/{y}/{x}',
-                }),
-            ),
+        method: 'xyz',
     },
     {
         order: 54,
@@ -494,13 +322,7 @@ const definitions: LayerSourceDefinition[] = [
         category: 'theme',
         group: 'Specialty',
         url: 'https://services.arcgisonline.com/arcgis/rest/services/Specialty/World_Navigation_Charts/MapServer/tile/{z}/{y}/{x}',
-        serviceType: 'xyz',
-        createSource: () =>
-            prioritizeTileSourceRequest(
-                new XYZ({
-                    url: 'https://services.arcgisonline.com/arcgis/rest/services/Specialty/World_Navigation_Charts/MapServer/tile/{z}/{y}/{x}',
-                }),
-            ),
+        method: 'xyz',
     },
     {
         order: 55,
@@ -513,13 +335,7 @@ const definitions: LayerSourceDefinition[] = [
         category: 'theme',
         group: 'World',
         url: 'https://services.arcgisonline.com/arcgis/rest/services/NatGeo_World_Map/MapServer/tile/{z}/{y}/{x}',
-        serviceType: 'xyz',
-        createSource: () =>
-            prioritizeTileSourceRequest(
-                new XYZ({
-                    url: 'https://services.arcgisonline.com/arcgis/rest/services/NatGeo_World_Map/MapServer/tile/{z}/{y}/{x}',
-                }),
-            ),
+        method: 'xyz',
     },
     {
         order: 57,
@@ -532,13 +348,7 @@ const definitions: LayerSourceDefinition[] = [
         category: 'theme',
         group: 'World',
         url: 'https://services.arcgisonline.com/arcgis/rest/services/World_Physical_Map/MapServer/tile/{z}/{y}/{x}',
-        serviceType: 'xyz',
-        createSource: () =>
-            prioritizeTileSourceRequest(
-                new XYZ({
-                    url: 'https://services.arcgisonline.com/arcgis/rest/services/World_Physical_Map/MapServer/tile/{z}/{y}/{x}',
-                }),
-            ),
+        method: 'xyz',
     },
     {
         order: 59,
@@ -551,13 +361,7 @@ const definitions: LayerSourceDefinition[] = [
         category: 'theme',
         group: 'World',
         url: 'https://services.arcgisonline.com/arcgis/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}',
-        serviceType: 'xyz',
-        createSource: () =>
-            prioritizeTileSourceRequest(
-                new XYZ({
-                    url: 'https://services.arcgisonline.com/arcgis/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}',
-                }),
-            ),
+        method: 'xyz',
     },
     {
         order: 63,
@@ -570,13 +374,7 @@ const definitions: LayerSourceDefinition[] = [
         category: 'theme',
         group: '专题',
         url: 'https://tiles.windy.com/v1/maptiles/outdoor/{z}/{x}/{y}/?lang=en',
-        serviceType: 'xyz',
-        createSource: () =>
-            prioritizeTileSourceRequest(
-                new XYZ({
-                    url: 'https://tiles.windy.com/v1/maptiles/outdoor/{z}/{x}/{y}/?lang=en',
-                }),
-            ),
+        method: 'xyz',
     },
     {
         order: 64,
@@ -589,13 +387,7 @@ const definitions: LayerSourceDefinition[] = [
         category: 'theme',
         group: '专题',
         url: 'https://tiles.windy.com/v1/maptiles/winter/{z}/{x}/{y}/?lang=en',
-        serviceType: 'xyz',
-        createSource: () =>
-            prioritizeTileSourceRequest(
-                new XYZ({
-                    url: 'https://tiles.windy.com/v1/maptiles/winter/{z}/{x}/{y}/?lang=en',
-                }),
-            ),
+        method: 'xyz',
     },
     {
         order: 65,
@@ -608,13 +400,7 @@ const definitions: LayerSourceDefinition[] = [
         category: 'theme',
         group: '专题',
         url: 'https://tiles.windy.com/tiles/v10.0/darkmap-retina/{z}/{x}/{y}.png',
-        serviceType: 'xyz',
-        createSource: () =>
-            prioritizeTileSourceRequest(
-                new XYZ({
-                    url: 'https://tiles.windy.com/tiles/v10.0/darkmap-retina/{z}/{x}/{y}.png',
-                }),
-            ),
+        method: 'xyz',
     },
     {
         order: 66,
@@ -627,11 +413,7 @@ const definitions: LayerSourceDefinition[] = [
         category: 'theme',
         group: '专题',
         url: 'https://tiles.windy.com/tiles/v10.0/grayland/{z}/{x}/{y}.png',
-        serviceType: 'xyz',
-        createSource: () =>
-            prioritizeTileSourceRequest(
-                new XYZ({ url: 'https://tiles.windy.com/tiles/v10.0/grayland/{z}/{x}/{y}.png' }),
-            ),
+        method: 'xyz',
     },
     {
         order: 67,
@@ -644,13 +426,7 @@ const definitions: LayerSourceDefinition[] = [
         category: 'theme',
         group: '专题',
         url: 'https://api.maptiler.com/maps/winter-v4/{z}/{x}/{y}.png?key=osLOujcXk1GJrGk5oaDz',
-        serviceType: 'xyz',
-        createSource: () =>
-            prioritizeTileSourceRequest(
-                new XYZ({
-                    url: 'https://api.maptiler.com/maps/winter-v4/{z}/{x}/{y}.png?key=osLOujcXk1GJrGk5oaDz',
-                }),
-            ),
+        method: 'xyz',
     },
     {
         order: 86,
@@ -663,16 +439,7 @@ const definitions: LayerSourceDefinition[] = [
         category: 'vector',
         group: '矢量',
         url: 'https://t{s}.tianditu.gov.cn/vec_w/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=vec&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&tk={tiandituTk}',
-        serviceType: 'xyz',
-        createSource: ({ tiandituTk }) =>
-            prioritizeTileSourceRequest(
-                new XYZ({
-                    url: buildTiandituUrl(
-                        '/vec_w/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=vec&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}',
-                        tiandituTk,
-                    ),
-                }),
-            ),
+        method: 'xyz',
     },
     {
         order: 89,
@@ -685,13 +452,7 @@ const definitions: LayerSourceDefinition[] = [
         category: 'vector',
         group: '矢量',
         url: 'https://tiles.geovisearth.com/base/v1/vec/{z}/{x}/{y}?token=0aeb02f29320b060c2e2d0c04eb4887c6b8d5a8ed479b3aacff2b6a273b0d38d',
-        serviceType: 'xyz',
-        createSource: () =>
-            prioritizeTileSourceRequest(
-                new XYZ({
-                    url: 'https://tiles.geovisearth.com/base/v1/vec/{z}/{x}/{y}?token=0aeb02f29320b060c2e2d0c04eb4887c6b8d5a8ed479b3aacff2b6a273b0d38d',
-                }),
-            ),
+        method: 'xyz',
     },
     {
         order: 90,
@@ -704,13 +465,7 @@ const definitions: LayerSourceDefinition[] = [
         category: 'vector',
         group: '矢量',
         url: 'https://webrd01.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&ltype=9&scl=2&x={x}&y={y}&z={z}',
-        serviceType: 'xyz',
-        createSource: () =>
-            prioritizeTileSourceRequest(
-                new XYZ({
-                    url: 'https://webrd01.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&ltype=9&scl=2&x={x}&y={y}&z={z}',
-                }),
-            ),
+        method: 'xyz',
     },
     {
         order: 91,
@@ -722,18 +477,9 @@ const definitions: LayerSourceDefinition[] = [
         description: '高德地图(WGS) · AMAP / WGS84',
         category: 'vector',
         group: '矢量',
-        url: gcj2wgsProxyUrl(
-            'http://webrd01.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&ltype=9&scl=1&x={x}&y={y}&z={z}',
-        ),
-        serviceType: 'xyz',
-        createSource: () =>
-            prioritizeTileSourceRequest(
-                new XYZ({
-                    url: gcj2wgsProxyUrl(
-                        'http://webrd01.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&ltype=9&scl=1&x={x}&y={y}&z={z}',
-                    ),
-                }),
-            ),
+        url: 'http://webrd01.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&ltype=9&scl=1&x={x}&y={y}&z={z}',
+        method: 'xyz',
+        correction: 'gcj2wgs',
     },
     {
         order: 92,
@@ -746,13 +492,7 @@ const definitions: LayerSourceDefinition[] = [
         category: 'vector',
         group: '矢量',
         url: 'https://webrd01.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&ltype=1&scl=2&x={x}&y={y}&z={z}',
-        serviceType: 'xyz',
-        createSource: () =>
-            prioritizeTileSourceRequest(
-                new XYZ({
-                    url: 'https://webrd01.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&ltype=1&scl=2&x={x}&y={y}&z={z}',
-                }),
-            ),
+        method: 'xyz',
     },
     {
         order: 93,
@@ -765,13 +505,7 @@ const definitions: LayerSourceDefinition[] = [
         category: 'vector',
         group: '矢量',
         url: 'https://webrd01.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&ltype=3&scl=2&x={x}&y={y}&z={z}',
-        serviceType: 'xyz',
-        createSource: () =>
-            prioritizeTileSourceRequest(
-                new XYZ({
-                    url: 'https://webrd01.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&ltype=3&scl=2&x={x}&y={y}&z={z}',
-                }),
-            ),
+        method: 'xyz',
     },
     {
         order: 94,
@@ -784,13 +518,7 @@ const definitions: LayerSourceDefinition[] = [
         category: 'vector',
         group: '矢量',
         url: 'None',
-        serviceType: 'xyz',
-        createSource: () =>
-            prioritizeTileSourceRequest(
-                new XYZ({
-                    url: 'None',
-                }),
-            ),
+        method: 'xyz',
     },
     {
         order: 95,
@@ -803,13 +531,7 @@ const definitions: LayerSourceDefinition[] = [
         category: 'vector',
         group: '矢量',
         url: 'None',
-        serviceType: 'xyz',
-        createSource: () =>
-            prioritizeTileSourceRequest(
-                new XYZ({
-                    url: 'None',
-                }),
-            ),
+        method: 'xyz',
     },
     {
         order: 96,
@@ -824,20 +546,10 @@ const definitions: LayerSourceDefinition[] = [
         
         
         
-        url: bd2wgsProxyUrl(
-            'https://maponline0.bdimg.com/tile/?qt=vtile&x={x}&y={y}&z={z}&styles=pl&scaler=1&from=jsapi2_0',
-        ),
-        serviceType: 'xyz',
+        url: 'https://maponline0.bdimg.com/tile/?qt=vtile&x={x}&y={y}&z={z}&styles=pl&scaler=1&from=jsapi2_0',
+        method: 'xyz',
+        correction: 'bd2wgs',
         maxZoom: 18,
-        createSource: () =>
-            prioritizeTileSourceRequest(
-                new XYZ({
-                    url: bd2wgsProxyUrl(
-                        'https://maponline0.bdimg.com/tile/?qt=vtile&x={x}&y={y}&z={z}&styles=pl&scaler=1&from=jsapi2_0',
-                    ),
-                    maxZoom: 18,
-                }),
-            ),
     },
     {
         order: 97,
@@ -850,13 +562,7 @@ const definitions: LayerSourceDefinition[] = [
         category: 'vector',
         group: '矢量',
         url: 'https://api.maptiler.com/maps/streets-v4/{z}/{x}/{y}.png?key=osLOujcXk1GJrGk5oaDz',
-        serviceType: 'xyz',
-        createSource: () =>
-            prioritizeTileSourceRequest(
-                new XYZ({
-                    url: 'https://api.maptiler.com/maps/streets-v4/{z}/{x}/{y}.png?key=osLOujcXk1GJrGk5oaDz',
-                }),
-            ),
+        method: 'xyz',
     },
     {
         order: 98,
@@ -869,13 +575,7 @@ const definitions: LayerSourceDefinition[] = [
         category: 'vector',
         group: '矢量',
         url: 'https://rt0.map.gtimg.com/realtimerender?z={z}&x={x}&y={-y}&type=vector&style=0',
-        serviceType: 'xyz',
-        createSource: () =>
-            prioritizeTileSourceRequest(
-                new XYZ({
-                    url: 'https://rt0.map.gtimg.com/realtimerender?z={z}&x={x}&y={-y}&type=vector&style=0',
-                }),
-            ),
+        method: 'xyz',
     },
     {
         order: 99,
@@ -888,13 +588,7 @@ const definitions: LayerSourceDefinition[] = [
         category: 'vector',
         group: '矢量',
         url: 'https://webrd01.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&ltype=1&x={x}&y={y}&z={z}',
-        serviceType: 'xyz',
-        createSource: () =>
-            prioritizeTileSourceRequest(
-                new XYZ({
-                    url: 'https://webrd01.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&ltype=1&x={x}&y={y}&z={z}',
-                }),
-            ),
+        method: 'xyz',
     },
     {
         order: 100,
@@ -906,14 +600,9 @@ const definitions: LayerSourceDefinition[] = [
         description: '高德电子256 地貌(ltype=1, WGS) · AMAP / WGS84',
         category: 'vector',
         group: '矢量',
-        url: gcj2wgsProxyUrl('https://webrd01.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&ltype=1&x={x}&y={y}&z={z}'),
-        serviceType: 'xyz',
-        createSource: () =>
-            prioritizeTileSourceRequest(
-                new XYZ({
-                    url: gcj2wgsProxyUrl('https://webrd01.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&ltype=1&x={x}&y={y}&z={z}'),
-                }),
-            ),
+        url: 'https://webrd01.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&ltype=1&x={x}&y={y}&z={z}',
+        method: 'xyz',
+        correction: 'gcj2wgs',
     },
     {
         order: 101,
@@ -926,13 +615,7 @@ const definitions: LayerSourceDefinition[] = [
         category: 'vector',
         group: '矢量',
         url: 'https://webrd01.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&ltype=2&x={x}&y={y}&z={z}',
-        serviceType: 'xyz',
-        createSource: () =>
-            prioritizeTileSourceRequest(
-                new XYZ({
-                    url: 'https://webrd01.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&ltype=2&x={x}&y={y}&z={z}',
-                }),
-            ),
+        method: 'xyz',
     },
     {
         order: 102,
@@ -944,14 +627,9 @@ const definitions: LayerSourceDefinition[] = [
         description: '高德电子256 路网(ltype=2, WGS) · AMAP / WGS84',
         category: 'vector',
         group: '矢量',
-        url: gcj2wgsProxyUrl('https://webrd01.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&ltype=2&x={x}&y={y}&z={z}'),
-        serviceType: 'xyz',
-        createSource: () =>
-            prioritizeTileSourceRequest(
-                new XYZ({
-                    url: gcj2wgsProxyUrl('https://webrd01.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&ltype=2&x={x}&y={y}&z={z}'),
-                }),
-            ),
+        url: 'https://webrd01.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&ltype=2&x={x}&y={y}&z={z}',
+        method: 'xyz',
+        correction: 'gcj2wgs',
     },
     {
         order: 103,
@@ -964,13 +642,7 @@ const definitions: LayerSourceDefinition[] = [
         category: 'vector',
         group: '矢量',
         url: 'https://webrd01.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&ltype=3&x={x}&y={y}&z={z}',
-        serviceType: 'xyz',
-        createSource: () =>
-            prioritizeTileSourceRequest(
-                new XYZ({
-                    url: 'https://webrd01.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&ltype=3&x={x}&y={y}&z={z}',
-                }),
-            ),
+        method: 'xyz',
     },
     {
         order: 104,
@@ -982,14 +654,9 @@ const definitions: LayerSourceDefinition[] = [
         description: '高德电子256 地貌+路网(ltype=3, WGS) · AMAP / WGS84',
         category: 'vector',
         group: '矢量',
-        url: gcj2wgsProxyUrl('https://webrd01.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&ltype=3&x={x}&y={y}&z={z}'),
-        serviceType: 'xyz',
-        createSource: () =>
-            prioritizeTileSourceRequest(
-                new XYZ({
-                    url: gcj2wgsProxyUrl('https://webrd01.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&ltype=3&x={x}&y={y}&z={z}'),
-                }),
-            ),
+        url: 'https://webrd01.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&ltype=3&x={x}&y={y}&z={z}',
+        method: 'xyz',
+        correction: 'gcj2wgs',
     },
     {
         order: 105,
@@ -1002,13 +669,7 @@ const definitions: LayerSourceDefinition[] = [
         category: 'vector',
         group: '矢量',
         url: 'https://webrd01.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&ltype=4&x={x}&y={y}&z={z}',
-        serviceType: 'xyz',
-        createSource: () =>
-            prioritizeTileSourceRequest(
-                new XYZ({
-                    url: 'https://webrd01.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&ltype=4&x={x}&y={y}&z={z}',
-                }),
-            ),
+        method: 'xyz',
     },
     {
         order: 106,
@@ -1020,14 +681,9 @@ const definitions: LayerSourceDefinition[] = [
         description: '高德电子256 注记(ltype=4, WGS) · AMAP / WGS84',
         category: 'vector',
         group: '矢量',
-        url: gcj2wgsProxyUrl('https://webrd01.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&ltype=4&x={x}&y={y}&z={z}'),
-        serviceType: 'xyz',
-        createSource: () =>
-            prioritizeTileSourceRequest(
-                new XYZ({
-                    url: gcj2wgsProxyUrl('https://webrd01.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&ltype=4&x={x}&y={y}&z={z}'),
-                }),
-            ),
+        url: 'https://webrd01.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&ltype=4&x={x}&y={y}&z={z}',
+        method: 'xyz',
+        correction: 'gcj2wgs',
     },
     {
         order: 107,
@@ -1040,13 +696,7 @@ const definitions: LayerSourceDefinition[] = [
         category: 'vector',
         group: '矢量',
         url: 'https://webrd01.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&ltype=5&x={x}&y={y}&z={z}',
-        serviceType: 'xyz',
-        createSource: () =>
-            prioritizeTileSourceRequest(
-                new XYZ({
-                    url: 'https://webrd01.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&ltype=5&x={x}&y={y}&z={z}',
-                }),
-            ),
+        method: 'xyz',
     },
     {
         order: 108,
@@ -1058,14 +708,9 @@ const definitions: LayerSourceDefinition[] = [
         description: '高德电子256 地貌+注记(ltype=5, WGS) · AMAP / WGS84',
         category: 'vector',
         group: '矢量',
-        url: gcj2wgsProxyUrl('https://webrd01.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&ltype=5&x={x}&y={y}&z={z}'),
-        serviceType: 'xyz',
-        createSource: () =>
-            prioritizeTileSourceRequest(
-                new XYZ({
-                    url: gcj2wgsProxyUrl('https://webrd01.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&ltype=5&x={x}&y={y}&z={z}'),
-                }),
-            ),
+        url: 'https://webrd01.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&ltype=5&x={x}&y={y}&z={z}',
+        method: 'xyz',
+        correction: 'gcj2wgs',
     },
     {
         order: 109,
@@ -1078,13 +723,7 @@ const definitions: LayerSourceDefinition[] = [
         category: 'vector',
         group: '矢量',
         url: 'https://webrd01.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&ltype=6&x={x}&y={y}&z={z}',
-        serviceType: 'xyz',
-        createSource: () =>
-            prioritizeTileSourceRequest(
-                new XYZ({
-                    url: 'https://webrd01.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&ltype=6&x={x}&y={y}&z={z}',
-                }),
-            ),
+        method: 'xyz',
     },
     {
         order: 110,
@@ -1096,14 +735,9 @@ const definitions: LayerSourceDefinition[] = [
         description: '高德电子256 路网+注记(ltype=6, WGS) · AMAP / WGS84',
         category: 'vector',
         group: '矢量',
-        url: gcj2wgsProxyUrl('https://webrd01.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&ltype=6&x={x}&y={y}&z={z}'),
-        serviceType: 'xyz',
-        createSource: () =>
-            prioritizeTileSourceRequest(
-                new XYZ({
-                    url: gcj2wgsProxyUrl('https://webrd01.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&ltype=6&x={x}&y={y}&z={z}'),
-                }),
-            ),
+        url: 'https://webrd01.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&ltype=6&x={x}&y={y}&z={z}',
+        method: 'xyz',
+        correction: 'gcj2wgs',
     },
     {
         order: 111,
@@ -1116,13 +750,7 @@ const definitions: LayerSourceDefinition[] = [
         category: 'vector',
         group: '矢量',
         url: 'https://webrd01.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&ltype=7&x={x}&y={y}&z={z}',
-        serviceType: 'xyz',
-        createSource: () =>
-            prioritizeTileSourceRequest(
-                new XYZ({
-                    url: 'https://webrd01.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&ltype=7&x={x}&y={y}&z={z}',
-                }),
-            ),
+        method: 'xyz',
     },
     {
         order: 112,
@@ -1134,14 +762,9 @@ const definitions: LayerSourceDefinition[] = [
         description: '高德电子256 地貌+路网+注记(ltype=7, WGS) · AMAP / WGS84',
         category: 'vector',
         group: '矢量',
-        url: gcj2wgsProxyUrl('https://webrd01.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&ltype=7&x={x}&y={y}&z={z}'),
-        serviceType: 'xyz',
-        createSource: () =>
-            prioritizeTileSourceRequest(
-                new XYZ({
-                    url: gcj2wgsProxyUrl('https://webrd01.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&ltype=7&x={x}&y={y}&z={z}'),
-                }),
-            ),
+        url: 'https://webrd01.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&ltype=7&x={x}&y={y}&z={z}',
+        method: 'xyz',
+        correction: 'gcj2wgs',
     },
     {
         order: 113,
@@ -1154,13 +777,7 @@ const definitions: LayerSourceDefinition[] = [
         category: 'vector',
         group: '矢量',
         url: 'https://webrd01.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&ltype=8&x={x}&y={y}&z={z}',
-        serviceType: 'xyz',
-        createSource: () =>
-            prioritizeTileSourceRequest(
-                new XYZ({
-                    url: 'https://webrd01.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&ltype=8&x={x}&y={y}&z={z}',
-                }),
-            ),
+        method: 'xyz',
     },
     {
         order: 114,
@@ -1172,14 +789,9 @@ const definitions: LayerSourceDefinition[] = [
         description: '高德电子256 建筑(ltype=8, WGS) · AMAP / WGS84',
         category: 'vector',
         group: '矢量',
-        url: gcj2wgsProxyUrl('https://webrd01.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&ltype=8&x={x}&y={y}&z={z}'),
-        serviceType: 'xyz',
-        createSource: () =>
-            prioritizeTileSourceRequest(
-                new XYZ({
-                    url: gcj2wgsProxyUrl('https://webrd01.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&ltype=8&x={x}&y={y}&z={z}'),
-                }),
-            ),
+        url: 'https://webrd01.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&ltype=8&x={x}&y={y}&z={z}',
+        method: 'xyz',
+        correction: 'gcj2wgs',
     },
     {
         order: 115,
@@ -1192,13 +804,7 @@ const definitions: LayerSourceDefinition[] = [
         category: 'vector',
         group: '矢量',
         url: 'https://webrd01.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&ltype=11&x={x}&y={y}&z={z}',
-        serviceType: 'xyz',
-        createSource: () =>
-            prioritizeTileSourceRequest(
-                new XYZ({
-                    url: 'https://webrd01.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&ltype=11&x={x}&y={y}&z={z}',
-                }),
-            ),
+        method: 'xyz',
     },
     {
         order: 116,
@@ -1210,14 +816,9 @@ const definitions: LayerSourceDefinition[] = [
         description: '高德电子256 地貌+路网+建筑(ltype=11, WGS) · AMAP / WGS84',
         category: 'vector',
         group: '矢量',
-        url: gcj2wgsProxyUrl('https://webrd01.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&ltype=11&x={x}&y={y}&z={z}'),
-        serviceType: 'xyz',
-        createSource: () =>
-            prioritizeTileSourceRequest(
-                new XYZ({
-                    url: gcj2wgsProxyUrl('https://webrd01.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&ltype=11&x={x}&y={y}&z={z}'),
-                }),
-            ),
+        url: 'https://webrd01.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&ltype=11&x={x}&y={y}&z={z}',
+        method: 'xyz',
+        correction: 'gcj2wgs',
     },
     {
         order: 117,
@@ -1230,13 +831,7 @@ const definitions: LayerSourceDefinition[] = [
         category: 'vector',
         group: '矢量',
         url: 'https://webrd01.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&ltype=15&x={x}&y={y}&z={z}',
-        serviceType: 'xyz',
-        createSource: () =>
-            prioritizeTileSourceRequest(
-                new XYZ({
-                    url: 'https://webrd01.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&ltype=15&x={x}&y={y}&z={z}',
-                }),
-            ),
+        method: 'xyz',
     },
     {
         order: 118,
@@ -1248,14 +843,9 @@ const definitions: LayerSourceDefinition[] = [
         description: '高德电子256 全要素(ltype=15, WGS) · AMAP / WGS84',
         category: 'vector',
         group: '矢量',
-        url: gcj2wgsProxyUrl('https://webrd01.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&ltype=15&x={x}&y={y}&z={z}'),
-        serviceType: 'xyz',
-        createSource: () =>
-            prioritizeTileSourceRequest(
-                new XYZ({
-                    url: gcj2wgsProxyUrl('https://webrd01.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&ltype=15&x={x}&y={y}&z={z}'),
-                }),
-            ),
+        url: 'https://webrd01.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&ltype=15&x={x}&y={y}&z={z}',
+        method: 'xyz',
+        correction: 'gcj2wgs',
     },
     {
         order: 119,
@@ -1268,13 +858,7 @@ const definitions: LayerSourceDefinition[] = [
         category: 'vector',
         group: '矢量',
         url: 'https://mt0.google.com/vt/lyrs=m&hl=zh-CN&x={x}&y={y}&z={z}',
-        serviceType: 'xyz',
-        createSource: () =>
-            prioritizeTileSourceRequest(
-                new XYZ({
-                    url: 'https://mt0.google.com/vt/lyrs=m&hl=zh-CN&x={x}&y={y}&z={z}',
-                }),
-            ),
+        method: 'xyz',
     },
     {
         order: 120,
@@ -1286,14 +870,9 @@ const definitions: LayerSourceDefinition[] = [
         description: 'Google标准电子(WGS) · Google / WGS84',
         category: 'vector',
         group: '矢量',
-        url: gcj2wgsProxyUrl('https://mt0.google.com/vt/lyrs=m&hl=zh-CN&x={x}&y={y}&z={z}'),
-        serviceType: 'xyz',
-        createSource: () =>
-            prioritizeTileSourceRequest(
-                new XYZ({
-                    url: gcj2wgsProxyUrl('https://mt0.google.com/vt/lyrs=m&hl=zh-CN&x={x}&y={y}&z={z}'),
-                }),
-            ),
+        url: 'https://mt0.google.com/vt/lyrs=m&hl=zh-CN&x={x}&y={y}&z={z}',
+        method: 'xyz',
+        correction: 'gcj2wgs',
     },
     {
         order: 123,
@@ -1306,13 +885,7 @@ const definitions: LayerSourceDefinition[] = [
         category: 'vector',
         group: '矢量',
         url: 'https://mt0.google.com/vt/lyrs=h&hl=zh-CN&x={x}&y={y}&z={z}',
-        serviceType: 'xyz',
-        createSource: () =>
-            prioritizeTileSourceRequest(
-                new XYZ({
-                    url: 'https://mt0.google.com/vt/lyrs=h&hl=zh-CN&x={x}&y={y}&z={z}',
-                }),
-            ),
+        method: 'xyz',
     },
     {
         order: 124,
@@ -1324,14 +897,9 @@ const definitions: LayerSourceDefinition[] = [
         description: 'Google仅注记(WGS) · Google / WGS84',
         category: 'vector',
         group: '矢量',
-        url: gcj2wgsProxyUrl('https://mt0.google.com/vt/lyrs=h&hl=zh-CN&x={x}&y={y}&z={z}'),
-        serviceType: 'xyz',
-        createSource: () =>
-            prioritizeTileSourceRequest(
-                new XYZ({
-                    url: gcj2wgsProxyUrl('https://mt0.google.com/vt/lyrs=h&hl=zh-CN&x={x}&y={y}&z={z}'),
-                }),
-            ),
+        url: 'https://mt0.google.com/vt/lyrs=h&hl=zh-CN&x={x}&y={y}&z={z}',
+        method: 'xyz',
+        correction: 'gcj2wgs',
     },
     {
         order: 125,
@@ -1344,13 +912,7 @@ const definitions: LayerSourceDefinition[] = [
         category: 'vector',
         group: '矢量',
         url: 'https://mt0.google.com/vt/lyrs=m&hl=zh-CN&x={x}&y={y}&z={z}&apistyle=s.t:0%7Cp.v:off,s.t:3%7Cp.v:on',
-        serviceType: 'xyz',
-        createSource: () =>
-            prioritizeTileSourceRequest(
-                new XYZ({
-                    url: 'https://mt0.google.com/vt/lyrs=m&hl=zh-CN&x={x}&y={y}&z={z}&apistyle=s.t:0%7Cp.v:off,s.t:3%7Cp.v:on',
-                }),
-            ),
+        method: 'xyz',
     },
     {
         order: 126,
@@ -1362,14 +924,9 @@ const definitions: LayerSourceDefinition[] = [
         description: 'Google纯路网含注记(WGS) · Google / WGS84',
         category: 'vector',
         group: '矢量',
-        url: gcj2wgsProxyUrl('https://mt0.google.com/vt/lyrs=m&hl=zh-CN&x={x}&y={y}&z={z}&apistyle=s.t:0%7Cp.v:off,s.t:3%7Cp.v:on'),
-        serviceType: 'xyz',
-        createSource: () =>
-            prioritizeTileSourceRequest(
-                new XYZ({
-                    url: gcj2wgsProxyUrl('https://mt0.google.com/vt/lyrs=m&hl=zh-CN&x={x}&y={y}&z={z}&apistyle=s.t:0%7Cp.v:off,s.t:3%7Cp.v:on'),
-                }),
-            ),
+        url: 'https://mt0.google.com/vt/lyrs=m&hl=zh-CN&x={x}&y={y}&z={z}&apistyle=s.t:0%7Cp.v:off,s.t:3%7Cp.v:on',
+        method: 'xyz',
+        correction: 'gcj2wgs',
     },
     {
         order: 127,
@@ -1382,13 +939,7 @@ const definitions: LayerSourceDefinition[] = [
         category: 'vector',
         group: '矢量',
         url: 'https://mt0.google.com/vt/lyrs=m&x={x}&y={y}&z={z}&apistyle=s.t:0%7Cp.v:off,s.t:3%7Cp.v:on,s.t:3%7Cs.e:l%7Cp.v:off',
-        serviceType: 'xyz',
-        createSource: () =>
-            prioritizeTileSourceRequest(
-                new XYZ({
-                    url: 'https://mt0.google.com/vt/lyrs=m&x={x}&y={y}&z={z}&apistyle=s.t:0%7Cp.v:off,s.t:3%7Cp.v:on,s.t:3%7Cs.e:l%7Cp.v:off',
-                }),
-            ),
+        method: 'xyz',
     },
     {
         order: 128,
@@ -1400,14 +951,9 @@ const definitions: LayerSourceDefinition[] = [
         description: 'Google纯路网骨架(WGS) · Google / WGS84',
         category: 'vector',
         group: '矢量',
-        url: gcj2wgsProxyUrl('https://mt0.google.com/vt/lyrs=m&x={x}&y={y}&z={z}&apistyle=s.t:0%7Cp.v:off,s.t:3%7Cp.v:on,s.t:3%7Cs.e:l%7Cp.v:off'),
-        serviceType: 'xyz',
-        createSource: () =>
-            prioritizeTileSourceRequest(
-                new XYZ({
-                    url: gcj2wgsProxyUrl('https://mt0.google.com/vt/lyrs=m&x={x}&y={y}&z={z}&apistyle=s.t:0%7Cp.v:off,s.t:3%7Cp.v:on,s.t:3%7Cs.e:l%7Cp.v:off'),
-                }),
-            ),
+        url: 'https://mt0.google.com/vt/lyrs=m&x={x}&y={y}&z={z}&apistyle=s.t:0%7Cp.v:off,s.t:3%7Cp.v:on,s.t:3%7Cs.e:l%7Cp.v:off',
+        method: 'xyz',
+        correction: 'gcj2wgs',
     },
     {
         order: 129,
@@ -1420,13 +966,7 @@ const definitions: LayerSourceDefinition[] = [
         category: 'vector',
         group: '矢量',
         url: 'https://mt0.google.com/vt/lyrs=m&hl=zh-CN&x={x}&y={y}&z={z}&apistyle=s.t:0%7Cp.v:off,s.t:3%7Cp.v:on,s.t:3%7Cs.e:g%7Cp.v:off',
-        serviceType: 'xyz',
-        createSource: () =>
-            prioritizeTileSourceRequest(
-                new XYZ({
-                    url: 'https://mt0.google.com/vt/lyrs=m&hl=zh-CN&x={x}&y={y}&z={z}&apistyle=s.t:0%7Cp.v:off,s.t:3%7Cp.v:on,s.t:3%7Cs.e:g%7Cp.v:off',
-                }),
-            ),
+        method: 'xyz',
     },
     {
         order: 130,
@@ -1438,14 +978,9 @@ const definitions: LayerSourceDefinition[] = [
         description: 'Google纯路网注记(WGS) · Google / WGS84',
         category: 'vector',
         group: '矢量',
-        url: gcj2wgsProxyUrl('https://mt0.google.com/vt/lyrs=m&hl=zh-CN&x={x}&y={y}&z={z}&apistyle=s.t:0%7Cp.v:off,s.t:3%7Cp.v:on,s.t:3%7Cs.e:g%7Cp.v:off'),
-        serviceType: 'xyz',
-        createSource: () =>
-            prioritizeTileSourceRequest(
-                new XYZ({
-                    url: gcj2wgsProxyUrl('https://mt0.google.com/vt/lyrs=m&hl=zh-CN&x={x}&y={y}&z={z}&apistyle=s.t:0%7Cp.v:off,s.t:3%7Cp.v:on,s.t:3%7Cs.e:g%7Cp.v:off'),
-                }),
-            ),
+        url: 'https://mt0.google.com/vt/lyrs=m&hl=zh-CN&x={x}&y={y}&z={z}&apistyle=s.t:0%7Cp.v:off,s.t:3%7Cp.v:on,s.t:3%7Cs.e:g%7Cp.v:off',
+        method: 'xyz',
+        correction: 'gcj2wgs',
     },
     {
         order: 131,
@@ -1458,13 +993,7 @@ const definitions: LayerSourceDefinition[] = [
         category: 'vector',
         group: '矢量',
         url: 'https://mt0.google.com/vt/lyrs=m&x={x}&y={y}&z={z}&apistyle=s.t:0%7Cp.v:off,s.t:6%7Cp.v:on',
-        serviceType: 'xyz',
-        createSource: () =>
-            prioritizeTileSourceRequest(
-                new XYZ({
-                    url: 'https://mt0.google.com/vt/lyrs=m&x={x}&y={y}&z={z}&apistyle=s.t:0%7Cp.v:off,s.t:6%7Cp.v:on',
-                }),
-            ),
+        method: 'xyz',
     },
     {
         order: 132,
@@ -1476,14 +1005,9 @@ const definitions: LayerSourceDefinition[] = [
         description: 'Google纯水体(WGS) · Google / WGS84',
         category: 'vector',
         group: '矢量',
-        url: gcj2wgsProxyUrl('https://mt0.google.com/vt/lyrs=m&x={x}&y={y}&z={z}&apistyle=s.t:0%7Cp.v:off,s.t:6%7Cp.v:on'),
-        serviceType: 'xyz',
-        createSource: () =>
-            prioritizeTileSourceRequest(
-                new XYZ({
-                    url: gcj2wgsProxyUrl('https://mt0.google.com/vt/lyrs=m&x={x}&y={y}&z={z}&apistyle=s.t:0%7Cp.v:off,s.t:6%7Cp.v:on'),
-                }),
-            ),
+        url: 'https://mt0.google.com/vt/lyrs=m&x={x}&y={y}&z={z}&apistyle=s.t:0%7Cp.v:off,s.t:6%7Cp.v:on',
+        method: 'xyz',
+        correction: 'gcj2wgs',
     },
     {
         order: 133,
@@ -1496,13 +1020,7 @@ const definitions: LayerSourceDefinition[] = [
         category: 'vector',
         group: '矢量',
         url: 'https://www.google.com/maps/vt/pb=!1m4!1m3!1i{z}!2i{x}!3i{y}!2m1!1e0',
-        serviceType: 'xyz',
-        createSource: () =>
-            prioritizeTileSourceRequest(
-                new XYZ({
-                    url: 'https://www.google.com/maps/vt/pb=!1m4!1m3!1i{z}!2i{x}!3i{y}!2m1!1e0',
-                }),
-            ),
+        method: 'xyz',
     },
     {
         order: 134,
@@ -1514,14 +1032,9 @@ const definitions: LayerSourceDefinition[] = [
         description: 'GooglePB标准电子(WGS) · Google / WGS84',
         category: 'vector',
         group: '矢量',
-        url: gcj2wgsProxyUrl('https://www.google.com/maps/vt/pb=!1m4!1m3!1i{z}!2i{x}!3i{y}!2m1!1e0'),
-        serviceType: 'xyz',
-        createSource: () =>
-            prioritizeTileSourceRequest(
-                new XYZ({
-                    url: gcj2wgsProxyUrl('https://www.google.com/maps/vt/pb=!1m4!1m3!1i{z}!2i{x}!3i{y}!2m1!1e0'),
-                }),
-            ),
+        url: 'https://www.google.com/maps/vt/pb=!1m4!1m3!1i{z}!2i{x}!3i{y}!2m1!1e0',
+        method: 'xyz',
+        correction: 'gcj2wgs',
     },
     {
         order: 135,
@@ -1534,13 +1047,7 @@ const definitions: LayerSourceDefinition[] = [
         category: 'vector',
         group: '矢量',
         url: 'https://www.google.com/maps/vt/pb=!1m4!1m3!1i{z}!2i{x}!3i{y}!2m1!1e4',
-        serviceType: 'xyz',
-        createSource: () =>
-            prioritizeTileSourceRequest(
-                new XYZ({
-                    url: 'https://www.google.com/maps/vt/pb=!1m4!1m3!1i{z}!2i{x}!3i{y}!2m1!1e4',
-                }),
-            ),
+        method: 'xyz',
     },
     {
         order: 136,
@@ -1552,14 +1059,9 @@ const definitions: LayerSourceDefinition[] = [
         description: 'GooglePB纯路网(WGS) · Google / WGS84',
         category: 'vector',
         group: '矢量',
-        url: gcj2wgsProxyUrl('https://www.google.com/maps/vt/pb=!1m4!1m3!1i{z}!2i{x}!3i{y}!2m1!1e4'),
-        serviceType: 'xyz',
-        createSource: () =>
-            prioritizeTileSourceRequest(
-                new XYZ({
-                    url: gcj2wgsProxyUrl('https://www.google.com/maps/vt/pb=!1m4!1m3!1i{z}!2i{x}!3i{y}!2m1!1e4'),
-                }),
-            ),
+        url: 'https://www.google.com/maps/vt/pb=!1m4!1m3!1i{z}!2i{x}!3i{y}!2m1!1e4',
+        method: 'xyz',
+        correction: 'gcj2wgs',
     },
     {
         order: 149,
@@ -1576,18 +1078,9 @@ const definitions: LayerSourceDefinition[] = [
         
         
         
-        url: gcj2wgsProxyUrl(
-            'https://rt0.map.gtimg.com/realtimerender?z={z}&x={x}&y={-y}&type=vector&style=0',
-        ),
-        serviceType: 'xyz',
-        createSource: () =>
-            prioritizeTileSourceRequest(
-                new XYZ({
-                    url: gcj2wgsProxyUrl(
-                        'https://rt0.map.gtimg.com/realtimerender?z={z}&x={x}&y={-y}&type=vector&style=0',
-                    ),
-                }),
-            ),
+        url: 'https://rt0.map.gtimg.com/realtimerender?z={z}&x={x}&y={-y}&type=vector&style=0',
+        method: 'xyz',
+        correction: 'gcj2wgs',
     },
     {
         order: 150,
@@ -1599,18 +1092,9 @@ const definitions: LayerSourceDefinition[] = [
         description: 'Google简洁(wgs) · Google / WGS84',
         category: 'vector',
         group: '矢量',
-        url: gcj2wgsProxyUrl(
-            'https://mt0.google.com/vt/lyrs=p&x={x}&y={y}&z={z}&s=Ga&apistyle=s.e:l%7Cp.v:off,s.t:1%7Cs.e.g%7Cp.v:off,s.t:2%7Cs.e.g%7Cp.v:off,s.t:3%7Cs.e.g%7Cp.v:off,s.t:4%7Cs.e.g%7Cp.v:off',
-        ),
-        serviceType: 'xyz',
-        createSource: () =>
-            prioritizeTileSourceRequest(
-                new XYZ({
-                    url: gcj2wgsProxyUrl(
-                        'https://mt0.google.com/vt/lyrs=p&x={x}&y={y}&z={z}&s=Ga&apistyle=s.e:l%7Cp.v:off,s.t:1%7Cs.e.g%7Cp.v:off,s.t:2%7Cs.e.g%7Cp.v:off,s.t:3%7Cs.e.g%7Cp.v:off,s.t:4%7Cs.e.g%7Cp.v:off',
-                    ),
-                }),
-            ),
+        url: 'https://mt0.google.com/vt/lyrs=p&x={x}&y={y}&z={z}&s=Ga&apistyle=s.e:l%7Cp.v:off,s.t:1%7Cs.e.g%7Cp.v:off,s.t:2%7Cs.e.g%7Cp.v:off,s.t:3%7Cs.e.g%7Cp.v:off,s.t:4%7Cs.e.g%7Cp.v:off',
+        method: 'xyz',
+        correction: 'gcj2wgs',
     },
     {
         order: 151,
@@ -1623,8 +1107,7 @@ const definitions: LayerSourceDefinition[] = [
         category: 'vector',
         group: '矢量',
         url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-        serviceType: 'osm',
-        createSource: () => prioritizeTileSourceRequest(new OSM()),
+        method: 'osm',
     },
     {
         order: 152,
@@ -1637,13 +1120,7 @@ const definitions: LayerSourceDefinition[] = [
         category: 'vector',
         group: '矢量',
         url: 'https://{a-c}.tile-cyclosm.openstreetmap.fr/cyclosm/{z}/{x}/{y}.png',
-        serviceType: 'xyz',
-        createSource: () =>
-            prioritizeTileSourceRequest(
-                new XYZ({
-                    url: 'https://{a-c}.tile-cyclosm.openstreetmap.fr/cyclosm/{z}/{x}/{y}.png',
-                }),
-            ),
+        method: 'xyz',
     },
     {
         order: 153,
@@ -1656,11 +1133,7 @@ const definitions: LayerSourceDefinition[] = [
         category: 'vector',
         group: '矢量',
         url: 'https://{a-d}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png',
-        serviceType: 'xyz',
-        createSource: () =>
-            prioritizeTileSourceRequest(
-                new XYZ({ url: 'https://{a-d}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png' }),
-            ),
+        method: 'xyz',
     },
     {
         order: 154,
@@ -1673,11 +1146,7 @@ const definitions: LayerSourceDefinition[] = [
         category: 'vector',
         group: '矢量',
         url: 'https://{a-d}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png',
-        serviceType: 'xyz',
-        createSource: () =>
-            prioritizeTileSourceRequest(
-                new XYZ({ url: 'https://{a-d}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png' }),
-            ),
+        method: 'xyz',
     },
     {
         order: 155,
@@ -1690,11 +1159,7 @@ const definitions: LayerSourceDefinition[] = [
         category: 'vector',
         group: '矢量',
         url: 'https://maps.wikimedia.org/osm-intl/{z}/{x}/{y}.png',
-        serviceType: 'xyz',
-        createSource: () =>
-            prioritizeTileSourceRequest(
-                new XYZ({ url: 'https://maps.wikimedia.org/osm-intl/{z}/{x}/{y}.png' }),
-            ),
+        method: 'xyz',
     },
     {
         order: 156,
@@ -1707,13 +1172,7 @@ const definitions: LayerSourceDefinition[] = [
         category: 'vector',
         group: '矢量',
         url: 'https://tiles.stadiamaps.com/tiles/stamen_toner/{z}/{x}/{y}.png?api_key=e5abf577-33b9-47f0-92b2-bd60f88d8c8d',
-        serviceType: 'xyz',
-        createSource: () =>
-            prioritizeTileSourceRequest(
-                new XYZ({
-                    url: 'https://tiles.stadiamaps.com/tiles/stamen_toner/{z}/{x}/{y}.png?api_key=e5abf577-33b9-47f0-92b2-bd60f88d8c8d',
-                }),
-            ),
+        method: 'xyz',
     },
     {
         order: 157,
@@ -1726,13 +1185,7 @@ const definitions: LayerSourceDefinition[] = [
         category: 'vector',
         group: '矢量',
         url: 'https://tiles.stadiamaps.com/tiles/alidade_smooth/{z}/{x}/{y}.png?api_key=e5abf577-33b9-47f0-92b2-bd60f88d8c8d',
-        serviceType: 'xyz',
-        createSource: () =>
-            prioritizeTileSourceRequest(
-                new XYZ({
-                    url: 'https://tiles.stadiamaps.com/tiles/alidade_smooth/{z}/{x}/{y}.png?api_key=e5abf577-33b9-47f0-92b2-bd60f88d8c8d',
-                }),
-            ),
+        method: 'xyz',
     },
     {
         order: 158,
@@ -1745,13 +1198,7 @@ const definitions: LayerSourceDefinition[] = [
         category: 'vector',
         group: '矢量',
         url: 'https://tiles.stadiamaps.com/tiles/stamen_toner_background/{z}/{x}/{y}.png?api_key=e5abf577-33b9-47f0-92b2-bd60f88d8c8d',
-        serviceType: 'xyz',
-        createSource: () =>
-            prioritizeTileSourceRequest(
-                new XYZ({
-                    url: 'https://tiles.stadiamaps.com/tiles/stamen_toner_background/{z}/{x}/{y}.png?api_key=e5abf577-33b9-47f0-92b2-bd60f88d8c8d',
-                }),
-            ),
+        method: 'xyz',
     },
     {
         order: 159,
@@ -1764,13 +1211,7 @@ const definitions: LayerSourceDefinition[] = [
         category: 'vector',
         group: '矢量',
         url: 'https://tiles.stadiamaps.com/tiles/stamen_toner_lite/{z}/{x}/{y}.png?api_key=e5abf577-33b9-47f0-92b2-bd60f88d8c8d',
-        serviceType: 'xyz',
-        createSource: () =>
-            prioritizeTileSourceRequest(
-                new XYZ({
-                    url: 'https://tiles.stadiamaps.com/tiles/stamen_toner_lite/{z}/{x}/{y}.png?api_key=e5abf577-33b9-47f0-92b2-bd60f88d8c8d',
-                }),
-            ),
+        method: 'xyz',
     },
     {
         order: 160,
@@ -1783,13 +1224,7 @@ const definitions: LayerSourceDefinition[] = [
         category: 'vector',
         group: '矢量',
         url: 'https://tiles.stadiamaps.com/tiles/alidade_smooth_dark/{z}/{x}/{y}.png?api_key=e5abf577-33b9-47f0-92b2-bd60f88d8c8d',
-        serviceType: 'xyz',
-        createSource: () =>
-            prioritizeTileSourceRequest(
-                new XYZ({
-                    url: 'https://tiles.stadiamaps.com/tiles/alidade_smooth_dark/{z}/{x}/{y}.png?api_key=e5abf577-33b9-47f0-92b2-bd60f88d8c8d',
-                }),
-            ),
+        method: 'xyz',
     },
     {
         order: 161,
@@ -1802,13 +1237,7 @@ const definitions: LayerSourceDefinition[] = [
         category: 'vector',
         group: '矢量',
         url: 'https://tiles.stadiamaps.com/tiles/osm_bright/{z}/{x}/{y}.png?api_key=e5abf577-33b9-47f0-92b2-bd60f88d8c8d',
-        serviceType: 'xyz',
-        createSource: () =>
-            prioritizeTileSourceRequest(
-                new XYZ({
-                    url: 'https://tiles.stadiamaps.com/tiles/osm_bright/{z}/{x}/{y}.png?api_key=e5abf577-33b9-47f0-92b2-bd60f88d8c8d',
-                }),
-            ),
+        method: 'xyz',
     },
     {
         order: 162,
@@ -1821,13 +1250,7 @@ const definitions: LayerSourceDefinition[] = [
         category: 'vector',
         group: '矢量',
         url: 'https://thematic.geoq.cn/arcgis/rest/services/ThematicMaps/WorldHydroMap/MapServer/WMTS/tile/1.0.0/ThematicMaps_WorldHydroMap/default/GoogleMapsCompatible/{z}/{y}/{x}.png',
-        serviceType: 'xyz',
-        createSource: () =>
-            prioritizeTileSourceRequest(
-                new XYZ({
-                    url: 'https://thematic.geoq.cn/arcgis/rest/services/ThematicMaps/WorldHydroMap/MapServer/WMTS/tile/1.0.0/ThematicMaps_WorldHydroMap/default/GoogleMapsCompatible/{z}/{y}/{x}.png',
-                }),
-            ),
+        method: 'xyz',
     },
     {
         order: 163,
@@ -1840,11 +1263,8 @@ const definitions: LayerSourceDefinition[] = [
         category: 'vector',
         group: '矢量',
         url: 'https://webgis.henu.edu.cn/server/rest/services/Hosted/Border_Vector/VectorTileServer/tile/{z}/{y}/{x}.pbf',
-        serviceType: 'vector-tile',
-        createSource: () =>
-            createVectorTileSourceFromUrl(
-                'https://webgis.henu.edu.cn/server/rest/services/Hosted/Border_Vector/VectorTileServer/tile/{z}/{y}/{x}.pbf',
-            ),
+        method: 'mvt',
+        engines: ['ol'],
     },
     {
         order: 169,
@@ -1856,14 +1276,9 @@ const definitions: LayerSourceDefinition[] = [
         description: '后端代理 · Google / WGS84',
         category: 'custom',
         group: '自定义',
-        url: tileProxyUrl('mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}'),
-        serviceType: 'xyz',
-        createSource: () =>
-            prioritizeTileSourceRequest(
-                new XYZ({
-                    url: tileProxyUrl('mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}'),
-                }),
-            ),
+        url: 'https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}',
+        method: 'xyz',
+        proxy: 'proxy',
     },
     {
         order: 170,
@@ -1878,17 +1293,11 @@ const definitions: LayerSourceDefinition[] = [
         
         
         
-        url: tileProxyUrl('tile.openstreetmap.org/{z}/{x}/{y}.png'),
-        serviceType: 'xyz',
+        url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+        method: 'xyz',
+        proxy: 'proxy',
         
         maxZoom: 19,
-        createSource: () =>
-            prioritizeTileSourceRequest(
-                new XYZ({
-                    url: tileProxyUrl('tile.openstreetmap.org/{z}/{x}/{y}.png'),
-                    maxZoom: 19,
-                }),
-            ),
     },
     {
         order: 171,
@@ -1902,14 +1311,9 @@ const definitions: LayerSourceDefinition[] = [
         group: '自定义',
         
         
-        url: tileProxyUrl('http://g3.ships66.com/maps/one/{z}/{x}/{y}.png'),
-        serviceType: 'xyz',
-        createSource: () =>
-            prioritizeTileSourceRequest(
-                new XYZ({
-                    url: tileProxyUrl('http://g3.ships66.com/maps/one/{z}/{x}/{y}.png'),
-                }),
-            ),
+        url: 'http://g3.ships66.com/maps/one/{z}/{x}/{y}.png',
+        method: 'xyz',
+        proxy: 'proxy',
     },
     {
         order: 172,
@@ -1922,13 +1326,7 @@ const definitions: LayerSourceDefinition[] = [
         category: 'custom',
         group: '自定义',
         url: 'https://api.mapbox.com/styles/v1/1tpjc/cmo6wg8dm003v01s8d58qckdv/tiles/{z}/{x}/{y}?access_token=pk.eyJ1IjoieGVyb2MiLCJhIjoiY21lenIyeWk4MXRuOTJrcTVjMWIwMXc3dCJ9.nMoRkxxiCpnFxmZ1H-ScwQ',
-        serviceType: 'xyz',
-        createSource: () =>
-            prioritizeTileSourceRequest(
-                new XYZ({
-                    url: 'https://api.mapbox.com/styles/v1/1tpjc/cmo6wg8dm003v01s8d58qckdv/tiles/{z}/{x}/{y}?access_token=pk.eyJ1IjoieGVyb2MiLCJhIjoiY21lenIyeWk4MXRuOTJrcTVjMWIwMXc3dCJ9.nMoRkxxiCpnFxmZ1H-ScwQ',
-                }),
-            ),
+        method: 'xyz',
     },
     {
         order: 173,
@@ -1941,13 +1339,7 @@ const definitions: LayerSourceDefinition[] = [
         category: 'custom',
         group: '自定义',
         url: 'https://api.mapbox.com/styles/v1/1tpjc/cmo71ml4b001m01sp8u9o773g/tiles/{z}/{x}/{y}?access_token=pk.eyJ1IjoieGVyb2MiLCJhIjoiY21lenIyeWk4MXRuOTJrcTVjMWIwMXc3dCJ9.nMoRkxxiCpnFxmZ1H-ScwQ',
-        serviceType: 'xyz',
-        createSource: () =>
-            prioritizeTileSourceRequest(
-                new XYZ({
-                    url: 'https://api.mapbox.com/styles/v1/1tpjc/cmo71ml4b001m01sp8u9o773g/tiles/{z}/{x}/{y}?access_token=pk.eyJ1IjoieGVyb2MiLCJhIjoiY21lenIyeWk4MXRuOTJrcTVjMWIwMXc3dCJ9.nMoRkxxiCpnFxmZ1H-ScwQ',
-                }),
-            ),
+        method: 'xyz',
     },
     {
         order: 174,
@@ -1960,13 +1352,7 @@ const definitions: LayerSourceDefinition[] = [
         category: 'custom',
         group: '自定义',
         url: 'https://webgis.henu.edu.cn/server/rest/services/Hosted/China_Blender/MapServer/WMTS/tile/1.0.0/China_Blender/default/GoogleMapsCompatible/{z}/{y}/{x}.png',
-        serviceType: 'xyz',
-        createSource: () =>
-            prioritizeTileSourceRequest(
-                new XYZ({
-                    url: 'https://webgis.henu.edu.cn/server/rest/services/Hosted/China_Blender/MapServer/WMTS/tile/1.0.0/China_Blender/default/GoogleMapsCompatible/{z}/{y}/{x}.png',
-                }),
-            ),
+        method: 'xyz',
     },
 ];
 

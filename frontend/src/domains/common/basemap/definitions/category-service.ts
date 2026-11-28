@@ -2,18 +2,13 @@
  * 底图定义：服务入口（WMS/WMTS/MVT/XYZ 触发）
  *
  * 每条定义自带完整 URL 与显式属性；order 用于恢复原始定义顺序。
+ * V3.7.16 自 ol/basemap/constants/definitions 迁入 common 定义层：
+ * 定义只声明原始 URL + method/correction/proxy，createSource 工厂已移至
+ * ol/basemap/loaders/createOlSource.ts；本文件零引擎依赖。
  */
-import XYZ from 'ol/source/XYZ';
-import {
-    NON_STANDARD_XYZ_ADAPTERS,
-} from '../basemapCore';
-import {
-    createXYZSourceFromUrl,
-    prioritizeTileSourceRequest,
-} from '@ol/tile-source';
-import type { LayerSourceDefinition } from '../basemapCore';
+import type { TileLayerDefinition } from './types';
 
-const definitions: LayerSourceDefinition[] = [
+const definitions: TileLayerDefinition[] = [
     {
         order: 8,
         id: 'custom',
@@ -25,12 +20,7 @@ const definitions: LayerSourceDefinition[] = [
         category: 'custom',
         group: '自定义',
         url: '',
-        adapters: NON_STANDARD_XYZ_ADAPTERS,
-        serviceType: 'custom',
-        createSource: ({ customUrl }) =>
-            customUrl
-                ? createXYZSourceFromUrl(customUrl, { adapters: NON_STANDARD_XYZ_ADAPTERS })
-                : null,
+        method: 'custom',
     },
     {
         order: 168,
@@ -43,13 +33,7 @@ const definitions: LayerSourceDefinition[] = [
         category: 'custom',
         group: '自定义',
         url: 'https://tiles.negiao.cc.cd/tiles/{z}/{x}/{y}.png',
-        serviceType: 'xyz',
-        createSource: () =>
-            prioritizeTileSourceRequest(
-                new XYZ({
-                    url: 'https://tiles.negiao.cc.cd/tiles/{z}/{x}/{y}.png',
-                }),
-            ),
+        method: 'xyz',
     },
 ];
 

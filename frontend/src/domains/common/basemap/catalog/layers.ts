@@ -1,7 +1,7 @@
 /**
  * 引擎无关的图层定义注册表（阶段 2 桥接）。
  *
- * 当前由 OL 的 basemapConfig 在模块加载时登记完整图层定义；阶段 3/4 的目录
+ * 当前由 common/basemap/definitions（index.ts）在模块加载时登记完整图层定义；阶段 3/4 的目录
  * UI 与 Cesium 均可从此处读取 category/provider/coord/description，而不必
  * 各自解析 id 字符串。后续阶段可把登记动作迁移到 catalog/layers/*.ts，
  * 对外 API 不变。

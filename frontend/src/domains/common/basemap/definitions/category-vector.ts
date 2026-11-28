@@ -2,22 +2,13 @@
  * 底图定义：矢量瓦片
  *
  * 每条定义自带完整 URL 与显式属性；order 用于恢复原始定义顺序。
+ * V3.7.16 自 ol/basemap/constants/definitions 迁入 common 定义层：
+ * 定义只声明原始 URL + method/correction/proxy，createSource 工厂已移至
+ * ol/basemap/loaders/createOlSource.ts；本文件零引擎依赖。
  */
-import VectorTileSource from 'ol/source/VectorTile';
-import {
-    createVectorTileSourceFromUrl,
-} from '@ol/tile-source';
-import type { LayerSourceDefinition } from '../basemapCore';
+import type { TileLayerDefinition } from './types';
 
-function createOpenFreeMapVectorSource(): VectorTileSource {
-    const source = createVectorTileSourceFromUrl(
-        'https://tiles.openfreemap.org/planet/latest/{z}/{x}/{y}.pbf',
-    );
-    source.set('styleUrl', 'https://tiles.openfreemap.org/styles/liberty');
-    return source;
-}
-
-const definitions: LayerSourceDefinition[] = [
+const definitions: TileLayerDefinition[] = [
     {
         order: 87,
         id: 'vector_tianditu_mvt',
@@ -30,14 +21,8 @@ const definitions: LayerSourceDefinition[] = [
         group: '矢量',
         url: 'https://vpn.negiao.cn/tdt-mvt/mvt/{z}/{x}/{y}',
         styleUrl: 'https://vpn.negiao.cn/tdt-mvt/style-tech-blue.json',
-        serviceType: 'vector-tile',
-        createSource: () => {
-            const source = createVectorTileSourceFromUrl(
-                'https://vpn.negiao.cn/tdt-mvt/mvt/{z}/{x}/{y}',
-            );
-            source.set('styleUrl', 'https://vpn.negiao.cn/tdt-mvt/style-tech-blue.json');
-            return source;
-        },
+        method: 'mvt',
+        engines: ['ol'],
     },
     {
         order: 88,
@@ -52,9 +37,9 @@ const definitions: LayerSourceDefinition[] = [
         
         url: 'https://tiles.openfreemap.org/planet/latest/{z}/{x}/{y}.pbf',
         styleUrl: 'https://tiles.openfreemap.org/styles/liberty',
-        serviceType: 'vector-tile',
+        method: 'mvt',
+        engines: ['ol'],
         maxZoom: 14,
-        createSource: () => createOpenFreeMapVectorSource(),
     },
 ];
 
