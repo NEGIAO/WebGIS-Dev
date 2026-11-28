@@ -1,4 +1,8 @@
 # Agent 能力系统架构
+> 版本说明：文中 V3.7.19–V3.7.27 等编号属于 **V3.7.15 历史批次的内部迭代号**，不再是当前版本锚点；现行版本为 V3.7.16（2026-11-28 核对）。
+
+> 架构核对：2026-11-28 · V3.7.18（以当前代码为准；历史决策记录 `decisions/` 不改写；文中行号仅作导航，以符号名为准）。
+
 
 > **日期**：2026-11-27（统一版本 V3.7.15 基线；V3.7.16–30 为同批内部迭代号，已归并）
 > **状态**：✅ 反映最新能力（能力注册表 + Code Review 全修后）
@@ -16,7 +20,7 @@ Agent 能力系统是「AI 对话式地图操作」的核心：用户用自然�
 1. **工具执行在浏览器**：20 个工具全部操作浏览器内存里的地图实例，经 `MapCommandBus` 白名单落地。不引入 MCP 等跨进程协议层。
 2. **能力定义单一事实来源**：工具层元数据（分组/触发词/机制段）集中在 `agentCapabilityRegistry.ts`；切片语义集中在 `tileIntentPresets.ts`；品牌映射集中在 `chatIntentFallback.ts`。三份数据各司其职，不互相复制。
 3. **机制写清，决策放手**：跨轮次交互协议（罗盘三段式）是客观平台机制，必须逐字写清；场景判断与参数估算只给依据，交给模型自行决策。
-4. **按需分发降 token**：工具 schema 是 token 大头（20 工具 8,752 字符，是 System Prompt 的 9 倍），按意图分发子集；罗盘协议段仅含 `enable_compass` 时注入。
+4. **按需分发降 token**：工具 schema 是 token 大头（20 工具约 8,817 字符 / 11,915 字节，是 System Prompt 的数倍），按意图分发子集；罗盘协议段仅含 `enable_compass` 时注入。
 
 ---
 
@@ -82,14 +86,15 @@ flowchart TD
 | `CAPABILITY_GROUPS` | 6 组 `{group, names, triggers}`，触发词从 V3.7.19 router 原样迁入 |
 | `REGISTERED_TOOL_NAMES` | 20 工具名集合，用于未登记工具兜底常驻 |
 | `buildTriggerPatterns(group)` | 编译触发词为正则：纯 ASCII 加 `\b`，中文子串匹配，`i` 标志 |
-| `COMPASS_MECHANISM_PROMPT` | 罗盘三段式协议原文（931 字符），逐字保留避免措辞漂移 |
+| `COMPASS_MECHANISM_PROMPT` | 罗盘三段式交互协议原文（926 字符），逐字保留避免措辞漂移 |
+| `COMPASS_KNOWLEDGE_PROMPT` | 宫位知识问答指引，**常驻注入**；不再随 `enable_compass` 条件丢失 |
 
 **边界**：不纳入底图品牌映射（49 条数据字典）、切片规则（19 条已是 SSOT）、工具 parameters schema、description 全文（措辞敏感，V3.7.22/23 教训——零漂移优先）。
 
 ### 3.2 `agentToolsSchema.ts` — 工具声明与 Prompt
 
 - `AGENT_TOOLS`：20 个工具，每项 `{type:'function', function:{name, description, parameters}}`。
-- `buildSystemPromptWithTools(toolNames?)`：5 段结构——角色声明 / 上下文 / 能力边界 / `${mechanism}`（按需）/ 降级格式。**无参数时向后兼容**（含机制段）。
+- `buildSystemPromptWithTools(toolNames?)`：6 段结构——角色声明 / 上下文 / 能力边界 / 常驻 `COMPASS_KNOWLEDGE_PROMPT` / `${mechanism}`（按需交互协议）/ 降级格式。**无参数时向后兼容**（含机制段）。
 - `formatToolResultForLLM` / `formatToolResultForUser`：LLM 结构化摘要（30+ 透传字段，GeoJSON 截断 6000 字符）与用户可见单行摘要分离。
 - `parseToolCallsFromText`：三级降级解析 `tool_call` 块 → `json` 块 → 裸 JSON。
 
@@ -178,7 +183,7 @@ flowchart TD
 
 前端 `llmCall.ts` 三通道均传 `system_prompt`；后端 `schemas.py` 上限 16,000 字符，`_build_agent_system_prompt` 追加位置上下文与地图状态摘要（只读数据，512 字符上限，JSON 转义）。
 
-> **system_prompt 传输（本批已修复）**：`agent.ts` 三个 body builder 现已统一把 `payload.system_prompt` 写入请求体，覆盖非流式/流式 × 三通道 6 条路径。V3.7.17–27 曾因两个 builder 遗漏该字段，导致默认 AI 与后端代理通道实际使用后端默认提示词——修复后前端组装的能力边界与罗盘协议段才真正生效。后端 6 个端点均读取该字段，schema 上限 16,000 字符（前端 Prompt 实测约 1,759 字符）。
+> **system_prompt 传输（本批已修复）**：`agent.ts` 三个 body builder 现已统一把 `payload.system_prompt` 写入请求体，覆盖非流式/流式 × 三通道 6 条路径。V3.7.17–27 曾因两个 builder 遗漏该字段，导致默认 AI 与后端代理通道实际使用后端默认提示词——修复后前端组装的能力边界与罗盘协议段才真正生效。后端 6 个端点均读取该字段，schema 上限 16,000 字符；前端 Prompt 随工具子集动态变化，含罗盘约 1.9k 字符 / 不含约 1.0k 字符。后端 `upstream.py` 还会追加不可覆盖的 `_AGENT_BACKEND_SAFETY_FLOOR`。
 
 ### 6.4 错误回传
 
@@ -213,4 +218,4 @@ flowchart TD
 | 改底图品牌映射 | `chatIntentFallback.BASEMAP_PRESET_MAPPING` | 规则表优先，品牌表只兜底未覆盖品牌 |
 | 改 Prompt 结构 | `agentToolsSchema.buildSystemPromptWithTools` | 跑自主判断措辞 + 机制注入断言 |
 
-**回归基线**（V3.7.27 实测）：工具数 20 / schema 8,752 字符 / 规则 19 / 快捷命令 18 / 基线 8 项全绿。项目未安装 vitest/jest，回归用临时 Node 脚本（用完即删）；后续若引入测试框架应固化这些断言。
+**回归基线**（2026-11-28 核对）：工具数 20 / schema 约 8,817 字符 / 规则 19 / 快捷命令 18 / 基线 8 项全绿。项目未安装 vitest/jest，回归用临时 Node 脚本（用完即删）；后续若引入测试框架应固化这些断言。

@@ -29,6 +29,7 @@ import { prioritizeTileSourceRequest } from './tileLifecycle';
 import { detectWmsByUrl, createTileWmsSource, createWmsSourceStrict, toOlProjection } from './wmsSource';
 import { matchArcgisRestServiceUrl } from '@common/basemap/wmsService';
 import { detectWmtsByUrl, createWmtsSourceStrict } from './wmtsSource';
+import { toBaiduTileXY } from './tileSourceAdapters';
 
 // ==================== Y 轴归一化 ====================
 
@@ -90,6 +91,25 @@ export function buildBingQuadKeyAdapter(
             const y = normalizeTileY(z, tileCoord[2], 'auto');
             const qk = toQuadKey(x, y, z);
             return `https://ecn.${subdomain}.tiles.virtualearth.net/tiles/${imagetype}${qk}.${ext}?g=1`;
+        },
+    };
+}
+
+/**
+ * 百度特有切片适配器：百度使用自有网格（x 减半区偏移 + y 反转），
+ * 不能套标准 XYZ 模板。仅改写坐标，不做代理或纠偏。
+ * @param displayName 适配器展示名
+ */
+export function buildBaiduTileAdapter(displayName: string): NonStandardXYZAdapter {
+    return {
+        pattern: /bdimg\.com\/tile\/.*qt=vtile/i,
+        name: displayName,
+        urlFunction: (tileCoord: number[]) => {
+            const z = tileCoord[0];
+            const x = tileCoord[1];
+            const y = normalizeTileY(z, tileCoord[2], 'auto');
+            const bd = toBaiduTileXY(x, y, z);
+            return `https://maponline0.bdimg.com/tile/?qt=vtile&x=${bd.x}&y=${bd.y}&z=${z}&styles=pl&scaler=1&from=jsapi2_0`;
         },
     };
 }

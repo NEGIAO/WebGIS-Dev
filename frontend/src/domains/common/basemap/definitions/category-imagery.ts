@@ -10,7 +10,7 @@ import type { TileLayerDefinition } from './types';
 
 const definitions: TileLayerDefinition[] = [
     {
-        order: 126,
+        order: 122,
         id: 'imagery_tianditu',
         name: '天地图影像',
         catalogCategory: 'imagery',
@@ -22,7 +22,7 @@ const definitions: TileLayerDefinition[] = [
         needsContext: ['tiandituTk'],
     },
     {
-        order: 127,
+        order: 123,
         id: 'imagery_tuxin',
         name: '图新影像',
         catalogCategory: 'imagery',
@@ -33,7 +33,7 @@ const definitions: TileLayerDefinition[] = [
         method: 'xyz',
     },
     {
-        order: 128,
+        order: 124,
         id: 'imagery_amap',
         name: '高德影像(GCJ)',
         catalogCategory: 'imagery',
@@ -44,7 +44,7 @@ const definitions: TileLayerDefinition[] = [
         method: 'xyz',
     },
     {
-        order: 129,
+        order: 125,
         id: 'imagery_amap_wgs',
         name: '高德影像(WGS)',
         catalogCategory: 'imagery',
@@ -56,7 +56,7 @@ const definitions: TileLayerDefinition[] = [
         correction: 'gcj2wgs',
     },
     {
-        order: 130,
+        order: 126,
         id: 'imagery_google',
         name: 'Google原版',
         catalogCategory: 'imagery',
@@ -68,7 +68,7 @@ const definitions: TileLayerDefinition[] = [
         maxZoom: 20,
     },
     {
-        order: 131,
+        order: 127,
         id: 'imagery_gac',
         name: 'Google(gac)',
         catalogCategory: 'imagery',
@@ -80,7 +80,7 @@ const definitions: TileLayerDefinition[] = [
         maxZoom: 20,
     },
     {
-        order: 132,
+        order: 128,
         id: 'theme_arcgis_imagery_root',
         name: 'ESRI影像图',
         catalogCategory: 'imagery',
@@ -91,7 +91,7 @@ const definitions: TileLayerDefinition[] = [
         method: 'xyz',
     },
     {
-        order: 133,
+        order: 129,
         id: 'imagery_mapbox',
         name: 'Mapbox影像',
         catalogCategory: 'imagery',
@@ -102,7 +102,7 @@ const definitions: TileLayerDefinition[] = [
         method: 'xyz',
     },
     {
-        order: 134,
+        order: 130,
         id: 'imagery_yandex',
         name: 'Yandex影像',
         catalogCategory: 'imagery',
@@ -113,7 +113,7 @@ const definitions: TileLayerDefinition[] = [
         method: 'xyz',
     },
     {
-        order: 135,
+        order: 131,
         id: 'imagery_maptiler_satellite',
         name: 'MapTiler影像',
         catalogCategory: 'imagery',
@@ -124,7 +124,7 @@ const definitions: TileLayerDefinition[] = [
         method: 'xyz',
     },
     {
-        order: 136,
+        order: 132,
         id: 'imagery_maptiler_satellite_hd',
         name: 'MapTiler影像HD',
         catalogCategory: 'imagery',
@@ -136,7 +136,7 @@ const definitions: TileLayerDefinition[] = [
         tilePixelRatio: 2,
     },
     {
-        order: 137,
+        order: 133,
         id: 'imagery_alidade_satellite',
         name: 'Alidade卫星',
         catalogCategory: 'imagery',
@@ -147,7 +147,7 @@ const definitions: TileLayerDefinition[] = [
         method: 'xyz',
     },
     {
-        order: 138,
+        order: 134,
         id: 'theme_arcgis_ocean_base',
         name: 'ESRI海洋底图',
         catalogCategory: 'imagery',
@@ -158,7 +158,7 @@ const definitions: TileLayerDefinition[] = [
         method: 'xyz',
     },
     {
-        order: 139,
+        order: 135,
         id: 'theme_arcgis_ocean_ref',
         name: 'ESRI海洋参考注记',
         catalogCategory: 'imagery',
@@ -169,7 +169,7 @@ const definitions: TileLayerDefinition[] = [
         method: 'xyz',
     },
     {
-        order: 140,
+        order: 136,
         id: 'imagery_arcgis_polar_ant_img',
         name: 'ESRI南极影像',
         catalogCategory: 'imagery',
@@ -180,7 +180,7 @@ const definitions: TileLayerDefinition[] = [
         method: 'xyz',
     },
     {
-        order: 141,
+        order: 137,
         id: 'imagery_arcgis_polar_arc_img',
         name: 'ESRI北极影像',
         catalogCategory: 'imagery',
@@ -191,7 +191,7 @@ const definitions: TileLayerDefinition[] = [
         method: 'xyz',
     },
     {
-        order: 142,
+        order: 138,
         id: 'theme_arcgis_polar_arc_base',
         name: 'ESRI北极底图',
         catalogCategory: 'imagery',
@@ -202,7 +202,7 @@ const definitions: TileLayerDefinition[] = [
         method: 'xyz',
     },
     {
-        order: 143,
+        order: 139,
         id: 'label_arcgis_polar_arc_ref',
         name: 'ESRI北极参考注记',
         catalogCategory: 'imagery',
@@ -214,29 +214,7 @@ const definitions: TileLayerDefinition[] = [
         method: 'xyz',
     },
     {
-        order: 144,
-        id: 'theme_maptiler_ocean',
-        name: 'MapTiler海洋',
-        catalogCategory: 'imagery',
-        provider: 'MapTiler',
-        coord: 'WGS84',
-        description: 'MapTiler海洋 · MapTiler / WGS84',
-        url: 'https://api.maptiler.com/maps/ocean-v4/{z}/{x}/{y}.png?key=osLOujcXk1GJrGk5oaDz',
-        method: 'xyz',
-    },
-    {
-        order: 145,
-        id: 'theme_stamen_watercolor',
-        name: 'Stamen水彩',
-        catalogCategory: 'imagery',
-        provider: 'Stamen',
-        coord: 'WGS84',
-        description: 'Stamen水彩 · Stamen / WGS84',
-        url: 'https://tiles.stadiamaps.com/tiles/stamen_watercolor/{z}/{x}/{y}.jpg?api_key=e5abf577-33b9-47f0-92b2-bd60f88d8c8d',
-        method: 'xyz',
-    },
-    {
-        order: 146,
+        order: 142,
         id: 'vector_google_combo_hybrid_gcj',
         name: 'Google混合影像(GCJ)',
         catalogCategory: 'imagery',
@@ -247,7 +225,7 @@ const definitions: TileLayerDefinition[] = [
         method: 'xyz',
     },
     {
-        order: 147,
+        order: 143,
         id: 'vector_google_combo_hybrid_wgs',
         name: 'Google混合影像(WGS)',
         catalogCategory: 'imagery',
@@ -259,7 +237,7 @@ const definitions: TileLayerDefinition[] = [
         correction: 'gcj2wgs',
     },
     {
-        order: 148,
+        order: 144,
         id: 'vector_google_combo_satellite_wgs',
         name: 'Google纯卫星(WGS)',
         catalogCategory: 'imagery',
@@ -270,7 +248,7 @@ const definitions: TileLayerDefinition[] = [
         method: 'xyz',
     },
     {
-        order: 149,
+        order: 145,
         id: 'vector_google_combo_satellite_gcj',
         name: 'Google纯卫星(GCJ)',
         catalogCategory: 'imagery',
@@ -282,7 +260,7 @@ const definitions: TileLayerDefinition[] = [
         correction: 'wgs2gcj',
     },
     {
-        order: 150,
+        order: 146,
         id: 'google_Backend_Proxy',
         name: 'Google卫星(后端代理)',
         catalogCategory: 'imagery',
@@ -297,7 +275,7 @@ const definitions: TileLayerDefinition[] = [
     },
     // V3.7.16：补齐互联网/GISer 高频公共底图（Bing / USGS / NASA GIBS）
     {
-        order: 151,
+        order: 147,
         id: 'imagery_bing_aerial',
         name: 'Bing影像',
         catalogCategory: 'imagery',
@@ -311,7 +289,7 @@ const definitions: TileLayerDefinition[] = [
         maxZoom: 19,
     },
     {
-        order: 152,
+        order: 148,
         id: 'imagery_bing_hybrid',
         name: 'Bing混合影像',
         catalogCategory: 'imagery',
@@ -325,7 +303,7 @@ const definitions: TileLayerDefinition[] = [
         maxZoom: 19,
     },
     {
-        order: 153,
+        order: 149,
         id: 'imagery_usgs',
         name: 'USGS影像',
         catalogCategory: 'imagery',
@@ -337,19 +315,7 @@ const definitions: TileLayerDefinition[] = [
         maxZoom: 18,
     },
     {
-        order: 154,
-        id: 'imagery_usgs_topo',
-        name: 'USGS影像地形',
-        catalogCategory: 'imagery',
-        provider: 'Other',
-        coord: 'WGS84',
-        description: 'USGS影像地形 · USGS / WGS84',
-        url: 'https://basemap.nationalmap.gov/arcgis/rest/services/USGSImageryTopo/MapServer/tile/{z}/{y}/{x}',
-        method: 'xyz',
-        maxZoom: 18,
-    },
-    {
-        order: 155,
+        order: 150,
         id: 'imagery_nasa_modis_terra',
         name: 'NASA MODIS真彩色',
         catalogCategory: 'imagery',
@@ -362,7 +328,7 @@ const definitions: TileLayerDefinition[] = [
         date: '2026-11-20',
     },
     {
-        order: 156,
+        order: 151,
         id: 'imagery_nasa_viirs_night',
         name: 'NASA VIIRS夜间灯光2012',
         catalogCategory: 'imagery',

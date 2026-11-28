@@ -10,7 +10,7 @@ import type { TileLayerDefinition } from './types';
 
 const definitions: TileLayerDefinition[] = [
     {
-        order: 159,
+        order: 154,
         id: 'terrain_gac',
         name: 'Google山体阴影(gac)',
         catalogCategory: 'terrain',
@@ -21,7 +21,7 @@ const definitions: TileLayerDefinition[] = [
         method: 'xyz',
     },
     {
-        order: 160,
+        order: 155,
         id: 'theme_arcgis_usa_topo',
         name: 'USA地形图',
         catalogCategory: 'terrain',
@@ -32,7 +32,7 @@ const definitions: TileLayerDefinition[] = [
         method: 'xyz',
     },
     {
-        order: 161,
+        order: 156,
         id: 'theme_arcgis_shaded_relief',
         name: '世界地形渲染图',
         catalogCategory: 'terrain',
@@ -43,7 +43,7 @@ const definitions: TileLayerDefinition[] = [
         method: 'xyz',
     },
     {
-        order: 162,
+        order: 157,
         id: 'theme_arcgis_terrain_base',
         name: '世界地形底图',
         catalogCategory: 'terrain',
@@ -54,7 +54,7 @@ const definitions: TileLayerDefinition[] = [
         method: 'xyz',
     },
     {
-        order: 163,
+        order: 158,
         id: 'theme_arcgis_topo_root',
         name: '世界地形图',
         catalogCategory: 'terrain',
@@ -65,7 +65,7 @@ const definitions: TileLayerDefinition[] = [
         method: 'xyz',
     },
     {
-        order: 164,
+        order: 159,
         id: 'terrain_esa',
         name: '欧空局地形',
         catalogCategory: 'terrain',
@@ -76,7 +76,7 @@ const definitions: TileLayerDefinition[] = [
         method: 'xyz',
     },
     {
-        order: 165,
+        order: 160,
         id: 'theme_mff_water',
         name: 'MFF水体',
         catalogCategory: 'terrain',
@@ -89,7 +89,7 @@ const definitions: TileLayerDefinition[] = [
         engines: ['ol'],
     },
     {
-        order: 166,
+        order: 161,
         id: 'theme_mff_admin',
         name: 'MFF行政边界',
         catalogCategory: 'terrain',
@@ -102,7 +102,7 @@ const definitions: TileLayerDefinition[] = [
         engines: ['ol'],
     },
     {
-        order: 167,
+        order: 162,
         id: 'theme_mff_streets',
         name: 'MFF街道',
         catalogCategory: 'terrain',
@@ -115,7 +115,7 @@ const definitions: TileLayerDefinition[] = [
         engines: ['ol'],
     },
     {
-        order: 168,
+        order: 163,
         id: 'theme_mff_country',
         name: 'MFF国家边界',
         catalogCategory: 'terrain',
@@ -128,7 +128,7 @@ const definitions: TileLayerDefinition[] = [
         engines: ['ol'],
     },
     {
-        order: 169,
+        order: 164,
         id: 'theme_mff_crop',
         name: 'MFF作物',
         catalogCategory: 'terrain',
@@ -141,7 +141,7 @@ const definitions: TileLayerDefinition[] = [
         engines: ['ol'],
     },
     {
-        order: 170,
+        order: 165,
         id: 'theme_mff_grass',
         name: 'MFF草地',
         catalogCategory: 'terrain',
@@ -154,7 +154,7 @@ const definitions: TileLayerDefinition[] = [
         engines: ['ol'],
     },
     {
-        order: 171,
+        order: 166,
         id: 'theme_mff_forest',
         name: 'MFF森林',
         catalogCategory: 'terrain',
@@ -167,7 +167,7 @@ const definitions: TileLayerDefinition[] = [
         engines: ['ol'],
     },
     {
-        order: 172,
+        order: 167,
         id: 'theme_mff_tundra',
         name: 'MFF冻土',
         catalogCategory: 'terrain',
@@ -180,7 +180,7 @@ const definitions: TileLayerDefinition[] = [
         engines: ['ol'],
     },
     {
-        order: 173,
+        order: 168,
         id: 'theme_mff_sand',
         name: 'MFF沙地',
         catalogCategory: 'terrain',
@@ -193,7 +193,7 @@ const definitions: TileLayerDefinition[] = [
         engines: ['ol'],
     },
     {
-        order: 174,
+        order: 169,
         id: 'theme_mff_swamp',
         name: 'MFF沼泽',
         catalogCategory: 'terrain',
@@ -206,7 +206,7 @@ const definitions: TileLayerDefinition[] = [
         engines: ['ol'],
     },
     {
-        order: 175,
+        order: 170,
         id: 'theme_mff_ice',
         name: 'MFF冰川',
         catalogCategory: 'terrain',
@@ -219,7 +219,7 @@ const definitions: TileLayerDefinition[] = [
         engines: ['ol'],
     },
     {
-        order: 176,
+        order: 171,
         id: 'terrain_relief',
         name: '地形浮雕(MFF)',
         catalogCategory: 'terrain',
@@ -232,7 +232,7 @@ const definitions: TileLayerDefinition[] = [
         engines: ['ol'],
     },
     {
-        order: 177,
+        order: 172,
         id: 'terrain_maptiler_landscape',
         name: 'MapTiler地貌',
         catalogCategory: 'terrain',
@@ -243,7 +243,7 @@ const definitions: TileLayerDefinition[] = [
         method: 'xyz',
     },
     {
-        order: 178,
+        order: 173,
         id: 'terrain_maptiler_topo',
         name: 'MapTiler地形图',
         catalogCategory: 'terrain',
@@ -254,7 +254,7 @@ const definitions: TileLayerDefinition[] = [
         method: 'xyz',
     },
     {
-        order: 179,
+        order: 174,
         id: 'terrain_stamen',
         name: 'Stamen地形',
         catalogCategory: 'terrain',
@@ -264,21 +264,10 @@ const definitions: TileLayerDefinition[] = [
         url: 'https://tiles.stadiamaps.com/tiles/stamen_terrain/{z}/{x}/{y}.png?api_key=e5abf577-33b9-47f0-92b2-bd60f88d8c8d',
         method: 'xyz',
     },
-    {
-        order: 180,
-        id: 'terrain_outdoors',
-        name: 'Stadia户外',
-        catalogCategory: 'terrain',
-        provider: 'Stadia',
-        coord: 'WGS84',
-        description: 'Stadia户外 · Stadia / WGS84',
-        url: 'https://tiles.stadiamaps.com/tiles/outdoors/{z}/{x}/{y}.png?api_key=e5abf577-33b9-47f0-92b2-bd60f88d8c8d',
-        method: 'xyz',
-    },
     // V3.7.16：lyrs=t/p 与 lyrs=m 在同一 XYZ 瓦片上的路网边缘最佳配准位移为 (0,0)，
     // 国内源同为 GCJ02；WGS 版须 gcj2wgs，GCJ 版不纠偏（原 wgs2gcj 方向反了）。
     {
-        order: 181,
+        order: 176,
         id: 'vector_google_combo_terrain_wgs',
         name: 'Google纯地形(WGS)',
         catalogCategory: 'terrain',
@@ -290,7 +279,7 @@ const definitions: TileLayerDefinition[] = [
         correction: 'gcj2wgs',
     },
     {
-        order: 182,
+        order: 177,
         id: 'vector_google_combo_terrain_gcj',
         name: 'Google纯地形(GCJ)',
         catalogCategory: 'terrain',
@@ -301,7 +290,7 @@ const definitions: TileLayerDefinition[] = [
         method: 'xyz',
     },
     {
-        order: 183,
+        order: 178,
         id: 'vector_google_combo_terrain_hybrid_wgs',
         name: 'Google地形混合(WGS)',
         catalogCategory: 'terrain',
@@ -313,7 +302,7 @@ const definitions: TileLayerDefinition[] = [
         correction: 'gcj2wgs',
     },
     {
-        order: 184,
+        order: 179,
         id: 'vector_google_combo_terrain_hybrid_gcj',
         name: 'Google地形混合(GCJ)',
         catalogCategory: 'terrain',
@@ -324,7 +313,7 @@ const definitions: TileLayerDefinition[] = [
         method: 'xyz',
     },
     {
-        order: 185,
+        order: 180,
         id: 'vector_google_combo_clean_terrain_wgs',
         name: 'Google干净地形(WGS)',
         catalogCategory: 'terrain',
@@ -336,7 +325,7 @@ const definitions: TileLayerDefinition[] = [
         correction: 'gcj2wgs',
     },
     {
-        order: 186,
+        order: 181,
         id: 'vector_google_combo_clean_terrain_gcj',
         name: 'Google干净地形(GCJ)',
         catalogCategory: 'terrain',
@@ -347,7 +336,7 @@ const definitions: TileLayerDefinition[] = [
         method: 'xyz',
     },
     {
-        order: 187,
+        order: 182,
         id: 'vector_google_combo_clean_terrain_no_road_wgs',
         name: 'Google干净地形无路(WGS)',
         catalogCategory: 'terrain',
@@ -359,7 +348,7 @@ const definitions: TileLayerDefinition[] = [
         correction: 'gcj2wgs',
     },
     {
-        order: 188,
+        order: 183,
         id: 'vector_google_combo_clean_terrain_no_road_gcj',
         name: 'Google干净地形无路(GCJ)',
         catalogCategory: 'terrain',
@@ -370,7 +359,7 @@ const definitions: TileLayerDefinition[] = [
         method: 'xyz',
     },
     {
-        order: 189,
+        order: 184,
         id: 'vector_google_combo_pb_hillshade_wgs',
         name: 'GooglePB山体阴影(WGS)',
         catalogCategory: 'terrain',
@@ -381,7 +370,7 @@ const definitions: TileLayerDefinition[] = [
         method: 'xyz',
     },
     {
-        order: 190,
+        order: 185,
         id: 'vector_google_combo_pb_hillshade_gcj',
         name: 'GooglePB山体阴影(GCJ)',
         catalogCategory: 'terrain',
@@ -393,7 +382,7 @@ const definitions: TileLayerDefinition[] = [
         correction: 'wgs2gcj',
     },
     {
-        order: 191,
+        order: 186,
         id: 'terrain_opentopomap',
         name: '地形图',
         catalogCategory: 'terrain',
@@ -404,7 +393,7 @@ const definitions: TileLayerDefinition[] = [
         method: 'xyz',
     },
     {
-        order: 192,
+        order: 187,
         id: 'terrain_omap_contour',
         name: '奥维等高线',
         catalogCategory: 'terrain',
@@ -416,7 +405,7 @@ const definitions: TileLayerDefinition[] = [
         needsContext: ['ovitalTdtkey'],
     },
     {
-        order: 193,
+        order: 188,
         id: 'terrain_arcgis_elev_hillshade',
         name: 'ESRI世界山体阴影',
         catalogCategory: 'terrain',
@@ -427,7 +416,7 @@ const definitions: TileLayerDefinition[] = [
         method: 'xyz',
     },
     {
-        order: 194,
+        order: 189,
         id: 'terrain_arcgis_elev_hillshade_dark',
         name: 'ESRI深色山体阴影',
         catalogCategory: 'terrain',
@@ -439,7 +428,7 @@ const definitions: TileLayerDefinition[] = [
     },
     // V3.7.16：补齐互联网/GISer 高频公共底图（Mapbox 户外 / USGS 地形 / OpenSeaMap 海图）
     {
-        order: 195,
+        order: 190,
         id: 'terrain_mapbox_outdoors',
         name: 'Mapbox户外',
         catalogCategory: 'terrain',
@@ -452,7 +441,7 @@ const definitions: TileLayerDefinition[] = [
         maxZoom: 20,
     },
     {
-        order: 196,
+        order: 191,
         id: 'terrain_usgs_topo',
         name: 'USGS地形图',
         catalogCategory: 'terrain',
@@ -464,7 +453,7 @@ const definitions: TileLayerDefinition[] = [
         maxZoom: 16,
     },
     {
-        order: 197,
+        order: 192,
         id: 'label_openseamap',
         name: 'OpenSeaMap海图注记',
         catalogCategory: 'terrain',
@@ -475,6 +464,18 @@ const definitions: TileLayerDefinition[] = [
         method: 'xyz',
         zBand: 'label',
         skipHighResTile: true,
+    },
+    {
+        // China Blender 是地形渲染服务，原归电子分类有误
+        order: 90,
+        id: 'custom_China_Blender',
+        name: 'China Blender',
+        catalogCategory: 'terrain',
+        provider: 'Custom',
+        coord: 'WGS84',
+        description: 'China Blender · Custom / WGS84',
+        url: 'https://webgis.henu.edu.cn/server/rest/services/Hosted/China_Blender/MapServer/WMTS/tile/1.0.0/China_Blender/default/GoogleMapsCompatible/{z}/{y}/{x}.png',
+        method: 'xyz',
     },
 ];
 

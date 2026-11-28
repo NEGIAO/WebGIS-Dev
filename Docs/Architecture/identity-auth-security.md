@@ -1,4 +1,6 @@
 # 身份鉴权链路与安全模型
+> 架构核对：2026-11-28 · V3.7.18（以当前代码为准；历史决策记录 `decisions/` 不改写；文中行号仅作导航，以符号名为准）。
+
 
 > **本文范围**：从「前端输入账号密码」到「后端放行管理接口」的完整信任链，以及该链路的强度边界、反爬能力与已知弱点。
 >
@@ -56,7 +58,7 @@ sequenceDiagram
 flowchart TD
     A["请求携带 Authorization 头"] --> B{"_extract_token()"}
     B -->|无凭据| C{"是否 guest-allow 端点"}
-    C -->|是| C1["临时游客会话（无 token）"]
+    C -->|是| C1["401 GUEST_TOKEN_REQUIRED"]
     C -->|否| C2["401 LOGIN_REQUIRED"]
     B -->|有凭据| D{"_get_session_sync(token)"}
     D -->|不存在 / 已过期| E["401 SESSION_EXPIRED"]
@@ -85,8 +87,8 @@ flowchart TD
 |---|---|---|---|
 | 管理员 | `SUPER_USER`（HF Secret） | 与 Secret 等时比较，**每次登录现算** | 正常签发 |
 | 注册用户 | `users.password_hash` | PBKDF2-HMAC-SHA256，16 字节随机盐，120000 次迭代 | 正常签发 |
-| 游客 | 共享口令（L1 配置 `GUEST_PASSWORD`） | 等时比较；身份取验签 guest token，否则 `H(XFF 末跳 IP|UA)`（设备号不参与） | 正常签发（游客权限） |
-| 临时游客 | 无 | 特定端点自动创建，2 小时内存态 | **无 token** |
+| 游客 | 共享口令（L1 配置 `GUEST_PASSWORD`） | 等时比较；身份必须来自验签 guest token 且命中 `sessions`；签发按身份 IP（XFF 最右侧公网跳）+ UA 限频 6 次/小时 | 由 `POST /auth/guest/session` 签发（游客权限） |
+| 旧临时游客桶 | — | 已废除，不再自动铸造；无 token 一律 401 | — |
 
 ---
 
@@ -151,11 +153,11 @@ flowchart TD
 | 登录节流 | 账号优先 + IP 兜底 | 中高。账号维度不可伪造 |
 | 浏览器跨域 | CORS 白名单（9 个前端来源） | 低。只约束浏览器脚本，`curl` / 服务端直连不受限 |
 | 边缘防护 | Cloudflare 仅代理前端域名（80/443/8443 等） | 低。后端 `*.hf.space` **不经过 CF**，WAF/限流规则对 API 无效 |
-| 游客身份 | 无 token 桶 `guest_uid = H(XFF 末跳 IP|UA)` + 后端签名 guest token（`dependencies.py:108-122`） | 中低。前端自报 `X-Client-IP` 已停用；XFF 末跳由反代追加，签名 token 由后端签发且限频 6 次/小时（`routes.py:775-780`） |
+| 游客身份 | 后端签名 guest token 必须命中 `sessions`；签发限频 6 次/小时；`is_temporary=false` | 中低。前端自报 `X-Client-IP` 已停用；无 token 401 `GUEST_TOKEN_REQUIRED`，DB 故障 503 |
 
 **已知缺口（按影响排序）**：
 
-1. **游客配额绕过已收敛（V3.7.6）**——桶改 `H(XFF 末跳 IP|UA)` + 签名 guest token，签发限频 6 次/小时；残留边界是更换网络出口仍可换桶；
+1. **游客配额绕过已收敛（V3.7.16）**——只有后端签发且命中 `sessions` 的 guest token 才被承认为游客；无 token 401，DB 故障 503，签发限频 6 次/小时；残留边界是更换网络出口后可重新签发；
 2. **API 层缺少通用速率限制**——目前只有登录节流与配额扣减，没有「每分钟请求数」维度的约束；
 3. **令牌明文入库**——若数据库文件泄漏，攻击者可直接复用未过期会话（建议改为存 `sha256(token)`，登录时比对摘要）。
 

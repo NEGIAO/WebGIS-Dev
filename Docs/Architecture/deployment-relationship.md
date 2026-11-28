@@ -1,4 +1,6 @@
 # 部署关系与域名映射（Deployment Relationship）
+> 架构核对：2026-11-28 · V3.7.18（以当前代码为准；历史决策记录 `decisions/` 不改写；文中行号仅作导航，以符号名为准）。
+
 
 > 本文档展示 WebGIS 项目所有域名、部署平台与运行时组件之间的对应关系。
 > 架构总览见 [system-architecture.md](system-architecture.md)，CI/CD 流水线见 [cicd-pipeline.md](cicd-pipeline.md)

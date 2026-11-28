@@ -1,4 +1,6 @@
 # 底图系统架构：声明式定义 + 统一目录（已落地）
+> 架构核对：2026-11-28 · V3.7.18（以当前代码为准；历史决策记录 `decisions/` 不改写；文中行号仅作导航，以符号名为准）。
+
 
 > 状态：✅ 已落地（V3.7.16 定义层重构 + V3.7.16 遗留项修复；本文为**现状架构文档**）
 > 日期：2026-11-27 初稿 · 2026-11-28 按实际代码重写
@@ -13,8 +15,8 @@
 
 | 关注点 | SSOT | 内容 |
 |---|---|---|
-| 图层技术定义 | `common/basemap/definitions/` | 205 条 `TileLayerDefinition`：URL 模板、加载方式、纠偏/代理、引擎能力 |
-| 预设与编号 | `common/basemap/basemapPresets.ts` | 181 条 `{id,label,stack}`，数组顺序即 URL `l` 的 1-based 编号 |
+| 图层技术定义 | `common/basemap/definitions/` | 196 条 `TileLayerDefinition`：URL 模板、加载方式、纠偏/代理、引擎能力 |
+| 预设与编号 | `common/basemap/basemapPresets.ts` | 177 条 `{id,label,stack}`，数组顺序即 URL `l` 的 1-based 编号 |
 
 统一目录 `common/basemap/catalog/` 是**查询视图**（只读投影），不持有第三份数据：预设条目从 `basemapPresets` 取顺序与 id，元数据从 definitions 按 `stack[0]` 取，缺失时回退 `taxonomy.ts` 推断。
 
@@ -24,7 +26,7 @@
 2. `ALL_BASEMAP_PRESETS` / `URL_LAYER_OPTIONS` / `BASEMAP_OPTIONS` 的既有顺序与 label 的「编号 + 名称」格式不变。
 3. 历史 layer id、代理前缀路径与 XYZ 索引语义不变。
 4. 默认预设 `custom_China_Blender_preset_2` 不变。
-5. `TileLayerDefinition.order` 覆盖 1..205 且唯一（加载时 `validate.ts` 强校验，错误直接抛错）。
+5. `TileLayerDefinition.order` 覆盖 1..196 且唯一（加载时 `validate.ts` 强校验，错误直接抛错）。
 
 ---
 
@@ -33,8 +35,8 @@
 ```mermaid
 flowchart TB
     subgraph S["SSOT（纯数据·零引擎依赖）"]
-        DEF["definitions/<br/>205 条 TileLayerDefinition<br/>url 模板 + method + correction + proxy"]
-        PRE["basemapPresets.ts<br/>181 条预设<br/>顺序 = URL l 编号"]
+        DEF["definitions/<br/>196 条 TileLayerDefinition<br/>url 模板 + method + correction + proxy"]
+        PRE["basemapPresets.ts<br/>177 条预设<br/>顺序 = URL l 编号"]
     end
 
     subgraph C["统一目录（查询视图）"]
@@ -82,7 +84,7 @@ flowchart TB
 |---|---|
 | `order` / `id` | 原始顺序（禁改）/ 稳定标识 |
 | `catalogCategory` / `provider` / `coord` / `description` | 统一目录元数据，每条显式声明 |
-| `zBand` | 渲染带：`'label'`（注记层，150~199）/ `'basemap'`（底图，0~99），缺省 = basemap；替代旧 `category === 'label'` 判断 |
+| `zBand` | 渲染带：`'label'`（注记层，150~196）/ `'basemap'`（底图，0~99），缺省 = basemap；替代旧 `category === 'label'` 判断 |
 | `url` | **原始上游 URL 模板**，含占位符；不写代理前缀 |
 | `method` | `xyz` / `wmts` / `wms` / `mvt` / `osm` / `custom` |
 | `correction` | `none` / `gcj2wgs` / `wgs2gcj` / `bd2wgs` / `wgs2bd`（行为指令） |
@@ -104,7 +106,7 @@ common/basemap/definitions/
 ├─ types.ts               TileLayerDefinition 等类型
 ├─ resolveTileUrl.ts      纯函数：占位符替换 + 纠偏/代理拼装
 ├─ validate.ts            加载期校验（error 抛错 / warning 打印）
-├─ index.ts               聚合 205 条 → TILE_LAYER_DEFINITIONS；登记到 catalog；启动校验
+├─ index.ts               聚合 196 条 → TILE_LAYER_DEFINITIONS；登记到 catalog；启动校验
 ├─ category-recommended.ts  精选底图显式清单（20 条 preset id，可自由增删改）
 └─ category-*.ts          六类分片：service / imagery / terrain / electronic / historical / vector
 ```
@@ -185,8 +187,8 @@ flowchart TD
 
 ```mermaid
 sequenceDiagram
-    participant P as basemapPresets（181 预设）
-    participant D as definitions（205 定义）
+    participant P as basemapPresets（177 预设）
+    participant D as definitions（196 定义）
     participant R as catalog/registry
     participant U as useBasemapCatalogUi
     participant V as OL/Cesium 面板
@@ -218,7 +220,7 @@ sequenceDiagram
 
 ### 5.1 OL：`createOlSource`
 
-唯一入口 `createOlSource(definition, ctx)` → `ol/source`，取代 205 条定义里各自的 `createSource` 工厂：
+唯一入口 `createOlSource(definition, ctx)` → `ol/source`，取代 196 条定义里各自的 `createSource` 工厂：
 
 | method | 实现方式 |
 |---|---|
@@ -268,9 +270,9 @@ flowchart TD
 
 | 脚本 | 作用 | 命令 |
 |---|---|---|
-| `check-basemap-catalog.mjs` | 181 预设数量/唯一性/首尾 id，锁定 `l` 编号契约 | `npm run check:basemap-catalog` |
+| `check-basemap-catalog.mjs` | 177 预设数量/唯一性/首尾 id，锁定 `l` 编号契约 | `npm run check:basemap-catalog` |
 | `check-layer-definitions.mjs` | 定义层 id/order/必填字段校验 | `npm run check:layer-definitions` |
-| `check-basemap-migration.mjs` | 205 条定义迁移前后逐字段等价 + OL/Cesium URL 抽查（天地图/高德/百度/WMS/WMTS/MVT/Sentinel） | `npm run check:basemap-migration` |
+| `check-basemap-migration.mjs` | 196 条定义迁移前后逐字段等价 + OL/Cesium URL 抽查（天地图/高德/百度/WMS/WMTS/MVT/Sentinel） | `npm run check:basemap-migration` |
 
 运行期还有 `validate.ts` 的加载期校验（id/order 唯一且连续、必填字段、method/correction/proxy 合法、wms/wmts 参数、纠偏与 coord 一致），错误直接抛错。
 
@@ -291,12 +293,12 @@ npm run check:basemap-migration
 | 阶段 | 状态 | 落地内容 |
 |---|---|---|
 | 0 现状与文档 | ✅ | 三路调查，需求与架构文档。 |
-| 1 catalog 骨架 | ✅ | `catalog/{types,taxonomy,layers,registry,compat,index}.ts`；`check-basemap-catalog` 锁定 181 预设。 |
-| 2 定义层重构 | ✅ | 205 条迁入 `common/basemap/definitions/`，按六类分片；`url + createSource` 合并为单定义 + 引擎适配器；删除 `basemapConfig.ts`/`basemapCore.ts`/`group-1~4.ts`。 |
+| 1 catalog 骨架 | ✅ | `catalog/{types,taxonomy,layers,registry,compat,index}.ts`；`check-basemap-catalog` 锁定 177 预设。 |
+| 2 定义层重构 | ✅ | 199 条迁入 `common/basemap/definitions/`，按六类分片；`url + createSource` 合并为单定义 + 引擎适配器；删除 `basemapConfig.ts`/`basemapCore.ts`/`group-1~4.ts`。 |
 | 3 OL 下拉 | ✅ | 常驻搜索 + 分类树；Wayback 动态项并入。 |
 | 4 Cesium 统一 | ✅ | 共用目录树与 `resolveTileUrl`；描述符全量透传。 |
 | 5 遗留修复 | ✅ | A1：`url:'None'` 占位（orders 94/95）修正为真实 URL；A2：`validate.ts` 新增 correction↔coord 一致性不变量。 |
-| 6 旧兼容字段清理 | ✅ | V3.7.16：删除名存实亡的 `TileLayerDefinition.category/group`（205 条定义从未填值，查询恒返回 `theme`/`专题`）；新增 `zBand` 字段承载渲染带；删除 `LayerCategory`/`LayerGroup`/`legacyCategory` 类型与 `getLayerCategory`/`getLayerGroup` 全链路（12 文件）；`isBasemapLayerId` 改用 `getDescriptorById()` 精确判断；Cesium Picker 颜色改用 `catalogCategory`。 |
+| 6 旧兼容字段清理 | ✅ | V3.7.16：删除名存实亡的 `TileLayerDefinition.category/group`（199 条定义从未填值，查询恒返回 `theme`/`专题`）；新增 `zBand` 字段承载渲染带；删除 `LayerCategory`/`LayerGroup`/`legacyCategory` 类型与 `getLayerCategory`/`getLayerGroup` 全链路（12 文件）；`isBasemapLayerId` 改用 `getDescriptorById()` 精确判断；Cesium Picker 颜色改用 `catalogCategory`。 |
 | 7 遗留清理 | ✅ | 删除零引用死文件 `catalog/compat.ts`；`url:'None'` 由 warning 升级为 error（A1 已清零，硬失败防回潮）；`check-basemap-migration.mjs` 登记为 `npm run check:basemap-migration`。 |
 | 8 精选底图显式化 | ✅ | V3.7.16：新增 `definitions/category-recommended.ts`（20 条 preset id 显式清单，与预设顺序解耦、可自由增删改）；`registry` 改按清单判定推荐，废弃 `RECOMMENDED_FIRST_N` + `CATEGORY_OVERRIDES`；推荐条目通过 tags 仍出现在原分类（允许重复）；`check-basemap-catalog` 增校验。V3.7.16 清理：修正 CesiumToolPanel 中「前 20 条 preset 归入精选底图」的过时注释。 |
 

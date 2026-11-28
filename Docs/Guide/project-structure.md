@@ -195,4 +195,5 @@ Docs/
 
 | 版本 | 变更 |
 |---|---|
+| V3.7.18 | 架构文档按当前代码全量核对并统一核对标记；基线 V3.7.16 已将底图定义层迁入 `common/basemap/` 并新增 `basemap-catalog-redesign.md` / `frontend/scripts/check-*.mjs`。 |
 | V3.6.37 | 新增「目录治理约定」；`Scripts/archive/`、`Architecture/decisions/`、`TODO/README.md`、`Demo/README.md`、`Guide/bot-pr-playbook.md` 入库；`TODO/` 全量重列（原仅列 7/23 且含已归档项）；补齐 `Architecture/` 漏列的 `cesium-planar-route` / `download-service` / `tile-rectify-system`；`Demo/` 补 `draw_manager` / `first_person_fly` 并标注非文档 |

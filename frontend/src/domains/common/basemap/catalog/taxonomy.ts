@@ -84,6 +84,22 @@ const COORD_OVERRIDES: Record<string, BasemapCoord> = {
     vector_amap_pure_roads_wgs_preset: 'MIXED',
 };
 
+/**
+ * 显式分类覆盖：关键词规则会误判的少数条目。
+ * MapTiler ocean-v4 / Stadia outdoors 是电子专题样式，但 ocean / terrain
+ * 关键词会被影像或地形规则抢先命中；ESRI Ocean、Mapbox 户外等真影像/地形条目
+ * 不受影响，故只覆盖具体条目而不删除全局规则。
+ */
+const CATEGORY_OVERRIDES: Partial<Record<string, BasemapCategory>> = {
+    theme_maptiler_ocean: 'electronic',
+    theme_maptiler_ocean_preset: 'electronic',
+    terrain_outdoors: 'electronic',
+    terrain_outdoors_preset: 'electronic',
+    custom_China_Blender: 'terrain',
+    custom_China_Blender_preset: 'terrain',
+    custom_China_Blender_preset_2: 'terrain',
+};
+
 const PROVIDER_MATCHERS: readonly [BasemapProvider, RegExp][] = [
     ['ESRI Wayback', /wayback/i],
     ['Sentinel', /s2_cloudless/i],
@@ -122,6 +138,7 @@ export function classifyProvider(id: string): BasemapProvider {
 }
 
 export function classifyCategory(id: string, label: string, provider: BasemapProvider): BasemapCategory {
+    if (CATEGORY_OVERRIDES[id]) return CATEGORY_OVERRIDES[id]!;
     if (id === 'custom' || id === 'local_tiles_preset') return 'service';
     if (/s2_cloudless|wayback/i.test(id)) return 'historical';
     if (/vector_tianditu_mvt|openfreemap_liberty|vector-tile/i.test(id)) return 'vector';

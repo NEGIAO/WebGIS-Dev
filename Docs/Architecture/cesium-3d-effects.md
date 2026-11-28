@@ -1,4 +1,6 @@
 # Cesium 三维特效架构说明
+> 架构核对：2026-11-28 · V3.7.18（以当前代码为准；历史决策记录 `decisions/` 不改写；文中行号仅作导航，以符号名为准）。
+
 
 日期：2026-07-21
 
@@ -65,7 +67,7 @@
 | `composables/scene/useCesiumBeautify.ts` | 场景美化：HDR + PBR 色调映射 + FXAA + 定向光 + 天空微调 + 分辨率缩放 |
 | `components/CesiumAdvancedEffects.vue` | "Cinematic FX" 面板：高度雾 / HBAO / 移轴 / 大气+Bloom 四个后处理开关 + FPS 图表 |
 | `composables/toolModules/useCesiumToolModules.ts` | 特效参数总线：集中管理各模块响应式参数与控件定义（约 238 行） |
-| `components/CesiumToolPanel.vue` | 工具面板 UI：模块卡片 + 控件渲染（约 2277 行） |
+| `components/CesiumToolPanel.vue` | 工具面板 UI：模块卡片 + 控件渲染（约 2703 行） |
 | `components/CesiumContainer.vue` | 容器组件：装配上述所有模块、watcher 与清理逻辑 |
 
 ## 4. 集成与参数总线
@@ -205,7 +207,7 @@ flowchart LR
 
 ### 7.1 技术栈定位（重要）
 
-`ShallowWater` **不是 Cesium 原生特效，也不求解浅水方程**。它是一套**独立的 Three.js（`three@^0.186.1`，见 `frontend/package.json:47`）渲染场景**：`useShallowWater.ts` 创建一个 `alpha:true` 的 `WebGLRenderer`，其 canvas 由 `ShallowWaterOverlay.vue` 以绝对定位、`z-index:2` 盖在 Cesium canvas 之上，用透明背景与 Cesium 视图"视觉融合"。它是一个自包含的热带浅水**演示场景**（有自己的相机、`OrbitControls`、键盘漫游、动画循环），与 Cesium 的相机/坐标系**不联动**。
+`ShallowWater` **不是 Cesium 原生特效，也不求解浅水方程**。它是一套**独立的 Three.js（`three@^0.186.1`，见 `frontend/package.json:50`）渲染场景**：`useShallowWater.ts` 创建一个 `alpha:true` 的 `WebGLRenderer`，其 canvas 由 `ShallowWaterOverlay.vue` 以绝对定位、`z-index:2` 盖在 Cesium canvas 之上，用透明背景与 Cesium 视图"视觉融合"。它是一个自包含的热带浅水**演示场景**（有自己的相机、`OrbitControls`、键盘漫游、动画循环），与 Cesium 的相机/坐标系**不联动**。
 
 ### 7.2 场景构成
 

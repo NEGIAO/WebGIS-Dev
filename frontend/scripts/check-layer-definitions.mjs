@@ -71,7 +71,7 @@ const VALID_CATEGORIES = new Set(['service', 'imagery', 'terrain', 'electronic',
 const VALID_COORDS = new Set(['WGS84', 'GCJ02', 'BD09', 'NONE', 'MIXED']);
 const VALID_PROVIDERS = new Set([
     'AMAP', 'Google', 'Tianditu', 'Tuxin', 'Baidu', 'Tencent', 'ESRI', 'MapTiler', 'Mapbox',
-    'OSM', 'Carto', 'Stadia', 'Stamen', 'OpenFreeMap', 'MFF', 'MineMap', 'GeoQ', 'Windy',
+    'OSM', 'Carto', 'Stadia', 'Stamen', 'OpenFreeMap', 'VersaTiles', 'MapLibre', 'Jawg', 'Protomaps', 'MFF', 'MineMap', 'GeoQ', 'Windy',
     'Sentinel', 'ESRI Wayback', 'NASA', 'Bing', 'OpenSeaMap', 'OpenRailwayMap', 'Local', 'Custom', 'Other',
 ]);
 // 与 validate.ts 同源：coord = 纠偏后输出坐标系，错位会在模块加载时被拒。

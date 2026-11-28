@@ -499,9 +499,10 @@ const PURIFY_CONFIG = {
  * - 未就绪或净化抛错 → 降级为纯文本转义，**绝不放行原始 HTML**。
  * 原实现中「DOMPurify 未加载」分支直接返回未消毒 HTML，构成首屏窗口期 XSS 缺口。
  * @param {string} html - 待消毒的 HTML 片段
+ * @param {string} [plainFallback] - 消毒库不可用时的纯文本来源（默认取 html 本身）
  * @returns {string} 可安全交给 v-html 的字符串
  */
-function sanitizeHtml(html: string) {
+function sanitizeHtml(html: string, plainFallback?: string) {
     const lib = dompurifyLib.value;
     if (lib && typeof lib.sanitize === 'function') {
         try {
@@ -510,7 +511,10 @@ function sanitizeHtml(html: string) {
             /* 净化异常 → 落到下方转义兜底 */
         }
     }
-    return escapeHtml(html).replace(/\n/g, '<br/>');
+    // V3.7.17：marked 路径传入的是已生成的 HTML（如 <p>文案</p>），
+    // 直接 escapeHtml(html) 会把结构标签变成字面文本显示在气泡里。
+    // 降级必须回到「原始纯文本」重新转义，既保持 fail-closed 又不泄漏标签。
+    return escapeHtml(plainFallback ?? html).replace(/\n/g, '<br/>');
 }
 
 /**
@@ -541,8 +545,9 @@ function renderAnswerHtml(rawContent: any) {
             // CommonMark 不认这种语法；在 marked 解析前归一化（公式已遮蔽、代码受保护）
             const preprocessed = normalizeEmphasisSpacing(mathMasked);
             const parsed = markedLib.value.parse(preprocessed);
-            // 先消毒（占位符是纯文本，安全通过）
-            html = sanitizeHtml(parsed);
+            // 先消毒（占位符是纯文本，安全通过）；降级时用原文而非 parsed，
+            // 避免 <p> 等结构标签以字面量出现在回复气泡中
+            html = sanitizeHtml(parsed, trimmed);
             // 再用 KaTeX 渲染数学公式（在 sanitize 之后，避免 KaTeX HTML 被杀）
             if (katexLib.value) {
                 html = renderMathInHtml(html, katexLib.value, ctx.store);
@@ -576,8 +581,8 @@ function renderThinkHtml(rawContent: any) {
             const mathMasked = extractMathExpressions(think, ctx);
             const preprocessed = normalizeEmphasisSpacing(mathMasked);
             const parsed = markedLib.value.parse(preprocessed);
-            // 先消毒（占位符是纯文本，安全通过）
-            let html = sanitizeHtml(parsed);
+            // 先消毒（占位符是纯文本，安全通过）；降级时用原文而非 parsed
+            let html = sanitizeHtml(parsed, think);
             // 再用 KaTeX 渲染数学公式（在 sanitize 之后）
             if (katexLib.value) {
                 html = renderMathInHtml(html, katexLib.value, ctx.store);

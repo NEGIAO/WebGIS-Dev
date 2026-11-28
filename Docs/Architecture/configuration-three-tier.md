@@ -1,4 +1,6 @@
 # 三层配置架构（L1/L2/L3）— 系统运行全景
+> 架构核对：2026-11-28 · V3.7.18（以当前代码为准；历史决策记录 `decisions/` 不改写；文中行号仅作导航，以符号名为准）。
+
 
 > 状态：已全量落地（V3.4.6 → V3.4.13，配置架构计划阶段 0–6 完成）
 > 使用手册：[Docs/Guide/configuration.md](../Guide/configuration.md) ·
@@ -14,7 +16,7 @@
 ```mermaid
 flowchart TB
     subgraph SRC["配置来源（三层安全模型）"]
-        L1["L1 deploy/.env<br/>（deploy/.env.example = 146 key 全集清单）<br/>低密常量 · 模板提交 git"]
+        L1["L1 deploy/.env<br/>（deploy/.env.example = 147 key 全集清单）<br/>低密常量 · 模板提交 git"]
         L2["L2 Admin 面板 + SQLite<br/>system_config · api_keys 池 · announcements<br/>运营常变 · 免重启生效"]
         L3["L3 HF Space Secrets<br/>（本地 = 未提交私密 .env）<br/>绝密 · 不进 git / DB / 前端"]
     end
@@ -56,7 +58,7 @@ flowchart TB
 
     subgraph FE["前端（Vue 3 + Vite）"]
         ENVF["构建期 env（L1 前端段 · 统一收敛 deploy/）<br/>deploy/.env（npm run build 读取）<br/>deploy/.env.local（npm run dev 读取）"]
-        PRT["src/config/publicRuntime.ts<br/>基址单点派生 + 4 个 URL helper<br/>全 src 唯一 import.meta.env 读取点"]
+        PRT["src/config/publicRuntime.ts<br/>基址单点派生 + 2 个 URL helper<br/>全 src 唯一 import.meta.env 读取点"]
         CONS["axios client ｜ 底图源 URL（经 publicRuntime helper 拼接）+ 代理兜底 ｜ 下载超时<br/>⚠️ 原『12 处』未逐项核验，仅作历史表述"]
     end
 
@@ -91,7 +93,7 @@ flowchart TB
 
 | 模块 | 职责 |
 |------|------|
-| `catalog.py` | 139 key 元数据登记（层级/默认值/secret 标记），与 `deploy/.env.example` 对应；部署拓扑默认常量单源 |
+| `catalog.py` | 161 key 元数据登记（层级/默认值/secret 标记），与 `deploy/.env.example` 对应；部署拓扑默认常量单源 |
 | `load.py` | 启动加载 env 文件 → 冻结 `BackendSettings`（lru_cache 快照）；`get_str/get_int/get_float/get_bool`（缺省回退 catalog 默认、数值越界钳制）；`masked_summary()` 脱敏摘要 |
 | `runtime.py` | L2 覆盖读取 `get_effective_str`：`system_config(DB) ▸ L1 env ▸ default`；**catalog 标记为绝密的 key 走 DB 直接抛 `ValueError`** |
 | `public.py` | `build_public_config()`：非密值 + 功能可用布尔（oauth_google/github、email、agent_env_key、amap、supabase），无任何明文 |
@@ -126,7 +128,7 @@ Vite 原生 `.env` 加载已关闭（`envDir: false`），根目录无任何 `.e
 Vite 只把 `VITE_*` 前缀项注入构建产物，`deploy/.env` 中的后端/绝密变量不会泄漏 →
 `src/config/publicRuntime.ts` 单点派生
 `BACKEND_BASE_URL` / `TILE_PROXY_BASE_URL` / `TILE_PROXY_MODE` / `DOWNLOAD_REQUEST_TIMEOUT_MS`
-等常量，以及 `backendUrl` / `tileProxyUrl` / `gcj2wgsProxyUrl` / `bd2wgsProxyUrl` 四个 URL helper。
+等常量，以及 `backendUrl` / `tileProxyUrl` 两个 URL helper；纠偏/直通 URL 由 `common/basemap/definitions/resolveTileUrl.ts` 统一拼装。
 实际读取的 `VITE_*` 远不止四项（超时、第三方端点、OAuth、静态资源候选链等，见 `publicRuntime.ts:46-172`）；
 axios 基址、底图源 URL、瓦片代理兜底、下载超时全部由此拼接（原「12 处底图源 URL」说法 ⚠️ 未逐项核验）；
 src 内已无任何硬编码部署域名。

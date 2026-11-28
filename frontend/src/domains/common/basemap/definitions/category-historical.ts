@@ -10,7 +10,7 @@ import type { TileLayerDefinition } from './types';
 
 const definitions: TileLayerDefinition[] = [
     {
-        order: 116,
+        order: 112,
         id: 'imagery_s2_cloudless_2016',
         name: 'Sentinel无云2016',
         catalogCategory: 'historical',
@@ -22,7 +22,7 @@ const definitions: TileLayerDefinition[] = [
         method: 'xyz',
     },
     {
-        order: 117,
+        order: 113,
         id: 'imagery_s2_cloudless_2017',
         name: 'Sentinel无云2017',
         catalogCategory: 'historical',
@@ -34,7 +34,7 @@ const definitions: TileLayerDefinition[] = [
         method: 'xyz',
     },
     {
-        order: 118,
+        order: 114,
         id: 'imagery_s2_cloudless_2018',
         name: 'Sentinel无云2018',
         catalogCategory: 'historical',
@@ -46,7 +46,7 @@ const definitions: TileLayerDefinition[] = [
         method: 'xyz',
     },
     {
-        order: 119,
+        order: 115,
         id: 'imagery_s2_cloudless_2019',
         name: 'Sentinel无云2019',
         catalogCategory: 'historical',
@@ -58,7 +58,7 @@ const definitions: TileLayerDefinition[] = [
         method: 'xyz',
     },
     {
-        order: 120,
+        order: 116,
         id: 'imagery_s2_cloudless_2020',
         name: 'Sentinel无云2020',
         catalogCategory: 'historical',
@@ -70,7 +70,7 @@ const definitions: TileLayerDefinition[] = [
         method: 'xyz',
     },
     {
-        order: 121,
+        order: 117,
         id: 'imagery_s2_cloudless_2021',
         name: 'Sentinel无云2021',
         catalogCategory: 'historical',
@@ -82,7 +82,7 @@ const definitions: TileLayerDefinition[] = [
         method: 'xyz',
     },
     {
-        order: 122,
+        order: 118,
         id: 'imagery_s2_cloudless_2022',
         name: 'Sentinel无云2022',
         catalogCategory: 'historical',
@@ -94,7 +94,7 @@ const definitions: TileLayerDefinition[] = [
         method: 'xyz',
     },
     {
-        order: 123,
+        order: 119,
         id: 'imagery_s2_cloudless_2023',
         name: 'Sentinel无云2023',
         catalogCategory: 'historical',
@@ -106,7 +106,7 @@ const definitions: TileLayerDefinition[] = [
         method: 'xyz',
     },
     {
-        order: 124,
+        order: 120,
         id: 'imagery_s2_cloudless_2024',
         name: 'Sentinel无云2024',
         catalogCategory: 'historical',
@@ -118,7 +118,7 @@ const definitions: TileLayerDefinition[] = [
         method: 'xyz',
     },
     {
-        order: 125,
+        order: 121,
         id: 'imagery_s2_cloudless_2025',
         name: 'Sentinel无云2025',
         catalogCategory: 'historical',

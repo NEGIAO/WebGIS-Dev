@@ -1,4 +1,6 @@
 # CI/CD 流水线（Pipeline）
+> 架构核对：2026-11-28 · V3.7.18（以当前代码为准；历史决策记录 `decisions/` 不改写；文中行号仅作导航，以符号名为准）。
+
 
 > 本文档详细分析 WebGIS 项目的 CI/CD 流水线架构。
 > 整体架构见 [system-architecture.md](system-architecture.md)，域名映射见 [deployment-relationship.md](deployment-relationship.md)

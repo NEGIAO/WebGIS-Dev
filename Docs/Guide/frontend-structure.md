@@ -446,16 +446,16 @@ frontend/src/
 │   │   │   │   ├── taxonomy.ts  # 底图分类判定（仅改 metadata，不改 id/顺序/编号）
 │   │   │   │   └── types.ts  # 统一底图目录类型（引擎无关，纯数据）
 │   │   │   ├── comboBasemaps.ts  # 组合底图 id 判定 isComboBasemapId（纯数据；组合条目经 catalog tags 进入目录树）
-│   │   │   ├── definitions/  # 瓦片底图层定义 SSOT（205 条，OL/Cesium 共用，零引擎依赖）
+│   │   │   ├── definitions/  # 瓦片底图层定义 SSOT（203 条，OL/Cesium 共用，零引擎依赖）
 │   │   │   │   ├── types.ts  # TileLayerDefinition（含 zBand 渲染带）/ TileLoadMethod / CoordCorrection / ProxyMode / TileLayerContext
 │   │   │   │   ├── resolveTileUrl.ts  # 纯函数：占位符替换 + 纠偏/代理拼 URL（不读 publicRuntime）
 │   │   │   │   ├── validate.ts  # 定义校验：id/order 唯一、order 连续、correction+direct 冲突等
 │   │   │   │   ├── category-service.ts  # 服务类定义（2 条）
-│   │   │   │   ├── category-imagery.ts  # 影像类定义（25 条）
-│   │   │   │   ├── category-terrain.ts  # 地形类定义（37 条，含 Maps-for-Free 12 条）
-│   │   │   │   ├── category-electronic.ts  # 电子类定义（97 条，含纠偏 24 条、proxy 3 条、skipHighResTile 9 条）
-│   │   │   │   ├── category-historical.ts  # 历史类定义（11 条）
-│   │   │   │   ├── category-vector.ts  # 矢量类定义（2 条，MVT，仅 OL）
+│   │   │   │   ├── category-imagery.ts  # 影像类定义（28 条）
+│   │   │   │   ├── category-terrain.ts  # 地形类定义（39 条，含 Maps-for-Free 12 条）
+│   │   │   │   ├── category-electronic.ts  # 电子类定义（116 条，含纠偏/proxy/skipHighResTile 声明；MapTiler ocean-v4、Stamen 水彩、Stadia 户外属电子专题）
+│   │   │   │   ├── category-historical.ts  # 历史类定义（10 条）
+│   │   │   │   ├── category-vector.ts  # 矢量类定义（8 条，MVT，仅 OL；含 CARTO 6 种官方样式）
 │   │   │   │   ├── category-recommended.ts  # 精选底图显式清单（20 条 preset id，可自由增删改，与预设顺序解耦）
 │   │   │   │   └── index.ts  # 聚合 TILE_LAYER_DEFINITIONS（按 order 排序）+ getDescriptorById / resolveRuntimeTokenPoolKey
 │   │   │   ├── ui/

@@ -7,7 +7,7 @@
  * nonStandardAdapter 字符串 ID，不持有此表。
  */
 
-import { buildBingQuadKeyAdapter, buildMapsForFreeAdapter } from '@ol/tile-source';
+import { buildBaiduTileAdapter, buildBingQuadKeyAdapter, buildMapsForFreeAdapter } from '@ol/tile-source';
 import type { NonStandardXYZAdapter } from '@ol/tile-source';
 
 export const NON_STANDARD_XYZ_ADAPTERS: Record<string, NonStandardXYZAdapter> = {
@@ -15,6 +15,8 @@ export const NON_STANDARD_XYZ_ADAPTERS: Record<string, NonStandardXYZAdapter> = 
     'bing-aerial': buildBingQuadKeyAdapter('a', 'jpeg', 'Bing影像'),
     'bing-road': buildBingQuadKeyAdapter('r', 'png', 'Bing道路'),
     'bing-hybrid': buildBingQuadKeyAdapter('h', 'jpeg', 'Bing混合影像'),
+    // 百度自有网格：仅改 xy/z 拼装，不套代理、不做坐标纠偏
+    'baidu': buildBaiduTileAdapter('百度地图'),
     'maps-for-free-relief': buildMapsForFreeAdapter('relief', '地形浮雕(MFF)', 'jpg'),
     'maps-for-free-water': buildMapsForFreeAdapter('water', '水体(MFF)'),
     'maps-for-free-admin': buildMapsForFreeAdapter('admin', '行政边界(MFF)'),

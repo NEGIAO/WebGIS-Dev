@@ -16,9 +16,9 @@ const expect = (condition, message) => {
     if (!condition) failures.push(message);
 };
 
-// 181 是本批冻结基线，只允许追加不允许回退；末项 id 不再硬编码，
-// 否则每加一个新预设都要改门禁，违背「追加不改编号」契约。
-const MIN_PRESET_COUNT = 181;
+// 174 是连续删除重复/失效预设后的冻结基线，只允许追加不允许回退；
+// 末项 id 不再硬编码，否则每加一个新预设都要改门禁。
+const MIN_PRESET_COUNT = 174;
 expect(ids.length >= MIN_PRESET_COUNT, `预设数量不得回退到 ${MIN_PRESET_COUNT} 以下，实际 ${ids.length}`);
 expect(new Set(ids).size === ids.length, '存在重复 preset id');
 expect(ids[0] === 'local_tiles_preset', `首个预设应为 local_tiles_preset，实际 ${ids[0]}`);
@@ -28,11 +28,12 @@ expect(Boolean(ids.at(-1)), '末个预设 id 为空');
 const amap = ids.filter((id) => id.startsWith('vector_amap_256_ltype_'));
 const google = ids.filter((id) => id.startsWith('vector_google_combo_'));
 expect(amap.length === 20, `AMAP 256 组合应为 20，实际 ${amap.length}`);
-expect(google.length === 30, `Google 组合应为 30，实际 ${google.length}`);
+// 删除 Google 标准电子与 PB纯路网两对重复组合后，组合数 30→26（各 15→13）。
+expect(google.length === 26, `Google 组合应为 26，实际 ${google.length}`);
 expect(amap.filter((id) => /_gcj_preset$/.test(id)).length === 10, 'AMAP GCJ 组合应为 10');
 expect(amap.filter((id) => /_wgs_preset$/.test(id)).length === 10, 'AMAP WGS 组合应为 10');
-expect(google.filter((id) => /_gcj_preset$/.test(id)).length === 15, 'Google GCJ 组合应为 15');
-expect(google.filter((id) => /_wgs_preset$/.test(id)).length === 15, 'Google WGS 组合应为 15');
+expect(google.filter((id) => /_gcj_preset$/.test(id)).length === 13, 'Google GCJ 组合应为 13');
+expect(google.filter((id) => /_wgs_preset$/.test(id)).length === 13, 'Google WGS 组合应为 13');
 
 // V3.7.27：精选底图显式清单校验——每个推荐 id 必须存在于预设表且无重复。
 const recommendedFile = resolve(

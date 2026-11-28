@@ -213,7 +213,6 @@ export const BASEMAP_PRESETS: BasemapPresetDefinition[] = [
         label: '深色阴影',
         stack: ['terrain_arcgis_elev_hillshade_dark', 'label_tianditu'],
     },
-    { id: 'terrain_google_preset', label: '山体', stack: ['vector_google_combo_pb_hillshade_wgs'] },
     { id: 'terrain_opentopomap_preset', label: '开放地形', stack: ['terrain_opentopomap'] },
     { id: 'terrain_esa_preset', label: '欧空局地形', stack: ['terrain_esa'] },
 
@@ -482,16 +481,6 @@ export const BASEMAP_PRESETS: BasemapPresetDefinition[] = [
     },
     // Google 全组合（依据 Google_tiles.md）：GCJ 原生与 WGS 原生均提供两种坐标格式，追加在末尾保持 l 索引不变
     {
-        id: 'vector_google_combo_standard_gcj_preset',
-        label: '标准电子',
-        stack: ['vector_google_combo_standard_gcj'],
-    },
-    {
-        id: 'vector_google_combo_standard_wgs_preset',
-        label: '标准电子',
-        stack: ['vector_google_combo_standard_wgs'],
-    },
-    {
         id: 'vector_google_combo_hybrid_gcj_preset',
         label: '混合影像',
         stack: ['vector_google_combo_hybrid_gcj'],
@@ -560,16 +549,6 @@ export const BASEMAP_PRESETS: BasemapPresetDefinition[] = [
         id: 'vector_google_combo_pb_roadmap_wgs_preset',
         label: 'PB标准电子',
         stack: ['vector_google_combo_pb_roadmap_wgs'],
-    },
-    {
-        id: 'vector_google_combo_pb_roadline_gcj_preset',
-        label: 'PB纯路网',
-        stack: ['vector_google_combo_pb_roadline_gcj'],
-    },
-    {
-        id: 'vector_google_combo_pb_roadline_wgs_preset',
-        label: 'PB纯路网',
-        stack: ['vector_google_combo_pb_roadline_wgs'],
     },
     {
         id: 'vector_google_combo_satellite_wgs_preset',
@@ -641,7 +620,6 @@ export const BASEMAP_PRESETS: BasemapPresetDefinition[] = [
         stack: ['vector_amap_roads_gcj'],
     },
     { id: 'vector_baidu_preset', label: '百度地图(BD09)', stack: ['vector_baidu'] },
-    { id: 'ships66_direct_preset', label: '船舶网(直连)', stack: ['ships66_direct'] },
     {
         id: 'vector_amap_hd_wgs_preset',
         label: '高德地貌+建筑(512 WGS)',
@@ -701,7 +679,6 @@ export const BASEMAP_PRESETS: BasemapPresetDefinition[] = [
     },
     { id: 'terrain_usgs_topo_preset', label: 'USGS地形图', stack: ['terrain_usgs_topo'] },
     { id: 'imagery_usgs_preset', label: 'USGS影像', stack: ['imagery_usgs'] },
-    { id: 'imagery_usgs_topo_preset', label: 'USGS影像地形', stack: ['imagery_usgs_topo'] },
     { id: 'label_openseamap_preset', label: 'OpenSeaMap海图注记', stack: ['label_openseamap'] },
     {
         id: 'vector_openrailwaymap_preset',
@@ -718,6 +695,48 @@ export const BASEMAP_PRESETS: BasemapPresetDefinition[] = [
         label: 'NASA VIIRS夜间灯光',
         stack: ['imagery_nasa_viirs_night'],
     },
+    // CARTO Basemaps 全量栅格/矢量样式（官方 7 栅格 + 6 矢量）
+    { id: 'vector_carto_voyager_nolabels_preset', label: 'CARTO Voyager无注记', stack: ['vector_carto_voyager_nolabels'] },
+    { id: 'vector_carto_voyager_labels_under_preset', label: 'CARTO Voyager注记在下', stack: ['vector_carto_voyager_labels_under'] },
+    { id: 'vector_carto_mvt_voyager_preset', label: 'CARTO矢量Voyager', stack: ['vector_carto_mvt_voyager'] },
+    { id: 'vector_carto_mvt_voyager_nolabels_preset', label: 'CARTO矢量Voyager无注记', stack: ['vector_carto_mvt_voyager_nolabels'] },
+    { id: 'vector_carto_mvt_positron_preset', label: 'CARTO矢量极简', stack: ['vector_carto_mvt_positron'] },
+    { id: 'vector_carto_mvt_positron_nolabels_preset', label: 'CARTO矢量极简无注记', stack: ['vector_carto_mvt_positron_nolabels'] },
+    { id: 'vector_carto_mvt_dark_matter_preset', label: 'CARTO矢量深色', stack: ['vector_carto_mvt_dark_matter'] },
+    { id: 'vector_carto_mvt_dark_matter_nolabels_preset', label: 'CARTO矢量深色无注记', stack: ['vector_carto_mvt_dark_matter_nolabels'] },
+    // 公开免 key 矢量瓦片：OpenFreeMap / VersaTiles / MapLibre Demotiles
+    { id: 'vector_ofm_bright_preset', label: 'OFM明亮矢量', stack: ['vector_ofm_bright'] },
+    { id: 'vector_ofm_positron_preset', label: 'OFM极简矢量', stack: ['vector_ofm_positron'] },
+    { id: 'vector_ofm_dark_preset', label: 'OFM深色矢量', stack: ['vector_ofm_dark'] },
+    { id: 'vector_ofm_fiord_preset', label: 'OFM蓝调矢量', stack: ['vector_ofm_fiord'] },
+    { id: 'vector_versatiles_colorful_preset', label: 'VersaTiles彩色矢量', stack: ['vector_versatiles_colorful'] },
+    { id: 'vector_maplibre_demo_preset', label: 'MapLibre演示矢量', stack: ['vector_maplibre_demo'] },
+    { id: 'vector_stadia_alidade_smooth_preset', label: 'Stadia柔和', stack: ['vector_stadia_alidade_smooth'] },
+    { id: 'vector_stadia_alidade_smooth_dark_preset', label: 'Stadia柔和深色', stack: ['vector_stadia_alidade_smooth_dark'] },
+    { id: 'vector_stadia_alidade_bright_preset', label: 'Stadia明亮', stack: ['vector_stadia_alidade_bright'] },
+    { id: 'vector_stadia_outdoors_preset', label: 'Stadia户外', stack: ['vector_stadia_outdoors'] },
+    { id: 'vector_stadia_osm_bright_preset', label: 'Stadia OSM明亮', stack: ['vector_stadia_osm_bright'] },
+    { id: 'vector_stadia_stamen_toner_preset', label: 'Stadia黑白', stack: ['vector_stadia_stamen_toner'] },
+    { id: 'vector_stadia_stamen_terrain_preset', label: 'Stadia地形', stack: ['vector_stadia_stamen_terrain'] },
+    { id: 'vector_stadia_stamen_watercolor_preset', label: 'Stadia水彩', stack: ['vector_stadia_stamen_watercolor'] },
+    { id: 'vector_maptiler_streets-v4_preset', label: 'MapTiler街道', stack: ['vector_maptiler_streets-v4'] },
+    { id: 'vector_maptiler_dataviz-v4-light_preset', label: 'MapTiler数据浅色', stack: ['vector_maptiler_dataviz-v4-light'] },
+    { id: 'vector_maptiler_dataviz-v4-dark_preset', label: 'MapTiler数据深色', stack: ['vector_maptiler_dataviz-v4-dark'] },
+    { id: 'vector_maptiler_topo-v4_preset', label: 'MapTiler地形', stack: ['vector_maptiler_topo-v4'] },
+    { id: 'vector_maptiler_outdoor-v4_preset', label: 'MapTiler户外', stack: ['vector_maptiler_outdoor-v4'] },
+    { id: 'vector_jawg_streets_preset', label: 'Jawg街道', stack: ['vector_jawg_streets'] },
+    { id: 'vector_jawg_dark_preset', label: 'Jawg深色', stack: ['vector_jawg_dark'] },
+    { id: 'vector_jawg_light_preset', label: 'Jawg浅色', stack: ['vector_jawg_light'] },
+    { id: 'vector_jawg_terrain_preset', label: 'Jawg地形', stack: ['vector_jawg_terrain'] },
+    { id: 'vector_jawg_lagoon_preset', label: 'Jawg蓝调', stack: ['vector_jawg_lagoon'] },
+    { id: 'vector_jawg_sunny_preset', label: 'Jawg暖色', stack: ['vector_jawg_sunny'] },
+    { id: 'vector_jawg_blueprint_preset', label: 'Jawg蓝图', stack: ['vector_jawg_blueprint'] },
+    { id: 'vector_protomaps_light_preset', label: 'Protomaps明亮', stack: ['vector_protomaps_light'] },
+    { id: 'vector_protomaps_dark_preset', label: 'Protomaps深色', stack: ['vector_protomaps_dark'] },
+    { id: 'vector_protomaps_white_preset', label: 'Protomaps白色', stack: ['vector_protomaps_white'] },
+    { id: 'vector_protomaps_grayscale_preset', label: 'Protomaps灰度', stack: ['vector_protomaps_grayscale'] },
+    { id: 'vector_protomaps_black_preset', label: 'Protomaps黑色', stack: ['vector_protomaps_black'] },
+    { id: 'vector_americana_preset', label: 'OSM Americana矢量', stack: ['vector_americana'] },
 ];
 
 /** Preset labels use the public 1-based URL layer number. */

@@ -42,6 +42,7 @@ export const RECOMMENDED_BASEMAPS: readonly RecommendedBasemapEntry[] = [
     { presetId: 'arcgis_imagery_preset', note: 'ESRI影像 [theme_arcgis_imagery_root, label_tianditu]' },
     { presetId: 'imagery_google_standard_preset', note: 'Google标准电子(GCJ) [imagery_google_standard]' },
     { presetId: 'vector_Google_clean_preset', note: 'Google简洁地形(WGS) [vector_Google_clean]' },
+    { presetId: 'custom_China_Blender_preset_2', note: 'China Blender2 [custom_China_Blender, label_tianditu_vector]' },
 ] as const;
 
 /** 推荐 preset id 集合（O(1) 判定；模块加载时构建一次） */

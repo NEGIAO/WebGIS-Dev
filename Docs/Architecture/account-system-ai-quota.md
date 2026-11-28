@@ -1,4 +1,6 @@
 # 账号体系与 AI 配额架构说明
+> 架构核对：2026-11-28 · V3.7.18（以当前代码为准；历史决策记录 `decisions/` 不改写；文中行号仅作导航，以符号名为准）。
+
 
 日期：2026-08-05
 
@@ -104,7 +106,7 @@ def normalize_role(raw_role: Optional[str], username: Optional[str]) -> str:
 
 `resolve_quota_subject` 决定配额计量的唯一标识：
 
-- 访客：无 token 时 `guest_uid = H(XFF 末跳 IP|UA)`（设备 ID 不参与桶派生，前端自报 `X-Client-IP` 已停用）；持签名 guest token 时验签取 uid（`dependencies.py:108-122`）。两者保证同一身份稳定共享配额。
+- 访客：必须持后端签发且命中 `sessions` 的验签 guest token，uid 来自 token；无 token 一律 401 `GUEST_TOKEN_REQUIRED`。签发按身份 IP（XFF 最右侧公网跳）+ UA 限频 6 次/小时，前端自报 `X-Client-IP` 与设备 ID 不参与身份桶。
 - 注册用户 / 管理员：使用 `username`。
 
 ## 4. 注册登录与会话管理
@@ -146,7 +148,7 @@ sequenceDiagram
 - **存储**：`sessions` 表，token 为 `secrets.token_urlsafe(32)`。
 - **有效期**：`SESSION_EXPIRE_HOURS = 4`（环境变量 `AUTH_SESSION_EXPIRE_HOURS` 可覆盖，硬上限 4 小时）。
 - **读取时自动维护**：`_get_session_sync` 在每次读取时执行 `normalize_role` 修正 role、同步 `requires_email_binding` 状态、过期自动删除并记录在线时长到 `user_metrics`。
-- **无 token 直接拒绝（V3.7.6 fail-closed）**：`require_login` 不再凭 `X-Share-Mode` / `?s=1` / 设备头铸造临时会话；无 token 一律返回 **401 `LOGIN_REQUIRED`**（`dependencies.py:161-167`）。2 小时临时 guest session（`is_temporary=True`）改由 `require_api_access_or_guest` 为游客可达端点铸造（`dependencies.py:290`）。
+- **无 token 直接拒绝（V3.7.16 fail-closed）**：`require_login` 与 `require_api_access_or_guest` 都不再凭 `X-Share-Mode` / `?s=1` / 设备头铸造临时会话；无 token 一律 401（`LOGIN_REQUIRED` 或 `GUEST_TOKEN_REQUIRED`）。游客身份唯一入口是 `POST /auth/guest/session`， session 显式 `is_temporary=false`、`temporary_credential=""`；DB 故障返回 503 `AUTH_DB_UNAVAILABLE`。
 
 ### 4.5 依赖注入层级
 
@@ -406,7 +408,7 @@ def _get_admin_password() -> str:
 
 1. **按次计量，非按 token**：配额仅统计调用次数，不区分短问短答与长文生成的资源消耗差异。
 2. **SQLite 并发瓶颈**：高并发场景下 SQLite 写锁可能成为配额递增的性能瓶颈（当前 WAL 模式已缓解，但未做连接池）。
-3. **游客配额仍有边界**：无 token 桶已改 `H(XFF 末跳 IP|UA)` 并叠加签名 guest token（签发限频 6 次/小时）；前端不再能靠伪造 `X-Client-IP` / 轮换设备 ID 续杯，但更换网络出口仍可换桶。
+3. **游客配额仍有边界**：身份只认验签 token 且必须命中 `sessions`，签发限频 6 次/小时；前端不能再靠伪造 `X-Client-IP` / 轮换设备 ID 续杯，但更换网络出口后可重新签发。
 4. **单管理员模型**：仅支持一个 `admin` 账号，无多管理员、RBAC 细粒度权限。
 5. **密钥轮询策略简单**：备用 key 仅在主 key 返回 503 + "key/rate-limit" 时切换，不处理上游 429 直接返回的场景（上游 429 被映射为 503 但 detail 为 "rate-limited upstream"，可触发轮询）。
 6. **无审计日志**：管理员配置变更无独立审计追踪（仅 `updated_at` / `updated_by` 字段）。

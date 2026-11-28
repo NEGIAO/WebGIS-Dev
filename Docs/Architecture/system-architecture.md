@@ -1,4 +1,6 @@
 # 系统架构（System Architecture）
+> 架构核对：2026-11-28 · V3.7.18（以当前代码为准；历史决策记录 `decisions/` 不改写；文中行号仅作导航，以符号名为准）。
+
 
 > 本文档以**分层架构图**展示 WebGIS 项目的完整工程链路：源码 → CI/CD → 多平台部署 → 运行时 → 用户。
 > 各层的详细分解见姊妹文档：[cicd-pipeline.md](cicd-pipeline.md) · [deployment-relationship.md](deployment-relationship.md)
@@ -196,14 +198,15 @@ tiles.negiao.cc.cd"]
 | `negiao.github.io` | GitHub Pages 默认 | ❌ | ⚠️ 不稳定 | 主页仓库 |
 | `negiao.cloud-ip.cc` | GitHub Pages + 自定义域 | ✅ 可配 | ✅ 可访问 | 主页仓库 |
 | `negiao.cc.cd` | Cloudflare Pages | ✅ Cloudflare | ❌ 被屏蔽 | 主页仓库 |
-| `negiao.pages.dev` | Cloudflare Pages 默认 | ✅ Cloudflare | ❌ 被屏蔽 | 主页仓库 |
+| `negiao.pages.dev` | Cloudflare Pages 默认 | ✅ Cloudflare | ✅ 流畅 | 主页仓库 |
 | `negiao-pages.share.connect.posit.cloud` | Posit Connect 默认 | ❌ | ✅ 可访问 | 主页仓库 |
 | `negiao.vercel.app` | Vercel 默认 | ❌ | ❌ 不可访问 | 主页仓库 |
 
-### WebGIS 前端域名（7 个）
+### WebGIS 前端域名（8 个）
 
 | 域名 | 平台 | 来源 |
 |------|------|------|
+| `webgis.negiao.cn` | **正式域名（付费）** | CNAME → GitHub Pages |
 | `negiao.github.io/WebGIS-Dev` | GitHub Pages | WebGIS-Dev 仓库根路径 |
 | `negiao.github.io/WebGIS` | GitHub Pages | 主页仓库 `WebGIS/` 子目录 |
 | `negiao.cloud-ip.cc/WebGIS-Dev` | GitHub Pages + 自定义域 | 自动跳转 |

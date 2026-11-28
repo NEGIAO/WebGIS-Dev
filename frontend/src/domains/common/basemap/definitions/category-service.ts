@@ -10,7 +10,7 @@ import type { TileLayerDefinition } from './types';
 
 const definitions: TileLayerDefinition[] = [
     {
-        order: 157,
+        order: 152,
         id: 'custom',
         name: '自定义URL',
         catalogCategory: 'service',
@@ -21,7 +21,7 @@ const definitions: TileLayerDefinition[] = [
         method: 'custom',
     },
     {
-        order: 158,
+        order: 153,
         id: 'local_tiles',
         name: '自定义瓦片',
         catalogCategory: 'service',

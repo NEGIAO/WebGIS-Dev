@@ -1,4 +1,6 @@
 # 多格式数据导入架构说明
+> 架构核对：2026-11-28 · V3.7.18（以当前代码为准；历史决策记录 `decisions/` 不改写；文中行号仅作导航，以符号名为准）。
+
 
 日期：2026-07-21
 
@@ -10,9 +12,9 @@
 
 本功能支持用户通过**文件选择**或**拖拽**方式，将多种 GIS 数据格式导入到 2D（OpenLayers）或 3D（Cesium）场景中，并自动定位到数据范围。
 
-支持的格式包括：GeoJSON、KML/KMZ、Shapefile（.shp + .dbf/.shx/.prj/.cpg）、GeoTIFF、GLB/GLTF、CZML、3D Tiles（ZIP 包或文件夹）。
+支持的格式包括：GeoJSON、KML/KMZ、Shapefile（.shp + .dbf/.shx/.prj/.cpg）、GeoTIFF、CSV/TXT/WKT、GLB/GLTF、CZML、3D Tiles（ZIP 包或文件夹）。
 
-**重要边界**：2D 管线与 3D 管线是**独立的两套实现**，共享底层解析工具（`shpParser.ts`、`crs/crs-engine.ts`、`decompressFile.ts`），但上层的格式路由、图层创建、相机定位逻辑完全分离。2D 管线不处理 GLTF/CZML/3D Tiles；3D 管线不处理 GeoTIFF 栅格。
+**重要边界**：2D 管线与 3D 管线是**独立的两套实现**，共享底层解析工具（`shpParser.ts`、`crs/crs-engine.ts`、`decompressFile.ts`），但上层的格式路由、图层创建、相机定位逻辑完全分离。2D 管线不处理 GLTF/CZML/3D Tiles；3D 管线已支持 GeoTIFF（`useCesiumDataImport.ts` 路由至 `loadGeoTIFF`，含栅格缓存与高程网格）。
 
 ## 2. 文件结构
 
@@ -25,7 +27,7 @@
 | `domains/common/data-import/crs/crs-engine.ts` | proj4 坐标参考引擎完整实现（19KB）：PRJ WKT 识别、EPSG 注册、`reprojectGeoJSON` 逐坐标转换；根目录 `crs-engine.ts` 仅 353B re-export 门面 |
 | `domains/common/data-import/crsAware.ts` | 投影感知辅助：`detectGeoJsonProjection`、`detectKmlProjectionHint`、`detectShpProjectionFromPrj` |
 | `domains/ol/data-import/composables/useLayerDataImport.ts` | 2D/OL 导入主管线：矢量要素创建、栅格图层渲染、自动定位 |
-| `domains/ol/data-import/composables/useGisLoader.ts` | 2D 管线的分发桥接层：文件夹/ZIP 递归扫描、SHP 分组、调用 `dispatchGisData` |
+| `domains/common/data-import/useGisLoader.ts` | 2D 管线的分发桥接层：文件夹/ZIP 递归扫描、SHP 分组、调用 `dispatchGisData` |
 | `domains/cesium/composables/dataImport/useCesiumDataImport.ts` | 3D/Cesium 导入主管线：DataSource 加载、3D Tiles blob URL 方案、GLTF 坐标提取 |
 | `domains/cesium/components/CesiumContainer.vue` | 3D 场景容器：拖拽事件监听（`@drop.prevent="onDrop"`）→ 调用 `loadDataFile` |
 
@@ -99,7 +101,7 @@ flowchart TD
 
 ### 5.4 自动定位
 
-首个成功导入的图层触发 `map.getView().fit(extent, { padding: [50,50,50,50], maxZoom: 18, duration: 900 })`，范围通过 `projectExtentToMapView` 从源投影转换到视图投影。
+首个成功导入的**矢量**图层触发 `map.getView().fit(extent, { padding: [50,50,50,50], duration: 1000 })`；栅格图层另有 `maxZoom: 18, duration: 900` 参数，范围通过 `projectExtentToMapView` 从源投影转换到视图投影。
 
 ## 6. 3D 导入管线（useCesiumDataImport.ts）
 
@@ -127,7 +129,7 @@ switch (ext) {
 
 `flyToEntity(viewer, Cesium, entity, format)` 统一处理：
 
-- **3D Tiles**：`viewer.flyTo(tileset, { offset: HeadingPitchRange(0, -30°, radius×2) })`
+- **3D Tiles**：`viewer.flyTo(tileset, { offset: HeadingPitchRange(0, -45°, radius×3.5), duration: 1.5 })`
 - **DataSource**（GeoJSON/KML/CZML/SHP）：`viewer.flyTo(dataSource, { duration: 2 })`
 - **GLTF**：`camera.flyTo` 到模型坐标上方 500m
 
@@ -300,7 +302,7 @@ const model = await Cesium.Model.fromGltfAsync({ url: blobUrl, modelMatrix });
 **现有局限：**
 
 1. **2D/3D 管线割裂**：两套管线各自维护格式路由和加载逻辑，新增格式需在两处分别实现。
-2. **3D 管线无栅格支持**：Cesium 侧不处理 GeoTIFF，无法在 3D 场景中叠加栅格影像。
+2. **3D 栅格支持边界**：Cesium 侧已能加载 GeoTIFF 并生成栅格高度网格，但超大影像仍受浏览器内存与 `rasterCache` 上限约束。
 3. **Shapefile 编码猜测**：DBF 编码依赖 CPG/LDID/UTF-8 探测链，对无 CPG 且 LDID 为 0 的文件可能误判。
 4. **3D Tiles 内存开销**：blob URL 方案将整个 ZIP 的所有文件同时驻留内存，超大 tileset（>1GB）可能导致浏览器 OOM。
 5. **GLTF 坐标提取有限**：仅支持 CESIUM_RTC、asset.extras、首 node matrix 三种来源，不处理多 node 或 mesh primitive 级别的变换。

@@ -1,4 +1,6 @@
 # Cesium 统一图层管理 — 设计文档
+> 架构核对：2026-11-28 · V3.7.18（以当前代码为准；历史决策记录 `decisions/` 不改写；文中行号仅作导航，以符号名为准）。
+
 
 > 状态：**已实施（两步走全量落地，版本见[根 README](../../README.md)）**；决策点已拍板：分组内平铺、2D 模式隐藏（随容器清档自动实现）、
 > 数据生命周期跟随容器（卸载即清档）；矢量透明度、属性表/样式/编辑/导出均已落地。实施日志：`Docs/LLM_record/26-07/2026-07-26/2026-07-26-cesium-unified-layer-mgmt-impl.md`
@@ -16,7 +18,7 @@ Cesium 侧导入的数据（GeoJSON/KML/CZML/SHP/TIF/GLB/3D Tiles）目前只活
 （树形分组、capabilities 驱动的可见/定位/删除/属性表/样式/导出/编辑）。
 
 **割裂点**：3D 模式下侧栏 TOC 显示的仍是 2D 图层树，Cesium 数据不在其中——
-用户需要在两个面板间跳转，且 3D 数据没有可见性开关与不透明度控制。
+（历史割裂点）用户曾需要在两个面板间跳转；V3.7.16 已通过 `cesiumLayers.ts` / `useCesiumLayerAdapter.ts` 补齐可见性与不透明度闭环。
 
 ## 2. 现状盘点（代码坐标）
 
@@ -24,8 +26,8 @@ Cesium 侧导入的数据（GeoJSON/KML/CZML/SHP/TIF/GLB/3D Tiles）目前只活
 |------|----------|--------|
 | 记录列表 | Pinia store + `layerTreeBuilder.toLayerNode` 节点契约 | `useCesiumDataImport.loadedDataSources`（组件内 ref） |
 | 树形分组 UI | `domains/common/layer-tree/components/TOCPanel.vue`（capabilities 驱动） | 数据页签卡片平铺列表 |
-| 可见性开关 | ✅ | ❌（只能删除） |
-| 不透明度 | ✅ | ❌（仅 tileset 有材质模式） |
+| 可见性开关 | ✅ | ✅ `cesiumLayers.ts setVisible` / `cesiumLayerNodeBuilder.ts visible` |
+| 不透明度 | ✅ | ✅ `setOpacity` / `supportsOpacity`（矢量 per-entity 快照、影像 alpha、模型 color、tileset style） |
 | 定位 / 删除 | ✅ | ✅ `flyToDataSource` / `removeDataSource` |
 | 属性表 / 样式 / 编辑 / 导出 | ✅ | ✅（本期已落地，见 §5 / §6） |
 | 类型特化 | — | ✅ glTF 重定位、TIF 拉伸高程、tileset 高程/材质 |
@@ -109,7 +111,7 @@ interface CesiumLayerRecord {
 
 | type | visible 实现 | opacity 实现 | 备注 |
 |------|--------------|--------------|------|
-| geojson/kml/kmz/czml/shp/wayline/draw/route | `DataSource.show` | ✅ per-entity 原色快照 × alpha（已落地） | WeakMap 快照原始色可反复调节；动态颜色属性（isConstant=false）跳过保留 CZML 动画；rAF 合并抗滑杆高频 |
+| geojson/kml/kmz/czml/shp/wayline/draw/route | `DataSource.show` | ✅ per-entity 原色快照 × alpha（已落地） | WeakMap 快照原始色可反复调节；动态颜色属性不再跳过，而是包装为缩放 `CallbackProperty`（见 `vectorColorScaling.ts`），保留 CZML 等时间动态语义；rAF 合并抗滑杆高频 |
 | tif | `ImageryLayer.show` | `ImageryLayer.alpha` ✅ | 另有 heightMesh 需同步 show |
 | gltf | `Model.show` | `Model.color = WHITE.withAlpha(a)` ✅ | |
 | 3dtiles | `Cesium3DTileset.show` | `Cesium3DTileStyle color alpha` ✅ | 【风险】与现有 `applyTilesetMaterial` 都写 style，需在 adapter 内合成（材质模式 + alpha 单点生成 style），避免互相覆盖 |

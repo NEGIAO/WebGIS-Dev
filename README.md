@@ -131,7 +131,7 @@
 
 ## 🎯 项目简介
 
-**NEGIAO's WebGIS** 是一个功能完整、架构清晰的前后端分离 WebGIS 平台（当前版本 V3.7.16），前端托管于 GitHub Pages（正式域名 webgis.negiao.cn），后端以 Docker 部署在 Hugging Face Spaces，通过 RESTful API 通信，支持独立扩展。
+**NEGIAO's WebGIS** 是一个功能完整、架构清晰的前后端分离 WebGIS 平台（当前版本 V3.7.25），前端托管于 GitHub Pages（正式域名 webgis.negiao.cn），后端以 Docker 部署在 Hugging Face Spaces，通过 RESTful API 通信，支持独立扩展。
 
 > 📚 本 README 仅保留核心概览与导航。完整文档已模块化至 [`Docs/Guide/`](Docs/Guide/)，详见下方「文档导航」。
 >
@@ -145,7 +145,7 @@
 
 | 维度 | 实测规模 |
 |---|---|
-| 前端 | 637 个 TS 源文件 + 73 个 Vue 单文件组件（全量 TypeScript 严格模式，0 业务 `.js` 文件） |
+| 前端 | 812 个 TS 源文件 + 74 个 Vue 单文件组件（全量 TypeScript 严格模式，0 业务 `.js` 文件） |
 | 后端 | 70 个 Python 文件 / 约 2.15 万行，15 组 REST 路由 |
 | 文档 | `Docs/` 下 762 篇 Markdown（含 `Guide/` 14 篇、`Architecture/` 23 篇 + `decisions/` 3 篇、`LLM_record/` 逐次开发记录） |
 | 双语文案 | `zh-CN` / `en-US` 各 2000+ 行 i18n，30 个命名空间 |
@@ -156,7 +156,7 @@
 | 领域 | 说明 |
 |------|------|
 | 🗺️ 2D/3D 双引擎 | OpenLayers 10.11 + Cesium 1.146 一键切换，视图状态双向同步，URL 分享还原 |
-| 🌐 丰富底图源 | **91 个底图预设 / 107 个图层定义**：天地图、高德、腾讯、天地图矢量、ESRI（含 Wayback 历史影像）、Sentinel-2 Cloudless、OSM、奥维等；熔断回退、GCJ-02/BD-09 纠偏、自定义 XYZ 接入 |
+| 🌐 丰富底图源 | **214 个底图预设 / 235 个图层定义（合计 449 种底图）**；共六大类详细分类整理（精选 / 影像 / 地形 / 电子 / 历史影像 / 矢量瓦片），涵盖天地图、高德、腾讯、ESRI（含 Wayback 历史影像）、Sentinel-2 Cloudless、OSM、奥维，以及 CARTO / MapTiler / Stadia / Jawg / Protomaps / OpenFreeMap 等矢量瓦片；矢量瓦片已恢复直连渲染；另支持自定义 WMS / WMTS / MVT / XYZ 标准地图服务；熔断回退、GCJ-02 / BD-09 纠偏 |
 | 🧩 非标准瓦片在线纠偏 | **GCJ-02 / BD-09 → WGS-84**：高德、腾讯与 Google 中国的 GCJ-02 瓦片、百度的 BD-09 瓦片经独立纠偏服务**逐瓦片重采样**，输出与标准 XYZ 网格对齐的 256×256 影像，前端按普通底图直接加载，2D/3D 双引擎零改造；百度侧为跨网格重投影，另提供反向 `wgs2gcj` / `wgs2bd` 与通用直通代理 |
 | 🧭 图层管理（TOC） | 统一目录：拖拽排序、行内重命名、显隐/透明度/样式、层级叠放定序、坐标转换（WGS-84 ⇄ GCJ-02）、单层导出（CSV/TXT/GeoJSON/KML）、二维图层导入 3D |
 | 📊 属性表 | 视图范围筛选、字段可见性、全字段检索、CSV 导出、要素定位与删除 |
@@ -170,7 +170,7 @@
 
 | 领域 | 说明 |
 |------|------|
-| 📥 多格式数据导入 | GeoJSON / JSON / KML / KMZ / SHP（zip 或散件）/ CZML / GLB / GLTF / 3D Tiles（zip）/ GeoTIFF / CSV / GPX；2D/3D 双管线、ZIP 批量分组、`.prj` 投影识别、失败行内可重试 |
+| 📥 多格式数据导入 | GeoJSON / JSON / KML / KMZ / SHP（zip 或散件）/ CZML / GLB / GLTF / 3D Tiles（zip）/ GeoTIFF / CSV / TXT / WKT；2D/3D 双管线、ZIP 批量分组、`.prj` 投影识别、失败行内可重试 |
 | 🏢 建筑白模抓取 | **腾讯地图 / 高德地图 / 天地图** 三类矢量瓦片：腾讯、高德实现建筑层级（CE）轮廓与楼高抓取解析，天地图实现 **12 类图层全量解析**；三者共用同一套解码与几何装配链路，放开图层过滤即可对腾讯、高德做全量解析；跨瓦片同标识融合、自动入库 TOC |
 | 📐 空间分析 | **8 算子**：缓冲区、叠加、泰森多边形、热点聚合、渔网（方格/六边形）、凸包、多环缓冲、几何简化（Shapely 后端精确计算） |
 | 🔬 三维分析 | 限高分析、可视域分析（`cesium/modules/analysis`，逐像素/射线两套实现） |
@@ -271,7 +271,7 @@
 | 依赖 | 要求 | 说明 |
 |------|------|------|
 | **Node.js** | **20 LTS 及以上**（推荐 20.x / 22.x） | Vite 8 要求 Node `^20.19.0 \|\| >=22.12.0`，本项目按 20 LTS 验证。仓库未在 `package.json` 声明 `engines` |
-| npm | 10+ | 随 Node 20 附带 |
+| npm | 10+ | 随 Node 22 附带 |
 | Docker Desktop | 仅全栈本地联调需要 | 只跑前端 `npm run dev` **不需要** Docker |
 | Python | 3.12（容器内 `python:3.12-slim` 已固定） | 后端仅通过 Docker 运行，不支持裸 `uvicorn` |
 | LocalDev.bat | Windows 一键启动脚本 | 自动检测上述依赖 |
@@ -555,12 +555,12 @@ tiles.negiao.cc.cd"]
 | [部署关系与域名映射](Docs/Architecture/deployment-relationship.md) | 域名清单、部署来源矩阵、平台能力对比 |
 | [三层配置架构](Docs/Architecture/configuration-three-tier.md) | L1/L2/L3 全景：来源→统一入口→业务/前端消费与门禁 |
 
-**功能级**
+**功能级**（现行态文档已于 2026-11-28 按 V3.7.16 代码核对；`decisions/` 为历史记录）
 
 | 功能 | 文档 |
 |------|------|
 | 2D/3D 双引擎 | [`ol-cesium-dual-engine.md`](Docs/Architecture/ol-cesium-dual-engine.md) |
-| 底图源系统 | [`basemap-source-system.md`](Docs/Architecture/basemap-source-system.md) |
+| 底图源系统（V3.7.16 现状） | [`basemap-source-system.md`](Docs/Architecture/basemap-source-system.md) |
 | 底图目录统一元数据与分类重构 | [`basemap-catalog-redesign.md`](Docs/Architecture/basemap-catalog-redesign.md) |
 | 双引擎坐标转换规范 | [`ol-cesium-coordinate-transform-spec.md`](Docs/Architecture/ol-cesium-coordinate-transform-spec.md) |
 | 多格式数据导入 | [`multi-format-data-import.md`](Docs/Architecture/multi-format-data-import.md) |
@@ -594,7 +594,7 @@ tiles.negiao.cc.cd"]
 
 | 项目 | 状态 | 说明 |
 |---|---|---|
-| **在线底图导出（GeoTIFF）** | ⚠️ **前端保留、后端已下线** | `MapDownloader.vue` 依赖 `/api/download/*`，该模块在 V3.6.5 移除，HF 环境返回 404。方案见 `Docs/TODO/plan-download-*` |
+| **在线底图导出（GeoTIFF）** | ✅ **远端下载节点可用** | `MapDownloader.vue` → `api/download.ts` → `VITE_DOWNLOAD_SERVICE_URL`（`deploy/.env` 已配置 `https://gis.negiao.cn:8443`）；本仓后端无 `/api/download/*` 路由，见 [`download-service.md`](Docs/Architecture/download-service.md) |
 | **瓦片纠偏（BD-09/GCJ-02 重采样）** | ⚠️ **实现已迁出本仓，能力仍在线** | 迁至独立仓 `tile-proxy`（线上 `vpn.negiao.cn/proxy/*`）；HF Space 政策禁止挂载 `/proxy/*`，故本仓只保留接入契约，见 [`tile-rectify-system.md`](Docs/Architecture/tile-rectify-system.md) |
 | **新闻热榜 `cls`（财联社）** | ⚠️ 上游恒定 504 | 该平台标签页为空；其余 21 个平台正常 |
 | **新闻 / 瓦片直连** | ⚠️ 国内间歇不可达 | 实际主通道为 `vpn.negiao.cn` 代理 |
@@ -620,9 +620,9 @@ tiles.negiao.cc.cd"]
 
 | 版本 | 日期 | 概要 |
 |------|------|------|
-| **V3.7.16** | 2026-11-28 | **底图定义层重构与暂存区批次统一**：24 次不规范迭代合并为单条 V3.7.16；205→199 条定义迁入 common 层，OL/Cesium 目录统一；鉴权匿名通道废除、在线镜像会话子集治理、自动代理默认关闭；重复定义/坐标系/矩阵集 bug 收口。日志：[CHANGELOG](Docs/Guide/CHANGELOG.md) |
-| **V3.7.15** | 2026-11-27 | Agent 能力系统整合（本批统一版本）。 |
-| **V3.7.14** | 2026-11-26 | 统一 IP 地理中枢 · 会话持久化城市 · 暂存区 Code Review 修复 · 架构文档核查（L3）。 |
+| **V3.7.25** | 2026-11-28 | **CARTO Basemaps 全量接入**：按官方文档接入 7 种栅格 PNG + 6 种 MapLibre 矢量样式，key 明文写入 URL；矢量改用 tileJSON 解析出的版本化 MVT 模板；定义 203 条 / 预设 182 个。日志：[carto-basemaps-full-integration](Docs/LLM_record/26-11/2026-11-28/2026-11-28-carto-basemaps-full-integration.md) |
+| **V3.7.24** | 2026-11-28 | **删除重复的 Google 标准电子预设**：保留被语义/精选引用的 #19，删除孤立的 #118/#119 GCJ·WGS 配对项；预设 177 个、定义 196 条。日志：[CHANGELOG](Docs/Guide/CHANGELOG.md) |
+| **V3.7.23** | 2026-11-28 | **Stadia 户外底图分类纠正**：`terrain_outdoors` 由地形类迁入电子类并改显式分类；推断加精确 id 覆盖。日志：[CHANGELOG](Docs/Guide/CHANGELOG.md) |
 
 ---
 
@@ -644,6 +644,6 @@ tiles.negiao.cc.cd"]
 |:------:|:--------:|:--------:|
 | [GitHub](https://github.com/NEGIAO/WebGIS-Dev) | [webgis.negiao.cn](https://webgis.negiao.cn)（正式域名，GitHub Pages 托管） | [Hugging Face](https://NEGIAO-WebGIS.hf.space) |
 
-<sub>V3.7.16 · 开发中 · 最后更新 2026-11-28</sub>
+<sub>V3.7.25 · 开发中 · 最后更新 2026-11-28</sub>
 
 </div>

@@ -1,8 +1,10 @@
 # 瓦片下载服务（独立节点）
+> 架构核对：2026-11-28 · V3.7.18（以当前代码为准；历史决策记录 `decisions/` 不改写；文中行号仅作导航，以符号名为准）。
 
-> **状态**：✅ 可用。走 `VITE_DOWNLOAD_SERVICE_URL` 配置值（历史部署为 `https://gis.negiao.cn:8443`，443 被备案拦截、8443 不触发，见 §5）。⚠️ 本仓 `deploy/.env.example` 中该变量为空模板，实际值以部署环境为准，本仓不可核验。
+
+> **状态**：✅ 可用。走 `VITE_DOWNLOAD_SERVICE_URL` 配置值（历史部署为 `https://gis.negiao.cn:8443`，443 被备案拦截、8443 不触发，见 §5）。`deploy/.env.example` 保留空模板，但 `deploy/.env` 已给出实际值 `https://gis.negiao.cn:8443`，本仓可核验。
 > **引入版本**：见根 [README 版本演进](../../README.md#-版本演进)（本文不硬编码版本号）。
-> **相关配置**：`VITE_DOWNLOAD_SERVICE_URL`（见 `deploy/.env.example`；⚠️ 模板中为空值，实际值以部署环境为准，本仓不可核验）。
+> **相关配置**：`VITE_DOWNLOAD_SERVICE_URL`（见 `deploy/.env.example` 模板与 `deploy/.env` 实际值）。
 > **⚠️ 临时性**：节点为腾讯云活动赠送、**有效期一个月**，仅用于验证与过渡；到期需迁移（§5.4）。
 
 ---
@@ -44,7 +46,7 @@ flowchart LR
 
 ## 2. 接口契约
 
-基址：`VITE_DOWNLOAD_SERVICE_URL`（⚠️ 本仓 `deploy/.env.example` 中为空模板；历史部署为 **`https://gis.negiao.cn:8443`**，端口不可省略；实际值以部署环境为准，本仓不可核验）。
+基址：`VITE_DOWNLOAD_SERVICE_URL`（`deploy/.env` 实际值 **`https://gis.negiao.cn:8443`**，端口不可省略；`.env.example` 为空模板）。
 所有路径均为 `/api/download/*`，与旧后端完全一致。
 
 | 方法 | 路径 | 用途 | 关键返回 |
@@ -137,7 +139,7 @@ const downloadAPI = USE_REMOTE_SERVICE ? axios.create({ baseURL: DOWNLOAD_SERVIC
 
 | 场景 | `VITE_DOWNLOAD_SERVICE_URL` | 行为 |
 |---|---|---|
-| 生产 / 联调 | ⚠️ 部署环境实际值（历史示例：`https://gis.negiao.cn:8443`） | 直连节点（历史配置**必须带 `:8443`**；本仓模板为空，不可核验） |
+| 生产 / 联调 | ✅ `https://gis.negiao.cn:8443`（`deploy/.env` 已配置） | 直连节点（**必须带 `:8443`**，漏端口会回到被拦截的 443） |
 | 本地开发（节点未就绪） | 留空 | 回落 `VITE_BACKEND_URL` 同源 `/api/download/*`（当前必 404，仅作降级占位） |
 
 ---
@@ -236,7 +238,7 @@ CF 回源必须携带 `SNI = gis.negiao.cn`（免费/Pro 无 SNI Override），`
 5. **CORS 白名单**：节点对来源做反射放行，新增前端部署域名时需确认节点侧已加入，否则下载会 403（与瓦片代理的 `TILE_PROXY_ALLOWED_ORIGINS` 是两套独立配置）。
 6. **⚠️ 节点到期**：腾讯云机器为活动赠送，**有效期一个月**。到期后 `gis.negiao.cn:8443` 全部接口失效，前端下载功能会整体不可用——需提前按 §5.4 迁移。
 7. **证书续期**：`CN=gis.negiao.cn` 为 Let's Encrypt，**2027-01-24 到期**（90 天）。续期由节点侧负责，本仓不感知；过期后浏览器会直接拒绝连接。
-8. **端口不可省略**：⚠️ `VITE_DOWNLOAD_SERVICE_URL` 实际值以部署环境为准（本仓 `deploy/.env.example` 为空模板，不可核验）。历史配置为 `https://gis.negiao.cn:8443`；若仍采用该节点，漏掉 `:8443` 会回到 443，表现为请求全部 `000`（RST），且错误信息不会提示「端口错了」。
+8. **端口不可省略**：`deploy/.env` 已配置 `VITE_DOWNLOAD_SERVICE_URL=https://gis.negiao.cn:8443`；漏掉 `:8443` 会回到 443，表现为请求全部 `000`（RST），且错误信息不会提示「端口错了」。
 
 ---
 

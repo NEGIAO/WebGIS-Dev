@@ -6,6 +6,112 @@
 
 ## 版本记录
 
+### V3.7.25 (2026-11-28) — CARTO Basemaps 全量接入（7 栅格 + 6 矢量，L2）
+
+> 日志：[2026-11-28-carto-basemaps-full-integration](../LLM_record/26-11/2026-11-28/2026-11-28-carto-basemaps-full-integration.md)。V3.7.24 已被并发会话占用，按 §5 顺延。
+
+**问题**：既有 5 条 CARTO 栅格定义未带 key，缺 2 种官方栅格变体，且无 CARTO 矢量瓦片；原矢量条目误用 tileJSON 地址而非 MVT 模板，OL 无法加载。
+
+**修复**：按官方文档接入 7 种栅格 PNG + 6 种 MapLibre 矢量样式（用户确认 key 可明文写 URL）。矢量 URL 改用官方 tileJSON 解析出的版本化 MVT 模板 `v/20261118-01/.../{z}/{x}/{y}.mvt?key=…&style=…`，`styleUrl` 指向对应官方 style JSON。新增 8 个 CARTO 预设，定义数 196→203、预设数 177→182。
+
+**验证**：7 个栅格样例均 200 image/png；6 个 style JSON 均 200；MVT 样例 200 application/x-protobuf；`vue-tsc` 0 错误；`check:layer-definitions` OK（203，order 1..203）；`check:basemap-catalog` OK（182 presets）。
+
+### V3.7.24 (2026-11-28) — 删除重复的 Google 标准电子(WGS) 预设（L2）
+
+> 日志：[2026-11-28-remove-duplicate-google-standard-wgs](../LLM_record/26-11/2026-11-28/2026-11-28-remove-duplicate-google-standard-wgs.md)。V3.7.23 已被同会话前一任务占用，顺延。
+
+**问题**：用户指出「19 谷歌电子地图」与「119 标准电子」重复。
+
+**根因**：两者同为 Google `lyrs=m` 标准电子样式；#119 的 WGS 纠偏能力已由 #161「Google标准电子(WGS)」覆盖，且 #119 的 stack 定义无其他引用。反之 #19 被语义规则（`tileIntentPresets.ts`）、意图兜底（`chatIntentFallback.ts`）与精选清单（`category-recommended.ts`）引用，不可删除。
+
+**修复**：删除 `vector_google_combo_standard_wgs_preset` 与 `vector_google_combo_standard_wgs` 定义（原 order 62）。门禁随即拦截：`vector_google_combo_standard_gcj` 按硬约束必须配有同 URL 的 WGS 派生版，故同组删除其预设（#118）与定义（原 order 61），避免留下孤立 GCJ 条目。其后定义 order 顺延恢复 1..196；预设护栏 179→177、Google 组合数 30→28（GCJ/WGS 各 15→14）；计数文档同步为 196 定义 / 177 预设。
+
+**契约变更**：预设数组顺序即 URL `l` 编号，删除点后编号前移一位。
+
+**验证**：见过程日志「测试方案」章节。
+
+### V3.7.23 (2026-11-28) — Stadia 户外底图分类纠正（L2）
+
+> 日志：[2026-11-28-stadia-outdoors-category-fix](../LLM_record/26-11/2026-11-28/2026-11-28-stadia-outdoors-category-fix.md)。V3.7.22 已被同会话前一任务占用，顺延。
+
+**问题**：底图目录把「Stadia户外」归入地形底图，用户指出应为电子地图类。
+
+**根因**：源定义 `terrain_outdoors` 的 `catalogCategory` 显式写为 `terrain`；`taxonomy.ts` 地形正则含 `terrain`，该 id 以 `terrain_` 开头，缺省推断同样误判。
+
+**修复**：定义从 `category-terrain.ts` 迁入 `category-electronic.ts`（order 179 不变）并改 `catalogCategory: 'electronic'`；`CATEGORY_OVERRIDES` 精确覆盖 `terrain_outdoors[_preset]`，不删除全局 terrain 规则（Mapbox 户外等仍为地形）；结构树计数同步（地形 39→38、电子 117→118）。
+
+**验证**：见过程日志「测试方案」章节。
+
+### V3.7.22 (2026-11-28) — 删除重复的 Google 山体阴影预设（L2）
+
+> 日志：[2026-11-28-remove-duplicate-google-hillshade-preset](../LLM_record/26-11/2026-11-28/2026-11-28-remove-duplicate-google-hillshade-preset.md)。V3.7.21 已被同会话前一任务占用，顺延。
+
+**问题**：「山体」与「PB山体阴影」两条目录项的 URL 完全相同。
+
+**根因**：两个预设 `terrain_google_preset` 与 `vector_google_combo_pb_hillshade_wgs_preset` 都指向同一个定义 `vector_google_combo_pb_hillshade_wgs`，属预设层重复登记；该定义还被另外两个组合预设引用，不能删定义。
+
+**修复**：删除泛化的 `terrain_google_preset`，保留 id 与 stack 对应、命名更精确的「PB山体阴影」；预设护栏 180→179；README 与两篇现行态架构文档计数同步。定义仍为 198 条，order 不变。
+
+**契约变更**：预设数组顺序即 URL `l` 编号，删除后其后预设编号前移一位。
+
+**验证**：见过程日志「测试方案」章节。
+
+### V3.7.21 (2026-11-28) — 删除失效底图 USGS影像地形（L2）
+
+> 日志：[2026-11-28-remove-usgs-imagery-topo](../LLM_record/26-11/2026-11-28/2026-11-28-remove-usgs-imagery-topo.md)。V3.7.20 已被同会话前一任务占用，顺延。
+
+**问题**：用户反馈「USGS影像地形」底图已失效，要求删除。
+
+**修复**：删除 `imagery_usgs_topo` 定义（原 order 154）与 `imagery_usgs_topo_preset` 预设；其后 45 条定义 order 整体 -1，恢复 1..198 连续；预设数量护栏由 181 下调为 180；README、结构树、交接文档与两篇现行态架构文档的数量同步。USGS 影像 / USGS 地形图两条保留。
+
+**契约变更**：预设数组顺序即 URL `l` 参数编号，删除后其后的预设编号整体前移一位，历史 `?l=` 链接可能指向相邻底图。
+
+**验证**：见过程日志「测试方案」章节。
+
+### V3.7.20 (2026-11-28) — Stamen 水彩底图分类纠正（L2）
+
+> 日志：[2026-11-28-stamen-watercolor-category-fix](../LLM_record/26-11/2026-11-28/2026-11-28-stamen-watercolor-category-fix.md)。V3.7.19 已被同会话前一任务占用，顺延。
+
+**问题**：底图目录把「Stamen水彩」及其预设归入影像底图，用户指出应为电子底图。
+
+**根因**：源定义 `theme_stamen_watercolor` 的 `catalogCategory` 显式写为 `imagery`，registry 优先采用该字段。`taxonomy.ts` 的推断规则对 `theme_` 前缀本就会返回 `electronic`，故无需新增覆盖。
+
+**修复**：定义从 `category-imagery.ts` 迁入 `category-electronic.ts`（order 145 不变）并改 `catalogCategory: 'electronic'`，与同系列 Stamen Toner 对齐；结构树计数同步（影像 30→29、电子 116→117）。
+
+**验证**：见过程日志「测试方案」章节。
+
+### V3.7.19 (2026-11-28) — MapTiler 海洋底图分类纠正（L2）
+
+> 日志：[2026-11-28-maptiler-ocean-category-fix](../LLM_record/26-11/2026-11-28/2026-11-28-maptiler-ocean-category-fix.md)。V3.7.18 已被并发会话占用，按 Force_command §5 顺延。
+
+**问题**：底图目录中「MapTiler海洋」及其预设被归入影像底图；`ocean-v4` 实为电子专题样式，应归电子底图。
+
+**根因**：源定义 `theme_maptiler_ocean` 的 `catalogCategory` 显式写为 `imagery`（registry 优先采用）；`taxonomy.ts` 影像正则含 `ocean`，先于 `theme_` 电子规则命中，双重误判。
+
+**修复**：定义从 `category-imagery.ts` 迁入 `category-electronic.ts` 并改 `catalogCategory: 'electronic'`（order 144 不变）；新增 `CATEGORY_OVERRIDES` 精确覆盖 `theme_maptiler_ocean[_preset]`，保留 ESRI Ocean 等真影像的 ocean 规则；同步结构树分类条目计数（影像 31→30、电子 115→116）。
+
+**验证**：见过程日志「测试方案」章节。
+
+### V3.7.18 (2026-11-28) — 架构文档按实际代码全量核对（L2）
+
+> 日志：[2026-11-28-architecture-docs-audit](../LLM_record/26-11/2026-11-28/2026-11-28-architecture-docs-audit.md)。V3.7.17 已被并发会话占用，按 Force_command §5 顺延。
+
+**问题**：24 篇现行态架构文档存在过时 SSOT（仍引用已删除的 `basemapConfig.ts` / `group-1~4.ts`）、错误数量（205 定义 / 92 预设 / 146 key）、相反流程（无 token 自动铸造游客）、过时能力（3D 不支持 GeoTIFF、Cesium 无可见性/透明度）与旧日期。
+
+**修复**：四组只读审计后原地回写现行态文档，`decisions/` 历史记录不改写。统一加 `V3.7.18 / 2026-11-28` 核对标记；`basemap-source-system.md` 按 `common/basemap` SSOT 全量重写；鉴权游客、3D GeoTIFF/CSV/TXT/WKT、Cesium 图层能力、Agent schema/提示词、配置键数、域名表、Node 22、下载节点、README 与三份 Guide 结构文档逐项对齐代码。
+
+**验证**：`vue-tsc` 0 错误；basemap-catalog 181 OK；layer-definitions 199 OK；结构树 769/769、配置登记、跨域依赖、平台红线 9 全绿。
+
+### V3.7.17 (2026-11-28) — 聊天空回复字面 HTML 标签泄漏修复（L2）
+
+**问题**：用户实机截图显示，AI 助手空回复气泡把 `<p>（未返回有效内容）</p>` 当作字面文本展示，思考过程块正常。
+
+**根因**：`useMarkdownRenderer.ts` 的 `sanitizeHtml()` 在 DOMPurify 未就绪 / 动态 import 失败时走 fail-closed 转义兜底，但传入的是 `marked.parse()` 已生成的 HTML（`<p>…</p>`），导致结构标签被转义为可见字符。
+
+**修复**：`sanitizeHtml(html, plainFallback?)` 降级时改传原始纯文本重新转义；marked 回答路径与 think 路径均传入原文。不降低 XSS 防护级别，仍不放行未消毒 HTML。
+
+**验证**：见 [过程日志](../LLM_record/26-11/2026-11-28/2026-11-28-chat-empty-reply-html-leak.md)。
+
 ### V3.7.16 (2026-11-28) — 底图定义层重构与暂存区批次统一（本批统一版本，L3）
 
 > **版本归并说明**：按用户明确指令，本批 V3.7.17–V3.7.39 共 23 个内部迭代号统一归并至 **V3.7.16**；过程日志保留原文件名与内容不迁移、不改写，仅作为追溯链。V3.7.16 曾作为 V3.7.15 批的内部号，但其「废弃」语义仅限上一批；本批依用户指令复用为正式统一版本号。方案与日志见条目末尾链接。

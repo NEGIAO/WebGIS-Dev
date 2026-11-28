@@ -1,4 +1,6 @@
 # 路径规划（驾车 / 公交）架构说明
+> 架构核对：2026-11-28 · V3.7.18（以当前代码为准；历史决策记录 `decisions/` 不改写；文中行号仅作导航，以符号名为准）。
+
 
 日期：2026-07-21
 
@@ -27,6 +29,8 @@
 | `api/locationSearch.ts` | 地名/POI 搜索模块：`fetchLocationResultsByService` 统一入口，`searchWithTianditu` 调天地图 `v2/search`；声明 WGS-84 坐标契约，透传 `signal` |
 | `domains/ol/routing/utils/driveXmlParser.ts` | 驾车 XML 解析：`parseDriveRouteXml` 提取起终点、总览、分段与整线坐标串 |
 | `domains/ol/routing/utils/transitRouteBuilder.ts` | 路线渲染数据构建：`buildBusRouteRenderData` / `buildDriveRouteRenderData` / `buildRouteRenderData` 生成 OpenLayers 要素，`fitExtentToCoverage` 视口适配 |
+| `domains/ol/routing/renderers/useRouteStepInteraction.ts` | 路线步骤交互：步骤选择/高亮事件 |
+| `domains/ol/routing/renderers/useRouteStepStyles.ts` | 路线步骤样式：分段颜色与图标状态 |
 | `domains/ol/routing/renderers/useRouteRendering.ts` | 路线绘制功能库：`createRouteRenderingFeature` 工厂返回 `drawRouteOnMap`（公交）/ `drawDriveRouteOnMap`（驾车）/ `syncRouteManagedLayer` |
 
 集成位置：`domains/common/shell/SidePanel.vue` 在 `activeTab === 'bus'` / `'drive'` 时挂载**同一个** `RoutePlannerPanel`，分别传 `mode="bus"` / `mode="drive"` 与 `tiandituToken`、地图回调（两种 mode 共用 `startBusPointPick` 取点，见 `SidePanel.vue:125,143`）；`domains/ol/components/MapContainer.vue` 通过 `createRouteRenderingFeature` 创建绘制函数，并以 `ensureRouteBuilderApi` **动态导入** `transitRouteBuilder.ts`（按需加载）。
@@ -184,7 +188,7 @@ postStr: { keyWord, level: 12, mapBound, queryType: 1, start, count }
 
 token 由 `SidePanel.vue` 以 `tiandituToken` 下发给 `RoutePlannerPanel` 与选点卡片。缺失时同一组件内两个分支处理不同：
 
-- **驾车分支**（`startDriveSearch`，`RoutePlannerPanel.ts:550`）：定义专门的 `TokenMissingError extends Error`（`:85`，`name = 'TokenMissingError'`），token 为空即抛出，catch 分支（`:598`）识别后给出"请在「设置」→「API 密钥管理」中添加 tianditu_tk"的引导文案。
+- **驾车分支**（`startDriveSearch`，`RoutePlannerPanel.ts:550`）：定义专门的 `TokenMissingError extends Error`（`:85`，`name = 'TokenMissingError'`），token 为空即抛出，catch 分支（`:595`）识别后给出"请在「设置」→「API 密钥管理」中添加 tianditu_tk"的引导文案。
 - **公交分支**（`startTransitPlan`，`RoutePlannerPanel.ts:372`）：直接 `throw new Error(...)`，文案与驾车一致但未复用 `TokenMissingError`。
 - **搜索模块**：`searchWithTianditu` 在 `!tiandituTk` 时抛 `Error('天地图 Token 未配置')`，并在 catch 中识别 `Token` 关键字弹出提示。
 
