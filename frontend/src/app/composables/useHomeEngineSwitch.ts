@@ -22,11 +22,7 @@ import {
     getCurrentQuerySnapshot,
 } from '@common/url-state/urlQueryReader';
 import { createBasemapUrlMappingFeature } from '@common/url-state/useBasemapUrlMapping';
-import {
-    URL_LAYER_OPTIONS,
-    getLayerCategory,
-    getLayerGroup,
-} from '@ol/basemap/constants/basemapResolver';
+import { URL_LAYER_OPTIONS } from '@ol/basemap/constants/basemapResolver';
 import { createMapCommandBus } from '@common/chat/agent/MapCommandBus';
 import {
     createCesiumMapCommandAdapter,
@@ -87,8 +83,6 @@ export function useHomeEngineSwitch(deps: UseHomeEngineSwitchDeps) {
 
     const { getLayerIdByIndex, getLayerIndexById } = createBasemapUrlMappingFeature({
         urlLayerOptions: URL_LAYER_OPTIONS,
-        getLayerCategoryById: (layerId?: string) => (layerId ? getLayerCategory(layerId) : null),
-        getLayerGroupById: (layerId?: string) => (layerId ? getLayerGroup(layerId) : null),
     });
 
     const CesiumContainer = shallowRef<any>(null);

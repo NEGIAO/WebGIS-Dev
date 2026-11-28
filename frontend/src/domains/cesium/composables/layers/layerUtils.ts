@@ -7,6 +7,7 @@
  */
 
 import { BASEMAP_OPTIONS } from '@common/basemap/basemapOptions';
+import { getBasemapEntryById } from '@common/basemap/catalog';
 import { getDescriptorById, resolvePresetLayerIds } from '@common/basemap/catalogProjection';
 import { CUSTOM_BASEMAP_URL_STORAGE_KEY } from '@common/basemap/useSharedCustomBasemapUrl';
 
@@ -31,11 +32,17 @@ export const GOOGLE_PHOTOREALISTIC_3D_TILES_VISIBLE_KEY = 'cesium_google_photore
  * @returns {Array<{value: string, label: string, description: string, source: string}>}
  */
 export function buildUnifiedBasemapOptions() {
-    return BASEMAP_OPTIONS.map((opt) => ({
-        ...opt,
-        description: getPresetDescription(opt.value),
-        source: 'preset',
-    }));
+    return BASEMAP_OPTIONS.map((opt) => {
+        const entry = getBasemapEntryById(opt.value);
+        return {
+            ...opt,
+            description: entry?.description || getPresetDescription(opt.value),
+            category: entry?.category,
+            provider: entry?.provider,
+            coord: entry?.coord,
+            source: 'preset',
+        };
+    });
 }
 
 /**
@@ -184,13 +191,14 @@ export function getPresetPickerColor(presetId: any) {
     if (!stackIds.length) return '#37d67a';
     const firstDesc = getDescriptorById(stackIds[0]);
     if (!firstDesc) return '#37d67a';
-    const cat = firstDesc.category;
+    // V3.7.16：改用统一目录分类（旧 category 字段已删除）。
+    const cat = firstDesc.catalogCategory;
     if (cat === 'imagery') return '#5ea1ff';
     if (cat === 'vector') return '#37d67a';
     if (cat === 'terrain') return '#d0a449';
-    if (cat === 'label') return '#a78bfa';
-    if (cat === 'theme') return '#f59e0b';
-    if (cat === 'custom') return '#f472b6';
+    if (cat === 'historical') return '#a78bfa';
+    if (cat === 'electronic') return '#f59e0b';
+    if (cat === 'service') return '#f472b6';
     return '#37d67a';
 }
 

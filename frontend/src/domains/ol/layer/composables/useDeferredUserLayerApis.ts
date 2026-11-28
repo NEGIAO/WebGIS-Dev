@@ -23,7 +23,6 @@ export interface DeferredUserLayerApisDeps {
     setDrawStyle?: (style: any) => void;
     layerListRef?: any;
     selectedLayerRef?: any;
-    getLayerCategory?: (layerId: any) => any;
     refreshLayersState?: () => void;
     isRouteManagedLayer?: (options: { layerId: string; removed: any }) => boolean;
     onRouteManagedLayerRemoved?: (options: { layerId: string; removed: any }) => void;
@@ -47,7 +46,6 @@ export function createDeferredUserLayerApis({
     setDrawStyle,
     layerListRef,
     selectedLayerRef,
-    getLayerCategory,
     refreshLayersState,
     isRouteManagedLayer,
     onRouteManagedLayerRemoved,
@@ -93,7 +91,6 @@ export function createDeferredUserLayerApis({
                     setDrawStyle,
                     layerList: layerListRef,
                     selectedLayer: selectedLayerRef,
-                    getLayerCategory,
                     refreshLayersState,
                     projectExtentToMapView: dataImportApi.projectExtentToMapView,
                     emitFeatureSelected,

@@ -7,7 +7,7 @@
  * - 底图瓦片带  0~99    底图影像
  * - 在线服务带  100~149 WMS/ArcGIS 注册表（容量见 REMOTE_CAPACITY = 50）
  * - 卷帘对比带  120~    底图带内卷帘对比层（沿用历史偏移，见 Z_BASEMAP_SWIPE_OFFSET）
- * - 标注瓦片带  150~199 label 类底图（category === 'label'）
+ * - 标注瓦片带  150~199 显式声明 zBand: 'label' 的底图层
  * - 数据几何带  200~599 用户数据**几何**（面/线/点，不含文字）
  * - 数据标注带  700~849 用户数据**文字标注**（与几何分离渲染）
  * - 区划边界带  850      行政区划
@@ -51,21 +51,21 @@ export const Z_BASEMAP_SWIPE_OFFSET = 120;
  * 功能：把「列表中可见的底图层」映射为带内 zIndex，列表靠前的可见层取更高 z。
  * 参数：
  *   - list：底图列表，每项至少含 `{ id, visible }`
- *   - resolveCategory：按 id 查 `category` 的回调（'label' 归标注瓦片带，其余归底图带）
+ *   - resolveZBand：按 id 查 `zBand` 的回调（'label' 归标注瓦片带，其余归底图带）
  * 返回：`Map<layerId, zIndex>`，**仅含可见项**；不可见项由调用方回落至带基准值。
  * 核心逻辑：先按带分组收集可见项，再以组内序号倒序编号
  *   （offset = 组内可见数 - 1 - 组内序号），故偏移恒小于组内可见数，不会越带。
  */
 export function allocateBasemapZIndex(
     list: Array<{ id: string; visible?: boolean }>,
-    resolveCategory: (id: string) => string | undefined,
+    resolveZBand: (id: string) => string | undefined,
 ): Map<string, number> {
     const result = new Map<string, number>();
     const bands: Record<'basemap' | 'label', string[]> = { basemap: [], label: [] };
 
     (Array.isArray(list) ? list : []).forEach((item) => {
         if (!item?.id || !item.visible) return;
-        const band = resolveCategory(item.id) === 'label' ? 'label' : 'basemap';
+        const band = resolveZBand(item.id) === 'label' ? 'label' : 'basemap';
         bands[band].push(String(item.id));
     });
 

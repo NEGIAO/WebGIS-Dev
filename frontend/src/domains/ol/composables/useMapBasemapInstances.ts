@@ -65,7 +65,7 @@ export function useMapBasemapInstances(
         // 沿用全量索引（length-1-index）会溢出到数据几何带。语义不变：列表靠前 = 带内更高 z。
         const zIndexById = allocateBasemapZIndex(
             layerList,
-            (id: string) => configs.find((cfg: any) => cfg?.id === id)?.category,
+            (id: string) => configs.find((cfg: any) => cfg?.id === id)?.zBand,
         );
 
         layerList.forEach((item) => {
@@ -84,8 +84,8 @@ export function useMapBasemapInstances(
                 layer.setVisible(targetVisible);
             }
 
-            const category = configs.find((cfg: any) => cfg?.id === item.id)?.category;
-            const zBand = category === 'label' ? Z_BAND.LABEL : Z_BAND.BASEMAP;
+            const band = configs.find((cfg: any) => cfg?.id === item.id)?.zBand;
+            const zBand = band === 'label' ? Z_BAND.LABEL : Z_BAND.BASEMAP;
             const targetZIndex = zIndexById.get(String(item.id)) ?? zBand;
             if (layer.getZIndex() !== targetZIndex) {
                 layer.setZIndex(targetZIndex);
@@ -189,16 +189,8 @@ export function useMapBasemapInstances(
 
         layerList.forEach((item) => {
             if (!item.visible && item.id !== 'custom') {
-                const cfg = configs.find((c: any) => c.id === item.id);
-                const category = cfg?.category;
-                const isBasemap =
-                    category === 'label' ||
-                    category === 'imagery' ||
-                    category === 'vector' ||
-                    category === 'terrain' ||
-                    category === 'theme' ||
-                    category === 'custom';
-                if (isBasemap) {
+                // layerConfigs 本身就是底图配置全集，命中即底图层，无需旧 category 白名单
+                if (configs.some((cfg: any) => cfg?.id === item.id)) {
                     clearLayerSourceForced(item.id);
                 }
             }
@@ -210,8 +202,8 @@ export function useMapBasemapInstances(
             normalizedResolvedIds.forEach((id, index) => {
                 const layer = instanceMap[id];
                 if (!layer || typeof layer.setZIndex !== 'function') return;
-                const category = configs.find((cfg: any) => cfg?.id === id)?.category;
-                const zBand = category === 'label' ? Z_BAND.LABEL : Z_BAND.BASEMAP;
+                const band = configs.find((cfg: any) => cfg?.id === id)?.zBand;
+                const zBand = band === 'label' ? Z_BAND.LABEL : Z_BAND.BASEMAP;
                 layer.setZIndex(zBand + index);
             });
         }

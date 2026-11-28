@@ -81,7 +81,7 @@ L3 HF Secrets（SUPER_USER / OAuth secret / SMTP 密码 / API Key）→ 只有�
 | 场景 | 入口 |
 |------|------|
 | 加后端 API | `backend/api/<域>.py` + `app.py` 挂路由；配置经 `from config import get_settings/get_str` |
-| 加底图源 | `constants/basemap/basemapConfig.ts` + `sourceDescriptors.ts`（**两文件对称**，基址用 publicRuntime helper 禁硬编码域名） |
+| 加底图源 | `domains/common/basemap/definitions/category-*.ts`（**205 条定义 SSOT**，原始 URL + method/correction/proxy 声明，禁硬编码代理前缀；URL 拼装统一走 `definitions/resolveTileUrl.ts`；双引擎加载器：`ol/basemap/loaders/createOlSource.ts` / `cesium/constants/basemapProviderFactory.ts`） |
 | 加 3D 工具模块 | §4.3 范式；参数默认值同时登记 catalog/.env.example（若走 env） |
 | 改 2D TOC 行为 | `stores/useLayerStore.ts`（树）/ `components/Layer/TOCPanel.vue`（动作）/ `layerTreeBuilder.ts`（节点契约） |
 | 改 Admin 面板 | `components/UserCenter/AdminControlPanel.vue` + `backend/api/admin.py`；L2 对照表见 configuration.md |

@@ -455,45 +455,82 @@ Sprint 3（穿插）：P3-1 容器二轮（O1/O2 交替）→ P2-1 bundle 分析
   - [ ] (现象) `backend/api/agent_chat/db.py:649` 注释写「V3.7.15：运行时 clamp 上限对齐 schema」，但该号已被 2026-11-22 归并进 V3.7.8（见 CHANGELOG 归并注），属历史曾用号；本次版本统一目标为 V3.7.14，该注释与本批暂存区无关。
   - [ ] (建议) 作为独立 L1 注释订正任务处理；不要在 IP 地理中枢批次中顺手改动。
 
+- [x] ~~**底图定义 url `'None'` 占位条目**（2026-11-28 · V3.7.16 瓦片底图定义重构会话发现，按 Force_command §2.5 只记不改，日志 [2026-11-27-basemap-definition-refactor](../LLM_record/26-11/2026-11-27/2026-11-27-basemap-definition-refactor.md)）~~：**✅ 2026-11-28 遗留项 A1 已解决**——orders 94/95（`vector_amap_clean_wgs` / `vector_amap_roads_wgs`）的 url 由字面量 `'None'` 修正为 30042a9 之前 group-3.ts 里 gcj2wgs 代理包装的真实 URL（原样解包）并补 `correction: 'gcj2wgs'`，coord 保持 WGS84、order 未动；迁移校验脚本以 `INTENTIONAL_DEVIATIONS` 记录偏离，`check-layer-definitions.mjs` 的 `'None'` 基线收紧为 0 条。
+  - [x] (现象) orders 94/95 的 `url` 与旧 `createSource` 均为字面量 `'None'`，无法加载任何瓦片；迁移时原样保留，未修。
+  - [x] (建议) 确认这两条是预留占位还是应删除/补真实 URL；若删除需同步处理 `l` 序号契约（orders 1–174 连续，删除会移位）。
+
+- [x] ~~**底图定义 coord 语义不一致**（2026-11-28 · V3.7.16 瓦片底图定义重构会话发现，按 Force_command §2.5 只记不改，日志同上）~~：**✅ 2026-11-28 遗留项 A2 已解决**——语义定为 (b) coord = 纠偏后输出坐标系；只改 order 5 `label_minedata` 与 order 6 `amap_label`（coord `GCJ02`→`WGS84` + description 同步），其余 31 条纠偏定义不动；`types.ts` 注释重写，`validate.ts` 新增 correction→coord 输出侧不变量防回归。
+  - [x] (现象) `coord` 实际描述的是纠偏后输出坐标系而非源坐标系：gcj2wgs 的 26 条中 2 条 `coord=GCJ02`、24 条 `coord=WGS84`；wgs2gcj 6 条 `coord=GCJ02`；bd2wgs 1 条 `coord=WGS84`。与类型注释「coord=源坐标系」的说法不符。
+  - [x] (建议) 统一 `coord` 的语义定义（源坐标系 vs 纠偏后输出坐标系）并逐条核对修正；改动涉及 33 条纠偏定义，需另立任务，不在重构批次中顺手改。
+
+- [ ] **底图定义 orders 146/150 纠偏方向存疑**（2026-11-28 · V3.7.16 遗留项 A2 实施时顺带发现，按 Force_command §2.5 只记不改，日志 [2026-11-27-basemap-definition-refactor](../LLM_record/26-11/2026-11-27/2026-11-27-basemap-definition-refactor.md) 遗留节）：
+  - [ ] (现象) order 146 `vector_google_combo_clean_terrain_no_road_gcj`（`category-terrain.ts`，coord GCJ02，correction `wgs2gcj`）与 order 150 `vector_Google_clean`（`category-electronic.ts`，coord WGS84，correction `gcj2wgs`）的 URL 模板逐字节相同（`https://mt0.google.com/vt/lyrs=p&x={x}&y={y}&z={z}&s=Ga&apistyle=...`），但纠偏方向相反——同一上游模板不可能既是 GCJ02 源又是 WGS84 源，必有一条 correction 错了。两条均满足新不变量（correction 输出侧与 coord 一致），故静态校验抓不到，必须实测。
+  - [ ] (核查方法) 实测两条图层分别加载后与已知正确底图叠加比对偏移方向（或查旧 `group-*.ts` 里两条的原始包装函数），再定哪条改 correction；未核实前禁止猜测性改动。
+
+## 2026-11-28 底图批次暂存区 Code Review（70 文件，修复：V3.7.16，日志：Docs/LLM_record/26-11/2026-11-28/2026-11-28-staged-review-fixes.md）
+
+- [x] ~~**Cesium 面板官方影像服务入口消失（无记录行为变化）**~~：**✅ V3.7.16 已恢复**——目录树下新增「官方影像服务」折叠组（`source==='official'`）；组合底图回归统一目录树（catalogTree + combo tags）。
+- [x] ~~**catalog/UI 批次无日志覆盖**（P1）~~：**✅ V3.7.16 已补记**——[2026-11-27-basemap-catalog-ui-batch-retro](../LLM_record/26-11/2026-11-27/2026-11-27-basemap-catalog-ui-batch-retro.md)。
+- [x] ~~**V3.7.16 日志 A4「已核实」声明失真（handover.md:84 仍为旧路径）**~~：**✅ V3.7.16 已订正**——handover.md:84 更新为新路径，日志声明勘误。
+- [x] ~~**check-basemap-migration.mjs 基线写死 category-*.ts，本仓库必崩**~~：**✅ V3.7.16 已修**——`git ls-tree` 动态发现 + group 布局 order 位置推导 + 基线数量不符显式 SKIP。
+- [x] ~~**OL 面板目录树新增控件缺 pointer:coarse 触屏档**~~：**✅ V3.7.16 已补**（关闭钮 40px、搜索框/折叠行/条目 min-height 40px）。
+- [x] ~~**combo 死代码链 / publicRuntime 三个纠偏死导出 / registry 无缓存 / 双校验器 correction 口径不一致**~~：**✅ V3.7.16 已全部修复**（详见 V3.7.16 日志变更文件清单）。
+- [x] ~~**Cesium 面板目录树触屏档未补**（V3.7.16 遗留）~~：**✅ V3.7.16 零散修补已补**（并行会话落定后）——`CesiumToolPanel.vue` 文件尾新增 `@media (max-width: 700px), (pointer: coarse)` 块：close-search-btn 40px、catalog-search-input min-height 40px、section-toggle/option-card 触屏 40px。
+- [x] ~~**V3.7.15 → 本批的既有图源 URL 内容变化未逐条审计**~~：**✅ V3.7.16 零散修补已完成语义级审计**（脚本对 114 条共同 id 逐条求值新旧 OL/Cesium 最终 URL + 全部加载参数；V3.7.15 的 Sentinel 10 条由 `basemapCore.buildS2CloudlessDef` 生成器产生、脚本不可见，单独核对为物化等价）。结论：
+  - [x] **真实渲染回归 3 条，已修复**：order 90 `vector_amap`（新挂 `scl=2` 未配 `tilePixelRatio`）、order 92 `vector_amap_clean_hd` / order 93 `vector_amap_clean_roads`（V3.7.15 有 `tilePixelRatio: 2`，本批丢失）——512px 瓦片按 256px 网格渲染会错档；已补 `tilePixelRatio: 2`（OL 侧行为恢复，Cesium 侧本来就不消费该参数）。
+  - [ ] **待确认意图 2 条（不回退）**：order 90/91 `vector_amap(_wgs)` 的上游模板挂上 `ltype=9`（90 另加 `scl=2`、91 加 `scl=1`）——推测与 AMAP 256 ltype 统一化相关，但无日志记载；请确认是有意调整（需补记录）还是误改（需回退）。改动证据：`git diff c936c1d64 809239cca -- frontend/src/domains/common/basemap/definitions/category-electronic.ts`。
+  - [x] **其余 112 条共同 id 加载语义零变化**（URL/参数逐条等价）；审计盲区仅 5 条静态不可求值项（`theme_arcgis_imagery_root` + 4 条 amap 工厂定义，其 url 字段均无变化，风险低）。
+  - [x] **新增 60 条定性**：真新增 50 条（amap_256 ×20 + google_combo ×30）+ Sentinel ×10（生成器物化，非新源）；删除 0 条。
+- [ ] **V3.7.16 日志「零代码改动」口径失实**（✅ 已于 V3.7.16 零散修补订正：其日志影响范围/变更文件清单已勘误补登记 `CesiumToolPanel.vue`，CHANGELOG V3.7.16 验证行同步订正）。
+- [ ] **目录树 UI 文案 i18n 缺口**（随批既有，只记不改）：目录树/搜索占位/空态等硬编码中文（「输入 URL」「没有匹配的底图」等），未接 `useLocale`；Cesium 面板其余区块已 t() 化，建议后续统一。
+- [ ] **README 版本演进表再次超 3 行**（2026-11-28 发现并已顺手修复）：V3.7.16 批次插入 3 行只删 1 行（5 行），V3.7.16 后达 6 行，重蹈 2026-11-27 B2 覆辙；V3.7.16 已收敛回恒定 3 行（20/19/18）。后续批次加行时必须同步删最旧行。
+
 ## 2026-11-27 暂存区全量 Code Review（92 文件，报告：Docs/LLM_record/26-11/2026-11-27/2026-11-27-staged-code-review.md）
 
-- [x] ~~**【阻断 B1】CSS transition 简写语法错误，约 89 处动效失效**（2026-11-27 Code Review）：~~（V3.7.30 已修复）
+- [x] ~~**【阻断 B1】CSS transition 简写语法错误，约 89 处动效失效**（2026-11-27 Code Review）：~~（V3.7.16 已修复）
   - [x] (现象) 大量写成 `transition: background, border-radius, color, height, width 0.15s;`，时长只作用于最后一项（CSS 规范），前面属性 duration=0s 无过渡。代表：`app/HomeView.vue:593`、`cesium/modules/player-controller/NavGuideHUD.vue:282`、`common/user/components/FloatingAccountPanel.vue:819`、`common/compass/components/PalaceExplanationPanel.vue:155`、`ol/components/AdministrativeDivisionPanel.vue:302`。
   - [x] (影响) Vue `<Transition>` 淡入淡出失效、hover/按压动效消失；改动初衷是性能优化，实际是全局动效退化。
   - [x] (建议) 每项独立带时长，或改用 `transition-property` + `transition-duration` 分离写法；剔除 height/width/padding/gap 等布局属性。
 
-- [x] ~~**【阻断 B2】README 版本演进表 17 行，违反「恒定 3 行」硬规范**（2026-11-27 Code Review）：~~（V3.7.30 已修复）
-  - [x] (现象) `README.md:622-638`，§5 要求恒定 3 行，本次插入 15 行只删 1 行，现存 17 行（V3.7.29→V3.7.13）。
+- [x] ~~**【阻断 B2】README 版本演进表 17 行，违反「恒定 3 行」硬规范**（2026-11-27 Code Review）：~~（V3.7.16 已修复）
+  - [x] (现象) `README.md:622-638`，§5 要求恒定 3 行，本次插入 15 行只删 1 行，现存 17 行（V3.7.16→V3.7.13）。
   - [x] (影响) README 与 CHANGELOG 大量重复，SSOT 破坏；§5「缺一即视为未完成」。
-  - [x] (建议) 只保留最新 3 条（V3.7.29/28/27），其余已在 CHANGELOG。
+  - [x] (建议) 只保留最新 3 条（V3.7.16/28/27），其余已在 CHANGELOG。
 
-- [x] ~~**【重要 I1】高德底图默认版本反转：规则表 GCJ-02 vs 品牌映射 WGS**（2026-11-27 Code Review）：~~（V3.7.30 已修复）
-  - [x] (现象) `tileIntentPresets.ts:38-43,108-112` 把「高德地图/卫星」映射为 GCJ-02 原始版，`chatIntentFallback.ts:41-45` 映射为 WGS 纠偏版。V3.7.27「规则表优先」后全部走原始版。
-  - [x] (影响) 底图瓦片与 WGS-84 中心坐标错位；同一句在 V3.7.26/27 结果不同；V3.7.21 类双表不同步复发。
+- [x] ~~**【重要 I1】高德底图默认版本反转：规则表 GCJ-02 vs 品牌映射 WGS**（2026-11-27 Code Review）：~~（V3.7.16 已修复）
+  - [x] (现象) `tileIntentPresets.ts:38-43,108-112` 把「高德地图/卫星」映射为 GCJ-02 原始版，`chatIntentFallback.ts:41-45` 映射为 WGS 纠偏版。V3.7.16「规则表优先」后全部走原始版。
+  - [x] (影响) 底图瓦片与 WGS-84 中心坐标错位；同一句在 V3.7.16/27 结果不同；V3.7.16 类双表不同步复发。
   - [x] (建议) 规则表两条改 WGS 纠偏版，校验函数加 presetId 交叉断言。
 
-- [x] ~~**【重要 I2】罗盘 Cesium 半径六档映射丢失**（2026-11-27 Code Review）：~~（V3.7.30 已修复）
-  - [x] (现象) `agentCapabilityRegistry.ts:126` 把 V3.7.23 恢复的六档 cameraHeight 边界压成「同量级换算」，OL 七档完整；`agentToolsSchema.ts:437` 注释称「逐字保留」与事实不符。
-  - [x] (影响) 3D 下模型缺档位，可能估算过小半径致罗盘不可见（V3.7.23 修过的回归）。
+- [x] ~~**【重要 I2】罗盘 Cesium 半径六档映射丢失**（2026-11-27 Code Review）：~~（V3.7.16 已修复）
+  - [x] (现象) `agentCapabilityRegistry.ts:126` 把 V3.7.16 恢复的六档 cameraHeight 边界压成「同量级换算」，OL 七档完整；`agentToolsSchema.ts:437` 注释称「逐字保留」与事实不符。
+  - [x] (影响) 3D 下模型缺档位，可能估算过小半径致罗盘不可见（V3.7.16 修过的回归）。
   - [x] (建议) 补回六档阈值或至少五个边界值。
 
-- [x] ~~**【重要 I3】宫位知识问答指引随工具集按需注入而丢失**（2026-11-27 Code Review）：~~（V3.7.30 已修复）
+- [x] ~~**【重要 I3】宫位知识问答指引随工具集按需注入而丢失**（2026-11-27 Code Review）：~~（V3.7.16 已修复）
   - [x] (现象) `COMPASS_MECHANISM_PROMPT` 同时含交互协议与「宫位释义不拒绝、引用严谨」指引，但注入条件是工具集含 enable_compass；「坎宫是什么含义」不命中 compass 触发词，整段指引不注入。
-  - [x] (影响) 纯知识问答回退到 V3.7.23 修复前的拒绝行为。
+  - [x] (影响) 纯知识问答回退到 V3.7.16 修复前的拒绝行为。
   - [x] (建议) 拆出 `COMPASS_KNOWLEDGE_PROMPT` 常驻注入，或扩充触发词覆盖宫位/山向/干支。
 
-- [x] ~~**【重要 I4】快捷命令回执污染 LLM 历史**（2026-11-27 Code Review）：~~（V3.7.30 已修复）
+- [x] ~~**【重要 I4】快捷命令回执污染 LLM 历史**（2026-11-27 Code Review）：~~（V3.7.16 已修复）
   - [x] (现象) `ChatPanelContent.ts:867-869` 注释称「不作为 LLM 历史」，但 `pushUser(label)` 无标记，`useChatSession.ts:329-336` 只过滤 isToolStatus；`userTurnsCount` 也按其计数。
   - [x] (影响) LLM 上下文被污染；会话轮次虚高致提前裁剪。
   - [x] (建议) 回执打 `isQuickCommand` 标记，两个过滤点一并排除。
 
-- [x] ~~**【一般 G1】handleQuickCommand 缺请求序号与中断保护**（2026-11-27 Code Review）：`ChatPanelContent.ts:853-899` 无 requestSeq/AbortController，停止生成时异步竞态。建议复用 dispatchSend 机制。~~（V3.7.30 已修复）
-- [x] ~~**【一般 G2】身份 IP 为空时静默共用配额桶**：`auth/constants.py:204-234` 全私网 XFF 边界返回空串，同 UA 撞桶。建议告警 + fail-closed。~~（V3.7.30 已修复）
-- [x] ~~**【一般 G3】is_private_client_ip docstring 与安全用途脱节**：`auth/constants.py:144-161` 仍写「不作鉴权依据」，现为身份判定核心。建议更新文档契约。~~（V3.7.30 已修复）
-- [x] ~~**【一般 G4】客户端完全控制系统提示词**：`routes.py:214-220,848-854` 后端安全规则可能被整体替换。建议固定安全段 + 前端工具清单拼接。~~（V3.7.30 已修复）
-- [x] ~~**【一般 G5】规则一致性校验未接线**：`basemapQuickCommands.ts:11-13,88-100` 文件头称「模块加载时校验」，文件尾称「不自动执行」，且 `validateQuickCommandsAgainstRules()` 无调用方。建议接入回归脚本并修正注释。~~（V3.7.30 已修复）
-- [x] ~~**【一般 G6】新增架构文档未登记唯一权威树**：`Docs/Guide/project-structure.md:94-119` 缺 `agent-capability-system.md`；README 却自行加了索引。建议补登记。~~（V3.7.30 已修复）
-- [x] ~~**【一般 G7】两篇日志章节编号重复**：`markdown-emphasis-fix.md:91,98`、`prompt-autonomy-fix.md:87,94` 均有两个「四、」。建议重编号。~~（V3.7.30 已修复）
-- [x] ~~**【一般 G8】CHANGELOG 链接文字错误**：`CHANGELOG.md:49` 链接文字 `prompt-slimming` 指向 `prompt-autonomy-fix.md`。建议改文字。~~（V3.7.30 已修复）
-- [x] ~~**【一般 G9】7 篇日志缺「变更文件清单」章节**：§6 必含，仅 `2026-11-26-guest-identity-ip-fix.md` 具备。建议补齐。~~（V3.7.30 已修复）
-- [x] ~~**【一般 G10】README 文档计数严重失准**：`README.md:150` 称 550 篇，磁盘实测 761 篇（Guide 14、Architecture 23+3 decisions）。建议核实口径修正。~~（V3.7.30 已修复）
+- [x] ~~**【一般 G1】handleQuickCommand 缺请求序号与中断保护**（2026-11-27 Code Review）：`ChatPanelContent.ts:853-899` 无 requestSeq/AbortController，停止生成时异步竞态。建议复用 dispatchSend 机制。~~（V3.7.16 已修复）
+- [x] ~~**【一般 G2】身份 IP 为空时静默共用配额桶**：`auth/constants.py:204-234` 全私网 XFF 边界返回空串，同 UA 撞桶。建议告警 + fail-closed。~~（V3.7.16 已修复）
+- [x] ~~**【一般 G3】is_private_client_ip docstring 与安全用途脱节**：`auth/constants.py:144-161` 仍写「不作鉴权依据」，现为身份判定核心。建议更新文档契约。~~（V3.7.16 已修复）
+- [x] ~~**【一般 G4】客户端完全控制系统提示词**：`routes.py:214-220,848-854` 后端安全规则可能被整体替换。建议固定安全段 + 前端工具清单拼接。~~（V3.7.16 已修复）
+- [x] ~~**【一般 G5】规则一致性校验未接线**：`basemapQuickCommands.ts:11-13,88-100` 文件头称「模块加载时校验」，文件尾称「不自动执行」，且 `validateQuickCommandsAgainstRules()` 无调用方。建议接入回归脚本并修正注释。~~（V3.7.16 已修复）
+- [x] ~~**【一般 G6】新增架构文档未登记唯一权威树**：`Docs/Guide/project-structure.md:94-119` 缺 `agent-capability-system.md`；README 却自行加了索引。建议补登记。~~（V3.7.16 已修复）
+- [x] ~~**【一般 G7】两篇日志章节编号重复**：`markdown-emphasis-fix.md:91,98`、`prompt-autonomy-fix.md:87,94` 均有两个「四、」。建议重编号。~~（V3.7.16 已修复）
+- [x] ~~**【一般 G8】CHANGELOG 链接文字错误**：`CHANGELOG.md:49` 链接文字 `prompt-slimming` 指向 `prompt-autonomy-fix.md`。建议改文字。~~（V3.7.16 已修复）
+- [x] ~~**【一般 G9】7 篇日志缺「变更文件清单」章节**：§6 必含，仅 `2026-11-26-guest-identity-ip-fix.md` 具备。建议补齐。~~（V3.7.16 已修复）
+- [x] ~~**【一般 G10】README 文档计数严重失准**：`README.md:150` 称 550 篇，磁盘实测 761 篇（Guide 14、Architecture 23+3 decisions）。建议核实口径修正。~~（V3.7.16 已修复）
+
+## 2026-11-28 暂存区全量 Code Review 顺带发现（本批未越权修改）
+
+- [x] ~~**【规范冲突 S1】VITE_* 配置登记口径不一致**：~~（V3.7.16 已修复）已将 `.env.example` 中 22 个缺失的 `VITE_*` 键批量登记到 `backend/config/catalog.py`（L1/非密），与既有 2 项合计 24 项；`CheckConfigRegistry.py` 全绿，规范与门禁口径一致，无需修改 Force_command。
+- [x] ~~**【文档漂移 S2】两篇现行架构文档仍引用已删除底图文件**：~~（V3.7.16 已修复）`runtime-map-token-pool.md` 改指向 `common/basemap/definitions/resolveTileUrl.ts` 与 `createOlSource`；`tile-rectify-system.md` 改指向 `CORRECTION_PROXY_SEGMENT` 与 `basemap-catalog-redesign.md`。
+- [x] ~~**【契约确认 S3】游客 session payload 字段变更**：~~（V3.7.16 已修复）`_build_temporary_guest_session_async` 显式写回 `is_temporary=False` / `temporary_credential=""`，保持 `/auth/me` 与在线镜像 payload 形状不变，并在代码中注明语义。
+- [x] ~~**【门禁脆弱 S4】`check-basemap-catalog.mjs` 末项 id 与总数断言硬编码**：~~（V3.7.16 已修复）总数断言改为 `MIN_PRESET_COUNT=181` 下界（追加不失败、回退才失败），末项断言改为非空；首部锚点与组合数量契约保留。

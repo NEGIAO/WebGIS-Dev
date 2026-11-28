@@ -1,12 +1,12 @@
 /**
- * Agent 工具按意图分发（V3.7.19；V3.7.27 改为从能力注册表派生）
+ * Agent 工具按意图分发（V3.7.16；V3.7.16 改为从能力注册表派生）
  *
  * 背景：20 个工具的完整 JSON Schema 约 8,817 字符 / 11,915 字节，
  * 是 System Prompt（962 字符）的 9.2 倍，且首轮与每个编排轮次都全量发送，
  * 构成首轮延迟的结构性瓶颈。本模块按用户消息关键词选择工具子集：
  * 核心工具常驻，命中分组整组追加。
  *
- * V3.7.27：分组定义与触发词迁入 agentCapabilityRegistry.ts（SSOT），
+ * V3.7.16：分组定义与触发词迁入 agentCapabilityRegistry.ts（SSOT），
  * 本文件只保留路由算法——注册表改一处，router 与 Prompt 同步。
  *
  * 设计约束：
@@ -28,7 +28,7 @@ import { validateQuickCommandsAgainstRules } from '@common/chat/constants/basema
 type AgentTool = (typeof AGENT_TOOLS)[number];
 
 // V3.7.15：开发期校验快捷命令 intent 仍能被切片规则表解析。
-// 规则表改动导致快捷命令失效时立即在控制台暴露，防止 V3.7.21 类静默断裂。
+// 规则表改动导致快捷命令失效时立即在控制台暴露，防止 V3.7.16 类静默断裂。
 if (import.meta.env.DEV) {
     const broken = validateQuickCommandsAgainstRules();
     if (broken.length > 0) {

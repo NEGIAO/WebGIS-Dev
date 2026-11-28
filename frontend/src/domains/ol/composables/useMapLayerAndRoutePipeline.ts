@@ -47,7 +47,6 @@ export interface MapLayerAndRoutePipelineOptions {
     tocStore: any;
     emit: (event: any, ...args: any[]) => void;
     message: any;
-    getLayerCategory: (layerId?: string) => any;
     refreshLayersState: () => void;
     setDrawStyle: (styleCfg: any) => void;
 }
@@ -65,7 +64,6 @@ export function createMapLayerAndRoutePipeline(options: MapLayerAndRoutePipeline
         tocStore,
         emit,
         message,
-        getLayerCategory,
         refreshLayersState,
         setDrawStyle,
     } = options;
@@ -260,7 +258,6 @@ export function createMapLayerAndRoutePipeline(options: MapLayerAndRoutePipeline
         setDrawStyle,
         layerListRef,
         selectedLayerRef,
-        getLayerCategory,
         refreshLayersState,
         emitFeatureSelected: (payload: any) => emit('feature-selected', payload),
         isRouteManagedLayer: ({ layerId, removed }: { layerId: string; removed: any }) =>

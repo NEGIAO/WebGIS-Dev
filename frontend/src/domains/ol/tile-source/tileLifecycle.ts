@@ -9,8 +9,9 @@
  * - controller 每次加载时从 source 动态读取（避免闭包锁死旧 controller）
  * - abort() 会真正中断浏览器底层 TCP 连接（而非仅标记）
  * - epoch 在请求开始时写入 tile，异步回调完成后再对比 source 最新 epoch
- * - 外部瓦片直连失败时自动走后端 /proxy/{host+path} 代理（fallback 模式）
- * - 支持 VITE_TILE_PROXY_MODE=always 强制所有外部瓦片走代理
+ * - 外部瓦片直连失败时可选走后端 /proxy/{host+path} 代理（fallback 模式，
+ *   受 VITE_TILE_AUTO_PROXY_ENABLED 控制，缺省关闭，避免网络波动隐式触发）
+ * - 支持 VITE_TILE_PROXY_MODE=always 强制所有外部瓦片走代理（显式配置，不受开关影响）
  * - 代理真正加载成功时才弹 toast（5s 防抖去重）
  * - prioritizeTileSourceRequest 幂等：重复包装只补齐 controller
  */
@@ -23,7 +24,12 @@ import {
     isOsmBlockedTileBlob,
     isOsmTileUrl,
 } from '@common/basemap/osmTileFallback';
-import { TILE_PROXY_BASE_URL, TILE_PROXY_MODE, tileProxyUrl } from '@/config/publicRuntime';
+import {
+    TILE_AUTO_PROXY_ENABLED,
+    TILE_PROXY_BASE_URL,
+    TILE_PROXY_MODE,
+    tileProxyUrl,
+} from '@/config/publicRuntime';
 
 // ==================== 代理通知（去重防抖） ====================
 
@@ -320,7 +326,11 @@ async function fetchTileAsBlobUrl(
         if (signal.aborted) return null;
     }
 
-    if (TILE_PROXY_MODE === 'off' || !proxyUrl || signal.aborted) return null;
+    // V3.7.16：fallback 自动代理默认关闭。网络抖动导致的直连超时不再隐式切 VPS；
+    // definition 级 proxy/correction 与 always 显式模式不受此开关影响。
+    if (!TILE_AUTO_PROXY_ENABLED || TILE_PROXY_MODE === 'off' || !proxyUrl || signal.aborted) {
+        return null;
+    }
 
     const proxiedUrl = await requestTileAsBlobUrl(proxyUrl, signal, { osm: isOsm });
     // 代理真正成功再提示，避免「已切换」但瓦片仍失败的误导

@@ -328,7 +328,7 @@ export class Instance {
 		const layerIds = resolvePresetLayerIds(presetId);
 		for (const layerId of layerIds) {
 			const config = this.layerConfigMap.get(layerId);
-			if (!config || config.category === 'label') continue;
+			if (!config || config.zBand === 'label') continue;
 			try {
 				const source = config.createSource?.();
 				const template = this.extractTileTemplate(source);

@@ -182,8 +182,12 @@ backendAPI.interceptors.response.use(
                 // 清本地会话 + 派发事件，由 main.ts 弹「会话过期，请重新登陆」并跳 /register。
                 // 此处提前 reject，避免下方通用 toast 再弹一次「401，登录状态已失效...」。
                 // GUEST_NO_TOKEN（历史码） / LOGIN_REQUIRED（未带 token 的 require_login）
+                // / GUEST_TOKEN_REQUIRED（V3.7.16：游客 token 缺失，由 s=1 路由守卫无感签发）
                 // → 仅提示，不清会话，不跳注册页。
-                const isGuestInsufficient = detailCode === 'GUEST_NO_TOKEN' || detailCode === 'LOGIN_REQUIRED';
+                const isGuestInsufficient =
+                    detailCode === 'GUEST_NO_TOKEN'
+                    || detailCode === 'LOGIN_REQUIRED'
+                    || detailCode === 'GUEST_TOKEN_REQUIRED';
                 // V3.7.12 Code Review：仅当触发 401 的凭证仍是当前凭证时才清理。
                 // 迟到的旧请求若携带已被替换的 token，清会话会误伤刚重建的登录态。
                 const issuedAuth = String((config as any)?._issuedAuthToken || '');

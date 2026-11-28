@@ -29,6 +29,7 @@ import {
 	Image as ImageIcon,
 	Layers,
 	RotateCcw,
+	Search as SearchIcon,
 	X,
 } from '@lucide/vue';
 import { defineResilientAsync } from '@common/utils/defineResilientAsync';
@@ -101,6 +102,7 @@ export default defineComponent({
 		Layers,
 		LocationSearch,
 		RotateCcw,
+		SearchIcon,
 		X,
 	},
 	props: propDefine,
@@ -133,7 +135,7 @@ export class Instance {
 		...args: any[]
 	) => void;
 	// ── 内部常量 ──
-	private readonly PANEL_WIDTH = 200;
+	// （PANEL_WIDTH 已随 V3.7.16 面板宽度同步 .layer-switcher 的改造移除——宽度取自宿主实测）
 	private readonly PANEL_GAP = 6;
 	private readonly PANEL_MARGIN = 8;
 	private readonly CONTEXT_MENU_WIDTH = 152;
@@ -143,7 +145,11 @@ export class Instance {
 	// ── 面板与菜单 ──
 	public layerManageButtonRef = ref<HTMLElement | null>(null);
 	public showLayerManager = ref(false);
-	public layerManagerAnchor = ref({ top: 0, left: 0 });
+	public isLayerSearchOpen = ref(false);
+	public layerSearchQuery = ref('');
+	/** 图层搜索输入框引用（打开时自动聚焦） */
+	public layerSearchInputRef = ref<HTMLInputElement | null>(null);
+	public layerManagerAnchor = ref({ top: 0, left: 0, width: 0 });
 	public showLayerContextMenu = ref(false);
 	public showUrlSubmenu = ref(false);
 	public contextMenuLayer = ref<any>(null);
@@ -209,23 +215,25 @@ export class Instance {
 	// ── 触摸设备（长按识别由 common/composables/useLongPress 承担） ──
 	public isTouchDevice = ref(false);
 
-	// ── 底图目录与历史影像（useBasemapCatalog 能力层成员） ──
+	// ── 底图目录（useBasemapCatalog 能力层成员） ──
 	/** 以上成员在构造函数中通过 Object.assign(this, catalog) 运行时挂载，此处仅声明类型，
 	 * 使 Vue 模板编译器与 tsc 能对 template 中的同名引用做类型检查。 */
-	public historicalProviderTab!: Ref<string>;
-	public historicalImageryLoading!: Ref<boolean>;
-	public esriWaybackLayers!: Ref<any[]>;
-	public historicalImageryUpdatedAt!: Ref<string>;
-	public openHistoryYears!: Ref<Set<string>>;
-	public regularBasemapOptions!: ComputedRef<any[]>;
-	public sentinelYearGroups!: ComputedRef<any[]>;
-	public esriYearGroups!: ComputedRef<any[]>;
+	public basemapQuery!: Ref<string>;
+	public catalogTree!: ComputedRef<any[]>;
+	public searchResults!: ComputedRef<any[]>;
+	public isSearchActive!: ComputedRef<boolean>;
+	public isCategoryOpen!: (category: string) => boolean;
+	public toggleCategory!: (category: string) => void;
+	public isProviderOpen!: (category: string, provider: string) => boolean;
+	public toggleProvider!: (category: string, provider: string) => void;
+	public categoryLabel!: (category: string) => string;
+	public coordLabel!: (coord: string) => string;
+	public categoryOrdinal!: (category: string) => string;
+	public providerOrdinal!: (category: string, provider: string) => string;
+	public providerEntryCount!: (provider: any) => number;
+	public categoryEntryCount!: (category: any) => number;
+	public entryTitle!: (entry: any) => string;
 	public currentLayerLabel!: ComputedRef<string>;
-	public selectHistoricalProviderTab!: (tab: string) => void;
-	public toggleHistoryYear!: (provider: string, year: string | number) => void;
-	public isHistoryYearOpen!: (provider: string, year: string | number) => boolean;
-	public formatHistoryDate!: (value: string) => string;
-	public loadHistoricalImageryCatalog!: () => Promise<void>;
 
 	// ── 内部可变状态 ──
 	/** URL 子菜单延迟关闭定时器（指针跨越父项与子菜单的间隙时需要） */
@@ -279,6 +287,29 @@ export class Instance {
 	get layerList() {
 		return this.props.layerList;
 	}
+
+	/** 图层检索：按名称/ID 过滤，命中项之外的行仅隐藏，保留原索引供拖拽排序使用 */
+	public layerMatchesSearch = (layer: any) => {
+		const query = this.layerSearchQuery.value.trim().toLowerCase();
+		if (!query) return true;
+		return `${layer?.name ?? ''} ${layer?.id ?? ''}`.toLowerCase().includes(query);
+	};
+
+	public toggleLayerSearch = () => {
+		this.isLayerSearchOpen.value = !this.isLayerSearchOpen.value;
+		if (this.isLayerSearchOpen.value) {
+			// V3.7.16：打开搜索即聚焦输入框，省一次点击
+			void nextTick(() => this.layerSearchInputRef.value?.focus());
+		} else {
+			this.layerSearchQuery.value = '';
+		}
+	};
+
+	public closeLayerSearch = () => {
+		this.isLayerSearchOpen.value = false;
+		this.layerSearchQuery.value = '';
+	};
+
 	get activeGraticule() {
 		return this.props.activeGraticule;
 	}
@@ -324,6 +355,8 @@ export class Instance {
 	public layerManagerPanelStyle = computed(() => ({
 		top: `${this.layerManagerAnchor.value.top}px`,
 		left: `${this.layerManagerAnchor.value.left}px`,
+		// V3.7.16：宽度同步 LayerControlPanel 面板宽度——左右缘与面板精确对齐
+		width: `${this.layerManagerAnchor.value.width}px`,
 	}));
 
 
@@ -336,6 +369,7 @@ export class Instance {
 			if (!visible) {
 				this.unbindAnchorListeners();
 				this.draggingIndex.value = -1;
+				this.closeLayerSearch();
 				this.closeLayerContextMenu();
 				return;
 			}
@@ -407,19 +441,44 @@ export class Instance {
 	};
 
 	public selectOption = (option: any) => {
-		this.ctx.emit('change-layer', { layerId: option.value, source: 'dropdown' });
+		// 统一目录条目使用 id；旧 BASEMAP_OPTIONS 使用 value，两者都兼容
+		this.ctx.emit('change-layer', { layerId: option.value ?? option.id, source: 'dropdown' });
 		this.isSelectDropdownOpen.value = false;
 	};
 
 	public selectHistoricalSnapshot = (snapshot: any) => {
 		if (!snapshot?.xyz_url) return;
-		this.historicalProviderTab.value = 'esri';
 		this.isSelectDropdownOpen.value = false;
 		this.ctx.emit('change-layer', {
 			layerId: 'custom',
 			source: 'custom-url',
 			customUrl: snapshot.xyz_url,
 		});
+	};
+
+	/** WMS/WMTS/MVT/XYZ 入口：切到 custom 并聚焦自定义输入框 */
+	public activateCustomBasemap = () => {
+		this.ctx.emit('change-layer', { layerId: 'custom', source: 'dropdown' });
+		this.isSelectDropdownOpen.value = false;
+		void nextTick(() => {
+			const input = document.querySelector<HTMLInputElement>('.custom-url-input');
+			input?.focus();
+			input?.scrollIntoView({ block: 'nearest' });
+		});
+	};
+
+	/** 统一目录条目：普通预设走 selectOption，Wayback 动态项走 custom-url */
+	public selectCatalogEntry = (entry: any) => {
+		if (entry?.customUrl) {
+			this.selectHistoricalSnapshot({
+				id: entry.id,
+				date: entry.label,
+				name: entry.description,
+				xyz_url: entry.customUrl,
+			});
+			return;
+		}
+		this.selectOption(entry);
 	};
 
 	/** Cesium overlay 开关变更：在实例层做类型断言，避免在 Vue 模板中使用 TS `as` 语法导致运行时 SyntaxError */
@@ -433,8 +492,8 @@ export class Instance {
 	//#region 桌面拖拽排序
 
 	public onDragStart = (evt: DragEvent, index: number) => {
-		// 移动端禁用拖动
-		if (this.isTouchDevice.value) {
+		// 移动端或检索中禁用拖动（检索时列表有隐藏项，索引不可见）
+		if (this.isTouchDevice.value || this.layerSearchQuery.value.trim()) {
 			evt.preventDefault();
 			return;
 		}
@@ -447,7 +506,7 @@ export class Instance {
 	};
 
 	public onDrop = (evt: DragEvent, dropIndex: number) => {
-		if (this.isTouchDevice.value) {
+		if (this.isTouchDevice.value || this.layerSearchQuery.value.trim()) {
 			evt.preventDefault();
 			return;
 		}
@@ -589,7 +648,7 @@ export class Instance {
 
 	/** touchstart：起点在手柄上进拖拽，否则走长按计时（右键菜单） */
 	public onLayerTouchStart = (layer: any, index: number, event: TouchEvent) => {
-		if (!this.isTouchDevice.value) return;
+		if (!this.isTouchDevice.value || this.layerSearchQuery.value.trim()) return;
 
 		const touches = event.touches;
 		if (touches.length !== 1) {
@@ -662,15 +721,21 @@ export class Instance {
 	public updateLayerManagerAnchor = () => {
 		const buttonEl = this.layerManageButtonRef.value;
 		if (!buttonEl) return;
-		const rect = buttonEl.getBoundingClientRect();
+		// V3.7.16：面板与整个 LayerControlPanel（.layer-switcher）左右缘对齐——
+		// 左缘贴面板左缘、宽度同步面板宽度（右缘即面板右缘）；锚定宿主从
+		// 管理按钮上浮到开关器整体，失败时回退按钮自身。
+		const hostEl = (buttonEl.closest('.layer-switcher') as HTMLElement | null) ?? buttonEl;
+		const rect = hostEl.getBoundingClientRect();
 		const containerRect = this.getLayerOverlayContainerRect();
 		const originLeft = containerRect?.left ?? 0;
 		const originTop = containerRect?.top ?? 0;
 		const containerWidth = containerRect?.width ?? (typeof window !== 'undefined' ? window.innerWidth : 0);
-		const maxLeft = containerWidth - this.PANEL_WIDTH - this.PANEL_MARGIN;
+		const width = Math.round(rect.width);
+		const maxLeft = containerWidth - width - this.PANEL_MARGIN;
 		this.layerManagerAnchor.value = {
 			top: Math.round(Math.max(this.PANEL_MARGIN, rect.bottom - originTop + this.PANEL_GAP)),
-			left: Math.round(this.clampToRange(rect.right - originLeft - this.PANEL_WIDTH, this.PANEL_MARGIN, maxLeft)),
+			left: Math.round(this.clampToRange(rect.left - originLeft, this.PANEL_MARGIN, Math.max(this.PANEL_MARGIN, maxLeft))),
+			width,
 		};
 	};
 

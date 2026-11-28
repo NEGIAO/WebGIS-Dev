@@ -685,8 +685,9 @@ def test_admin_online_mirror_only_keeps_current_identities(monkeypatch):
     conn.executescript(
         """
         CREATE TABLE sessions (
-            username TEXT, role TEXT, guest_uid TEXT, guest_device_id TEXT,
-            ip TEXT, user_agent TEXT, created_at TEXT, last_seen_at TEXT
+            token TEXT, username TEXT, role TEXT, guest_uid TEXT, guest_device_id TEXT,
+            ip TEXT, user_agent TEXT, created_at TEXT, last_seen_at TEXT,
+            expires_at TEXT, ip_city TEXT, ip_region TEXT, ip_country TEXT
         );
         CREATE TABLE guest_identity_records (
             id INTEGER, guest_uid TEXT, username TEXT, role TEXT, guest_device_id TEXT,
@@ -706,11 +707,7 @@ def test_admin_online_mirror_only_keeps_current_identities(monkeypatch):
             sse_connections INTEGER, ip TEXT, ip_city TEXT, ip_region TEXT,
             ip_country TEXT, latitude REAL, longitude REAL, coord_source TEXT,
             user_agent TEXT, first_seen_at TEXT, last_seen_at TEXT,
-            last_heartbeat_at TEXT, refreshed_at TEXT
-        );
-        INSERT INTO sessions VALUES (
-            'admin', 'admin', '', '', '9.9.9.9', 'UA-ADMIN',
-            '2026-11-25 10:00:00', '2026-11-25 12:00:00'
+            last_heartbeat_at TEXT, refreshed_at TEXT, session_token_sig TEXT
         );
         -- id=2055、username 残留旧值 user_1988：验证镜像用 id 而非 username
         INSERT INTO guest_identity_records VALUES (
@@ -724,6 +721,30 @@ def test_admin_online_mirror_only_keeps_current_identities(monkeypatch):
         INSERT INTO users VALUES ('admin', 'Admin Nick');
         """
     )
+    # V3.7.16：会话行必须是有效时间窗内的真值，镜像刷新会按 4h 硬截止过滤。
+    from datetime import timedelta
+
+    from api.auth.db import _iso as _db_iso, _utc_now as _db_utc_now
+
+    now = _db_utc_now()
+    created = _db_iso(now - timedelta(minutes=10))
+    expires = _db_iso(now + timedelta(hours=2))
+    conn.execute(
+        "INSERT INTO sessions VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        (
+            "tok-admin", "admin", "admin", "", "", "9.9.9.9", "UA-ADMIN",
+            created, created, expires, "", "", "",
+        ),
+    )
+    conn.execute(
+        "INSERT INTO sessions VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        (
+            "tok-guest", "guest_mirror1", "guest", "guest_mirror1", "gd_mirror1",
+            "10.16.26.165", "UA-GUEST", created, created, expires,
+            "Nanjing", "Jiangsu", "China",
+        ),
+    )
+    conn.commit()
 
     @contextmanager
     def _memory_db():
@@ -752,11 +773,68 @@ def test_admin_online_mirror_only_keeps_current_identities(monkeypatch):
     # V3.7.13：游客 display_name 用 guest_<id>，与用户中心一致（不受 username 旧值影响）
     assert guest["display_name"] == "guest_2055"
     assert guest["client_ids"] == ["c_guest_mirror"]
+    # V3.7.16：镜像行必须可追溯到有效 session 的 token 指纹
+    assert admin["session_token_sig"] == statistics._session_token_sig("tok-admin")
+    assert guest["session_token_sig"] == statistics._session_token_sig("tok-guest")
 
     tracker.drop_presence("u:admin", client_id="c_admin_mirror")
     assert statistics._refresh_admin_online_mirror_sync() == 1
     rows = statistics._load_admin_online_mirror_sync()
     assert [row["presence_id"] for row in rows] == ["g:guest_mirror1"]
+
+
+def test_online_mirror_drops_presence_without_live_session(monkeypatch):
+    """V3.7.16：tracker 有心跳但 sessions 无有效会话的幽灵身份不得写入镜像表。"""
+    import sqlite3
+    from contextlib import contextmanager
+
+    from api import statistics
+
+    conn = sqlite3.connect(":memory:", check_same_thread=False)
+    conn.row_factory = sqlite3.Row
+    conn.executescript(
+        """
+        CREATE TABLE sessions (
+            token TEXT, username TEXT, role TEXT, guest_uid TEXT, guest_device_id TEXT,
+            ip TEXT, user_agent TEXT, created_at TEXT, last_seen_at TEXT,
+            expires_at TEXT, ip_city TEXT, ip_region TEXT, ip_country TEXT
+        );
+        CREATE TABLE guest_identity_records (
+            id INTEGER, guest_uid TEXT, username TEXT, role TEXT, guest_device_id TEXT,
+            ip TEXT, user_agent TEXT, first_seen_at TEXT, last_seen_at TEXT
+        );
+        CREATE TABLE visit_tracking_events (
+            username TEXT, ip_city TEXT, ip_region TEXT, ip_country TEXT,
+            latitude REAL, longitude REAL, coord_source TEXT, created_at TEXT
+        );
+        CREATE TABLE users (username TEXT, display_name TEXT);
+        CREATE TABLE admin_online_presence (
+            presence_id TEXT PRIMARY KEY, display_name TEXT, role TEXT,
+            identity_type TEXT, guest_uid TEXT, guest_device_id TEXT,
+            device_presence_id TEXT, client_ids TEXT, session_count INTEGER,
+            sse_connections INTEGER, ip TEXT, ip_city TEXT, ip_region TEXT,
+            ip_country TEXT, latitude REAL, longitude REAL, coord_source TEXT,
+            user_agent TEXT, first_seen_at TEXT, last_seen_at TEXT,
+            last_heartbeat_at TEXT, refreshed_at TEXT, session_token_sig TEXT
+        );
+        INSERT INTO guest_identity_records VALUES (
+            2000, 'guest_ghost', 'guest_2000', 'guest', 'gd_ghost',
+            '180.137.117.8', 'UA-GHOST', '2026-11-16 20:35:32', '2026-11-24 21:44:39'
+        );
+        """
+    )
+
+    @contextmanager
+    def _memory_db():
+        yield conn
+
+    monkeypatch.setattr(statistics, "_db_connection", _memory_db)
+    tracker = _tracker(monkeypatch)
+    monkeypatch.setattr(statistics, "get_online_tracker", lambda: tracker)
+    tracker.mark_heartbeat("g:guest_ghost", client_id="c_ghost")
+
+    assert statistics._refresh_admin_online_mirror_sync() == 0
+    assert statistics._load_admin_online_mirror_sync() == []
 
 
 def test_public_ip_for_display_filters_private_gateway_ips():

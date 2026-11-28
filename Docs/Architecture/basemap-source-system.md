@@ -174,13 +174,15 @@ flowchart TD
 
 ### 5.4 代理模式
 
-由环境变量 `VITE_TILE_PROXY_MODE` 控制：
+由环境变量 `VITE_TILE_PROXY_MODE` 控制；自动代理另由 `VITE_TILE_AUTO_PROXY_ENABLED` 独立开关控制（V3.7.16 起默认 `0`）：
 
 | 模式 | 行为 |
 |------|------|
-| `fallback`（默认） | 直连优先，失败后自动走后端 `/proxy/{URL}` |
-| `always` | 所有可代理的外部瓦片统一走后端 |
+| `fallback`（默认） | 直连优先；**仅当 `VITE_TILE_AUTO_PROXY_ENABLED=1` 时**失败后自动走后端 `/proxy/{URL}` |
+| `always` | 所有可代理的外部瓦片统一走后端（显式配置，不受自动代理开关影响） |
 | `off` | 禁用代理，仅直连 |
+
+> `VITE_TILE_AUTO_PROXY_ENABLED=0` 只关闭「直连失败/超时 → VPS 代理」的隐式兜底；定义中显式声明的 `correction` / `proxy:'proxy'` 仍按 SSOT 走代理，OSM 德国社区镜像也保留。
 
 代理触发时通过 `useMessage` 弹出 toast 通知（5s 防抖去重，`PROXY_NOTIFY_DEBOUNCE_MS = 5000`）。
 

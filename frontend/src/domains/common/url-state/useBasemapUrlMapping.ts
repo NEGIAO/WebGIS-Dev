@@ -1,29 +1,21 @@
 /**
- * 底图URL映射功能库
- * 负责底图索引与ID的互相转换、分类与分组信息查询
+ * 底图 URL 映射功能库
+ * 负责底图索引与 ID 的互相转换。
  *
  * 导出：
  * - getLayerIdByIndex(index)
  * - getLayerIndexById(layerId)
- * - getLayerCategory(layerId)
- * - getLayerGroup(layerId)
  */
 
 /**
  * 工厂函数 - 返回底图映射相关的导出函数
  * @param {Array<string>} urlLayerOptions - URL 图层索引映射数组
- * @param {Function} getLayerCategoryById - 获取底图分类的函数
- * @param {Function} getLayerGroupById - 获取底图分组的函数
- * @returns {Object} 包含 getLayerIdByIndex、getLayerIndexById、getLayerCategory、getLayerGroup 的对象
+ * @returns {Object} 包含 getLayerIdByIndex、getLayerIndexById 的对象
  */
 export function createBasemapUrlMappingFeature({
 	urlLayerOptions = [] as string[],
-	getLayerCategoryById = (_layerId?: string): string | null => null,
-	getLayerGroupById = (_layerId?: string): string | null => null,
 }: {
 	urlLayerOptions?: string[];
-	getLayerCategoryById?: (layerId?: string) => string | null;
-	getLayerGroupById?: (layerId?: string) => string | null;
 } = {}) {
     /**
      * 根据图层索引获取底图 ID
@@ -49,28 +41,8 @@ export function createBasemapUrlMappingFeature({
         return idx >= 0 ? idx + 1 : null;
     }
 
-    /**
-     * 根据底图 ID 判断图层属于底图还是覆盖层
-     * @param {string} layerId - 底图 ID
-     * @returns {string} 底图分类（如：'basemap', 'overlay' 等）
-     */
-    function getLayerCategory(layerId: any) {
-        return getLayerCategoryById(layerId);
-    }
-
-    /**
-     * 为底图面板提供分组标签（影像/矢量/专题/注记）
-     * @param {string} layerId - 底图 ID
-     * @returns {string} 底图分组名称
-     */
-    function getLayerGroup(layerId: any) {
-        return getLayerGroupById(layerId);
-    }
-
     return {
         getLayerIdByIndex,
         getLayerIndexById,
-        getLayerCategory,
-        getLayerGroup,
     };
 }

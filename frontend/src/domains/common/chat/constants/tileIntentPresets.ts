@@ -191,7 +191,7 @@ export const TILE_INTENT_RULES: readonly TileIntentRule[] = Object.freeze([
         caveat: 'apistyle 非稳定服务参数。',
     },
     {
-        // V3.7.21：补登记聊天面板默认建议词「切换到谷歌代理卫星底图」。
+        // V3.7.16：补登记聊天面板默认建议词「切换到谷歌代理卫星底图」。
         // 旧版此语义只在 chatIntentFallback 正则兜底里存在；当 LLM 正常返回
         // switch_basemap(intent) 时走规则表匹配不到，导致建议词点击必失败。
         id: 'google_backend_proxy_satellite',

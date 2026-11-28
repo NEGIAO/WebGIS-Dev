@@ -537,7 +537,7 @@ function renderAnswerHtml(rawContent: any) {
             // 顺序：KaTeX 渲染在 sanitize 之后，避免其 output 的 style/mathML 标签被误杀
             const ctx = createMathContext();
             const mathMasked = extractMathExpressions(trimmed, ctx);
-            // V3.7.24：LLM 常在加粗星号内侧多打空格（如 `** favorable**`），
+            // V3.7.16：LLM 常在加粗星号内侧多打空格（如 `** favorable**`），
             // CommonMark 不认这种语法；在 marked 解析前归一化（公式已遮蔽、代码受保护）
             const preprocessed = normalizeEmphasisSpacing(mathMasked);
             const parsed = markedLib.value.parse(preprocessed);

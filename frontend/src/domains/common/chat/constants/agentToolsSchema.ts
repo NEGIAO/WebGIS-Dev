@@ -433,7 +433,7 @@ export const AGENT_TOOLS = [
 ];
 
 export function buildSystemPromptWithTools(toolNames?: ReadonlySet<string> | readonly string[]) {
-    // V3.7.27：罗盘交互机制从注册表按需注入——仅在工具集含 enable_compass 时发送。
+    // V3.7.16：罗盘交互机制从注册表按需注入——仅在工具集含 enable_compass 时发送。
     // 原文逐字保留在 agentCapabilityRegistry.COMPASS_MECHANISM_PROMPT，避免措辞漂移。
     const names = toolNames
         ? (toolNames instanceof Set ? toolNames : new Set(toolNames))

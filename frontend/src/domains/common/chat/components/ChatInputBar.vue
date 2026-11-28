@@ -12,7 +12,7 @@
                 @keydown="onKeydown"
                 @input="autoResize"
             ></textarea>
-            <!-- V3.7.20：底图切片预设快捷命令（本地解析+执行，零 LLM 调用） -->
+            <!-- V3.7.16：底图切片预设快捷命令（本地解析+执行，零 LLM 调用） -->
             <button
                 class="round-btn quick-btn"
                 :class="{ 'is-open': quickOpen }"
@@ -202,7 +202,7 @@ textarea::placeholder {
     50% { box-shadow: 0 2px 12px rgba(var(--danger-rgb), 0.55); }
 }
 
-/* V3.7.20：底图切片预设快捷命令 */
+/* V3.7.16：底图切片预设快捷命令 */
 .quick-btn {
     background: transparent;
     color: var(--text-muted);

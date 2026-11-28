@@ -55,7 +55,7 @@ function buildDefaultProxyBody(payload: any = {}): Record<string, any> {
         if (mapContext) body.map_context = mapContext;
     }
 
-    // V3.7.29 修复：System Prompt 必须走专用字段。旧版遗漏本行，
+    // V3.7.16 修复：System Prompt 必须走专用字段。旧版遗漏本行，
     // 默认 AI 通道实际使用后端默认提示词，前端能力边界与罗盘协议段全部失效。
     if (payload.system_prompt) body.system_prompt = String(payload.system_prompt).trim();
 
@@ -324,7 +324,7 @@ function buildAgentCompletionsBody(payload: any = {}): Record<string, any> {
         if (mapContext) body.map_context = mapContext;
     }
 
-    // V3.7.29 修复：与 buildAgentProxyBody 对齐。旧版遗漏本行，
+    // V3.7.16 修复：与 buildAgentProxyBody 对齐。旧版遗漏本行，
     // 后端代理通道实际使用后端默认提示词，前端组装的能力边界未生效。
     if (payload.system_prompt) body.system_prompt = String(payload.system_prompt).trim();
 

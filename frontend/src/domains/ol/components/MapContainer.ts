@@ -10,6 +10,7 @@ import {
     onUnmounted,
     ref,
     shallowRef,
+    watch,
     type ExtractPropTypes,
     type Ref,
     type SetupContext,
@@ -48,6 +49,7 @@ import {
 } from '@ol/tile-source/index';
 
 import LayerControlPanel from '@ol/layer/components/LayerControlPanel.vue';
+import { resolvePresetLayerIds } from '@ol/basemap/constants';
 import MapSwipeController from './MapSwipeController.vue';
 import MapControlsBar from './MapControlsBar.vue';
 
@@ -335,6 +337,48 @@ export class Instance {
             basemapPipeline.resetBasemapChain?.({ targetLayerId: this.selectedLayer.value });
         };
 
+        // ── V3.7.16/V3.7.16：激活置顶策略 ────────────────────────────────────
+        // 列表顺序即显示顺序（index 0 = 栈顶：allocateBasemapZIndex 带内「列表靠前 = 更高 z」）。
+        // 激活新底图时把列表重排为三分区：标注层（zBand='label'）恒居栈顶 → 本次激活预设栈
+        // → 其余图层（两区均保持相对顺序）。只移动激活栈、不扰动其它图层相对次序，因此
+        // 新激活图层与现有图层不冲突；重排后 refreshLayersState 统一重算带内 zIndex。
+        // ⚠️ 激活栈必须按「栈序反转」放入：resolvePresetLayerIds 的栈序是「底图在前、
+        // 注记在后（注记渲染在最上）」，而列表先位 = 更高 z——若按栈原顺序写入，
+        // 底图会压住同栈注记（V3.7.16 初版实测顺序相反，即此原因）。
+        const zBandOfLayer = (layerId: string) =>
+            String(
+                LAYER_CONFIGS.find((cfg: any) => cfg.id === layerId)?.zBand ?? 'basemap',
+            );
+        const reorderLayerListForActivation = (activeStackIds: string[]) => {
+            const list = layerList.value;
+            if (!Array.isArray(list) || !list.length) return;
+            const activeSet = new Set(activeStackIds.map((id) => String(id || '').trim()).filter(Boolean));
+            // 标注区与激活区必须互斥：激活栈中的注记层（zBand='label'）归标注区（栈顶），
+            // 否则会双重归属触发守恒校验失败、整个重排被静默放弃
+            const labels = list.filter((item: any) => zBandOfLayer(item.id) === 'label');
+            const active = [...activeStackIds]
+                .reverse()
+                .flatMap((id) => {
+                    const found = list.find((item: any) => item.id === id);
+                    return found && zBandOfLayer(found.id) !== 'label' ? [found] : [];
+                });
+            const rest = list.filter(
+                (item: any) => !activeSet.has(item.id) && zBandOfLayer(item.id) !== 'label',
+            );
+            // 分区守恒校验：任一图层恰好归属一个分区，长度不符即放弃本次重排
+            if (labels.length + active.length + rest.length !== list.length) return;
+            layerList.value.splice(0, list.length, ...labels, ...active, ...rest);
+            bootstrapApi?.refreshLayersState?.();
+        };
+        watch(
+            this.selectedLayer,
+            (val) => {
+                const stack = resolvePresetLayerIds?.(String(val || '').trim()) || [];
+                reorderLayerListForActivation(stack.length ? stack : [String(val || '')]);
+            },
+            { immediate: true },
+        );
+
         const {
             pendingBusPickRef,
             pendingReverseGeocodePickRef,
@@ -372,7 +416,6 @@ export class Instance {
             tocStore,
             emit,
             message,
-            getLayerCategory: basemapPipeline.getLayerCategory,
             refreshLayersState: () => bootstrapApi?.refreshLayersState(),
             setDrawStyle: (styleCfg: any) => setDrawStyleBridge(styleCfg),
         });

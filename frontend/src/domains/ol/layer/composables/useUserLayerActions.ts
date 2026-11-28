@@ -19,7 +19,6 @@ export interface UserLayerActionsDeps {
     setDrawStyle?: (style: any) => void;
     layerList?: any;
     selectedLayer?: any;
-    getLayerCategory?: (layerId: any) => any;
     refreshLayersState?: () => void;
     projectExtentToMapView?: (extent: any, sourceProjection?: string) => any;
     emitFeatureSelected?: (payload?: any) => void;
@@ -40,7 +39,6 @@ export function useUserLayerActions({
     setDrawStyle,
     layerList,
     selectedLayer,
-    getLayerCategory: _getLayerCategory,
     refreshLayersState,
     projectExtentToMapView,
     emitFeatureSelected,

@@ -22,6 +22,7 @@ import {
 } from '../core/cesiumStorage';
 import { resolvePresetLayerIds } from '@common/basemap/catalogProjection';
 import { DEFAULT_BASEMAP_PRESET_ID } from '@common/basemap/basemapPresets';
+import { isComboBasemapId } from '@common/basemap/comboBasemaps';
 import { abortAllDescriptorRequests } from '@cesium-domain/constants/basemapProviderFactory';
 import { useCesiumBasemapSwitcher } from './useCesiumBasemapSwitcher';
 import {
@@ -213,17 +214,19 @@ export function useCesiumLayers({
     });
 
     const basemapOptions = computed(() => [
-        ...getUnifiedBasemapOptions().map((option: any) => {
-            if (option.value !== 'custom') return option;
-            return {
-                ...option,
-                description: customXyzBasemapUrl.value
-                    ? customXyzBasemapUrl.value
-                    : '输入 XYZ / WMS 图源 URL 后启用',
-                source: 'custom',
-                disabled: !customXyzBasemapUrl.value,
-            };
-        }),
+        ...getUnifiedBasemapOptions()
+            .filter((option: any) => !isComboBasemapId(option.value))
+            .map((option: any) => {
+                if (option.value !== 'custom') return option;
+                return {
+                    ...option,
+                    description: customXyzBasemapUrl.value
+                        ? customXyzBasemapUrl.value
+                        : '输入 XYZ / WMS 图源 URL 后启用',
+                    source: 'custom',
+                    disabled: !customXyzBasemapUrl.value,
+                };
+            }),
         ...officialBasemapOptions.value,
     ]);
 

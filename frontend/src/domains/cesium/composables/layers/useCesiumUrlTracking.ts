@@ -17,7 +17,6 @@ import { isSearchOnlyQueryKey } from '@common/url-state/urlParamSanitizer';
 import { normalizeLocationFlag } from '@common/utils/normalize';
 import { URL_LAYER_OPTIONS } from '@common/basemap/basemapOptions';
 import { createBasemapUrlMappingFeature } from '@common/url-state/useBasemapUrlMapping';
-import { getLayerCategory, getLayerGroup } from '@common/basemap/catalogProjection';
 import { deserializeBasemapSelection, normalizeBasemapSelection } from '@common/basemap/basemapRegistry';
 
 export { MAP_VIEW_CESIUM, CAMERA_VIEW_PARAM_KEY };
@@ -30,8 +29,6 @@ function getBasemapUrlMapping() {
     if (!basemapUrlMapping) {
         basemapUrlMapping = createBasemapUrlMappingFeature({
             urlLayerOptions: URL_LAYER_OPTIONS,
-            getLayerCategoryById: (layerId?: string) => (layerId ? getLayerCategory(layerId) : null),
-            getLayerGroupById: (layerId?: string) => (layerId ? getLayerGroup(layerId) : null),
         });
     }
     return basemapUrlMapping;

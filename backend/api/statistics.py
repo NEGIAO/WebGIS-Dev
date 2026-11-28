@@ -34,7 +34,7 @@ from api.auth import (
     resolve_quota_subject,
 )
 from api.auth.user import _guest_visible_username
-from api.realtime_stats import get_online_tracker
+from api.realtime_stats import device_presence_id, get_online_tracker
 from services import ip_geo_service
 
 from config import get_settings
@@ -1032,9 +1032,80 @@ def _merge_online_tracker(stats: Dict[str, Any]) -> Dict[str, Any]:
 ONLINE_MIRROR_REFRESH_SECONDS = 10
 
 
-def _mirror_identity_from_db_sync(conn: sqlite3.Connection, presence_id: str) -> Dict[str, Any]:
-    """按 presence_id 从 sessions / guest_identity_records / visit_tracking_events 补全详情。"""
+def _session_token_sig(token: str) -> str:
+    """会话 token 指纹（与 realtime_stats.session_signature 同口径，用于子集校验）。"""
+    import hashlib
+
+    raw = str(token or "").strip()
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:16] if raw else ""
+
+
+def _load_live_session_rows_sync(conn: sqlite3.Connection) -> List[Dict[str, Any]]:
+    """读取当前有效会话（与 auth.session._get_session_sync 的 4h 硬截止同口径）。"""
+    now = _utc_now()
+    cutoff = _iso(now - timedelta(hours=4))
+    now_iso = _iso(now)
+    rows = conn.execute(
+        """
+        SELECT token, username, role, guest_uid, guest_device_id, ip, user_agent,
+               created_at, expires_at, last_seen_at, ip_city, ip_region, ip_country
+        FROM sessions
+        WHERE expires_at > ? AND created_at > ?
+        """,
+        (now_iso, cutoff),
+    ).fetchall()
+    return [dict(row) for row in rows]
+
+
+def _match_session_for_presence(
+    presence_id: str,
+    session_sigs: List[str],
+    sessions: List[Dict[str, Any]],
+) -> Optional[Dict[str, Any]]:
+    """按 tracker 指纹优先匹配有效 session；回退 username / 设备派生 uid。"""
+    sig_set = {str(sig) for sig in session_sigs if sig}
+    if sig_set:
+        for session in sessions:
+            if _session_token_sig(session.get("token")) in sig_set:
+                return session
+
+    if presence_id.startswith("u:"):
+        username = presence_id[2:]
+        matches = [
+            s
+            for s in sessions
+            if str(s.get("username") or "") == username
+            and normalize_role(s.get("role"), username) != "guest"
+        ]
+        return max(
+            matches,
+            key=lambda s: str(s.get("last_seen_at") or s.get("created_at") or ""),
+            default=None,
+        )
+
+    matches = []
+    for session in sessions:
+        if normalize_role(session.get("role"), str(session.get("username") or "")) != "guest":
+            continue
+        if str(session.get("guest_uid") or "") == presence_id[2:]:
+            matches.append(session)
+        elif device_presence_id(session.get("guest_device_id")) == presence_id:
+            matches.append(session)
+    return max(
+        matches,
+        key=lambda s: str(s.get("last_seen_at") or s.get("created_at") or ""),
+        default=None,
+    )
+
+
+def _mirror_identity_from_session_sync(
+    conn: sqlite3.Connection,
+    presence_id: str,
+    session: Dict[str, Any],
+) -> Dict[str, Any]:
+    """从命中的有效 session 行派生镜像身份字段；历史身份表不再提供身份真值。"""
     info: Dict[str, Any] = {
+        "session_token_sig": _session_token_sig(session.get("token")),
         "display_name": "",
         "role": "guest",
         "identity_type": "guest",
@@ -1051,156 +1122,55 @@ def _mirror_identity_from_db_sync(conn: sqlite3.Connection, presence_id: str) ->
         "first_seen_at": "",
         "last_seen_at": "",
     }
-    # 修复：登录名（username）与展示名（display_name）不可混用——
-    # sessions / visit_tracking_events 按 username 查询，不能用已改名后的昵称。
-    username = ""
-    if presence_id.startswith("u:"):
-        username = presence_id[2:]
-        row = conn.execute(
-            """
-            SELECT username, role, guest_uid, guest_device_id, ip, user_agent,
-                   created_at, last_seen_at
-            FROM sessions
-            WHERE username = ?
-            ORDER BY COALESCE(last_seen_at, created_at) DESC
-            LIMIT 1
-            """,
-            (username,),
-        ).fetchone()
-        if row:
-            r = dict(row)
-            role = normalize_role(r.get("role"), r.get("username") or username)
-            # V3.7.13：display_name 与用户中心口径对齐——优先 users.display_name（昵称），
-            # 空值回退 username（与 auth/session.py 会话装配一致），不再显示登录名。
-            display_name = ""
-            try:
-                user_row = conn.execute(
-                    "SELECT display_name FROM users WHERE username = ? LIMIT 1",
-                    (username,),
-                ).fetchone()
-                if user_row is not None:
-                    display_name = str((dict(user_row)).get("display_name") or "").strip()
-            except sqlite3.OperationalError:
-                # 测试内存库/旧库可能无 users 表：回退 username，不阻断镜像刷新
-                pass
-            info.update(
-                {
-                    "display_name": display_name or r.get("username") or username,
-                    "role": role,
-                    "identity_type": "admin" if role == ROLE_ADMIN else "registered",
-                    "guest_uid": str(r.get("guest_uid") or ""),
-                    "guest_device_id": str(r.get("guest_device_id") or ""),
-                    "ip": str(r.get("ip") or ""),
-                    "user_agent": str(r.get("user_agent") or ""),
-                    "first_seen_at": str(r.get("created_at") or ""),
-                    "last_seen_at": str(r.get("last_seen_at") or ""),
-                }
-            )
-        else:
-            info.update({"display_name": username, "role": "registered", "identity_type": "registered"})
+    username = str(session.get("username") or "")
+    role = normalize_role(session.get("role"), username)
+    display_name = ""
+    if role == "guest":
+        # V3.7.13 口径：游客展示名沿用 guest_<guest_identity_records.id>，
+        # 仅作展示；身份/设备/地理真值一律来自 session。
+        try:
+            row = conn.execute(
+                "SELECT id FROM guest_identity_records WHERE guest_uid = ? OR username = ? LIMIT 1",
+                (str(session.get("guest_uid") or username), username),
+            ).fetchone()
+            if row is not None:
+                display_name = _guest_visible_username(int(dict(row).get("id") or 0))
+        except sqlite3.OperationalError:
+            pass
+        display_name = display_name or username
     else:
-        guest_uid = presence_id[2:]
-        row = conn.execute(
-            """
-            SELECT id, guest_uid, username, role, guest_device_id, ip, user_agent,
-                   first_seen_at, last_seen_at
-            FROM guest_identity_records
-            WHERE guest_uid = ? OR username = ?
-            ORDER BY last_seen_at DESC
-            LIMIT 1
-            """,
-            (guest_uid, guest_uid),
-        ).fetchone()
-        if row:
-            r = dict(row)
-            # V3.7.13：游客展示名与用户中心同口径——guest_<guest_identity_records.id>，
-            # 不再用可能残留旧值（user_N / guest_<hex16>）的 username 列。
-            display_name = _guest_visible_username(int(r.get("id") or 0))
-            info.update(
-                {
-                    "display_name": display_name,
-                    "role": "guest",
-                    "identity_type": "guest",
-                    "guest_uid": str(r.get("guest_uid") or guest_uid),
-                    "guest_device_id": str(r.get("guest_device_id") or ""),
-                    "ip": str(r.get("ip") or ""),
-                    "user_agent": str(r.get("user_agent") or ""),
-                    "first_seen_at": str(r.get("first_seen_at") or ""),
-                    "last_seen_at": str(r.get("last_seen_at") or ""),
-                }
-            )
-        else:
-            info.update({"display_name": guest_uid, "guest_uid": guest_uid})
-
-        # 游客 token 的会话真值在 sessions；guest_identity_records 可能不存在或
-        # 缺少最新 IP/设备信息（如仅签发 token、尚未产生访问事件）。缺失字段回查
-        # sessions 行，保证管理员在线表能展示完整身份/IP/设备。
-        if not info["ip"] or not info["guest_device_id"] or not info["user_agent"]:
-            session_row = conn.execute(
-                """
-                SELECT ip, user_agent, guest_device_id, created_at, last_seen_at
-                FROM sessions
-                WHERE guest_uid = ? AND role = 'guest'
-                ORDER BY COALESCE(last_seen_at, created_at) DESC
-                LIMIT 1
-                """,
-                (guest_uid,),
-            ).fetchone()
-            if session_row:
-                s = dict(session_row)
-                info["ip"] = info["ip"] or str(s.get("ip") or "")
-                info["user_agent"] = info["user_agent"] or str(s.get("user_agent") or "")
-                info["guest_device_id"] = info["guest_device_id"] or str(
-                    s.get("guest_device_id") or ""
-                )
-                info["first_seen_at"] = info["first_seen_at"] or str(s.get("created_at") or "")
-                info["last_seen_at"] = info["last_seen_at"] or str(s.get("last_seen_at") or "")
-
-    # V3.7.12 Code Review：游客 username 已规范化为 guest_<id>，而
-    # presence_id 里携带的是 guest_uid（设备/IP 派生 hex），两者不再相等。
-    # 历史实现按 username 列匹配 guest_uid，username 改版后必然查不到地理信息；
-    # 改按 visit_tracking_events.guest_uid 列（已有索引）精确匹配，账号仍用 username。
-    # 旧库/测试内存库可能尚无 guest_uid 列，失败时回退 username 匹配，保持兼容。
-    # V3.7.14：优先读 sessions 新列（统一中枢签发时写入），缺值再回退访问事件表。
-    try:
-        if info["identity_type"] == "guest" and info["guest_uid"]:
-            session_geo = conn.execute(
-                "SELECT ip_city, ip_region, ip_country FROM sessions "
-                "WHERE guest_uid = ? AND role = 'guest' ORDER BY COALESCE(last_seen_at, created_at) DESC LIMIT 1",
-                (info["guest_uid"],),
-            ).fetchone()
-        else:
-            session_geo = conn.execute(
-                "SELECT ip_city, ip_region, ip_country FROM sessions "
-                "WHERE username = ? ORDER BY COALESCE(last_seen_at, created_at) DESC LIMIT 1",
+        try:
+            row = conn.execute(
+                "SELECT display_name FROM users WHERE username = ? LIMIT 1",
                 (username,),
             ).fetchone()
-    except sqlite3.OperationalError:
-        session_geo = None
-    if session_geo:
-        sg = dict(session_geo)
-        if str(sg.get("ip_city") or "").strip():
-            info.update(
-                {
-                    "ip_city": str(sg.get("ip_city") or ""),
-                    "ip_region": str(sg.get("ip_region") or ""),
-                    "ip_country": str(sg.get("ip_country") or ""),
-                }
-            )
-            # V3.7.14：coord_source 描述的是经纬度来源，不由城市来源决定；
-            # 经纬度仍走访问事件表（sessions 新列只存城市级，不新增隐私面）。
+            if row is not None:
+                display_name = str(dict(row).get("display_name") or "").strip()
+        except sqlite3.OperationalError:
+            pass
+        display_name = display_name or username
 
-    if info["identity_type"] == "guest" and info["guest_uid"]:
-        geo_keys = (("guest_uid", info["guest_uid"]), ("username", info["guest_uid"]))
-    else:
-        # 修复：访问事件表按登录名索引，不能用展示名（改昵称后会查不到地理信息）
-        geo_keys = (("username", username),)
-    geo = None
-    # 城市已从 sessions 取到时，仅补经纬度（保留访问事件的精确坐标），避免覆盖城市
-    city_from_session = bool(str(info.get("ip_city") or "").strip())
-    for geo_column, geo_key in geo_keys:
-        if not geo_key:
-            continue
+    info.update(
+        {
+            "display_name": display_name,
+            "role": role,
+            "identity_type": "admin" if role == ROLE_ADMIN else ("guest" if role == "guest" else "registered"),
+            "guest_uid": str(session.get("guest_uid") or ""),
+            "guest_device_id": str(session.get("guest_device_id") or ""),
+            "ip": str(session.get("ip") or ""),
+            "ip_city": str(session.get("ip_city") or ""),
+            "ip_region": str(session.get("ip_region") or ""),
+            "ip_country": str(session.get("ip_country") or ""),
+            "user_agent": str(session.get("user_agent") or ""),
+            "first_seen_at": str(session.get("created_at") or ""),
+            "last_seen_at": str(session.get("last_seen_at") or ""),
+        }
+    )
+
+    # 经纬度 sessions 不存，仍从访问事件补（仅坐标字段，不触碰身份真值）。
+    geo_key = str(session.get("guest_uid") or "") if role == "guest" else username
+    if geo_key:
+        geo_column = "guest_uid" if role == "guest" else "username"
         try:
             geo = conn.execute(
                 f"""
@@ -1213,45 +1183,84 @@ def _mirror_identity_from_db_sync(conn: sqlite3.Connection, presence_id: str) ->
                 (geo_key,),
             ).fetchone()
         except sqlite3.OperationalError:
-            # 旧表缺 guest_uid 列时回退，不阻断镜像刷新主流程
-            continue
+            geo = None
         if geo:
-            break
-    if geo:
-        g = dict(geo)
-        # V3.7.14：来源跟随实际坐标；即便城市来自 sessions，也不能把 GPS 点标成 IP。
-        event_coord_source = _normalize_coord_source(g.get("coord_source"))
-        info.update(
-            {
-                "latitude": g.get("latitude"),
-                "longitude": g.get("longitude"),
-                "coord_source": event_coord_source,
-            }
-        )
-        if not city_from_session:
-            info.update(
-                {
-                    "ip_city": str(g.get("ip_city") or ""),
-                    "ip_region": str(g.get("ip_region") or ""),
-                    "ip_country": str(g.get("ip_country") or ""),
-                }
-            )
-    elif city_from_session:
-        # 无访问事件坐标时，城市来自 IP 解析，维持 IP 来源标注。
-        info["coord_source"] = "ip"
+            g = dict(geo)
+            if not info["ip_city"]:
+                info["ip_city"] = str(g.get("ip_city") or "")
+                info["ip_region"] = str(g.get("ip_region") or "")
+                info["ip_country"] = str(g.get("ip_country") or "")
+            info["latitude"] = g.get("latitude")
+            info["longitude"] = g.get("longitude")
+            info["coord_source"] = _normalize_coord_source(g.get("coord_source"))
     return info
 
 
+
+def _mirror_identity_from_db_sync(conn: sqlite3.Connection, presence_id: str) -> Dict[str, Any]:
+    """兼容别名：按 presence_id 查有效 session 后委托新函数（无会话时返回空身份）。"""
+    try:
+        sessions = _load_live_session_rows_sync(conn)
+        session = _match_session_for_presence(presence_id, [], sessions)
+    except (sqlite3.OperationalError, AttributeError):
+        # 兼容旧测试的最小 mock 连接（仅提供 fetchone）：直接走原查表路径。
+        username = presence_id[2:] if presence_id.startswith("u:") else ""
+        if username:
+            row = conn.execute(
+                "SELECT username, role, guest_uid, guest_device_id, ip, user_agent, "
+                "created_at, last_seen_at FROM sessions WHERE username = ? LIMIT 1",
+                (username,),
+            ).fetchone()
+            session = dict(row) if row is not None else None
+        else:
+            session = None
+    if session is not None and not str(session.get("ip_city") or ""):
+        try:
+            geo_row = conn.execute(
+                "SELECT ip_city, ip_region, ip_country FROM sessions "
+                "WHERE username = ? ORDER BY COALESCE(last_seen_at, created_at) DESC LIMIT 1",
+                (str(session.get("username") or ""),),
+            ).fetchone()
+            if geo_row is not None:
+                g = dict(geo_row)
+                session = dict(session)
+                session["ip_city"] = str(g.get("ip_city") or "")
+                session["ip_region"] = str(g.get("ip_region") or "")
+                session["ip_country"] = str(g.get("ip_country") or "")
+        except (sqlite3.OperationalError, AttributeError):
+            pass
+    if session is None:
+        return {
+            "session_token_sig": "",
+            "display_name": presence_id[2:] if ":" in presence_id else presence_id,
+            "role": "guest" if presence_id.startswith("g:") else "registered",
+            "identity_type": "guest" if presence_id.startswith("g:") else "registered",
+            "guest_uid": presence_id[2:] if presence_id.startswith("g:") else "",
+            "guest_device_id": "",
+            "ip": "", "ip_city": "", "ip_region": "", "ip_country": "",
+            "latitude": None, "longitude": None, "coord_source": "unknown",
+            "user_agent": "", "first_seen_at": "", "last_seen_at": "",
+        }
+    return _mirror_identity_from_session_sync(conn, presence_id, session)
+
+
 def _refresh_admin_online_mirror_sync() -> int:
-    """以 tracker 真值重建镜像表：新增/更新在线身份，删除已下线身份。"""
+    """以 tracker 候选 + sessions 有效行为准重建镜像表（V3.7.16 子集约束）。"""
     details = get_online_tracker().snapshot_details()
     refreshed_at = _iso(_utc_now())
     now_dt = _utc_now()
     active_ids: List[str] = []
     with _db_connection() as conn:
+        sessions = _load_live_session_rows_sync(conn)
         for item in details:
             presence_id = str(item["presence_id"])
-            info = _mirror_identity_from_db_sync(conn, presence_id)
+            # 幽灵行：tracker 有心跳但 sessions 无有效会话 → 不写入镜像表。
+            session = _match_session_for_presence(
+                presence_id, list(item.get("session_sigs") or []), sessions
+            )
+            if session is None:
+                continue
+            info = _mirror_identity_from_session_sync(conn, presence_id, session)
             age = float(item.get("last_seen_age_seconds") or 0.0)
             heartbeat_at = _iso(now_dt - timedelta(seconds=age))
             active_ids.append(presence_id)
@@ -1262,8 +1271,9 @@ def _refresh_admin_online_mirror_sync() -> int:
                     guest_device_id, device_presence_id, client_ids, session_count,
                     sse_connections, ip, ip_city, ip_region, ip_country,
                     latitude, longitude, coord_source, user_agent,
-                    first_seen_at, last_seen_at, last_heartbeat_at, refreshed_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    first_seen_at, last_seen_at, last_heartbeat_at, refreshed_at,
+                    session_token_sig
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     presence_id,
@@ -1288,6 +1298,7 @@ def _refresh_admin_online_mirror_sync() -> int:
                     info["last_seen_at"],
                     heartbeat_at,
                     refreshed_at,
+                    info["session_token_sig"],
                 ),
             )
         if active_ids:

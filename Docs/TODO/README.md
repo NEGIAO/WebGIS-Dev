@@ -33,6 +33,10 @@
 | 文件 | 状态 | 一句话 | 已完成 / 待做 |
 |---|:---:|---|---|
 | `bugfix-optimization-plan.md` | 🟢 活跃 | **滚动修复主规划**（P0–P3 分级），所有「顺带发现」的登记处 | 136 项待办，持续勾选 |
+| `2026-11-28-online-mirror-session-subset-plan.md` | 🔵 实施中 | **在线镜像表收敛为 sessions 子集**：tracker 候选 + session 指纹双闸，剔除幽灵在线行（V3.7.16 已落地） | P1 已实施；P2（标活前校验 session_sig）待做 |
+| `2026-11-28-no-anonymous-token-plan.md` | 🔵 实施中 | **废除无 token 匿名通道**：所有身份必须持有 sessions 有效 token，仅 `s=1` 前端无感签发（V3.7.16 已落地） | 已实施；应急游客开关待评估 |
+| `2026-11-28-remove-legacy-basemap-category-group-plan.md` | 🟢 已实施 | **移除 legacy `category/group` 字段**：统一目录直接读 `catalogCategory`，`zBand` 承载渲染带（V3.7.16 本批） | 定义层与目录层零残留 |
+| `2026-11-27-basemap-catalog-requirements.md` | 🟢 已实施 | **底图系统重构需求整理**：常驻搜索、三级菜单、图层属性定义、OL/Cesium 共享管理 | 方案与实施记录见 `Architecture/basemap-catalog-redesign.md` |
 | `guest-identity-governance-plan.md` | 🔵 实施中 | 游客身份治理：require_login fail-closed + 服务端签发游客 token（限频）+ 废随机 uid + 记录 90 天清理（P1-4 三项打包，V3.7.6 已落地） | 实机八步验证待用户（含 HF Secrets 配置 `GUEST_TOKEN_SECRET`） |
 | `2026-11-08-per-model-terrain-clamp-plan.md` | 🟡 待批准 | 3D Tiles 与多模型 GLB 逐体按真实地形高程贴地引擎（L3 架构） | 待用户批准后施工 |
 | `account-panel-ui-optimization.md` | 🔵 实施中 | 账号面板 UI 优化 | 2 项已做 / 8 项待做 |
@@ -69,6 +73,9 @@
 | `next-sprint-bugfix-and-optimization.md` | — | 自我声明「历史归档」，内容已并入 `bugfix-optimization-plan.md` |
 | `next-session-prompt-rendering.md` | — | 接续提示词模板，引用 `Force_command v2` 与 `26-07-26` 旧路径，已被 `Guide/handover.md` 取代 |
 | `2026-11-01-bot-pr-handling-guideline-plan.md` | V3.6.37 | 规范 §12 机器人 PR 处置指引，方案已全量落地 |
+| `2026-11-28-recommended-basemap-explicit-plan.md` | V3.7.16 | `definitions/category-recommended.ts` 含 20 条 preset id；`registry.ts` 按 `RECOMMENDED_PRESET_IDS` 判定；旧 `RECOMMENDED_FIRST_N` / `CATEGORY_OVERRIDES` 零残留 |
+| `2026-11-28-tile-order-and-tuxin-correction-fix.md` | V3.7.16 | 206 条定义 order 连续 1..206（`check:layer-definitions` OK）；图新 geovisearth 三条 WGS 变体无 correction；`imagery_tuxin_wgs` 定义已删、preset stack 改指 `imagery_tuxin` |
+| `2026-11-28-tile-proxy-architecture-review.md` | V3.7.16 | 架构文档 §3.4 三层代理已落地；`resolveTileUrl` 的 `tileProxyMode` 死参数零残留；临时 `renumber.cjs` 已清理 |
 | `2026-11-01-docs-organization-governance-plan.md` | V3.6.37 | 文档治理（目录按生命周期分层 / TODO 索引 / Force_command 精炼），方案已全量落地 |
 
 ---

@@ -17,8 +17,6 @@ import { buildRasterBasemapSource, applyBasemapSourceToLayer } from './basemapLa
  * @param {Object} options - 工厂选项
  * @param {Ref} options.layerList - 底图列表响应式变量
  * @param {Ref} options.selectedLayer - 当前选中底图响应式变量
- * @param {Function} options.getLayerCategory - 获取底图分类函数
- * @param {Function} options.getLayerGroup - 获取底图分组函数
  * @param {Function} options.emit - Vue emit 函数
  * @param {Array} options.LAYER_CONFIGS - 图层配置列表
  * @param {Object} options.layerInstances - 图层实例映射表
@@ -29,8 +27,6 @@ import { buildRasterBasemapSource, applyBasemapSourceToLayer } from './basemapLa
 export interface BasemapStateManagementDeps {
     layerList: any;
     selectedLayer: any;
-    getLayerCategory: (id: any) => string;
-    getLayerGroup: (id: any) => string;
     emit: (event: string, ...args: any[]) => void;
     LAYER_CONFIGS: any[];
     layerInstances: Record<string, any>;
@@ -40,8 +36,6 @@ export interface BasemapStateManagementDeps {
 export function createBasemapStateManagementFeature({
     layerList,
     selectedLayer,
-    getLayerCategory,
-    getLayerGroup,
     emit,
     LAYER_CONFIGS,
     layerInstances,
@@ -95,8 +89,7 @@ export function createBasemapStateManagementFeature({
                 id: item.id,
                 name: item.name,
                 visible: item.visible,
-                category: getLayerCategory(item.id),
-                group: getLayerGroup(item.id),
+                zBand: LAYER_CONFIGS.find((cfg: any) => cfg?.id === item.id)?.zBand ?? 'basemap',
                 active: selectedLayer.value === item.id,
             })),
         );

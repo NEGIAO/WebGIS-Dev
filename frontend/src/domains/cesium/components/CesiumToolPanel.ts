@@ -4,12 +4,13 @@
  * 说    明：视图层逻辑入口。页签与折叠态持久化、WMS 图层枚举、模块/动作图标映射、
  *          叠加层与数据导入事件派发。
  */
-import { computed, defineComponent, onBeforeUnmount, ref, watch, type ExtractPropTypes, type PropType, type SetupContext } from 'vue';
+import { computed, defineComponent, nextTick, onBeforeUnmount, ref, watch, type ComputedRef, type ExtractPropTypes, type PropType, type Ref, type SetupContext } from 'vue';
 import {
 	Box,
 	Building,
 	Check,
 	ChevronDown,
+	ChevronRight,
 	Cloud,
 	Crosshair,
 	Download,
@@ -40,6 +41,7 @@ import {
 	RotateCcw,
 	Route,
 	ScanEye,
+	Search as SearchIcon,
 	Send,
 	SlidersHorizontal,
 	Square,
@@ -53,6 +55,8 @@ import {
 import LilGuiControls from './LilGuiControls.vue';
 import { useLocale } from '@common/app/useLocale';
 import { looksLikeWmsSourceUrl, ensureWmsServiceInfo } from '@common/basemap/wmsService';
+import { useBasemapCatalogUi } from '@common/basemap/ui/useBasemapCatalogUi';
+import { useWaybackCatalog } from '@common/basemap/useWaybackCatalog';
 
 // 一、Emits 类型
 type EmitsType = (
@@ -103,6 +107,7 @@ export default defineComponent({
 		Building,
 		Check,
 		ChevronDown,
+		ChevronRight,
 		Eye,
 		FileArchive,
 		FolderOpen,
@@ -116,6 +121,7 @@ export default defineComponent({
 		Minimize2,
 		Mountain,
 		Navigation,
+		SearchIcon,
 		Send,
 		SlidersHorizontal,
 		Upload,
@@ -153,6 +159,26 @@ export class Instance {
 	public compactMode = ref(true);
 	public expandedLayerSectionIds = ref(new Set<string>());
 	public expandedModuleIds = ref(new Set<string>());
+	/** 官方影像服务折叠态（Cesium 原生 BaseLayerPicker 同源服务，在目录树之外单列一组） */
+	public openOfficialServices = ref(false);
+	/** 统一目录树（与 OL 共用 @common/basemap/ui） */
+	public basemapQuery!: Ref<string>;
+	public catalogTree!: ComputedRef<any[]>;
+	public searchResults!: ComputedRef<any[]>;
+	public isSearchActive!: ComputedRef<boolean>;
+	public isCategoryOpen!: (category: string) => boolean;
+	public toggleCategory!: (category: string) => void;
+	/** ESRI Wayback 动态历史影像目录（按需加载，与 OL 共用） */
+	private wayback!: ReturnType<typeof useWaybackCatalog>;
+	public isProviderOpen!: (category: string, provider: string) => boolean;
+	public toggleProvider!: (category: string, provider: string) => void;
+	public categoryLabel!: (category: string) => string;
+	public coordLabel!: (coord: string) => string;
+	public categoryOrdinal!: (category: string) => string;
+	public providerOrdinal!: (category: string, provider: string) => string;
+	public providerEntryCount!: (provider: any) => number;
+	public categoryEntryCount!: (category: any) => number;
+	public entryTitle!: (entry: any) => string;
 	public customBasemapDraft = ref('');
 
 	// ── 样例菜单 ──
@@ -187,6 +213,10 @@ export class Instance {
 		this.emit = this.ctx.emit;
 		const { t } = useLocale();
 		this.t = t;
+		this.wayback = useWaybackCatalog();
+		Object.assign(this, useBasemapCatalogUi(() => this.wayback.dynamicEntries.value));
+		// 默认展开「常用推荐」：三层目录全部收起时首屏没有任何可点条目，需额外两次点击才能选底图
+		this.toggleCategory('recommended');
 
 		const storedUiState: any = this.readStoredUiState();
 		const shouldRestoreExpansionState = storedUiState.uiStateVersion === UI_STATE_VERSION;
@@ -443,6 +473,22 @@ export class Instance {
 		this.ctx.emit('update:open', value);
 	};
 
+	/** MVT/PBF 矢量瓦片在 Cesium 侧没有 ImageryProvider，明示「仅二维」，避免点击后静默无变化 */
+	public isUnsupportedCategory = (category: string) => category === 'vector';
+
+	/**
+	 * 目录条目级禁用判定（V3.7.16，V3.7.16 注释校正）：分类头禁用只覆盖「矢量瓦片」分类，
+	 * 而精选底图由显式清单（definitions/category-recommended.ts）决定——被推荐的 MVT 条目
+	 * category='recommended'、原分类仅保留在 tags 中，搜索结果亦绕过分类头。
+	 * 统一在此拦截 MVT 与无 URL 的 custom 条目，避免点击后清空底图且无提示。
+	 */
+	public isCatalogEntryDisabled = (entry: any) => {
+		if (!entry) return true;
+		if (entry.tags?.includes('vector') || entry.category === 'vector') return true;
+		if (entry.id === 'custom' && !this.customBasemapUrl) return true;
+		return false;
+	};
+
 	public isLayerSectionExpanded = (sectionId: string) => this.expandedLayerSectionIds.value.has(sectionId);
 
 	public toggleLayerSection = (sectionId: string) => {
@@ -463,7 +509,40 @@ export class Instance {
 
 	public selectBasemapOption = (option: any) => {
 		if (option?.disabled) return;
-		this.ctx.emit('update:activeBasemap', option.value);
+		// 统一目录条目使用 id；旧 BASEMAP_OPTIONS 使用 value，两者都兼容
+		this.ctx.emit('update:activeBasemap', option.value ?? option.id);
+	};
+
+	/** 目录条目选中态：动态 Wayback 项以当前 customUrl 比对，普通项按 id */
+	public isCatalogEntryActive = (entry: any) => {
+		if (entry?.dynamic === 'wayback') return !!entry.customUrl && entry.customUrl === this.customBasemapUrl;
+		return entry?.id === this.activeBasemap;
+	};
+
+	/** 展开历史影像时按需加载 ESRI Wayback 动态目录（其余分类仅切换折叠态） */
+	public toggleCatalogCategory = (category: string) => {
+		this.toggleCategory(category);
+		if (category === 'historical') void this.wayback.load();
+	};
+
+	/** WMS/WMTS/MVT/XYZ 入口：聚焦自定义 URL 输入框 */
+	public activateCustomBasemap = () => {
+		void nextTick(() => {
+			const input = document.querySelector<HTMLInputElement>('.custom-basemap-input');
+			input?.focus();
+			input?.scrollIntoView({ block: 'nearest' });
+		});
+	};
+
+	/** 统一目录条目：普通预设走 preset id；Wayback 动态项直接提交其 XYZ URL */
+	public selectCatalogEntry = (entry: any) => {
+		if (this.isCatalogEntryDisabled(entry)) return;
+		if (entry?.dynamic === 'wayback' && entry.customUrl) {
+			this.customBasemapDraft.value = entry.customUrl;
+			this.submitCustomBasemap();
+			return;
+		}
+		this.selectBasemapOption(entry);
 	};
 
 	public submitCustomBasemap = () => {

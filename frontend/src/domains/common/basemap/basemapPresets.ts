@@ -46,11 +46,11 @@ export const BASEMAP_PRESETS: BasemapPresetDefinition[] = [
     { id: 'vector_tuxin_preset', label: '星图矢量', stack: ['vector_tuxin', 'label_tuxin'] },
 
     // 互联网商业地图
-    { id: 'imagery_gac_preset', label: 'Google(gac)', stack: ['imagery_gac', 'label_tianditu'] },
+    { id: 'imagery_gac_preset', label: '谷歌影像(gac)', stack: ['imagery_gac', 'label_tianditu'] },
     {
         id: 'imagery_google_preset',
-        label: 'Google原版',
-        stack: ['imagery_google', 'terrain_google', 'label_tianditu'],
+        label: '谷歌影像原版',
+        stack: ['imagery_google', 'vector_google_combo_pb_hillshade_wgs', 'label_tianditu'],
     },
     { id: 'imagery_amap_preset', label: '高德影像', stack: ['imagery_amap'] },
     {
@@ -60,7 +60,7 @@ export const BASEMAP_PRESETS: BasemapPresetDefinition[] = [
     },
     {
         id: 'google_Backend_Proxy_preset',
-        label: '谷歌代理',
+        label: '谷歌卫星代理',
         stack: ['google_Backend_Proxy', 'label_tianditu'],
     },
     // OSM 代理：矢量底图自带注记，不叠注记层（与 vector_osm_preset 同构）
@@ -70,7 +70,7 @@ export const BASEMAP_PRESETS: BasemapPresetDefinition[] = [
         stack: ['osm_Backend_Proxy'],
     },
     { id: 'imagery_amap_wgs_preset', label: '高德影像(WGS)', stack: ['imagery_amap_wgs'] },
-    { id: 'vector_amap_wgs_preset', label: '高德地图(WGS)', stack: ['vector_amap_wgs'] },
+    { id: 'vector_amap_wgs_preset', label: '高德地貌+建筑(WGS)', stack: ['vector_amap_wgs'] },
     { id: 'vector_baidu_wgs_preset', label: '百度地图(WGS)', stack: ['vector_baidu_wgs'] },
     { id: 'imagery_mapbox_preset', label: 'Mapbox影像', stack: ['imagery_mapbox', 'label_tuxin'] },
     {
@@ -80,33 +80,37 @@ export const BASEMAP_PRESETS: BasemapPresetDefinition[] = [
     },
     {
         id: 'imagery_google_standard_preset',
-        label: 'Google标准',
+        label: '谷歌电子地图',
         stack: ['imagery_google_standard'],
     },
-    { id: 'vector_Google_clean_preset', label: 'Google简洁', stack: ['vector_Google_clean'] },
-    { id: 'vector_amap_preset', label: '高德地图', stack: ['vector_amap'] },
-    { id: 'vector_tengxun_preset', label: '腾讯地图', stack: ['vector_tengxun'] },
-    { id: 'vector_tengxun_wgs_preset', label: '腾讯地图(WGS)', stack: ['vector_tengxun_wgs'] },
-    { id: 'vector_osm_preset', label: 'OSM标准', stack: ['vector_osm'] },
-    { id: 'vector_cyclosm_preset', label: 'CyclOSM骑行', stack: ['vector_cyclosm'] },
-    { id: 'custom_mapbox_labeled_preset', label: 'Mapbox自定义', stack: ['custom_mapbox_labeled'] },
+    { id: 'vector_Google_clean_preset', label: '简洁地形', stack: ['vector_google_combo_clean_terrain_no_road_wgs'] },
+    { id: 'vector_amap_preset', label: '地貌+建筑', stack: ['vector_amap'] },
+    { id: 'vector_tengxun_preset', label: '标准地图', stack: ['vector_tengxun'] },
+    { id: 'vector_tengxun_wgs_preset', label: '标准地图', stack: ['vector_tengxun_wgs'] },
+    { id: 'vector_osm_preset', label: '标准', stack: ['vector_osm'] },
+    { id: 'vector_cyclosm_preset', label: '骑行', stack: ['vector_cyclosm'] },
+    {
+        id: 'custom_mapbox_labeled_preset',
+        label: '自定义(含标注)',
+        stack: ['custom_mapbox_labeled'],
+    },
     {
         id: 'custom_mapbox_unlabeled_preset',
-        label: 'Mapbox(无注记)',
+        label: '自定义(无标注)',
         stack: ['custom_mapbox_unlabeled', 'label_tuxin'],
     },
     {
         id: 'custom_China_Blender_preset',
         label: 'China Blender1',
-        stack: ['custom_China_Blender', 'terrain_google'],
+        stack: ['custom_China_Blender', 'vector_google_combo_pb_hillshade_wgs'],
     },
     {
         id: 'custom_China_Blender_preset_2',
         label: 'China Blender2',
-        stack: ['custom_China_Blender','label_tianditu_vector'],
+        stack: ['custom_China_Blender', 'label_tianditu_vector'],
     },
-    { id: 'vector_carton_light_preset', label: 'Carto浅色', stack: ['vector_carton_light'] },
-    { id: 'vector_carton_dark_preset', label: 'Carto深色', stack: ['vector_carton_dark'] },
+    { id: 'vector_carton_light_preset', label: '浅色', stack: ['vector_carton_light'] },
+    { id: 'vector_carton_dark_preset', label: '深色', stack: ['vector_carton_dark'] },
     { id: 'vector_toner_preset', label: '黑白版画', stack: ['vector_toner'] },
     { id: 'vector_alidade_preset', label: '清爽风格', stack: ['vector_alidade'] },
     {
@@ -124,77 +128,77 @@ export const BASEMAP_PRESETS: BasemapPresetDefinition[] = [
         label: 'Alidade暗色',
         stack: ['vector_alidade_smooth_dark'],
     },
-    { id: 'vector_osm_bright_preset', label: 'OSM Bright', stack: ['vector_osm_bright'] },
-    { id: 'terrain_stamen_preset', label: 'Stamen地形', stack: ['terrain_stamen'] },
-    { id: 'terrain_outdoors_preset', label: 'Stadia户外', stack: ['terrain_outdoors'] },
+    { id: 'vector_osm_bright_preset', label: 'Bright', stack: ['vector_osm_bright'] },
+    { id: 'terrain_stamen_preset', label: '地形', stack: ['terrain_stamen'] },
+    { id: 'terrain_outdoors_preset', label: '户外', stack: ['terrain_outdoors'] },
     {
         id: 'theme_stamen_watercolor_preset',
-        label: 'Stamen水彩',
+        label: '水彩',
         stack: ['theme_stamen_watercolor'],
     },
     {
         id: 'imagery_alidade_satellite_preset',
-        label: 'Alidade卫星',
+        label: '卫星',
         stack: ['imagery_alidade_satellite'],
     },
     {
         id: 'label_stamen_toner_lines_preset',
-        label: 'Stamen线划',
+        label: '线划',
         stack: ['label_stamen_toner_lines'],
     },
     {
         id: 'label_stamen_toner_labels_preset',
-        label: 'Stamen注记',
+        label: '注记',
         stack: ['label_stamen_toner_labels'],
     },
 
     // MapTiler 系列
     {
         id: 'imagery_maptiler_satellite_preset',
-        label: 'MapTiler影像',
+        label: '影像',
         stack: ['imagery_maptiler_satellite', 'label_tianditu'],
     },
     {
         id: 'imagery_maptiler_satellite_hd_preset',
-        label: 'MapTiler影像HD',
+        label: '影像HD',
         stack: ['imagery_maptiler_satellite_hd', 'label_tianditu'],
     },
     {
         id: 'vector_maptiler_streets_preset',
-        label: 'MapTiler街道',
+        label: '街道',
         stack: ['vector_maptiler_streets'],
     },
     {
         id: 'terrain_maptiler_landscape_preset',
-        label: 'MapTiler地貌',
+        label: '地貌',
         stack: ['terrain_maptiler_landscape'],
     },
     {
         id: 'terrain_maptiler_topo_preset',
-        label: 'MapTiler地形图',
+        label: '地形图',
         stack: ['terrain_maptiler_topo'],
     },
     {
         id: 'theme_maptiler_winter_preset',
-        label: 'MapTiler冬季',
+        label: '冬季',
         stack: ['terrain_maptiler_topo', 'theme_maptiler_winter'],
     },
-    { id: 'theme_maptiler_ocean_preset', label: 'MapTiler海洋', stack: ['theme_maptiler_ocean'] },
+    { id: 'theme_maptiler_ocean_preset', label: '海洋', stack: ['theme_maptiler_ocean'] },
 
     // ArcGIS (ESRI) 系列
     { id: 'imagery_yandex_preset', label: 'Yandex卫星', stack: ['imagery_yandex'] },
     {
         id: 'arcgis_canvas_dark_preset',
-        label: 'ESRI深灰',
+        label: '深灰',
         stack: ['theme_arcgis_canvas_dark_base', 'theme_arcgis_canvas_dark_ref'],
     },
     {
         id: 'arcgis_canvas_light_preset',
-        label: 'ESRI浅灰',
+        label: '浅灰',
         stack: ['theme_arcgis_canvas_light_base', 'theme_arcgis_canvas_light_ref'],
     },
-    { id: 'arcgis_street_preset', label: 'ESRI街道', stack: ['theme_arcgis_street_root'] },
-    { id: 'arcgis_topo_preset', label: 'ESRI世界地形', stack: ['theme_arcgis_topo_root'] },
+    { id: 'arcgis_street_preset', label: '街道', stack: ['theme_arcgis_street_root'] },
+    { id: 'arcgis_topo_preset', label: '世界地形', stack: ['theme_arcgis_topo_root'] },
     { id: 'arcgis_natgeo_preset', label: '国家地理', stack: ['theme_arcgis_natgeo_world'] },
     { id: 'arcgis_physical_preset', label: '自然地理', stack: ['theme_arcgis_physical_root'] },
 
@@ -209,7 +213,7 @@ export const BASEMAP_PRESETS: BasemapPresetDefinition[] = [
         label: '深色阴影',
         stack: ['terrain_arcgis_elev_hillshade_dark', 'label_tianditu'],
     },
-    { id: 'terrain_google_preset', label: 'Google山体', stack: ['terrain_google'] },
+    { id: 'terrain_google_preset', label: '山体', stack: ['vector_google_combo_pb_hillshade_wgs'] },
     { id: 'terrain_opentopomap_preset', label: '开放地形', stack: ['terrain_opentopomap'] },
     { id: 'terrain_esa_preset', label: '欧空局地形', stack: ['terrain_esa'] },
 
@@ -232,15 +236,15 @@ export const BASEMAP_PRESETS: BasemapPresetDefinition[] = [
 
     // Windy 气象系列
     { id: 'ship66_preset', label: '船舶网', stack: ['ships66'] },
-    { id: 'windy_preset', label: 'Windy户外', stack: ['theme_windy'] },
-    { id: 'windy2_preset', label: 'Windy冬季', stack: ['theme_windy2'] },
-    { id: 'windy_outer_preset', label: 'Windy轮廓', stack: ['theme_windy_outer'] },
-    { id: 'windy_greenland_preset', label: 'Windy灰色', stack: ['theme_windy_greenland'] },
+    { id: 'windy_preset', label: '户外', stack: ['theme_windy'] },
+    { id: 'windy2_preset', label: '冬季', stack: ['theme_windy2'] },
+    { id: 'windy_outer_preset', label: '轮廓', stack: ['theme_windy_outer'] },
+    { id: 'windy_greenland_preset', label: '灰色', stack: ['theme_windy_greenland'] },
 
     // 极地与海洋系列
     {
         id: 'arcgis_ocean_preset',
-        label: 'ESRI海洋',
+        label: '海洋',
         stack: ['theme_arcgis_ocean_base', 'theme_arcgis_ocean_ref'],
     },
     {
@@ -260,84 +264,84 @@ export const BASEMAP_PRESETS: BasemapPresetDefinition[] = [
     { id: 'mff_relief_preset', label: '地形浮雕', stack: ['terrain_relief', 'label_tianditu'] },
     {
         id: 'mff_water_preset',
-        label: 'MFF水体',
+        label: '水体',
         stack: ['terrain_relief', 'theme_mff_water', 'label_tianditu'],
     },
     {
         id: 'mff_admin_preset',
-        label: 'MFF边界',
+        label: '边界',
         stack: ['terrain_relief', 'theme_mff_admin', 'label_tianditu'],
     },
     {
         id: 'mff_streets_preset',
-        label: 'MFF街道',
+        label: '街道',
         stack: ['terrain_relief', 'theme_mff_streets', 'label_tianditu'],
     },
     {
         id: 'mff_forest_preset',
-        label: 'MFF森林',
+        label: '森林',
         stack: ['terrain_relief', 'theme_mff_forest', 'label_tianditu'],
     },
 
     // 其他与自定义
-    { id: 'vector_geoq_hydro_preset', label: 'GeoQ水', stack: ['vector_geoq_hydro'] },
+    { id: 'vector_geoq_hydro_preset', label: '水系', stack: ['vector_geoq_hydro'] },
 
     // Google 水系叠加（底部影像 + 水系纠偏叠加层）
     {
         id: 'imagery_google_water_preset',
-        label: 'Google水系',
-        stack: ['imagery_tuxin', 'imagery_google_water'],
+        label: '水系',
+        stack: ['imagery_tuxin', 'vector_google_combo_water_wgs'],
     },
 
     // Sentinel-2 无云年度影像（EOX，2016~2025）
     {
         id: 'imagery_s2_cloudless_2016_preset',
-        label: 'Sentinel无云2016',
+        label: '无云2016',
         stack: ['imagery_s2_cloudless_2016', 'label_tianditu'],
     },
     {
         id: 'imagery_s2_cloudless_2017_preset',
-        label: 'Sentinel无云2017',
+        label: '无云2017',
         stack: ['imagery_s2_cloudless_2017', 'label_tianditu'],
     },
     {
         id: 'imagery_s2_cloudless_2018_preset',
-        label: 'Sentinel无云2018',
+        label: '无云2018',
         stack: ['imagery_s2_cloudless_2018', 'label_tianditu'],
     },
     {
         id: 'imagery_s2_cloudless_2019_preset',
-        label: 'Sentinel无云2019',
+        label: '无云2019',
         stack: ['imagery_s2_cloudless_2019', 'label_tianditu'],
     },
     {
         id: 'imagery_s2_cloudless_2020_preset',
-        label: 'Sentinel无云2020',
+        label: '无云2020',
         stack: ['imagery_s2_cloudless_2020', 'label_tianditu'],
     },
     {
         id: 'imagery_s2_cloudless_2021_preset',
-        label: 'Sentinel无云2021',
+        label: '无云2021',
         stack: ['imagery_s2_cloudless_2021', 'label_tianditu'],
     },
     {
         id: 'imagery_s2_cloudless_2022_preset',
-        label: 'Sentinel无云2022',
+        label: '无云2022',
         stack: ['imagery_s2_cloudless_2022', 'label_tianditu'],
     },
     {
         id: 'imagery_s2_cloudless_2023_preset',
-        label: 'Sentinel无云2023',
+        label: '无云2023',
         stack: ['imagery_s2_cloudless_2023', 'label_tianditu'],
     },
     {
         id: 'imagery_s2_cloudless_2024_preset',
-        label: 'Sentinel无云2024',
+        label: '无云2024',
         stack: ['imagery_s2_cloudless_2024', 'label_tianditu'],
     },
     {
         id: 'imagery_s2_cloudless_2025_preset',
-        label: 'Sentinel无云2025',
+        label: '无云2025',
         stack: ['imagery_s2_cloudless_2025', 'label_tianditu'],
     },
     // MineMap（四维图新）纯注记：源为 GCJ-02 加偏，已在图层定义处走 gcj2wgs 逐瓦片纠偏；
@@ -345,35 +349,374 @@ export const BASEMAP_PRESETS: BasemapPresetDefinition[] = [
     // 追加在列表末尾——URL 参数 l 为 1-based 索引契约，插在中间会改变既有预设编号、破坏已分享链接。
     {
         id: 'label_minedata_preset',
-        label: 'MineMap注记',
+        label: '注记',
         stack: ['label_minedata'],
     },
     // OpenFreeMap Liberty 矢量样式（OSM 数据 + ol-mapbox-style 全量样式），追加在末尾以保持 l 索引契约
     {
         id: 'vector_openfreemap_liberty_preset',
-        label: 'OpenFreeMap矢量',
+        label: 'Liberty矢量',
         stack: ['vector_openfreemap_liberty'],
     },
     // 追加在末尾，保持既有 URL 参数 l 的 1-based 编号不变。
     {
         id: 'vector_amap_clean_hd_preset',
-        label: '高德简洁512（无道路）',
+        label: '简洁512（无道路）',
         stack: ['vector_amap_clean_hd'],
     },
     {
         id: 'vector_amap_clean_wgs_preset',
-        label: '高德简洁纠偏（WGS）',
-        stack: ['vector_amap_clean_wgs'],
+        label: '简洁纠偏',
+        stack: ['vector_amap_256_ltype_1_wgs'],
     },
     {
         id: 'vector_amap_clean_roads_preset',
-        label: '高德简洁有路（无注记）',
+        label: '简洁有路（无注记）',
         stack: ['vector_amap_clean_roads'],
     },
     {
         id: 'vector_amap_pure_roads_wgs_preset',
-        label: '高德简洁底图+纯道路（WGS）',
-        stack: ['vector_amap_clean_wgs', 'vector_amap_roads_wgs'],
+        label: '简洁底图+纯道路',
+        stack: ['vector_amap_256_ltype_1_wgs', 'vector_amap_roads_wgs'],
+    },
+    // 高德 256px 电子底图 ltype 常用组合（GCJ + WGS），逐条显式声明，追加在末尾保持 URL l 索引不变
+    {
+        id: 'vector_amap_256_ltype_1_gcj_preset',
+        label: '地貌',
+        stack: ['vector_amap_256_ltype_1_gcj'],
+    },
+    {
+        id: 'vector_amap_256_ltype_1_wgs_preset',
+        label: '地貌',
+        stack: ['vector_amap_256_ltype_1_wgs'],
+    },
+    {
+        id: 'vector_amap_256_ltype_2_gcj_preset',
+        label: '路网',
+        stack: ['vector_amap_256_ltype_2_gcj'],
+    },
+    {
+        id: 'vector_amap_256_ltype_2_wgs_preset',
+        label: '路网',
+        stack: ['vector_amap_256_ltype_2_wgs'],
+    },
+    {
+        id: 'vector_amap_256_ltype_3_gcj_preset',
+        label: '地貌+路网',
+        stack: ['vector_amap_256_ltype_3_gcj'],
+    },
+    {
+        id: 'vector_amap_256_ltype_3_wgs_preset',
+        label: '地貌+路网',
+        stack: ['vector_amap_256_ltype_3_wgs'],
+    },
+    {
+        id: 'vector_amap_256_ltype_4_gcj_preset',
+        label: '注记',
+        stack: ['vector_amap_256_ltype_4_gcj'],
+    },
+    {
+        id: 'vector_amap_256_ltype_4_wgs_preset',
+        label: '注记',
+        stack: ['vector_amap_256_ltype_4_wgs'],
+    },
+    {
+        id: 'vector_amap_256_ltype_5_gcj_preset',
+        label: '地貌+注记',
+        stack: ['vector_amap_256_ltype_5_gcj'],
+    },
+    {
+        id: 'vector_amap_256_ltype_5_wgs_preset',
+        label: '地貌+注记',
+        stack: ['vector_amap_256_ltype_5_wgs'],
+    },
+    {
+        id: 'vector_amap_256_ltype_6_gcj_preset',
+        label: '路网+注记',
+        stack: ['vector_amap_256_ltype_6_gcj'],
+    },
+    {
+        id: 'vector_amap_256_ltype_6_wgs_preset',
+        label: '路网+注记',
+        stack: ['vector_amap_256_ltype_6_wgs'],
+    },
+    {
+        id: 'vector_amap_256_ltype_7_gcj_preset',
+        label: '地貌+路网+注记',
+        stack: ['vector_amap_256_ltype_7_gcj'],
+    },
+    {
+        id: 'vector_amap_256_ltype_7_wgs_preset',
+        label: '地貌+路网+注记',
+        stack: ['vector_amap_256_ltype_7_wgs'],
+    },
+    {
+        id: 'vector_amap_256_ltype_8_gcj_preset',
+        label: '建筑',
+        stack: ['vector_amap_256_ltype_8_gcj'],
+    },
+    {
+        id: 'vector_amap_256_ltype_8_wgs_preset',
+        label: '建筑',
+        stack: ['vector_amap_256_ltype_8_wgs'],
+    },
+    {
+        id: 'vector_amap_256_ltype_11_gcj_preset',
+        label: '地貌+路网+建筑',
+        stack: ['vector_amap_256_ltype_11_gcj'],
+    },
+    {
+        id: 'vector_amap_256_ltype_11_wgs_preset',
+        label: '地貌+路网+建筑',
+        stack: ['vector_amap_256_ltype_11_wgs'],
+    },
+    {
+        id: 'vector_amap_256_ltype_15_gcj_preset',
+        label: '全要素',
+        stack: ['vector_amap_256_ltype_15_gcj'],
+    },
+    {
+        id: 'vector_amap_256_ltype_15_wgs_preset',
+        label: '全要素',
+        stack: ['vector_amap_256_ltype_15_wgs'],
+    },
+    // Google 全组合（依据 Google_tiles.md）：GCJ 原生与 WGS 原生均提供两种坐标格式，追加在末尾保持 l 索引不变
+    {
+        id: 'vector_google_combo_standard_gcj_preset',
+        label: '标准电子',
+        stack: ['vector_google_combo_standard_gcj'],
+    },
+    {
+        id: 'vector_google_combo_standard_wgs_preset',
+        label: '标准电子',
+        stack: ['vector_google_combo_standard_wgs'],
+    },
+    {
+        id: 'vector_google_combo_hybrid_gcj_preset',
+        label: '混合影像',
+        stack: ['vector_google_combo_hybrid_gcj'],
+    },
+    {
+        id: 'vector_google_combo_hybrid_wgs_preset',
+        label: '混合影像',
+        stack: ['vector_google_combo_hybrid_wgs'],
+    },
+    {
+        id: 'vector_google_combo_labels_gcj_preset',
+        label: '仅注记',
+        stack: ['vector_google_combo_labels_gcj'],
+    },
+    {
+        id: 'vector_google_combo_labels_wgs_preset',
+        label: '仅注记',
+        stack: ['vector_google_combo_labels_wgs'],
+    },
+    {
+        id: 'vector_google_combo_road_labeled_gcj_preset',
+        label: '纯路网含注记',
+        stack: ['vector_google_combo_road_labeled_gcj'],
+    },
+    {
+        id: 'vector_google_combo_road_labeled_wgs_preset',
+        label: '纯路网含注记',
+        stack: ['vector_google_combo_road_labeled_wgs'],
+    },
+    {
+        id: 'vector_google_combo_road_skeleton_gcj_preset',
+        label: '纯路网骨架',
+        stack: ['vector_google_combo_road_skeleton_gcj'],
+    },
+    {
+        id: 'vector_google_combo_road_skeleton_wgs_preset',
+        label: '纯路网骨架',
+        stack: ['vector_google_combo_road_skeleton_wgs'],
+    },
+    {
+        id: 'vector_google_combo_road_text_gcj_preset',
+        label: '纯路网注记',
+        stack: ['vector_google_combo_road_text_gcj'],
+    },
+    {
+        id: 'vector_google_combo_road_text_wgs_preset',
+        label: '纯路网注记',
+        stack: ['vector_google_combo_road_text_wgs'],
+    },
+    {
+        id: 'vector_google_combo_water_gcj_preset',
+        label: '纯水体',
+        stack: ['vector_google_combo_water_gcj'],
+    },
+    {
+        id: 'vector_google_combo_water_wgs_preset',
+        label: '纯水体',
+        stack: ['vector_google_combo_water_wgs'],
+    },
+    {
+        id: 'vector_google_combo_pb_roadmap_gcj_preset',
+        label: 'PB标准电子',
+        stack: ['vector_google_combo_pb_roadmap_gcj'],
+    },
+    {
+        id: 'vector_google_combo_pb_roadmap_wgs_preset',
+        label: 'PB标准电子',
+        stack: ['vector_google_combo_pb_roadmap_wgs'],
+    },
+    {
+        id: 'vector_google_combo_pb_roadline_gcj_preset',
+        label: 'PB纯路网',
+        stack: ['vector_google_combo_pb_roadline_gcj'],
+    },
+    {
+        id: 'vector_google_combo_pb_roadline_wgs_preset',
+        label: 'PB纯路网',
+        stack: ['vector_google_combo_pb_roadline_wgs'],
+    },
+    {
+        id: 'vector_google_combo_satellite_wgs_preset',
+        label: '纯卫星',
+        stack: ['vector_google_combo_satellite_wgs'],
+    },
+    {
+        id: 'vector_google_combo_satellite_gcj_preset',
+        label: '纯卫星',
+        stack: ['vector_google_combo_satellite_gcj'],
+    },
+    {
+        id: 'vector_google_combo_terrain_wgs_preset',
+        label: '纯地形',
+        stack: ['vector_google_combo_terrain_wgs'],
+    },
+    {
+        id: 'vector_google_combo_terrain_gcj_preset',
+        label: '纯地形',
+        stack: ['vector_google_combo_terrain_gcj'],
+    },
+    {
+        id: 'vector_google_combo_terrain_hybrid_wgs_preset',
+        label: '地形混合',
+        stack: ['vector_google_combo_terrain_hybrid_wgs'],
+    },
+    {
+        id: 'vector_google_combo_terrain_hybrid_gcj_preset',
+        label: '地形混合',
+        stack: ['vector_google_combo_terrain_hybrid_gcj'],
+    },
+    {
+        id: 'vector_google_combo_clean_terrain_wgs_preset',
+        label: '干净地形',
+        stack: ['vector_google_combo_clean_terrain_wgs'],
+    },
+    {
+        id: 'vector_google_combo_clean_terrain_gcj_preset',
+        label: '干净地形',
+        stack: ['vector_google_combo_clean_terrain_gcj'],
+    },
+    {
+        id: 'vector_google_combo_clean_terrain_no_road_wgs_preset',
+        label: '干净地形无路',
+        stack: ['vector_google_combo_clean_terrain_no_road_wgs'],
+    },
+    {
+        id: 'vector_google_combo_clean_terrain_no_road_gcj_preset',
+        label: '干净地形无路',
+        stack: ['vector_google_combo_clean_terrain_no_road_gcj'],
+    },
+    {
+        id: 'vector_google_combo_pb_hillshade_wgs_preset',
+        label: 'PB山体阴影',
+        stack: ['vector_google_combo_pb_hillshade_wgs'],
+    },
+    {
+        id: 'vector_google_combo_pb_hillshade_gcj_preset',
+        label: 'PB山体阴影',
+        stack: ['vector_google_combo_pb_hillshade_gcj'],
+    },
+    // V3.7.16：补齐「纠偏/代理版 ↔ 原始版」矩阵，追加在末尾以保持既有 1..148 编号不变
+    { id: 'label_minedata_gcj_preset', label: 'MineMap注记(GCJ)', stack: ['label_minedata_gcj'] },
+    { id: 'amap_label_gcj_preset', label: '高德注记(GCJ)', stack: ['amap_label_gcj'] },
+    { id: 'vector_amap_gcj_preset', label: '高德地貌+建筑(GCJ)', stack: ['vector_amap_gcj'] },
+    {
+        id: 'vector_amap_roads_gcj_preset',
+        label: '高德纯道路(GCJ)',
+        stack: ['vector_amap_roads_gcj'],
+    },
+    { id: 'vector_baidu_preset', label: '百度地图(BD09)', stack: ['vector_baidu'] },
+    { id: 'ships66_direct_preset', label: '船舶网(直连)', stack: ['ships66_direct'] },
+    {
+        id: 'vector_amap_hd_wgs_preset',
+        label: '高德地貌+建筑(512 WGS)',
+        stack: ['vector_amap_hd_wgs'],
+    },
+    {
+        id: 'vector_amap_clean_hd_wgs_preset',
+        label: '高德简洁电子(512 WGS)',
+        stack: ['vector_amap_clean_hd_wgs'],
+    },
+    {
+        id: 'vector_amap_clean_roads_wgs_preset',
+        label: '高德简洁有路(512 WGS)',
+        stack: ['vector_amap_clean_roads_wgs'],
+    },
+    { id: 'label_tuxin_wgs_preset', label: '图新注记(WGS)', stack: ['label_tuxin'] },
+    { id: 'vector_tuxin_wgs_preset', label: '图新矢量(WGS)', stack: ['vector_tuxin'] },
+    { id: 'imagery_tuxin_wgs_preset', label: '图新影像(WGS)', stack: ['imagery_tuxin'] },
+    { id: 'vector_geoq_hydro_wgs_preset', label: 'GeoQ水(WGS)', stack: ['vector_geoq_hydro_wgs'] },
+    {
+        id: 'imagery_google_standard_wgs_preset',
+        label: 'Google标准电子(WGS)',
+        stack: ['imagery_google_standard_wgs'],
+    },
+    // V3.7.16：补齐互联网/GISer 高频公共底图，追加在末尾保持既有 1..162 编号不变
+    { id: 'imagery_bing_aerial_preset', label: 'Bing影像', stack: ['imagery_bing_aerial'] },
+    { id: 'vector_bing_road_preset', label: 'Bing道路', stack: ['vector_bing_road'] },
+    { id: 'imagery_bing_hybrid_preset', label: 'Bing混合影像', stack: ['imagery_bing_hybrid'] },
+    { id: 'vector_mapbox_streets_preset', label: 'Mapbox街道', stack: ['vector_mapbox_streets'] },
+    {
+        id: 'terrain_mapbox_outdoors_preset',
+        label: 'Mapbox户外',
+        stack: ['terrain_mapbox_outdoors'],
+    },
+    { id: 'vector_mapbox_light_preset', label: 'Mapbox浅色', stack: ['vector_mapbox_light'] },
+    { id: 'vector_mapbox_dark_preset', label: 'Mapbox深色', stack: ['vector_mapbox_dark'] },
+    {
+        id: 'vector_maptiler_bright_preset',
+        label: 'MapTiler明亮',
+        stack: ['vector_maptiler_bright'],
+    },
+    {
+        id: 'vector_maptiler_positron_preset',
+        label: 'MapTiler极简',
+        stack: ['vector_maptiler_positron'],
+    },
+    { id: 'vector_carto_voyager_preset', label: 'CARTO Voyager', stack: ['vector_carto_voyager'] },
+    {
+        id: 'vector_carto_positron_nolabels_preset',
+        label: 'CARTO极简无注记',
+        stack: ['vector_carto_positron_nolabels'],
+    },
+    {
+        id: 'vector_carto_dark_nolabels_preset',
+        label: 'CARTO深色无注记',
+        stack: ['vector_carto_dark_nolabels'],
+    },
+    { id: 'terrain_usgs_topo_preset', label: 'USGS地形图', stack: ['terrain_usgs_topo'] },
+    { id: 'imagery_usgs_preset', label: 'USGS影像', stack: ['imagery_usgs'] },
+    { id: 'imagery_usgs_topo_preset', label: 'USGS影像地形', stack: ['imagery_usgs_topo'] },
+    { id: 'label_openseamap_preset', label: 'OpenSeaMap海图注记', stack: ['label_openseamap'] },
+    {
+        id: 'vector_openrailwaymap_preset',
+        label: 'OpenRailwayMap铁路',
+        stack: ['vector_openrailwaymap'],
+    },
+    {
+        id: 'imagery_nasa_modis_terra_preset',
+        label: 'NASA MODIS真彩色',
+        stack: ['imagery_nasa_modis_terra'],
+    },
+    {
+        id: 'imagery_nasa_viirs_night_preset',
+        label: 'NASA VIIRS夜间灯光',
+        stack: ['imagery_nasa_viirs_night'],
     },
 ];
 

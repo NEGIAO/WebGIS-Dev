@@ -288,10 +288,7 @@
                         :id="`feature-${feature.no}`"
                         :key="feature.key"
                         class="feature-card"
-                        :class="{
-                            'feature-card--hero': feature.hero,
-                            'feature-card--wide': feature.wide,
-                        }"
+                        :class="{ 'feature-card--hero': feature.hero }"
                     >
                         <!-- 序号章：装饰性，读屏器跳过 -->
                         <span
@@ -2550,33 +2547,9 @@ button:focus-visible {
     }
 }
 
-/* 桌面 3 列下按等宽排布会在末行留孤卡，故末尾若干张卡跨满整行、
-   转为「图标 + 文案」横向汇总卡：11 卡 = 主卡 2×2（4 格）+ 8 格 + 宽卡 3 格 ×2
-   = 18 格 = 6 行，恰好铺满。跨列仅在 3 列布局（>1024px）生效；
-   2 列下宽卡退化为普通卡，主卡整行 + 10 张普通卡 = 5 行，合计 6 行同样铺满；单列无需处理 */
-.feature-card--wide {
-    display: flex;
-    flex-direction: column;
-}
-
-@media (min-width: 1025px) {
-    .feature-card--wide {
-        grid-column: 1 / -1;
-        flex-direction: row;
-        align-items: flex-start;
-        gap: 1.4rem;
-        padding: 1.6rem 1.8rem;
-    }
-
-    .feature-card--wide .feature-icon {
-        margin-bottom: 0;
-        flex-shrink: 0;
-    }
-
-    .feature-card--wide h4 {
-        margin-bottom: 0.45rem;
-    }
-}
+/* 12 张卡等宽方块布局：3 列下主卡 2×2（4 格）+ 11 张普通卡 = 15 格 = 5 行；
+   2 列下主卡整行（1 格）+ 11 张普通卡 = 12 格 = 6 行，两种断点均恰好铺满，
+   无需跨列汇总卡。7–9 与 10–12 自然成两组三列方块。 */
 
 /* 主卡（feature1）：桌面 3 列网格里跨 2 列 2 行，制造"一张主卡 + 一圈小卡"
    的次主关系，借鉴门户"重点一块 + 环绕若干块"的版面。
@@ -4429,7 +4402,7 @@ button:focus-visible {
         grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 
-    /* 2 列下主卡整行 + 10 张普通卡恰满 5 行，取消孤卡居中 */
+    /* 2 列下主卡整行 + 11 张普通卡恰满 6 行；显式复位末卡跨列，防历史样式回潮 */
     .features-grid .feature-card:last-child {
         grid-column: auto;
     }

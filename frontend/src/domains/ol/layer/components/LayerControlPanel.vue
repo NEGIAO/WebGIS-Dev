@@ -40,91 +40,120 @@
                     />
                 </div>
             <div v-show="isSelectDropdownOpen" class="custom-select-dropdown">
+                <!-- V3.7.16 修复：搜索栏整块阻断点击冒泡——容器上的 toggleSelectDropdown
+                 * 会把「点击输入框」误判为开关下拉，导致输入框一点就收起、来不及输入 -->
                 <div
-                    v-for="option in regularBasemapOptions"
-                    :key="option.value"
-                    class="custom-select-option"
-                    :class="{ 'selected': option.value === selectedLayer }"
-                    @click.stop="selectOption(option)"
+                    class="catalog-search-bar"
+                    @click.stop
+                    @mousedown.stop
                 >
-                    <span class="preset-index">{{ option.label.split(' ')[0] }}</span>
-                    <span class="preset-name">{{ option.label.slice(option.label.indexOf(' ') + 1) }}</span>
+                    <SearchIcon
+                        :size="14"
+                        :stroke-width="2"
+                    />
+                    <input
+                        v-model="basemapQuery"
+                        class="catalog-search-input"
+                        placeholder="搜索编号 / ID / 名称 / 服务商 / 坐标系"
+                    />
+                    <button
+                        v-if="isSearchActive"
+                        type="button"
+                        class="close-search-btn"
+                        aria-label="清空搜索"
+                        @click.stop="basemapQuery = ''"
+                    >
+                        <X
+                            :size="13"
+                            :stroke-width="2.2"
+                        />
+                    </button>
                 </div>
 
-                <div class="history-section-divider" aria-hidden="true"></div>
-                <div class="history-section-title">历史影像</div>
-                <div class="history-tabs">
-                    <button
-                        type="button"
-                        class="history-tab"
-                        :class="{ active: historicalProviderTab === 'sentinel' }"
-                        @click.stop="historicalProviderTab = 'sentinel'"
+                <template v-if="isSearchActive">
+                    <div v-if="!searchResults.length" class="history-empty">没有匹配的底图</div>
+                    <div
+                        v-for="entry in searchResults"
+                        :key="`${entry.id}:${entry.customUrl || ''}`"
+                        class="custom-select-option catalog-result"
+                        :class="{ selected: entry.customUrl ? entry.customUrl === customMapUrl : entry.id === selectedLayer }"
+                        :title="entryTitle(entry)"
+                        @click.stop="selectCatalogEntry(entry)"
                     >
-                        Sentinel
-                    </button>
-                    <button
-                        type="button"
-                        class="history-tab"
-                        :class="{ active: historicalProviderTab === 'esri' }"
-                        @click.stop="selectHistoricalProviderTab('esri')"
-                    >
-                        ESRI Wayback
-                    </button>
-                </div>
-                <template v-if="historicalProviderTab === 'sentinel'">
-                    <div v-for="group in sentinelYearGroups" :key="group.year" class="history-year-group">
-                        <button type="button" class="history-year-toggle" @click.stop="toggleHistoryYear('sentinel', group.year)">
-                            <span>{{ group.year }}年</span>
-                            <ChevronRight
-                                class="year-chevron"
-                                :class="{ open: isHistoryYearOpen('sentinel', group.year) }"
-                                :size="14"
-                                :stroke-width="2.2"
-                            />
-                        </button>
-                        <template v-if="isHistoryYearOpen('sentinel', group.year)">
-                            <div
-                                v-for="option in group.items"
-                                :key="option.value"
-                                class="custom-select-option history-option"
-                                :class="{ selected: option.value === selectedLayer }"
-                                @click.stop="selectOption(option)"
-                            >
-                                <span class="preset-name">{{ String(option.label).replace(/^\d+\s+/, '') }}</span>
-                            </div>
-                        </template>
+                        <span class="preset-index">{{ entry.number || '—' }}</span>
+                        <span v-if="entry.proxied" class="entry-proxy-tag" title="经 VPS 瓦片代理（纠偏/代理转发）">proxy</span>
+                        <span class="preset-name">{{ entry.label }}</span>
+                        <span class="catalog-crumb">{{ categoryLabel(entry.category) }} / {{ entry.provider }} / {{ coordLabel(entry.coord) }}</span>
                     </div>
                 </template>
+
                 <template v-else>
-                    <div v-if="historicalImageryLoading" class="history-empty">正在读取快照目录…</div>
-                    <div v-else-if="!esriWaybackLayers.length" class="history-empty">
-                        暂无数据，后端将在启动后自动同步
-                    </div>
-                    <div v-for="group in esriYearGroups" :key="group.year" class="history-year-group">
-                        <button type="button" class="history-year-toggle" @click.stop="toggleHistoryYear('esri', group.year)">
-                            <span>{{ group.year }}年</span>
+                    <div v-for="cat in catalogTree" :key="cat.category" class="catalog-category-group">
+                        <button
+                            type="button"
+                            class="history-year-toggle catalog-category-toggle"
+                            @click.stop="cat.category === 'service' ? activateCustomBasemap() : toggleCategory(cat.category)"
+                        >
+                            <span class="catalog-heading"><span class="catalog-ordinal-l1">{{ categoryOrdinal(cat.category) }}</span>{{ categoryLabel(cat.category) }}<span v-if="cat.category !== 'service'" class="catalog-count">{{ categoryEntryCount(cat) }}</span></span>
                             <ChevronRight
+                                v-if="cat.category !== 'service'"
                                 class="year-chevron"
-                                :class="{ open: isHistoryYearOpen('esri', group.year) }"
+                                :class="{ open: isCategoryOpen(cat.category) }"
                                 :size="14"
                                 :stroke-width="2.2"
                             />
+                            <span v-else class="catalog-trigger-chip">输入 URL →</span>
                         </button>
-                        <template v-if="isHistoryYearOpen('esri', group.year)">
-                            <div
-                                v-for="snapshot in group.items"
-                                :key="snapshot.id"
-                                class="custom-select-option history-option"
-                                :class="{ selected: selectedLayer === 'custom' && snapshot.xyz_url === customMapUrl }"
-                                :title="snapshot.name || snapshot.id"
-                                @click.stop="selectHistoricalSnapshot(snapshot)"
-                            >
-                                <span class="preset-name">{{ snapshot.date }}</span>
-                            </div>
+                        <template v-if="cat.category !== 'service' && isCategoryOpen(cat.category)">
+                            <template v-if="cat.category === 'recommended'">
+                                <div
+                                    v-for="entry in cat.entries || []"
+                                    :key="entry.id"
+                                    class="custom-select-option history-option catalog-entry"
+                                    :class="{ selected: entry.id === selectedLayer }"
+                                    :title="entryTitle(entry)"
+                                    @click.stop="selectCatalogEntry(entry)"
+                                >
+                                    <span class="preset-index">{{ entry.number }}</span>
+                                    <span v-if="entry.proxied" class="entry-proxy-tag" title="经 VPS 瓦片代理（纠偏/代理转发）">proxy</span>
+                                    <span class="preset-name">{{ entry.label }}</span>
+                                    <span class="entry-coord-tag">{{ coordLabel(entry.coord) }}</span>
+                                </div>
+                            </template>
+                            <template v-else>
+                                <div v-for="prov in cat.providers" :key="prov.provider" class="combo-provider-group">
+                                    <button
+                                        type="button"
+                                        class="history-year-toggle combo-provider-toggle"
+                                        @click.stop="toggleProvider(cat.category, prov.provider)"
+                                    >
+                                        <span class="catalog-heading"><span class="catalog-ordinal-l2">{{ providerOrdinal(cat.category, prov.provider) }}</span>{{ prov.provider }}<span class="catalog-count">{{ providerEntryCount(prov) }}</span></span>
+                                        <ChevronRight
+                                            class="year-chevron"
+                                            :class="{ open: isProviderOpen(cat.category, prov.provider) }"
+                                            :size="13"
+                                            :stroke-width="2.2"
+                                        />
+                                    </button>
+                                    <template v-if="isProviderOpen(cat.category, prov.provider)">
+                                        <!-- V3.7.16：第三级坐标目录已整体移除，条目平铺在服务商层，坐标由条目徽标承载 -->
+                                        <div
+                                            v-for="entry in prov.entries"
+                                            :key="`${entry.id}:${entry.customUrl || ''}`"
+                                            class="custom-select-option history-option catalog-entry"
+                                            :class="{ selected: entry.customUrl ? entry.customUrl === customMapUrl : entry.id === selectedLayer }"
+                                            :title="entryTitle(entry)"
+                                            @click.stop="selectCatalogEntry(entry)"
+                                        >
+                                            <span class="preset-index">{{ entry.number || '—' }}</span>
+                                            <span v-if="entry.proxied" class="entry-proxy-tag" title="经 VPS 瓦片代理（纠偏/代理转发）">proxy</span>
+                                            <span class="preset-name">{{ entry.label }}</span>
+                                            <span class="entry-coord-tag">{{ coordLabel(entry.coord) }}</span>
+                                        </div>
+                                    </template>
+                                </div>
+                            </template>
                         </template>
-                    </div>
-                    <div v-if="historicalImageryUpdatedAt" class="history-updated">
-                        更新于 {{ formatHistoryDate(historicalImageryUpdatedAt) }}
                     </div>
                 </template>
             </div>
@@ -267,6 +296,38 @@
                     />
                     <span class="panel-header-title">底图排序与显隐</span>
                     <button
+                        v-if="!isLayerSearchOpen"
+                        type="button"
+                        class="panel-search-toggle"
+                        title="搜索图层（名称 / ID）"
+                        @click="toggleLayerSearch"
+                    >
+                        <SearchIcon
+                            :size="14"
+                            :stroke-width="2"
+                        />
+                    </button>
+                    <template v-else>
+                        <input
+                            ref="layerSearchInputRef"
+                            v-model="layerSearchQuery"
+                            class="layer-search-input"
+                            placeholder="搜索图层（名称 / ID）"
+                            @keydown.esc="closeLayerSearch"
+                        />
+                        <button
+                            type="button"
+                            class="close-search-btn"
+                            aria-label="关闭搜索"
+                            @click="closeLayerSearch"
+                        >
+                            <X
+                                :size="13"
+                                :stroke-width="2.2"
+                            />
+                        </button>
+                    </template>
+                    <button
                         type="button"
                         class="close-panel-btn"
                         aria-label="关闭"
@@ -284,9 +345,10 @@
                 >
                     <div
                         v-for="(layer, index) in layerList"
+                        v-show="layerMatchesSearch(layer)"
                         :key="layer.id"
                         class="layer-item"
-                        :draggable="!isTouchDevice"
+                        :draggable="!isTouchDevice && !layerSearchQuery.trim()"
                         :class="{ dragging: draggingIndex === index, 'is-off': !layer.visible, 'touch-drop-target': touchDragActive && touchDropIndex === index && touchDragIndex !== index }"
                         @dragstart="onDragStart($event, index)"
                         @dragend="onDragEnd"
@@ -554,7 +616,10 @@
 
 /* ===== 底图选择器 ===== */
 .custom-select-container {
-    position: relative;
+    /* V3.7.16：去掉 position:relative——dropdown 的定位锚需要上浮到 .layer-switcher
+     * 整个面板（左贴面板左缘、右不超面板右缘），锚在容器上只会覆盖底图行中段。
+     * 容器内无其他绝对定位子元素，移除后不影响布局；外部点击判定
+     * （closest('.custom-select-container')）不受影响，dropdown 仍是其 DOM 子节点。 */
     flex: 1;
     min-width: 0;
     user-select: none;
@@ -610,22 +675,32 @@
 .custom-select-dropdown {
     position: absolute;
     top: calc(100% + 5px);
+    /* V3.7.16 溢出修复 + V3.7.16 对齐：原 left:0/right:0 双锚被 width:max-content 覆盖
+     * （显式宽度使 right 失效），超宽内容自左锚向右延伸，开关器贴屏幕右上角时直接
+     * 溢出屏幕右缘。现改为宽度完全跟随面板容器（left:0/right:0 双锚 + width:auto）：
+     * 左缘贴 LayerControlPanel 左缘，右缘不超其右缘；超宽内容靠行内 ellipsis 收缩
+     * （catalog-heading / preset-name），calc(100vw) 护栏仅作极窄屏兜底。 */
     left: 0;
     right: 0;
-    width: max-content;
-    min-width: 100%;
+    width: auto;
+    max-width: calc(100vw - 16px);
     max-height: 450px;
     background: rgba(255, 255, 255, 0.98);
     border: 1px solid rgba(var(--brand-primary-rgb), 0.2);
     border-radius: 11px;
     box-shadow: var(--toc-shadow-lg);
     z-index: var(--z-modal-high);
+    /* V3.7.16：纵向为主、横向仅作兜底；原生横向滚动条默认约 15px，与目录行高相比过重 */
+    overflow-x: auto;
     overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(var(--brand-primary-rgb), 0.35) transparent;
     animation: fadeIn 0.15s ease-out;
 }
 
 .custom-select-dropdown::-webkit-scrollbar {
     width: 6px;
+    height: 4px;
 }
 
 .custom-select-dropdown::-webkit-scrollbar-track {
@@ -635,6 +710,14 @@
 .custom-select-dropdown::-webkit-scrollbar-thumb {
     background: rgba(var(--brand-primary-rgb), 0.35);
     border-radius: 4px;
+}
+
+.custom-select-dropdown::-webkit-scrollbar-thumb:hover {
+    background: rgba(var(--brand-primary-rgb), 0.55);
+}
+
+.custom-select-dropdown::-webkit-scrollbar-corner {
+    background: transparent;
 }
 
 .custom-select-option {
@@ -747,6 +830,180 @@
 
 .history-year-toggle:hover {
     background: var(--toc-primary-bg);
+}
+
+.catalog-search-bar {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 8px;
+    background: var(--bg-brand-light);
+    border-bottom: 1px solid var(--brand-primary-lighter);
+}
+
+.catalog-search-input {
+    flex: 1;
+    min-width: 0;
+    padding: 4px 6px;
+    border: 1px solid var(--brand-primary-lighter);
+    border-radius: 4px;
+    background: #ffffff;
+    color: var(--toc-text-primary);
+    font-size: 11px;
+    outline: none;
+}
+
+.catalog-search-input:focus {
+    border-color: var(--brand-primary);
+    box-shadow: 0 0 0 2px rgba(var(--brand-primary-rgb), 0.12);
+}
+
+.catalog-category-toggle {
+    color: var(--brand-accent-dark);
+    font-size: 12px;
+}
+
+.catalog-heading {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    /* V3.7.16：长标签（如 WMS/WMTS/MVT/XYZ）可收缩省略，防止撑破 dropdown 宽度上限 */
+    min-width: 0;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.catalog-count {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 18px;
+    height: 16px;
+    padding: 0 5px;
+    border-radius: 8px;
+    background: rgba(var(--brand-primary-rgb), 0.12);
+    color: var(--brand-accent-dark);
+    font-size: 10px;
+    font-variant-numeric: tabular-nums;
+    line-height: 1;
+}
+
+.catalog-ordinal-l1,
+.catalog-ordinal-l2 {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 auto;
+    font-variant-numeric: tabular-nums;
+}
+
+.catalog-ordinal-l1 {
+    min-width: 18px;
+    height: 18px;
+    border-radius: 4px;
+    background: var(--brand-primary);
+    color: #fff;
+    font-size: 11px;
+}
+
+.catalog-ordinal-l2 {
+    min-width: 16px;
+    color: var(--toc-text-light);
+    font-size: 11px;
+}
+
+.entry-coord-tag {
+    flex: 0 0 auto;
+    margin-left: auto;
+    padding: 0 4px;
+    border-radius: 3px;
+    background: rgba(var(--brand-primary-rgb), 0.08);
+    color: var(--toc-text-light);
+    font-size: 10px;
+    line-height: 15px;
+}
+
+/* V3.7.16：纠偏/代理标识——该图源经 VPS 瓦片代理（correction≠none 或 proxy='proxy'）；
+ * 置于编号后、名称前，与右侧坐标徽标形成「前因后果」的阅读顺序 */
+.entry-proxy-tag {
+    flex: 0 0 auto;
+    padding: 0 4px;
+    border-radius: 3px;
+    background: rgba(var(--brand-accent-rgb, var(--brand-primary-rgb)), 0.14);
+    color: var(--brand-accent-dark);
+    font-size: 10px;
+    line-height: 15px;
+    letter-spacing: 0.02em;
+}
+
+/* V3.7.16：二级服务商行升级为「节标题」——加粗 + 淡底色块 + 圆角，与平铺条目行
+ * （无底色、常规字重、靠编号徽标辨识）明确分层；hover 仅加深不改几何 */
+.combo-provider-toggle {
+    /* V3.7.16：继承 .history-year-toggle 的 width:100% 时会叠加左右 4px margin，
+     * 导致 dropdown 恒定横向溢出 8px 并触发过高的原生横向滚动条；此处扣除 margin */
+    width: calc(100% - 8px);
+    font-weight: 700;
+    color: var(--toc-text-primary);
+    background: rgba(var(--brand-primary-rgb), 0.06);
+    border-radius: 6px;
+    margin: 2px 4px;
+    padding: 6px 10px;
+}
+
+.combo-provider-toggle:hover {
+    background: rgba(var(--brand-primary-rgb), 0.11);
+}
+
+.catalog-trigger-hint {
+    color: var(--toc-text-light);
+    font-size: 10px;
+    font-weight: normal;
+}
+
+/* V3.7.16：服务入口行（WMS/WMTS/MVT/XYZ）的动作胶囊——该行是「触发自定义 URL 输入」
+ * 的入口而非折叠分组，用右对齐胶囊明示动作，替代紧贴长标签的裸提示文本 */
+.catalog-trigger-chip {
+    margin-left: auto;
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 10px;
+    border-radius: 999px;
+    background: rgba(var(--brand-primary-rgb), 0.10);
+    color: var(--brand-accent-dark);
+    font-size: 10px;
+    font-weight: 600;
+    white-space: nowrap;
+    transition: background 0.15s ease, color 0.15s ease;
+}
+
+.custom-select-option:hover .catalog-trigger-chip,
+.history-year-toggle:hover .catalog-trigger-chip {
+    background: rgba(var(--brand-primary-rgb), 0.16);
+}
+
+.catalog-result {
+    align-items: flex-start;
+    flex-wrap: wrap;
+}
+
+.catalog-crumb {
+    flex: 1 0 100%;
+    padding-left: 30px;
+    color: var(--toc-text-light);
+    font-size: 10px;
+    line-height: 1.2;
+}
+
+.catalog-entry .preset-index {
+    min-width: 26px;
+    text-align: right;
 }
 
 .year-chevron {
@@ -882,7 +1139,10 @@
 /* ===== 图层管理浮层 ===== */
 .layer-manager-panel {
     position: absolute;
+    /* V3.7.16：宽度由 inline style 同步 .layer-switcher 面板宽度（左右缘精确对齐），
+     * 此处 216px 仅作锚点计算前的兜底；超窄屏护栏与面板同规 */
     width: 216px;
+    max-width: calc(100vw - 16px);
     background: rgba(255, 255, 255, 0.97);
     border: 1px solid rgba(var(--brand-primary-rgb), 0.18);
     border-radius: 12px;
@@ -933,6 +1193,72 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+}
+
+.panel-search-toggle {
+    /* V3.7.16：搜索改为独立图标钮（标题回归纯文本），圆形触达区 + hover 淡底 */
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    border: 0;
+    border-radius: 50%;
+    background: transparent;
+    color: var(--toc-text-secondary);
+    cursor: pointer;
+    transition: background 0.15s ease, color 0.15s ease;
+}
+
+.panel-search-toggle:hover {
+    background: rgba(var(--brand-primary-rgb), 0.12);
+    color: var(--brand-accent-dark);
+}
+
+.panel-search-toggle:hover {
+    color: var(--brand-accent);
+}
+
+.layer-search-input {
+    flex: 1;
+    min-width: 0;
+    padding: 4px 6px;
+    border: 1px solid var(--brand-primary-lighter);
+    border-radius: 4px;
+    background: #ffffff;
+    color: var(--toc-text-primary);
+    font-size: 12px;
+    font-weight: normal;
+    outline: none;
+}
+
+.layer-search-input:focus {
+    border-color: var(--brand-primary);
+    box-shadow: 0 0 0 2px rgba(var(--brand-primary-rgb), 0.12);
+}
+
+.close-search-btn {
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    border: 0;
+    border-radius: 50%;
+    background: transparent;
+    color: var(--toc-text-secondary);
+    cursor: pointer;
+}
+
+.close-search-btn:hover {
+    background: rgba(var(--brand-primary-rgb), 0.12);
+}
+
+.close-search-btn svg {
+    width: 13px;
+    height: 13px;
 }
 
 /* 图标尺寸单源落在 CSS：模板 :size 仅为无样式兜底 */
@@ -1217,6 +1543,18 @@
     .submenu-arrow { width: 16px; height: 16px; }
     .custom-url-btn svg { width: 18px; height: 18px; }
     .drag-handle svg { width: 18px; height: 18px; }
+    /* V3.7.16：统一目录树新增控件同步放大（折叠行 / 关闭钮 / 搜索框触屏目标 ≥40px） */
+    .close-search-btn { width: 40px; height: 40px; }
+    .close-search-btn svg { width: 16px; height: 16px; }
+    .catalog-search-input,
+    .layer-search-input { min-height: 40px; font-size: 14px; }
+    .history-year-toggle { min-height: 40px; }
+    .custom-select-option { min-height: 40px; }
+    /* V3.7.16：小屏限制下拉高度，条目徽标（entry-coord-tag）字号同步放大保证可读 */
+    .custom-select-dropdown { max-height: min(450px, 62vh); }
+    .entry-coord-tag, .entry-proxy-tag { font-size: 11px; padding: 2px 7px; }
+    /* V3.7.16：标题搜索入口此前约 35px，补齐触屏目标 ≥40px */
+    .panel-search-toggle { min-height: 40px; display: inline-flex; align-items: center; }
 }
 
 /* Cesium overlay 开关 */

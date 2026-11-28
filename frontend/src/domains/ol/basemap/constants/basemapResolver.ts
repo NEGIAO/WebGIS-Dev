@@ -1,10 +1,20 @@
 /**
  * 底图解析器
  * 提供图层配置解析、预设解析等功能
+ *
+ * V3.7.16：图层定义已迁入 common/basemap/definitions（SSOT 不再是
+ * ol/basemap/constants/basemapConfig.ts，该文件已删除）；本模块仍是
+ * OL 侧的解析入口，并继续向 common/basemap/catalogProjection 发布
+ * 只读目录投影（时序保证不变：HomeView 静态引入本模块）。
  */
 
-import type { LayerCategory, LayerGroup, LayerFactoryContext } from './basemapConfig';
-import { LAYER_SOURCE_DEFINITIONS, getDescriptorById, resolveRuntimeTokenPoolKey } from './basemapConfig';
+import type { TileLayerContext } from '@common/basemap/definitions/types';
+import {
+    TILE_LAYER_DEFINITIONS,
+    getDescriptorById,
+    resolveRuntimeTokenPoolKey,
+} from '@common/basemap/definitions';
+import { createOlSource } from '@ol/basemap/loaders/createOlSource';
 import { publishBasemapCatalogProjection } from '@common/basemap/catalogProjection';
 import {
     ALL_BASEMAP_PRESETS,
@@ -12,7 +22,7 @@ import {
 } from '@common/basemap/basemapPresets';
 
 // ========== 内部索引 ==========
-const LAYER_SOURCE_MAP = new Map(LAYER_SOURCE_DEFINITIONS.map((item) => [item.id, item]));
+const LAYER_SOURCE_MAP = new Map(TILE_LAYER_DEFINITIONS.map((item) => [item.id, item]));
 const BASEMAP_PRESET_MAP = new Map(ALL_BASEMAP_PRESETS.map((item) => [item.id, item]));
 
 // ========== 解析函数 ==========
@@ -68,16 +78,6 @@ export function getBasemapOptionLabel(optionId: string): string {
     return preset?.label || String(optionId || '');
 }
 
-/** 获取图层分类（用于外部状态同步） */
-export function getLayerCategory(layerId: string): LayerCategory {
-    return LAYER_SOURCE_MAP.get(String(layerId || ''))?.category || 'theme';
-}
-
-/** 获取图层分组（用于外部状态同步） */
-export function getLayerGroup(layerId: string): LayerGroup {
-    return LAYER_SOURCE_MAP.get(String(layerId || ''))?.group || '专题';
-}
-
 /**
  * 创建底图配置列表（由配置文件集中驱动）
  * @param tiandituTk 天地图 Token
@@ -90,22 +90,21 @@ export function createLayerConfigs(
     ovitalTdtkey: string = '',
     customUrl: string = '',
 ) {
-    const context: LayerFactoryContext = {
+    const context: TileLayerContext = {
         tiandituTk,
         ovitalTdtkey,
         customUrl,
     };
 
-    return LAYER_SOURCE_DEFINITIONS.map((definition) => ({
+    return TILE_LAYER_DEFINITIONS.map((definition) => ({
         id: definition.id,
         name: definition.name,
-        category: definition.category,
-        group: definition.group,
+        zBand: definition.zBand,
         visible:
             DEFAULT_VISIBLE_LAYER_ID_SET.size > 0
                 ? DEFAULT_VISIBLE_LAYER_ID_SET.has(definition.id)
                 : !!definition.defaultVisible,
-        createSource: () => definition.createSource(context),
+        createSource: () => createOlSource(definition, context),
     }));
 }
 
@@ -115,18 +114,14 @@ export function useBasemapManager() {
         createLayerConfigs,
         resolvePresetLayerIds,
         getBasemapOptionLabel,
-        getLayerCategory,
-        getLayerGroup,
     };
 }
 
 // ========== 向 common 发布只读目录投影 ==========
-// 三维域只需要元数据查询，不应静态 import 本目录（其 createSource 直接构造 ol/source）。
+// 三维域只需要元数据查询，不应静态 import OL 加载器。
 // 本模块作为目录门面，加载即发布投影；任何 import 本模块的入口都会顺带完成发布。
 publishBasemapCatalogProjection({
     resolvePresetLayerIds,
-    getLayerCategory,
-    getLayerGroup,
     getDescriptorById,
     resolveRuntimeTokenPoolKey,
 });

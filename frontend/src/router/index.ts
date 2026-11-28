@@ -168,8 +168,14 @@ router.beforeEach(async (to: RouteLocationNormalized, from: RouteLocationNormali
             console.warn('[Router] Share mode detected: Guest token injected');
             // 继续到下一步（参数提取）
         } else {
-            console.warn('[Router] Failed to inject guest token for share mode');
-            // 即使失败也继续，用户会看到访客受限的功能
+            // V3.7.16：无 token 不再允许匿名浏览（后端所有 API 返回 401）。
+            // 签发失败（未配置 GUEST_TOKEN_SECRET / 限频 / 网络异常）必须重定向登录页。
+            console.warn('[Router] Failed to inject guest token for share mode; redirecting to register');
+            cacheRoutePositionCode(to);
+            return {
+                name: 'register',
+                query: { redirect: to.fullPath },
+            };
         }
     }
 

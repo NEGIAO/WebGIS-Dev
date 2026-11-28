@@ -1,5 +1,5 @@
 /**
- * 底图切片预设快捷命令（V3.7.20；V3.7.27 加规则表一致性校验）
+ * 底图切片预设快捷命令（V3.7.16；V3.7.16 加规则表一致性校验）
  *
  * 背景：tileIntentPresets.ts 已有 19 条高德/Google 切片语义规则，但聊天面板
  * 无可点击入口，用户必须记忆并手打「只显示水系」「高德不要道路」等表述。
@@ -8,8 +8,8 @@
  * 设计约束：
  * - intent 文本必须是 TILE_INTENT_RULES 中 userPhrases 的原文，保证规则表命中。
  * - 不硬编码 presetId/URL：解析与代理前缀拼接仍由 tileIntentPresets.ts 负责（SSOT）。
- * - V3.7.27：提供 validateQuickCommandsAgainstRules() 供回归脚本调用——校验
- *   所有 intent 命中规则表，避免重演 V3.7.21「改了规则表漏了兜底表」的静默断裂。
+ * - V3.7.16：提供 validateQuickCommandsAgainstRules() 供回归脚本调用——校验
+ *   所有 intent 命中规则表，避免重演 V3.7.16「改了规则表漏了兜底表」的静默断裂。
  *   V3.7.15：该函数已接入 router 模块加载期（仅开发期告警，生产零开销）。
  */
 
@@ -82,7 +82,7 @@ export function isBasemapQuickIntent(text: unknown): boolean {
 }
 
 /**
- * V3.7.27：校验所有快捷命令 intent 都能被规则表解析，且 provider 与分组一致。
+ * V3.7.16：校验所有快捷命令 intent 都能被规则表解析，且 provider 与分组一致。
  * 规则表是 SSOT；此校验让「改了规则表漏了快捷命令」在加载期即暴露（开发期可见）。
  * @returns 失效命令列表，空数组表示全部一致
  */

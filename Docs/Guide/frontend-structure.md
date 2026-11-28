@@ -432,12 +432,34 @@ frontend/src/
 │   │   │   ├── basemapPresets.ts  # 底图预设纯数据（BASEMAP_PRESETS + ALL_BASEMAP_PRESETS + URL_LAYER_OPTIONS，零 ol/cesium 依赖，自 ol 域迁入）
 │   │   │   ├── basemapOptions.ts  # 底图选项常量 + 公开 1-based URL 图层编号双向 helper
 │   │   │   ├── basemapRegistry.ts  # 双引擎底图选择规范化、旧路由兼容与历史年份分组
+│   │   │   ├── useWaybackCatalog.ts  # ESRI Wayback 动态历史影像目录（OL/Cesium 共用 composable，按需加载并映射为统一目录条目）
 │   │   │   ├── remoteServices.ts  # 在线服务注册表（WMS/WMTS/MVT/XYZ/ArcGIS 元数据 SSOT：多子层选择/顺序、逐层参数、渲染签名、TOC 动作与引擎定位 API）
 │   │   │   ├── remoteServiceNodeBuilder.ts  # 注册表记录 → TOC「在线服务」分组节点（folder + 多选子图层叶子；WMS/WMTS/ArcGIS 动态支持拖拽排序）
 │   │   │   ├── remoteServiceTocActions.ts  # rsvc: 前缀 TOC 动作分流器（显隐/子图层勾选/移除/引擎定位直调注册表）
 │   │   │   ├── arcgisAttributeQuery.ts  # ArcGIS REST 属性查询（/{layerId}/query 点查 + 多子层合并 + esri 类型映射）
 │   │   │   ├── identifyPresentation.ts  # 要素点查结果展示渲染（HTML 构建 + HTML 转义，OL/Cesium 双引擎共用）
 │   │   │   ├── catalogProjection.ts  # 图源目录投影（磁盘目录 → 图源目录元数据）
+│   │   │   ├── catalog/  # 底图目录注册表（分类/图层登记，preset 元数据 + 完整图层定义）
+│   │   │   │   ├── index.ts  # 统一底图目录公共入口（barrel export）
+│   │   │   │   ├── layers.ts  # 引擎无关的图层定义注册表（definitions/index.ts 在模块加载时登记）
+│   │   │   │   ├── registry.ts  # 统一底图目录注册表（以 ALL_BASEMAP_PRESETS 生成分类元数据）
+│   │   │   │   ├── taxonomy.ts  # 底图分类判定（仅改 metadata，不改 id/顺序/编号）
+│   │   │   │   └── types.ts  # 统一底图目录类型（引擎无关，纯数据）
+│   │   │   ├── comboBasemaps.ts  # 组合底图 id 判定 isComboBasemapId（纯数据；组合条目经 catalog tags 进入目录树）
+│   │   │   ├── definitions/  # 瓦片底图层定义 SSOT（205 条，OL/Cesium 共用，零引擎依赖）
+│   │   │   │   ├── types.ts  # TileLayerDefinition（含 zBand 渲染带）/ TileLoadMethod / CoordCorrection / ProxyMode / TileLayerContext
+│   │   │   │   ├── resolveTileUrl.ts  # 纯函数：占位符替换 + 纠偏/代理拼 URL（不读 publicRuntime）
+│   │   │   │   ├── validate.ts  # 定义校验：id/order 唯一、order 连续、correction+direct 冲突等
+│   │   │   │   ├── category-service.ts  # 服务类定义（2 条）
+│   │   │   │   ├── category-imagery.ts  # 影像类定义（25 条）
+│   │   │   │   ├── category-terrain.ts  # 地形类定义（37 条，含 Maps-for-Free 12 条）
+│   │   │   │   ├── category-electronic.ts  # 电子类定义（97 条，含纠偏 24 条、proxy 3 条、skipHighResTile 9 条）
+│   │   │   │   ├── category-historical.ts  # 历史类定义（11 条）
+│   │   │   │   ├── category-vector.ts  # 矢量类定义（2 条，MVT，仅 OL）
+│   │   │   │   ├── category-recommended.ts  # 精选底图显式清单（20 条 preset id，可自由增删改，与预设顺序解耦）
+│   │   │   │   └── index.ts  # 聚合 TILE_LAYER_DEFINITIONS（按 order 排序）+ getDescriptorById / resolveRuntimeTokenPoolKey
+│   │   │   ├── ui/
+│   │   │   │   └── useBasemapCatalogUi.ts  # 底图目录树 UI 状态（搜索 + 三层展开，OL/Cesium 共用，零引擎依赖）
 │   │   │   ├── capabilitiesProxy.ts  # 能力文档拉取的后端代理兜底注入器（自签证书/CORS 直连失败时经 /proxy 重试）
 │   │   │   ├── wms/  # WMS/ArcGIS 协议适配分层（入口只做编排与缓存）
 │   │   │   │   ├── arcgisRest.ts  # ArcGIS REST 元数据/点查/切片与导出模板/WMS 端点探测
@@ -829,15 +851,11 @@ frontend/src/
 │       │   │   ├── useBasemapStateManagement.ts  # 底图状态管理
 │       │   │   └── useBasemapSwipe.ts  # 卷帘对比
 │       │   ├── constants/
-│       │   │   ├── basemapConfig.ts  # 底图配置唯一真相源（SSOT）：图源定义 + url/serviceType 字段 + getDescriptorById() 自动派生 Cesium 描述符
-│       │   │   ├── basemapCore.ts  # 底图配置内核（类型/主机常量/非标准适配器/URL 构建器）
-│       │   │   ├── definitions/  # 图源定义分片（按原始顺序切片，聚合顺序不变）
-│       │   │   │   ├── group-1.ts
-│       │   │   │   ├── group-2.ts
-│       │   │   │   ├── group-3.ts
-│       │   │   │   └── group-4.ts
-│       │   │   ├── basemapResolver.ts  # 解析逻辑（使用 ALL_BASEMAP_PRESETS；DEFAULT_BASEMAP_LAYER_INDEX/BASEMAP_OPTIONS/URL_LAYER_OPTIONS 纯数据常量 re-export 自 common/basemap）
-│       │   │   └── index.ts  # barrel export
+│       │   │   ├── basemapResolver.ts  # OL 图层配置工厂（createLayerConfigs：定义 → OL source，经 createOlSource；继续向 catalogProjection 发布投影）
+│       │   │   └── index.ts  # barrel export（新类型/聚合/getDescriptorById/resolveTileUrl/预设）
+│       │   ├── loaders/  # OL 瓦片源构建（按 TileLayerDefinition.method 分支）
+│       │   │   ├── createOlSource.ts  # OL 瓦片源工厂（XYZ/WMTS/TileWMS/VectorTile/OSM/custom + prioritize/withSkipHighResTile/非标准适配器）
+│       │   │   └── nonStandardAdapters.ts  # 非标准 XYZ 适配器表（Maps-for-Free 等，OL 引擎侧专属）
 │       │   └── resilience/
 │       │       └── useBasemapResilience.ts  # 底图熔断回退（超时/错误自动切换）
 │       ├── components/
@@ -1023,4 +1041,4 @@ frontend/src/
     └── tiffWorker.ts  # TIF 解码 Worker（TS 类型化消息协议 + Transferable 契约）
 ```
 
-> 注：`frontend/src/` 之外的 `frontend/scripts/` 存放构建辅助脚本（如 [bundle-shaders.mjs](../../frontend/scripts/bundle-shaders.mjs)：将体积云 Shaders/ 真源打包为 lib/shaders/bundledShaders.js 并同步 public 镜像，已由 vite.config 求值期自动调用——dev/build 全覆盖；`--check` 模式供 CI 与本地校验；[subset-fontawesome.py](../../frontend/scripts/subset-fontawesome.py)：扫描源码在用 fa-* 图标并生成 `src/assets/fontawesome-subset.css`，`npm run fonts:subset` 调用，`--check` 校验产物，字体本身走 BootCDN 不生成），不属于本树扫描范围，改动时仍需保持与本文件注释一致。
+> 注：`frontend/src/` 之外的 `frontend/scripts/` 存放构建辅助脚本（如 [bundle-shaders.mjs](../../frontend/scripts/bundle-shaders.mjs)：将体积云 Shaders/ 真源打包为 lib/shaders/bundledShaders.js 并同步 public 镜像，已由 vite.config 求值期自动调用——dev/build 全覆盖；`--check` 模式供 CI 与本地校验；[subset-fontawesome.py](../../frontend/scripts/subset-fontawesome.py)：扫描源码在用 fa-* 图标并生成 `src/assets/fontawesome-subset.css`，`npm run fonts:subset` 调用，`--check` 校验产物，字体本身走 BootCDN 不生成；[build-with-base.mjs](../../frontend/scripts/build-with-base.mjs)：注入 base 路径构建；[check-basemap-catalog.mjs](../../frontend/scripts/check-basemap-catalog.mjs)：预设数量/编号契约；[check-layer-definitions.mjs](../../frontend/scripts/check-layer-definitions.mjs)：定义 order/id/配对/枚举门禁；[check-basemap-migration.mjs](../../frontend/scripts/check-basemap-migration.mjs)：迁移定义等价校验），不属于本树扫描范围，改动时仍需保持与本文件注释一致。

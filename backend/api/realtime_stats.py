@@ -773,6 +773,18 @@ class OnlineUserTracker:
                         ),
                         "session_count": len(beat_clients),
                         "sse_connections": len(conn_ids),
+                        "session_sigs": sorted(
+                            {
+                                str(meta.get("session_sig") or "")
+                                for meta in beat_clients.values()
+                                if meta.get("session_sig")
+                            }
+                            | {
+                                str(self._connections[cid].get("session_sig") or "")
+                                for cid in conn_ids
+                                if self._connections[cid].get("session_sig")
+                            }
+                        ),
                         "device_presence_ids": sorted(
                             {
                                 rec.get("device_presence_id", "")

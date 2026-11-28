@@ -268,30 +268,208 @@
                             v-if="isLayerSectionExpanded('basemap')"
                             class="section-body"
                         >
-                            <div class="option-grid">
+                            <div class="catalog-search-bar">
+                                <SearchIcon
+                                    :size="14"
+                                    stroke-width="2"
+                                />
+                                <input
+                                    v-model="basemapQuery"
+                                    class="catalog-search-input"
+                                    placeholder="搜索编号 / ID / 名称 / 服务商 / 坐标系"
+                                />
                                 <button
-                                    v-for="option in basemapOptions"
-                                    :key="option.value"
-                                    class="option-card"
-                                    :class="{ active: option.value === activeBasemap }"
+                                    v-if="isSearchActive"
                                     type="button"
-                                    :disabled="option.disabled"
-                                    :aria-pressed="option.value === activeBasemap"
-                                    :title="option.description || option.label"
-                                    @click="selectBasemapOption(option)"
+                                    class="close-search-btn"
+                                    aria-label="清空搜索"
+                                    @click="basemapQuery = ''"
                                 >
-                                    <span class="option-card-label">
-                                        <span class="preset-index">{{ option.label.split(' ')[0] }}</span>
-                                        <span class="preset-name">{{ option.label.slice(option.label.indexOf(' ') + 1) }}</span>
-                                    </span>
-                                    <Check
-                                        v-if="option.value === activeBasemap"
-                                        class="option-card-check"
-                                        :size="14"
-                                        stroke-width="2.5"
+                                    <X
+                                        :size="13"
+                                        stroke-width="2.2"
                                     />
                                 </button>
                             </div>
+
+                            <template v-if="isSearchActive">
+                                <div v-if="!searchResults.length" class="catalog-empty">没有匹配的底图</div>
+                                <div class="option-grid">
+                                    <button
+                                        v-for="entry in searchResults"
+                                        :key="`${entry.id}:${entry.customUrl || ''}`"
+                                        class="option-card catalog-result"
+                                        :class="{ active: isCatalogEntryActive(entry) }"
+                                        type="button"
+                                        :title="entryTitle(entry)"
+                                        :disabled="isCatalogEntryDisabled(entry)"
+                                        @click="selectCatalogEntry(entry)"
+                                    >
+                                        <span class="option-card-label">
+                                            <span class="preset-index">{{ entry.number || '—' }}</span>
+                                            <span v-if="entry.proxied" class="entry-proxy-tag" title="经 VPS 瓦片代理（纠偏/代理转发）">proxy</span>
+                                            <span class="preset-name">{{ entry.label }}</span>
+                                        </span>
+                                        <span class="catalog-crumb">{{ categoryLabel(entry.category) }} / {{ entry.provider }} / {{ coordLabel(entry.coord) }}</span>
+                                        <Check
+                                            v-if="isCatalogEntryActive(entry)"
+                                            class="option-card-check"
+                                            :size="14"
+                                            stroke-width="2.5"
+                                        />
+                                    </button>
+                                </div>
+                            </template>
+
+                            <template v-else>
+                                <div v-for="cat in catalogTree" :key="cat.category" class="catalog-category-group">
+                                    <button
+                                        type="button"
+                                        class="section-head section-toggle catalog-category-toggle"
+                                        :disabled="isUnsupportedCategory(cat.category)"
+                                        :aria-expanded="cat.category === 'service' ? undefined : isCategoryOpen(cat.category)"
+                                        @click="cat.category === 'service' ? activateCustomBasemap() : toggleCatalogCategory(cat.category)"
+                                    >
+                                        <span class="section-main">
+                                            <span class="catalog-ordinal-l1">{{ categoryOrdinal(cat.category) }}</span>
+                                            {{ categoryLabel(cat.category) }}
+                                            <span v-if="cat.category !== 'service'" class="catalog-count">{{ categoryEntryCount(cat) }}</span>
+                                        </span>
+                                        <span v-if="isUnsupportedCategory(cat.category)" class="catalog-trigger-hint">仅二维地图</span>
+                                        <ChevronDown
+                                            v-else-if="cat.category !== 'service'"
+                                            class="section-chevron catalog-category-chevron"
+                                            :class="{ open: isCategoryOpen(cat.category) }"
+                                            :size="14"
+                                            stroke-width="2.2"
+                                        />
+                                        <span v-else class="catalog-trigger-chip">输入 URL →</span>
+                                    </button>
+                                    <template v-if="cat.category !== 'service' && isCategoryOpen(cat.category)">
+                                        <template v-if="cat.category === 'recommended'">
+                                            <div class="option-grid">
+                                                <button
+                                                    v-for="entry in cat.entries || []"
+                                                    :key="entry.id"
+                                                    class="option-card catalog-entry"
+                                                    :class="{ active: isCatalogEntryActive(entry) }"
+                                                    type="button"
+                                                    :title="entryTitle(entry)"
+                                                    :disabled="isCatalogEntryDisabled(entry)"
+                                                    @click="selectCatalogEntry(entry)"
+                                                >
+                                                    <span class="option-card-label">
+                                                        <span class="preset-index">{{ entry.number }}</span>
+                                                        <span v-if="entry.proxied" class="entry-proxy-tag" title="经 VPS 瓦片代理（纠偏/代理转发）">proxy</span>
+                                                        <span class="preset-name">{{ entry.label }}</span>
+                                                    </span>
+                                                    <span class="entry-coord-tag">{{ coordLabel(entry.coord) }}</span>
+                                                    <Check
+                                                        v-if="isCatalogEntryActive(entry)"
+                                                        class="option-card-check"
+                                                        :size="14"
+                                                        stroke-width="2.5"
+                                                    />
+                                                </button>
+                                            </div>
+                                        </template>
+                                        <template v-else>
+                                            <div v-for="prov in cat.providers" :key="prov.provider" class="catalog-provider-group">
+                                                <button
+                                                    type="button"
+                                                    class="section-head section-toggle catalog-provider-toggle"
+                                                    :aria-expanded="isProviderOpen(cat.category, prov.provider)"
+                                                    @click="toggleProvider(cat.category, prov.provider)"
+                                                >
+                                                    <span class="section-main"><span class="catalog-ordinal-l2">{{ providerOrdinal(cat.category, prov.provider) }}</span>{{ prov.provider }}<span class="catalog-count">{{ providerEntryCount(prov) }}</span></span>
+                                                    <ChevronRight
+                                                        class="section-chevron"
+                                                        :class="{ open: isProviderOpen(cat.category, prov.provider) }"
+                                                        :size="13"
+                                                        stroke-width="2.2"
+                                                    />
+                                                </button>
+                                                <template v-if="isProviderOpen(cat.category, prov.provider)">
+                                                    <!-- V3.7.16：第三级坐标目录已整体移除，条目平铺在服务商层，坐标由条目徽标承载 -->
+                                                    <div class="option-grid">
+                                                        <button
+                                                            v-for="entry in prov.entries"
+                                                            :key="`${entry.id}:${entry.customUrl || ''}`"
+                                                            class="option-card catalog-entry"
+                                                            :class="{ active: isCatalogEntryActive(entry) }"
+                                                            type="button"
+                                                            :title="entryTitle(entry)"
+                                                            :disabled="isCatalogEntryDisabled(entry)"
+                                                            @click="selectCatalogEntry(entry)"
+                                                        >
+                                                            <span class="option-card-label">
+                                                                <span class="preset-index">{{ entry.number || '—' }}</span>
+                                                                <span v-if="entry.proxied" class="entry-proxy-tag" title="经 VPS 瓦片代理（纠偏/代理转发）">proxy</span>
+                                                                <span class="preset-name">{{ entry.label }}</span>
+                                                            </span>
+                                                            <span class="entry-coord-tag">{{ coordLabel(entry.coord) }}</span>
+                                                            <Check
+                                                                v-if="isCatalogEntryActive(entry)"
+                                                                class="option-card-check"
+                                                                :size="14"
+                                                                stroke-width="2.5"
+                                                            />
+                                                        </button>
+                                                    </div>
+                                                </template>
+                                            </div>
+                                        </template>
+                                    </template>
+                                </div>
+
+                                <!-- 官方影像服务：Cesium 原生 BaseLayerPicker 同源服务，单列一组避免与统一目录混排 -->
+                                <div
+                                    v-if="basemapOptions.some(option => option.source === 'official')"
+                                    class="catalog-category-group"
+                                >
+                                    <button
+                                        type="button"
+                                        class="section-head section-toggle catalog-category-toggle"
+                                        :aria-expanded="openOfficialServices"
+                                        @click="openOfficialServices = !openOfficialServices"
+                                    >
+                                        <span class="section-main">
+                                            官方影像服务
+                                            <span class="catalog-count">{{ basemapOptions.filter(option => option.source === 'official').length }}</span>
+                                        </span>
+                                        <ChevronDown
+                                            class="section-chevron catalog-category-chevron"
+                                            :class="{ open: openOfficialServices }"
+                                            :size="14"
+                                            stroke-width="2.2"
+                                        />
+                                    </button>
+                                    <div
+                                        v-if="openOfficialServices"
+                                        class="option-grid"
+                                    >
+                                        <button
+                                            v-for="option in basemapOptions.filter(option => option.source === 'official')"
+                                            :key="option.value"
+                                            class="option-card catalog-entry"
+                                            :class="{ active: option.value === activeBasemap }"
+                                            type="button"
+                                            :title="option.description || option.label"
+                                            @click="selectBasemapOption(option)"
+                                        >
+                                            <span class="option-card-label">
+                                                <span class="preset-name">{{ option.label }}</span>
+                                            </span>
+                                            <Check
+                                                v-if="option.value === activeBasemap"
+                                                class="option-card-check"
+                                                :size="14"
+                                                stroke-width="2.5"
+                                            />
+                                        </button>
+                                    </div>
+                                </div>
+                            </template>
 
                             <!-- 自定义 XYZ 图层输入 -->
                             <form
@@ -1265,8 +1443,230 @@
     transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-.option-group.expanded .section-chevron {
+/* 仅顶层底图组随组展开旋转；目录树内部箭头由各自状态控制，避免父级展开把子箭头统一转成向上 */
+.option-group.expanded > .section-head .section-chevron {
     transform: rotate(180deg);
+}
+
+.catalog-category-chevron {
+    transform: rotate(0deg);
+}
+
+.catalog-category-chevron.open {
+    transform: rotate(180deg);
+}
+
+.catalog-nested-chevron,
+.catalog-provider-group .section-chevron {
+    transform: rotate(0deg);
+}
+
+.catalog-nested-chevron.open,
+.catalog-provider-group .section-chevron.open {
+    transform: rotate(90deg);
+}
+
+.catalog-category-group + .catalog-category-group {
+    margin-top: 2px;
+    padding-top: 2px;
+    border-top: 1px solid rgba(var(--brand-primary-rgb), 0.1);
+}
+
+.catalog-category-toggle:disabled {
+    cursor: not-allowed;
+    opacity: 0.55;
+}
+
+.catalog-count {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 18px;
+    height: 16px;
+    padding: 0 5px;
+    border-radius: 8px;
+    background: rgba(var(--brand-primary-rgb), 0.12);
+    color: var(--brand-primary-dark);
+    font-size: 10px;
+    font-weight: 600;
+    line-height: 1;
+}
+
+.catalog-ordinal-l1,
+.catalog-ordinal-l2 {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 auto;
+    font-variant-numeric: tabular-nums;
+}
+
+.catalog-ordinal-l1 {
+    min-width: 18px;
+    height: 18px;
+    border-radius: 4px;
+    background: var(--brand-primary);
+    color: #fff;
+    font-size: 11px;
+}
+
+.catalog-ordinal-l2 {
+    min-width: 16px;
+    color: var(--text-secondary);
+    font-size: 11px;
+}
+
+.entry-coord-tag {
+    flex: 0 0 auto;
+    margin-left: auto;
+    padding: 0 4px;
+    border-radius: 3px;
+    background: rgba(var(--brand-primary-rgb), 0.08);
+    color: var(--text-secondary);
+    font-size: 10px;
+    line-height: 15px;
+}
+
+/* V3.7.16：纠偏/代理标识——与 OL 下拉同款（镜像），置于编号后、名称前 */
+.entry-proxy-tag {
+    flex: 0 0 auto;
+    padding: 0 4px;
+    border-radius: 3px;
+    background: rgba(var(--brand-accent-rgb, var(--brand-primary-rgb)), 0.14);
+    color: var(--brand-accent);
+    font-size: 10px;
+    line-height: 15px;
+    letter-spacing: 0.02em;
+}
+
+/* V3.7.16：二级服务商行「节标题」淡底（section-head 已是 700 字重，加底色块后
+ * 与卡片网格条目分层）；hover 仅加深不改几何 */
+.catalog-provider-toggle {
+    background: rgba(var(--brand-primary-rgb), 0.06);
+    border-radius: 6px;
+    margin: 2px 0;
+}
+
+.catalog-provider-toggle:hover {
+    background: rgba(var(--brand-primary-rgb), 0.11);
+}
+
+.catalog-search-bar {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 8px;
+    border: 1px solid rgba(var(--brand-primary-rgb), 0.18);
+    border-radius: 6px;
+    background: rgba(var(--ctp-input-bg-rgb), 0.92);
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.catalog-search-bar:focus-within {
+    border-color: var(--brand-primary);
+    box-shadow: 0 0 0 2px rgba(var(--brand-primary-rgb), 0.14);
+}
+
+.catalog-search-bar > svg {
+    flex: 0 0 auto;
+    color: var(--brand-primary);
+}
+
+.catalog-search-input {
+    flex: 1;
+    min-width: 0;
+    border: 0;
+    outline: none;
+    background: transparent;
+    font-size: 11px;
+    color: var(--ctp-text);
+}
+
+.catalog-search-input::placeholder {
+    color: var(--text-secondary);
+}
+
+.close-search-btn {
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    border: 0;
+    border-radius: 50%;
+    background: transparent;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: background 0.2s ease, color 0.2s ease;
+}
+
+.close-search-btn:hover {
+    background: rgba(var(--brand-primary-rgb), 0.12);
+    color: var(--brand-primary-dark);
+}
+
+.catalog-empty {
+    padding: 10px;
+    color: var(--text-secondary);
+    font-size: 11px;
+    text-align: center;
+}
+
+.catalog-trigger-hint {
+    color: var(--text-secondary);
+    font-size: 10px;
+    font-weight: normal;
+}
+
+/* V3.7.16：服务入口行（WMS/WMTS/MVT/XYZ）的动作胶囊——与 OL 下拉同款（镜像） */
+.catalog-trigger-chip {
+    margin-left: auto;
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 10px;
+    border-radius: 999px;
+    background: rgba(var(--brand-primary-rgb), 0.10);
+    color: var(--brand-accent);
+    font-size: 10px;
+    font-weight: 600;
+    white-space: nowrap;
+    transition: background 0.15s ease, color 0.15s ease;
+}
+
+.section-toggle:hover .catalog-trigger-chip {
+    background: rgba(var(--brand-primary-rgb), 0.16);
+}
+
+.catalog-result {
+    position: relative;
+    min-height: 46px;
+    align-items: flex-start;
+    flex-wrap: wrap;
+}
+
+.catalog-result .option-card-check {
+    position: absolute;
+    top: 4px;
+    right: 6px;
+}
+
+.catalog-crumb {
+    flex: 1 0 100%;
+    padding-left: 30px;
+    color: var(--text-secondary);
+    font-size: 10px;
+    line-height: 1.2;
+}
+
+.catalog-entry .preset-index {
+    min-width: 26px;
+    text-align: right;
 }
 
 .section-body {
@@ -2285,6 +2685,18 @@
         height: 16px;
         flex-shrink: 0;
     }
+}
+
+/* V3.7.16 零散修补：目录树/官方服务新增控件触屏档（判据与 OL LayerControlPanel 同款：
+ * 窄屏覆盖 F12 模拟，粗指针覆盖真机），可点击目标 ≥40px */
+@media (max-width: 700px), (pointer: coarse) {
+    .close-search-btn { width: 40px; height: 40px; }
+    .close-search-btn svg { width: 16px; height: 16px; }
+    .catalog-search-input { min-height: 40px; font-size: 14px; }
+    .section-toggle { min-height: 40px; }
+    .option-card { height: 40px; }
+    /* V3.7.16：条目徽标（坐标/代理）触屏字号同步放大 */
+    .entry-coord-tag, .entry-proxy-tag { font-size: 11px; padding: 2px 7px; }
 }
 </style>
 

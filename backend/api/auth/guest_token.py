@@ -249,8 +249,21 @@ def revoke_guest_uid(guest_uid: str, reason: str = "") -> None:
         logger.warning("撤销游客 session 失败: %s", exc)
 
 
-def verify_guest_token_active(token: str) -> Optional[str]:
-    """验签 + 有效期 + sessions 表存在性；删行即失效，无第二套状态。"""
+class GuestTokenDbUnavailable(RuntimeError):
+    """游客 token 校验期间认证库不可用（与「token 无效」严格区分）。
+
+    V3.7.16：认证层的游客分支据此返回 503，避免 DB 抖动被误判为
+    SESSION_EXPIRED 而强制登出。原 verify_guest_token_active 保持
+    fail-closed 语义不变（供非认证路径使用）。
+    """
+
+
+def verify_guest_token_active_strict(token: str) -> Optional[str]:
+    """验签 + 有效期 + sessions 表存在性；DB 故障抛 GuestTokenDbUnavailable。
+
+    与 verify_guest_token_active 的唯一区别：后者把 DB 异常 fail-closed 为
+    None（= token 无效），本函数将其上抛，让调用方区分 401 与 503。
+    """
     uid = verify_guest_token(token)
     if not uid:
         return None
@@ -264,11 +277,21 @@ def verify_guest_token_active(token: str) -> Optional[str]:
                 (token, _iso(_utc_now())),
             ).fetchone()
     except Exception as exc:
-        # DB 暂时不可用时 fail-open 到签名有效身份，避免全体游客被误踢；
-        # 管理员删行后的失效在 DB 恢复的下一次请求即生效。
-        logger.warning("校验游客 session 失败: %s", exc)
-        return uid
+        logger.warning("校验游客 session 失败（DB 不可用）: %s", exc)
+        raise GuestTokenDbUnavailable(str(exc)) from exc
     return uid if row else None
+
+
+def verify_guest_token_active(token: str) -> Optional[str]:
+    """验签 + 有效期 + sessions 表存在性；删行即失效，无第二套状态。
+
+    DB 不可用时 fail-closed 返回 None（不把无 session 行的签名字串当有效身份）。
+    认证路径请用 verify_guest_token_active_strict 以区分 DB 故障与 token 失效。
+    """
+    try:
+        return verify_guest_token_active_strict(token)
+    except GuestTokenDbUnavailable:
+        return None
 
 
 class GuestIssueLimiter:

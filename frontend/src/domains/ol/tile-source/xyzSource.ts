@@ -68,6 +68,32 @@ export function buildMapsForFreeAdapter(
     };
 }
 
+/**
+ * Bing VirtualEarth QuadKey 适配器工厂（V3.7.16）。
+ * Bing 瓦片不使用 z/x/y 模板，而是把 z/x/y 编码为单个 quadkey 嵌入 URL；
+ * pattern 匹配定义中的 `{q}` 占位模板，urlFunction 在请求期将 xyz 编码为 quadkey。
+ * @param imagetype 'a'=卫星 'r'=道路 'h'=混合
+ * @param subdomain CDN 子域（t0~t7，默认 t3/t0 与常见用法一致）
+ */
+export function buildBingQuadKeyAdapter(
+    imagetype: 'a' | 'r' | 'h',
+    ext: string,
+    displayName: string,
+    subdomain: string = 't3',
+): NonStandardXYZAdapter {
+    return {
+        pattern: new RegExp(`virtualearth\\.net/tiles/${imagetype}\\{q\\}`, 'i'),
+        name: displayName,
+        urlFunction: (tileCoord: number[]) => {
+            const z = tileCoord[0];
+            const x = tileCoord[1];
+            const y = normalizeTileY(z, tileCoord[2], 'auto');
+            const qk = toQuadKey(x, y, z);
+            return `https://ecn.${subdomain}.tiles.virtualearth.net/tiles/${imagetype}${qk}.${ext}?g=1`;
+        },
+    };
+}
+
 export const DEFAULT_NON_STANDARD_XYZ_ADAPTERS: Record<string, NonStandardXYZAdapter> = {};
 
 export function detectNonStandardXYZ(

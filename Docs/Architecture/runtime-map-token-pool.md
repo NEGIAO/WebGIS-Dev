@@ -150,9 +150,9 @@ export async function loadRuntimeMapTokens({ force = false } = {}) {
 所有消费方通过同一个入口读取，**零异步、零网络**：
 
 ```js
-// 底图瓦片
+// 底图瓦片：定义只存 {tiandituTk} 占位符，统一由 resolveTileUrl 注入
 const { tiandituTk } = getRuntimeMapTokensSync();
-const url = buildTiandituUrl('/img_w/wmts?...', tiandituTk);
+const url = resolveTileUrl(definition, { tiandituTk, ... });
 
 // 搜索
 const { tiandituTk } = getRuntimeMapTokensSync();
@@ -238,10 +238,7 @@ sequenceDiagram
 
 | 消费方 | 文件 | 使用方式 | 调用路径 |
 |---|---|---|---|
-| OL 底图（注记） | `basemapConfig.ts` | `buildTiandituUrl(path, tk)` | `MapContainer → LayerControlPanel → createLayer` |
-| OL 底图（影像） | `basemapConfig.ts` | 同上 | 同上 |
-| OL 底图（矢量） | `basemapConfig.ts` | 同上 | 同上 |
-| OL 底图（矢量注记） | `basemapConfig.ts` | 同上 | 同上 |
+| OL 底图（注记/影像/矢量/矢量注记） | `common/basemap/definitions/category-*.ts` + `definitions/resolveTileUrl.ts` | 定义写 `{tiandituTk}`，加载时由 `resolveTileUrl` 按 `needsContext` 注入 | `MapContainer → LayerControlPanel → createOlSource` |
 | Cesium 底图 | `useCesiumLayers.ts` | `UrlTemplateImageryProvider.url` | `CesiumContainer → useCesiumLayers` |
 | 地名/POI 搜索 | `locationSearch.ts` | `fetch(\`...&tk=${tiandituTk}\`)` | `SidePanel → MapPointPickerCard` |
 | 逆地理编码 | `geocoding.ts` | `axios.get('/geocoder', { params: { tk } })` | `TOCPanel / usePositionCodeTool / useSharedEntryResolver` |
@@ -299,7 +296,7 @@ sequenceDiagram
 | `frontend/src/domains/ol/composables/useSharedEntryResolver.ts` | 分享链接入口：消费 token 做逆编码 |
 | `frontend/src/api/geocoding.ts` | 逆地理编码：`resolveTiandituToken()` |
 | `frontend/src/api/locationSearch.ts` | 地名搜索：`searchWithTianditu()` |
-| `frontend/src/domains/ol/basemap/constants/basemapConfig.ts` | 底图：`buildTiandituUrl()` |
+| `frontend/src/domains/common/basemap/definitions/resolveTileUrl.ts` | 底图：`{tiandituTk}` 占位符统一注入 |
 | `frontend/src/domains/cesium/composables/layers/useCesiumLayers.ts` | Cesium 底图 |
 | `frontend/src/domains/common/weather/composables/useWeatherData.ts` | 天气 |
 | `backend/api/api_keys_management.py` | 后端：聚合 token 池 |

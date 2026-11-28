@@ -35,6 +35,7 @@ import {
 	FileUp,
 	GitFork,
 	Globe,
+	Grid2X2,
 	IdCard,
 	Layers,
 	LogIn,
@@ -78,9 +79,9 @@ const VISITOR_LABEL_KEYS: Record<string, string> = {
 	totalPv: 'visitorTotalPv',
 };
 
-/** 核心功能卡片：图标 + i18n key，避免 10 段近似模板重复 */
+/** 核心功能卡片：图标 + i18n key，避免 12 段近似模板重复 */
 const FEATURES = Object.freeze([
-	// hero = 桌面 3 列网格里的主卡：跨 2 列 2 行，让 10 张等宽卡出现主次
+	// hero = 桌面 3 列网格里的主卡：跨 2 列 2 行，让 11 张等宽卡出现主次
 	{ key: 'feature1', icon: Globe, hero: true },
 	{ key: 'feature2', icon: Layers },
 	{ key: 'feature3', icon: FileUp },
@@ -90,9 +91,9 @@ const FEATURES = Object.freeze([
 	{ key: 'feature7', icon: Bot },
 	{ key: 'feature8', icon: ShieldCheck },
 	{ key: 'feature9', icon: Wrench },
-	// 末尾两张卡各跨满整行，呈横向汇总卡：3 列下 4（主卡 2×2）+ 8 + 3 + 3 = 18 格
-	{ key: 'feature10', icon: Building2, wide: true },
-	{ key: 'feature11', icon: Crosshair, wide: true },
+	{ key: 'feature10', icon: Building2 },
+	{ key: 'feature11', icon: Crosshair },
+	{ key: 'feature12', icon: Grid2X2 },
 ]);
 
 /** Hero 统计条：可量化项（num 非空）进入视口时从 0 滚到目标值 */
@@ -155,7 +156,7 @@ const NAV_SCROLL_OFFSET = 76;
 export default defineComponent({
 	name: 'LandingView',
 	// 模板以标签形式直接使用的图标，必须显式注册（<script src> 无编译期自动注入）
-	components: { SectionTitle, Bot, Building2, ChartArea, ChevronRight, Cloud, CloudSun, Crosshair, ExternalLink, FileUp, GitFork, Globe, IdCard, Layers, LogIn, Mail, MapPinned, Rocket, Route, Send, ShieldCheck, Star, UserRound, Wrench, X, Zap },
+	components: { SectionTitle, Bot, Building2, ChartArea, ChevronRight, Cloud, CloudSun, Crosshair, ExternalLink, FileUp, GitFork, Globe, Grid2X2, IdCard, Layers, LogIn, Mail, MapPinned, Rocket, Route, Send, ShieldCheck, Star, UserRound, Wrench, X, Zap },
 	props: propDefine,
 	emits: [],
 	setup(props, ctx) {

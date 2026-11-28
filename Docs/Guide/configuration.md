@@ -75,6 +75,7 @@ FRONTEND_PUBLIC_URL=http://localhost:5173
 VITE_BACKEND_URL=http://localhost:7860
 VITE_TILE_PROXY_BASE_URL=http://localhost:7860
 VITE_TILE_PROXY_MODE=fallback
+VITE_TILE_AUTO_PROXY_ENABLED=0
 ```
 
 `.env` 中确认（部署环境基线）：
@@ -88,6 +89,7 @@ VITE_BACKEND_URL=https://negiao-webgis.hf.space
 # 瓦片代理已迁出 HF，生产恒指 VPS
 VITE_TILE_PROXY_BASE_URL=https://vpn.negiao.cn
 VITE_TILE_PROXY_MODE=fallback
+VITE_TILE_AUTO_PROXY_ENABLED=0
 ```
 
 ### 3. 启动

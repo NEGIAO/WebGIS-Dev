@@ -5,8 +5,6 @@ require_api_access_or_guest。
 
 import asyncio
 import logging
-import secrets
-from datetime import timedelta
 from typing import Any, Dict, Optional
 
 from fastapi import HTTPException, Request, status
@@ -14,19 +12,15 @@ from fastapi import HTTPException, Request, status
 from .constants import (
     ROLE_ADMIN,
     ROLE_GUEST,
-    _derive_uid_from_ip_ua,
-    _extract_client_ip,
-    _extract_identity_ip,
     _extract_token,
-    _normalize_guest_device_id,
     normalize_role,
     resolve_quota_subject,
 )
 from .db import _iso, _utc_now
 from .guest_token import (
     GUEST_TOKEN_COOKIE_NAME,
-    peek_guest_token_uid,
-    verify_guest_token_active,
+    GuestTokenDbUnavailable,
+    verify_guest_token_active_strict,
 )
 from .quota import _consume_api_quota_sync
 from .session import _create_session_sync, _get_session_sync
@@ -89,8 +83,8 @@ def _extract_guest_token(request: Request) -> str:
     """提取游客身份签名 token：优先 X-Guest-Token 头，其次 webgis_guest Cookie。
 
     V3.7.6 游客身份治理：token 由 POST /auth/guest/session 签发（HMAC），
-    是无登录会话下唯一受信任的稳定身份来源；无效/过期由 verify_guest_token
-    统一返回 None，调用方回落确定性派生桶。
+    是无登录会话下唯一受信任的稳定身份来源；缺失或无效一律由调用方
+    fail-closed 返回 401，不再回落确定性派生桶。
     """
     header_token = str(request.headers.get("X-Guest-Token") or "").strip()
     if header_token:
@@ -102,52 +96,63 @@ def _extract_guest_token(request: Request) -> str:
 
 
 async def _build_temporary_guest_session_async(request: Request) -> Dict[str, Any]:
-    request_ip = _extract_client_ip(request)
-    request_user_agent = str(request.headers.get("User-Agent", "unknown"))
-    guest_device_id = _normalize_guest_device_id(
-        request.headers.get("X-Guest-Device-Id")
-        or request.query_params.get("guest_device_id")
-    )
-    # V3.7.6 游客身份治理：身份优先取已验签 guest token（签发通道下发）；
-    # 无 token 时按确定性桶 H(身份IP|UA) 派生。device_id 不再参与无 token
-    # 场景的桶派生——轮换设备头无法绕过配额（展示/在线去重仍用 device_id）。
+    """V3.7.16：游客身份必须来自 sessions 有效 token；无 token 一律拒绝。
+
+    身份铸造唯一入口是 POST /auth/guest/session（受 (身份IP, UA) 限频），
+    前端仅在 ?s=1 分享模式无感签发。原 H(身份IP|UA) 派生临时桶（token=""）
+    不写 sessions、管理员不可撤销，已废除。
+    """
     presented_token = _extract_guest_token(request)
-    guest_uid = verify_guest_token_active(presented_token) if presented_token else None
-    if not guest_uid and presented_token and peek_guest_token_uid(presented_token):
-        # 签名有效但已过期/被撤销：不能再静默回落派生桶（那会让被管理员删除的
-        # 游客继续以“新身份”浏览），必须返回结构化 401 让前端统一登出并跳注册页。
+    if not presented_token:
+        # 无 token：不派生、不落库。前端在 s=1 场景据此自动签发后重试；
+        # 其它场景提示需要登录（结构码由前端区分，不跳 register）。
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=_auth_error_detail("GUEST_TOKEN_REQUIRED", "请先获取访客身份或登录"),
+        )
+    try:
+        guest_uid = verify_guest_token_active_strict(presented_token)
+    except GuestTokenDbUnavailable:
+        # V3.7.16：DB 抖动不是 token 失效，禁止误判为 SESSION_EXPIRED 强制登出。
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=_auth_error_detail("AUTH_DB_UNAVAILABLE", "认证服务暂时不可用，请稍后重试"),
+        )
+    if not guest_uid:
+        # 签名有效但已过期/sessions 无行（被管理员撤销）→ 强制登出跳注册页。
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail=_auth_error_detail("SESSION_EXPIRED", "会话过期，请重新登陆"),
         )
-    if not guest_uid:
-        guest_uid = _derive_uid_from_ip_ua(_extract_identity_ip(request), request_user_agent)
+    # 从 sessions 读取该 token 的真实会话字段（唯一真值），不再内存虚构凭据。
+    try:
+        session = await asyncio.to_thread(
+            _get_session_sync, presented_token, False, True
+        )
+    except Exception as exc:
+        logger.error("读取游客 session 失败: %s", exc, exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=_auth_error_detail("AUTH_DB_UNAVAILABLE", "认证服务暂时不可用，请稍后重试"),
+        )
+    if session is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=_auth_error_detail("SESSION_EXPIRED", "会话过期，请重新登陆"),
+        )
     guest_record = await asyncio.to_thread(_get_or_create_guest_username_sync, guest_uid)
-    # _get_or_create_guest_username_sync 返回 {username, no}：no 为游客展示序号
-    # （guest_identity_records.id 自增）。随会话对象内存传递，
-    # _public_user_payload 优先读它，避免每次构造 payload 都回查库
-    username = str(guest_record.get("username") or "") if isinstance(guest_record, dict) else str(guest_record)
     guest_no = int(guest_record.get("no") or 0) if isinstance(guest_record, dict) else 0
 
-    now = _utc_now()
-    expires_at = now + timedelta(hours=2)
-    temporary_credential = f"guest_tmp_{secrets.token_urlsafe(12)}"
-
-    return {
-        "token": "",
-        "username": username,
-        "role": ROLE_GUEST,
-        "guest_uid": guest_uid,
-        "guest_device_id": guest_device_id,
-        "guest_no": max(0, guest_no),
-        "ip": request_ip,
-        "user_agent": request_user_agent,
-        "created_at": _iso(now),
-        "expires_at": _iso(expires_at),
-        "is_temporary": True,
-        "guest_allow": True,
-        "temporary_credential": temporary_credential,
-    }
+    # token 保留真实值：_mark_active_safe 据此算 session_sig，P1 镜像刷新才能按指纹匹配。
+    session["token"] = presented_token
+    session["guest_no"] = max(0, guest_no)
+    session["guest_allow"] = True
+    # 兼容契约：/auth/me 与在线镜像仍读取这两个字段。游客现在来自 sessions
+    # 有效 token，已不是旧「内存临时桶」，故显式输出 false / 空凭证，
+    # 避免字段静默缺失导致下游读到与历史不同的 payload 形状。
+    session["is_temporary"] = False
+    session["temporary_credential"] = ""
+    return session
 
 
 async def _resolve_session_with_options(
@@ -257,10 +262,11 @@ async def require_api_access(request: Request) -> Dict[str, Any]:
 async def _authenticate_login_or_guest(
     request: Request, *, touch_presence: bool = True
 ) -> Dict[str, Any]:
-    """认证核心：登录 token 有效则用登录身份，否则自动创建临时 guest session。不消耗配额。
+    """认证核心：登录/游客 token 都必须命中 sessions 有效行，无 token 一律拒绝。
 
-    touch_presence=False 专供只读统计端点：查询人数本身不得反过来制造“有人在线”，
-    否则管理端诊断/对账拉取会把幽灵身份计入在线。
+    V3.7.16：原「无 token 自动创建临时 guest session」通道已废除——该身份不写库、
+    管理员不可撤销。身份铸造唯一入口是 POST /auth/guest/session（s=1 前端无感签发）。
+    touch_presence=False 专供只读统计端点：查询人数本身不得反过来制造在线。
     """
     token = _extract_token(request)
     session = None
@@ -271,7 +277,6 @@ async def _authenticate_login_or_guest(
         try:
             session = await asyncio.to_thread(_get_session_sync, token, False, True)
         except Exception as e:
-            # DB 暂不可用不是“token 过期”，不能据此把用户强制登出。
             session_query_failed = True
             logger.error("require_api_access_or_guest: 会话查询失败: %s", str(e), exc_info=True)
         if session is None and not session_query_failed:
@@ -279,14 +284,19 @@ async def _authenticate_login_or_guest(
 
     if session is None:
         if expired_login_token:
-            # 管理员/注册用户 token 过期或被删：绝不能在游客可达端点静默降级为游客，
-            # 否则 /auth/me、/statistics/realtime 等永远拿不到 401，前端无法触发
-            # 统一的“会话过期 → 提示 → 跳 /register”流程。三类身份在此统一失败。
+            # 管理员/注册用户 token 过期或被删：强制登出跳 /register。
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail=_auth_error_detail("SESSION_EXPIRED", "会话过期，请重新登陆"),
             )
-        # 真正无登录 token 时才创建临时 guest session
+        if session_query_failed:
+            # DB 暂不可用既不是「token 过期」也不是「无 token」：返回 503 让前端稍后重试，
+            # 绝不降级为匿名身份（那会绕开 sessions 唯一真值）。
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail=_auth_error_detail("AUTH_DB_UNAVAILABLE", "认证服务暂时不可用，请稍后重试"),
+            )
+        # 无登录 token：校验游客 token（必须命中 sessions），否则 401。
         session = await _build_temporary_guest_session_async(request)
 
     if bool(session.get("requires_email_binding")):

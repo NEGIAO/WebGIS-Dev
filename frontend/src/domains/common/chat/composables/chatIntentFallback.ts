@@ -172,7 +172,7 @@ export function detectGISIntent(userMsg: any) {
         if (!match?.[1]) continue;
         const target = match[1].trim().toLowerCase();
 
-        // V3.7.27：先走规则表（SSOT）——单要素切片语义（水系/土地利用/卫星等）
+        // V3.7.16：先走规则表（SSOT）——单要素切片语义（水系/土地利用/卫星等）
         // 由 tileIntentPresets 统一裁决；规则表未覆盖的品牌（天地图/ESRI/OSM 等）
         // 再退回下方品牌映射字典。避免两表对同一语义给出不同 presetId。
         const resolved = resolveTileBasemapArg(target, TILE_PROXY_BASE_URL);

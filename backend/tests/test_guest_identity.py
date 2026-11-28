@@ -144,7 +144,7 @@ class GuestUidDerivationTests(unittest.TestCase):
 
 
 class ExtractIdentityIpTests(unittest.TestCase):
-    """V3.7.18：身份 IP 取 XFF 最右侧公网跳（此前取末跳，HF 下取到内网代理 IP）。"""
+    """V3.7.16：身份 IP 取 XFF 最右侧公网跳（此前取末跳，HF 下取到内网代理 IP）。"""
 
     def _req(self, xff=None, host="10.16.1.43"):
         from types import SimpleNamespace
@@ -326,14 +326,12 @@ class GuestTokenRevocationTests(unittest.TestCase):
             headers={}, query_params={}, cookies={}, client=SimpleNamespace(host="127.0.0.1")
         )
         with mock.patch.object(dependencies, "_extract_guest_token", return_value="gt1_revoked"):
-            with mock.patch.object(dependencies, "verify_guest_token_active", return_value=None):
-                with mock.patch.object(
-                    dependencies, "peek_guest_token_uid", return_value="guest_revoked_01"
-                ):
-                    with self.assertRaises(HTTPException) as ctx:
-                        asyncio.run(
-                            dependencies._build_temporary_guest_session_async(fake_request)
-                        )
+            # 直接命中严格校验的「签名有效但会话已撤销」分支（返回 None）。
+            with mock.patch.object(dependencies, "verify_guest_token_active_strict", return_value=None):
+                with self.assertRaises(HTTPException) as ctx:
+                    asyncio.run(
+                        dependencies._build_temporary_guest_session_async(fake_request)
+                    )
         self.assertEqual(ctx.exception.status_code, 401)
         self.assertEqual(ctx.exception.detail["code"], "SESSION_EXPIRED")
 
@@ -363,14 +361,12 @@ class GuestTokenRevocationTests(unittest.TestCase):
         self.assertEqual(ctx.exception.detail["code"], "SESSION_EXPIRED")
 
     def test_session_db_failure_is_not_treated_as_expired(self):
-        """DB 暂不可用不得误判 token 过期，否则全站用户会被集体强制登出。"""
+        """V3.7.16：DB 暂不可用返回 503，不误判过期、也不降级为匿名身份。"""
         import asyncio
         from types import SimpleNamespace
 
+        from fastapi import HTTPException
         from api.auth import dependencies
-
-        async def _fake_guest(request):
-            return {"username": "guest_x", "role": "guest", "guest_uid": "guest_x"}
 
         fake_request = SimpleNamespace(
             headers={}, query_params={}, cookies={}, client=SimpleNamespace(host="127.0.0.1")
@@ -381,13 +377,51 @@ class GuestTokenRevocationTests(unittest.TestCase):
                 "_get_session_sync",
                 side_effect=RuntimeError("db temporarily unavailable"),
             ):
-                with mock.patch.object(
-                    dependencies, "_build_temporary_guest_session_async", _fake_guest
-                ):
-                    session = asyncio.run(
-                        dependencies._authenticate_login_or_guest(fake_request)
-                    )
-        self.assertEqual(session["username"], "guest_x")
+                with self.assertRaises(HTTPException) as ctx:
+                    asyncio.run(dependencies._authenticate_login_or_guest(fake_request))
+        self.assertEqual(ctx.exception.status_code, 503)
+        self.assertEqual(ctx.exception.detail["code"], "AUTH_DB_UNAVAILABLE")
+
+    def test_guest_token_db_failure_is_not_treated_as_expired(self):
+        """V3.7.16：游客 token 校验期间 DB 故障返回 503，不误判 SESSION_EXPIRED 强制登出。"""
+        import asyncio
+        from types import SimpleNamespace
+
+        from fastapi import HTTPException
+        from api.auth import dependencies
+        from api.auth.guest_token import GuestTokenDbUnavailable
+
+        fake_request = SimpleNamespace(
+            headers={}, query_params={}, cookies={}, client=SimpleNamespace(host="127.0.0.1")
+        )
+        with mock.patch.object(
+            dependencies, "_extract_token", return_value=""
+        ), mock.patch.object(
+            dependencies, "_extract_guest_token", return_value="guest-token-1"
+        ), mock.patch.object(
+            dependencies, "verify_guest_token_active_strict",
+            side_effect=GuestTokenDbUnavailable("db temporarily unavailable"),
+        ):
+            with self.assertRaises(HTTPException) as ctx:
+                asyncio.run(dependencies._authenticate_login_or_guest(fake_request))
+        self.assertEqual(ctx.exception.status_code, 503)
+        self.assertEqual(ctx.exception.detail["code"], "AUTH_DB_UNAVAILABLE")
+
+    def test_no_token_is_rejected_without_anonymous_fallback(self):
+        """V3.7.16：无 token 一律 401 GUEST_TOKEN_REQUIRED，不铸造匿名身份。"""
+        import asyncio
+        from types import SimpleNamespace
+
+        from fastapi import HTTPException
+        from api.auth import dependencies
+
+        fake_request = SimpleNamespace(
+            headers={}, query_params={}, cookies={}, client=SimpleNamespace(host="127.0.0.1")
+        )
+        with self.assertRaises(HTTPException) as ctx:
+            asyncio.run(dependencies._authenticate_login_or_guest(fake_request))
+        self.assertEqual(ctx.exception.status_code, 401)
+        self.assertEqual(ctx.exception.detail["code"], "GUEST_TOKEN_REQUIRED")
 
     def test_admin_delete_collects_guest_context_before_delete(self):
         conn = sqlite3.connect(":memory:", check_same_thread=False)

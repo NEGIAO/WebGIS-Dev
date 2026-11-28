@@ -16,6 +16,7 @@
  * - VITE_BACKEND_URL           后端 API 基址
  * - VITE_TILE_PROXY_BASE_URL   瓦片代理基址（缺省同 VITE_BACKEND_URL）
  * - VITE_TILE_PROXY_MODE       fallback | always | off（缺省 fallback）
+ * - VITE_TILE_AUTO_PROXY_ENABLED  直连失败/超时后是否自动走 VPS 代理（1 开 / 0 关，缺省 0）
  * - VITE_*_TIMEOUT_MS          公开请求超时与 CDN 加载超时
  * - VITE_*_BASE_URL(S)         公开第三方服务端点 / CDN 候选链
  */
@@ -62,6 +63,16 @@ export const TILE_PROXY_BASE_URL: string = stripTrailingSlash(
 export const TILE_PROXY_MODE: string = String(
     import.meta.env.VITE_TILE_PROXY_MODE || 'fallback',
 ).toLowerCase();
+
+/**
+ * 直连失败/超时后是否自动回退到 VPS 代理（V3.7.16）。
+ *
+ * 缺省关闭：瓦片定义层已显式声明 correction/proxy，网络波动不应再隐式触发代理。
+ * - 仅关闭 fallback 自动代理；`TILE_PROXY_MODE=always` 仍按显式配置全量代理。
+ * - 不影响定义里的 `correction` / `proxy:'proxy'`（这些是源定义契约，必须继续生效）。
+ */
+export const TILE_AUTO_PROXY_ENABLED: boolean =
+    String(import.meta.env.VITE_TILE_AUTO_PROXY_ENABLED || '0').trim() === '1';
 
 /** 大文件下载请求超时（ms）：远长于全局 8s，GeoTIFF 流式传输耗时久（缺省 2000000ms ≈ 33 分钟） */
 export const DOWNLOAD_REQUEST_TIMEOUT_MS: number = positiveNumberEnv('VITE_DOWNLOAD_REQUEST_TIMEOUT', 2000000);
@@ -148,26 +159,8 @@ export function tileProxyUrl(hostAndPath: string): string {
     return `${TILE_PROXY_BASE_URL}/proxy/${hostAndPath}`;
 }
 
-/**
- * 拼接 GCJ-02 纠偏代理 URL（/proxy/gcj2wgs/{完整上游URL} 形式）
- * @param upstreamUrl 完整上游 URL（含协议），如 http://webst01.is.autonavi.com/appmaptile?...
- *
- * ⚠️ 索引契约：gcj2wgs/wgs2gcj 的 {x}/{y}/{z} 均为「标准 XYZ 网格」索引（客户端地图工作网格）。
- */
-export function gcj2wgsProxyUrl(upstreamUrl: string): string {
-    return `${TILE_PROXY_BASE_URL}/proxy/gcj2wgs/${upstreamUrl}`;
-}
+// 纠偏代理子路径（/proxy/{gcj2wgs|wgs2gcj|bd2wgs|wgs2bd}/…）不再提供独立 helper：
+// V3.7.16 起定义层只存原始 URL + correction 声明，纠偏 URL 由
+// common/basemap/definitions/resolveTileUrl.ts 统一拼装（其 CORRECTION_PROXY_SEGMENT
+// 注释承载纠偏路径的索引契约）。
 
-/**
- * 拼接百度 BD-09 → WGS84 纠偏代理 URL（/proxy/bd2wgs/{完整上游URL} 形式）
- * @param upstreamUrl 完整上游百度瓦片 URL（含协议），如 https://maponline{s}.bdimg.com/tile/?qt=vtile&x={x}&y={y}&z={z}&styles=pl&scaler=1&from=jsapi2_0
- *
- * ⚠️ 索引契约：
- *   - bd2wgs：{x}/{y}/{z} 为「标准 XYZ 网格」索引——前端按普通 XYZ 底图使用（推荐路径）；
- *   - wgs2bd：{x}/{y}/{z} 为「百度网格」索引（居中原点、Y 轴向上、res=2^(18-z)），仅当客户端
- *     工作在百度坐标/网格空间（如原生加载百度底图叠加 WGS 图源）时才使用。
- *   {s} 子域占位符仅用于原始上游 URL；走到 bd2wgs 时由 OL/Cesium 在请求前替换为具体子域数字。
- */
-export function bd2wgsProxyUrl(upstreamUrl: string): string {
-    return `${TILE_PROXY_BASE_URL}/proxy/bd2wgs/${upstreamUrl}`;
-}

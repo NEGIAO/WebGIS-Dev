@@ -99,6 +99,7 @@ Docs/
 │   ├── ol-cesium-dual-engine.md       # 2D/3D 双引擎：切换、视图同步、URL 还原
 │   ├── ol-cesium-coordinate-transform-spec.md # 双引擎视图尺度高精度双向转换实现规范（V3.6.37 自 TODO 迁入）
 │   ├── basemap-source-system.md       # 底图源系统：20+ 图源、熔断回退、GCJ-02 纠偏
+│   ├── basemap-catalog-redesign.md    # 底图目录统一元数据与分类重构现状（V3.7.16 本批）
 │   ├── multi-format-data-import.md    # 多格式数据导入：拖拽加载，2D/3D 双管线
 │   ├── spatial-analysis-backend.md    # 空间分析：单端点分发，Shapely 后端 8 算子
 │   ├── route-planning.md              # 路径规划：驾车/公交双管线
@@ -109,7 +110,7 @@ Docs/
 │   ├── tile-rectify-system.md         # 瓦片纠偏系统（历史稿，已迁出主链路）
 │   ├── download-service.md            # 下载服务
 │   ├── utility-tools.md               # 实用工具：测量、坐标拾取、罗盘
-│   ├── agent-capability-system.md     # Agent 能力系统：提示词/工具/分发/执行全景（V3.7.27+）
+│   ├── agent-capability-system.md     # Agent 能力系统：提示词/工具/分发/执行全景（V3.7.16+）
 │   ├── account-system-ai-quota.md     # 账号体系：邮箱登录、三级身份、双 AI 配额
 │   ├── identity-auth-security.md      # 身份鉴权链路与安全模型（信任边界、威胁、反爬强度）
 │   ├── runtime-map-token-pool.md      # 运行时地图 token 池

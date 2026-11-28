@@ -31,7 +31,7 @@ flowchart LR
 | BD-09 | 百度全系 | GCJ-02 之上再加偏 |
 | BD09MC（百度墨卡托） | 百度瓦片网格 | 独立投影 + 独立网格 |
 
-> 代码对照：代理 URL 拼接函数定义在 `frontend/src/config/publicRuntime.ts`（`gcj2wgsProxyUrl` :157 / `bd2wgsProxyUrl` :171）；具体图源的**调用**分布在 `domains/ol/basemap/constants/definitions/group-1.ts` / `group-3.ts` / `group-4.ts`，由 `basemapConfig.ts` 聚合导出。走 `gcj2wgsProxyUrl` 的仅高德（注记无偏 / 影像 WGS / 地图 WGS）、谷歌中国（水系 WGS / 简洁 wgs）、腾讯（地图 WGS）；走 `bd2wgsProxyUrl` 的仅百度（地图 WGS）；天地图各图源走 `buildTiandituUrl`。
+> 代码对照：纠偏/代理 URL 现在由 `frontend/src/domains/common/basemap/definitions/resolveTileUrl.ts` 统一拼接（`CORRECTION_PROXY_SEGMENT` + `ctx.tileProxyBaseUrl`），图源只在 `domains/common/basemap/definitions/category-*.ts` 声明 `url` + `correction` + `proxy`，零引擎依赖；OL / Cesium 分别经 `ol/basemap/loaders/createOlSource.ts` 与 `cesium/constants/basemapProviderFactory.ts` 消费。走 `gcj2wgs` 段的是高德/谷歌中国/腾讯标注为 `correction:'gcj2wgs'` 的定义；走 `bd2wgs` 段的是百度 WGS 派生版；天地图定义只写 `{tiandituTk}` 占位符，不纠偏。历史 `basemapConfig.ts` / `group-1~4.ts` / `buildTiandituUrl` 已删除，详见 `basemap-catalog-redesign.md`。
 
 把 GCJ/BD 瓦片按标准 XYZ 直接贴到 WGS84 画布会整城错位。纠偏服务在**服务端逐瓦片重采样**，输出与请求方网格对齐的 256×256 图，前端零改造。
 

@@ -6,6 +6,27 @@
 
 ## 版本记录
 
+### V3.7.16 (2026-11-28) — 底图定义层重构与暂存区批次统一（本批统一版本，L3）
+
+> **版本归并说明**：按用户明确指令，本批 V3.7.17–V3.7.39 共 23 个内部迭代号统一归并至 **V3.7.16**；过程日志保留原文件名与内容不迁移、不改写，仅作为追溯链。V3.7.16 曾作为 V3.7.15 批的内部号，但其「废弃」语义仅限上一批；本批依用户指令复用为正式统一版本号。方案与日志见条目末尾链接。
+
+**问题**：暂存区积累 24 次不规范迭代：底图定义散落 OL 域且 URL 与工厂双写，OL/Cesium 元数据两份副本；目录分类靠位置规则推断；纠偏/代理与原始版本大量缺失；鉴权与在线镜像存在匿名通道与幽灵会话；多次 code review 发现重复 id、坐标系误标与启动校验漏洞；版本与文档被拆成 V3.7.17–39 共 23 个中间号，不符合单批单版本要求。
+
+**统一修复**：
+
+1. **定义层 SSOT**：205→199 条 `TileLayerDefinition` 迁入 `common/basemap/definitions/`（六类分片 + `index`/`validate`/`resolveTileUrl`/`types`），原始 URL + `method`/`correction`/`proxy`/`engines` 单一声明，零引擎依赖；删除 OL 侧 `basemapConfig.ts`、`basemapCore.ts` 与 `group-1~4.ts`。`catalog/` 统一分类/服务商/坐标元数据，`catalog/index.ts` 显式触发登记，避免加载顺序导致元数据退化。
+2. **双引擎共用**：OL `loaders/createOlSource.ts` + `nonStandardAdapters.ts`（含 Bing quadkey），Cesium `basemapProviderFactory.ts` 共用同一定义；Bing 因缺 quadkey 适配器标 `engines:['ol']`。
+3. **目录与 UI**：两级分类树、服务商分区样式、proxy/纠偏徽标、精选底图显式清单、搜索与 Wayback 编号哨兵治理、图层管理激活置顶与移动端对齐、下拉溢出与滚动条瘦身为最终形态。
+4. **图源补全与纠偏**：AMAP/Google 参数实测分类纠偏；补齐原始/纠偏成对矩阵（含百度 BD09 原始版）；新增 Bing/Mapbox/MapTiler/CARTO/USGS/OpenSeaMap/OpenRailwayMap/NASA 等 19 条高频公共源；修复 VIIRS 矩阵集、Bing 道路坐标系、GeoQ/图新重复定义。
+5. **鉴权与统计**：废除无 token 匿名游客通道，DB 故障严格三态返回 503；在线镜像收敛为有效 session 子集并按 token 指纹匹配；删除 `statistics.py` 不可达旧镜像块；修正撤销 token 测试目标。
+6. **代理治理**：新增 `VITE_TILE_AUTO_PROXY_ENABLED`（默认 `0`），关闭直连超时隐式走 VPS；`always` 显式模式、定义级 `correction`/`proxy:'proxy'`、OSM 社区镜像保持不变。
+7. **本批 Code Review 收口**：合并 6 组同 URL/同元数据重复定义并重编号 1..199；`check-layer-definitions` 新增重复 payload、枚举值、`correction→coord` 不变量与解析漏读校验；`check-basemap-migration` 移除硬编码 174；5 条天地图定义补 `needsContext:['tiandituTk']`；结构树/配置文档同步。
+8. **遗留 S1–S4 清零**：22 个缺失 `VITE_*` 键补登 `backend/config/catalog.py`，规范与门禁口径一致；两篇架构文档改指 `resolveTileUrl` / `basemap-catalog-redesign.md`；游客 session 显式输出 `is_temporary=false` / `temporary_credential=""`；`check-basemap-catalog` 改为数量下界 + 首部锚点。配置注释中的红线措辞已中性化；既有 `vpn.negiao.cn` 域名值未改，需用户另行决策。
+
+**过程日志（仅追溯，不改写）**：[定义重构](../LLM_record/26-11/2026-11-27/2026-11-27-basemap-definition-refactor.md)、[目录 UI 批次](../LLM_record/26-11/2026-11-27/2026-11-27-basemap-catalog-ui-batch-retro.md)、[staged review](../LLM_record/26-11/2026-11-28/2026-11-28-staged-review-fixes.md)、[旧分类清理](../LLM_record/26-11/2026-11-28/2026-11-28-basemap-legacy-cleanup.md)、[在线镜像](../LLM_record/26-11/2026-11-28/2026-11-28-online-mirror-session-subset.md)、[匿名通道](../LLM_record/26-11/2026-11-28/2026-11-28-no-anonymous-token.md)、[架构文档](../LLM_record/26-11/2026-11-28/2026-11-28-basemap-architecture-doc-refresh.md)、[Code Review](../LLM_record/26-11/2026-11-28/2026-11-28-code-review-bugfixes.md)、[精选清单](../LLM_record/26-11/2026-11-28/2026-11-28-recommended-basemap-explicit.md)、[面板优化](../LLM_record/26-11/2026-11-28/2026-11-28-layer-manager-polish-and-activation-pin.md)、[滚动条](../LLM_record/26-11/2026-11-28/2026-11-28-dropdown-scrollbar-slim.md)、[AMAP/Google 实测](../LLM_record/26-11/2026-11-28/2026-11-28-amap-google-tile-definition-audit.md)、[落地页卡片](../LLM_record/26-11/2026-11-28/2026-11-28-landing-feature-cards.md)、[矩阵补齐](../LLM_record/26-11/2026-11-28/2026-11-28-basemap-variant-completeness.md)、[常用底图](../LLM_record/26-11/2026-11-28/2026-11-28-common-basemap-coverage.md)、[order/图新修正](../TODO/archive/2026-11-28-tile-order-and-tuxin-correction-fix.md)、[VIIRS](../LLM_record/26-11/2026-11-28/2026-11-28-viirs-tilematrixset-fix.md)、[id/Bing 坐标](../LLM_record/26-11/2026-11-28/2026-11-28-duplicate-id-and-bing-coord-fix.md)、[GeoQ id](../LLM_record/26-11/2026-11-28/2026-11-28-geoq-duplicate-id-fix.md)、[自动代理开关](../LLM_record/26-11/2026-11-28/2026-11-28-tile-auto-proxy-switch.md)。其余 7 份过程日志按同目录文件名追溯。
+
+**验证**：`vue-tsc --noEmit` 0 错误；`check:basemap-catalog` OK（181 presets）；`check:layer-definitions` OK（199 definitions，order 1..199，重复 payload/枚举/纠偏不变量门禁通过）；`check:basemap-migration` 显式 NOT RUN（HEAD 115 条 ≠ 当前 199 条，退出码 2，非通过）；后端 `test_guest_identity.py` + `test_realtime_stats.py` 69 passed；结构树 769/769、配置登记、跨域依赖、平台红线自查全绿。
+
 ### V3.7.15 (2026-11-27) — Agent 能力系统整合（本批统一版本）
 
 > **版本号归并（2026-11-27）**：V3.7.16 ~ V3.7.30 十五条记录所记为**同一批未提交工作**的逐次增量开发（内部迭代号）。按用户「暂存区的代码是多次不规范的 commit 信息，需要整合为一个统一的版本：V3.7.15」的指令，十五条合并为单条 **V3.7.15**，曾用中间版本号（V3.7.16 ~ V3.7.30）自本条起废弃；功能与修复内容、发布日期、结论均不变，仅版本号表述归一。分主题的原始过程记录保留在 `Docs/LLM_record/26-11/`，不迁移、不改写。

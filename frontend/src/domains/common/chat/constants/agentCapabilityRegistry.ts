@@ -1,15 +1,15 @@
 /**
- * Agent 能力注册表（V3.7.27，L3 架构重构）
+ * Agent 能力注册表（V3.7.16，L3 架构重构）
  *
  * 定位：工具层元数据的单一事实来源（SSOT）。借鉴 Skill 的「渐进披露」——
  * 能力按组登记，触发关键词与交互机制集中在此，供工具路由与 System Prompt
- * 派生，避免同一语义散落多处、改一处漏一处（V3.7.21 代理卫星 bug 的根因）。
+ * 派生，避免同一语义散落多处、改一处漏一处（V3.7.16 代理卫星 bug 的根因）。
  *
  * 边界（见 Docs/TODO/2026-11-27-agent-capability-registry-plan.md）：
  * - 不纳入底图品牌映射（50+ 条数据字典，留在 chatIntentFallback.ts）；
  * - 不纳入单要素切片规则（19 条，留在 tileIntentPresets.ts 作 SSOT）；
  * - 不纳入工具 parameters JSON Schema（留在 agentToolsSchema.ts）；
- * - description 全文也留在 schema——今天 V3.7.22/23 证明措辞敏感，零漂移优先。
+ * - description 全文也留在 schema——今天 V3.7.16/23 证明措辞敏感，零漂移优先。
  *
  * 本注册表承载：分组、触发关键词（派生 router）、交互机制（按需注入 Prompt）。
  */
@@ -44,7 +44,7 @@ export const CORE_CAPABILITIES = [
 
 /**
  * 分组触发器：命中任一正则即把该组工具加入工具集。
- * 正则源从 V3.7.19 agentToolRouter.ts 原样迁入，行为零漂移。
+ * 正则源从 V3.7.16 agentToolRouter.ts 原样迁入，行为零漂移。
  */
 export const CAPABILITY_GROUPS: ReadonlyArray<{
     group: CapabilityGroup;
@@ -112,7 +112,7 @@ export function buildTriggerPatterns(group: CapabilityGroup): RegExp[] {
 }
 
 /**
- * 罗盘交互机制段（V3.7.23 原文，逐字保留）。
+ * 罗盘交互机制段（V3.7.16 原文，逐字保留）。
  * 仅当本轮工具集包含 enable_compass 时才注入 System Prompt——
  * 这是 Skill 的「渐进披露」：机制只在需要时可见，其余轮次不占 token。
  */

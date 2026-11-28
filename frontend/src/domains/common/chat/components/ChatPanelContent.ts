@@ -574,10 +574,10 @@ export class Instance {
 		this.config.lastCallCost = 0;
 
 		try {
-			// V3.7.19：按本轮用户意图选择工具子集，首轮与后续编排轮次复用同一集合。
+			// V3.7.16：按本轮用户意图选择工具子集，首轮与后续编排轮次复用同一集合。
 			// 避免中途工具集变化导致模型引用不存在工具；空消息由路由返回全量兜底。
 			const activeTools = selectToolsForMessage(userMsg);
-			// V3.7.27：System Prompt 按工具集生成——罗盘机制段仅在含 enable_compass 时注入
+			// V3.7.16：System Prompt 按工具集生成——罗盘机制段仅在含 enable_compass 时注入
 			const systemPrompt = buildSystemPromptWithTools(
 				new Set(activeTools.map((t: any) => t.function.name))
 			);
@@ -695,7 +695,7 @@ export class Instance {
 							mapContext: pendingMapContext,
 							// 每轮都带完整系统提示词：约束（先 list_layers、不得伪称成功）必须跨轮一致
 							systemPrompt: systemPrompt,
-							// V3.7.19：复用首轮工具集，中途不重新筛选（防止模型引用不存在工具）
+							// V3.7.16：复用首轮工具集，中途不重新筛选（防止模型引用不存在工具）
 							tools: activeTools,
 							onDelta: (accumulated: string) => {
 								if (seq !== this.requestSeq) return;
@@ -846,7 +846,7 @@ export class Instance {
 	};
 
 	/**
-	 * V3.7.20：底图切片预设快捷命令——本地解析 + 直接执行，零 LLM 调用。
+	 * V3.7.16：底图切片预设快捷命令——本地解析 + 直接执行，零 LLM 调用。
 	 * intent 文本取自规则表原文，解析仍走 tileIntentPresets（SSOT），
 	 * 执行复用 executeToolsAndUpdateUI（TOC 注册、工具状态回显、地图上下文快照）。
 	 */

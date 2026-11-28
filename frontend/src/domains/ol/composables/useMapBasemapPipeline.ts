@@ -29,8 +29,7 @@ import {
     URL_LAYER_OPTIONS,
     createLayerConfigs,
     getBasemapOptionLabel,
-    getLayerCategory as getLayerCategoryById,
-    getLayerGroup as getLayerGroupById,
+    getDescriptorById,
     resolvePresetLayerIds,
 } from '@/constants';
 
@@ -77,21 +76,14 @@ export function createMapBasemapPipeline(options: MapBasemapPipelineOptions) {
         syncUrlFromActiveMap,
     } = options;
 
-    const { getLayerIdByIndex, getLayerIndexById, getLayerCategory } =
-        createBasemapUrlMappingFeature({
-            urlLayerOptions: URL_LAYER_OPTIONS,
-            getLayerCategoryById: (layerId?: string) =>
-                layerId ? getLayerCategoryById(layerId) : null,
-            getLayerGroupById: (layerId?: string) =>
-                layerId ? getLayerGroupById(layerId) : null,
-        });
+    const { getLayerIdByIndex, getLayerIndexById } = createBasemapUrlMappingFeature({
+        urlLayerOptions: URL_LAYER_OPTIONS,
+    });
 
     const { emitBaseLayersChangeBatched, refreshAllBasemapSourcesForHD } =
         createBasemapStateManagementFeature({
             layerList: layerListRef,
             selectedLayer: selectedLayerRef,
-            getLayerCategory: getLayerCategoryById,
-            getLayerGroup: getLayerGroupById,
             emit,
             LAYER_CONFIGS: layerConfigs,
             layerInstances,
@@ -184,17 +176,7 @@ export function createMapBasemapPipeline(options: MapBasemapPipelineOptions) {
             selectedLayerRef,
             switchLayerById: mapState.switchLayerById,
             resolvePresetLayerIds,
-            isBasemapLayerId: (layerId: string) => {
-                const category = getLayerCategoryById?.(String(layerId || '').trim());
-                return (
-                    category === 'label' ||
-                    category === 'imagery' ||
-                    category === 'vector' ||
-                    category === 'terrain' ||
-                    category === 'theme' ||
-                    category === 'custom'
-                );
-            },
+            isBasemapLayerId: (layerId: string) => !!getDescriptorById(String(layerId || '').trim()),
             emitBaseLayersChange: emitBaseLayersChangeBatched,
             mapInstanceRef,
             layerInstances,
@@ -217,7 +199,6 @@ export function createMapBasemapPipeline(options: MapBasemapPipelineOptions) {
     return {
         getLayerIdByIndex,
         getLayerIndexById,
-        getLayerCategory,
         emitBaseLayersChangeBatched,
         refreshAllBasemapSourcesForHD,
         ...mapState,

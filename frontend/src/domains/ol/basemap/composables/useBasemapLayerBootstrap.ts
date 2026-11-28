@@ -52,7 +52,7 @@ export function createBasemapLayerBootstrap({
         // 语义不变：列表顶部（index 0）= 面板"置顶"目标 → 带内最高 z。
         const zIndexById = allocateBasemapZIndex(
             list,
-            (id: string) => layerConfigs.find((cfg: any) => cfg.id === id)?.category,
+            (id: string) => layerConfigs.find((cfg: any) => cfg.id === id)?.zBand,
         );
 
         list.forEach((item) => {
@@ -61,7 +61,7 @@ export function createBasemapLayerBootstrap({
             const source = rawSource ? prioritizeTileSourceRequest(rawSource) : null;
             // 显示带：标注类底图归标注带（150~199），其余归底图带（0~99）；
             // 不可见层不参与编号，回落至带基准值（不渲染，无视觉影响）
-            const zBand = config?.category === 'label' ? Z_BAND.LABEL : Z_BAND.BASEMAP;
+            const zBand = config?.zBand === 'label' ? Z_BAND.LABEL : Z_BAND.BASEMAP;
             const zIndex = zIndexById.get(String(item.id)) ?? zBand;
             const isVectorTile = config?.serviceType === 'vector-tile';
             const layer = isVectorTile

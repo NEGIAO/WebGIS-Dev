@@ -573,10 +573,23 @@ def init_auth_tables_sync(conn) -> None:
             first_seen_at TEXT NOT NULL DEFAULT '',
             last_seen_at TEXT NOT NULL DEFAULT '',
             last_heartbeat_at TEXT NOT NULL DEFAULT '',
-            refreshed_at TEXT NOT NULL DEFAULT ''
+            refreshed_at TEXT NOT NULL DEFAULT '',
+            session_token_sig TEXT NOT NULL DEFAULT ''
         )
     """)
+    # V3.7.16：存量库补列——镜像行必须可追溯到 sessions 中的有效会话指纹。
+    presence_column_rows = conn.execute("PRAGMA table_info(admin_online_presence)").fetchall()
+    presence_columns = {str(dict(row).get("name") or "") for row in presence_column_rows}
+    if "session_token_sig" not in presence_columns:
+        _safe_execute(
+            conn,
+            "ALTER TABLE admin_online_presence ADD COLUMN session_token_sig TEXT NOT NULL DEFAULT ''",
+        )
     _safe_execute(conn, "CREATE INDEX IF NOT EXISTS idx_admin_online_presence_role ON admin_online_presence(role)")
+    _safe_execute(
+        conn,
+        "CREATE INDEX IF NOT EXISTS idx_admin_online_presence_session_sig ON admin_online_presence(session_token_sig)",
+    )
     _safe_execute(conn, "CREATE INDEX IF NOT EXISTS idx_admin_online_presence_last_seen ON admin_online_presence(last_seen_at)")
     _safe_execute(conn, "CREATE INDEX IF NOT EXISTS idx_admin_online_presence_ip ON admin_online_presence(ip)")
 
