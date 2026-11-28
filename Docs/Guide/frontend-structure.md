@@ -438,6 +438,27 @@ frontend/src/
 │   │   │   ├── arcgisAttributeQuery.ts  # ArcGIS REST 属性查询（/{layerId}/query 点查 + 多子层合并 + esri 类型映射）
 │   │   │   ├── identifyPresentation.ts  # 要素点查结果展示渲染（HTML 构建 + HTML 转义，OL/Cesium 双引擎共用）
 │   │   │   ├── catalogProjection.ts  # 图源目录投影（磁盘目录 → 图源目录元数据）
+│   │   │   ├── catalog/  # 底图目录注册表（分类/图层登记，preset 元数据 + 完整图层定义）
+│   │   │   │   ├── compat.ts  # 兼容出口（阶段 1 保持旧 import 路径与导出身份不变）
+│   │   │   │   ├── index.ts  # 统一底图目录公共入口（barrel export）
+│   │   │   │   ├── layers.ts  # 引擎无关的图层定义注册表（definitions/index.ts 在模块加载时登记）
+│   │   │   │   ├── registry.ts  # 统一底图目录注册表（以 ALL_BASEMAP_PRESETS 生成分类元数据）
+│   │   │   │   ├── taxonomy.ts  # 底图分类判定（仅改 metadata，不改 id/顺序/编号）
+│   │   │   │   └── types.ts  # 统一底图目录类型（引擎无关，纯数据）
+│   │   │   ├── comboBasemaps.ts  # AMap/Google 组合底图折叠展示辅助（纯数据，零 UI 依赖）
+│   │   │   ├── definitions/  # 瓦片底图层定义 SSOT（174 条，OL/Cesium 共用，零引擎依赖）
+│   │   │   │   ├── types.ts  # TileLayerDefinition / LayerCategory / LayerGroup / TileLoadMethod / CoordCorrection / ProxyMode / TileLayerContext
+│   │   │   │   ├── resolveTileUrl.ts  # 纯函数：占位符替换 + 纠偏/代理拼 URL（不读 publicRuntime）
+│   │   │   │   ├── validate.ts  # 定义校验：id/order 唯一、order 连续、correction+direct 冲突等
+│   │   │   │   ├── category-service.ts  # 服务类定义（2 条）
+│   │   │   │   ├── category-imagery.ts  # 影像类定义（25 条）
+│   │   │   │   ├── category-terrain.ts  # 地形类定义（37 条，含 Maps-for-Free 12 条）
+│   │   │   │   ├── category-electronic.ts  # 电子类定义（97 条，含纠偏 24 条、proxy 3 条、skipHighResTile 9 条）
+│   │   │   │   ├── category-historical.ts  # 历史类定义（11 条）
+│   │   │   │   ├── category-vector.ts  # 矢量类定义（2 条，MVT，仅 OL）
+│   │   │   │   └── index.ts  # 聚合 TILE_LAYER_DEFINITIONS（按 order 排序）+ getDescriptorById / resolveRuntimeTokenPoolKey
+│   │   │   ├── ui/
+│   │   │   │   └── useBasemapCatalogUi.ts  # 底图目录树 UI 状态（搜索 + 三层展开，OL/Cesium 共用，零引擎依赖）
 │   │   │   ├── capabilitiesProxy.ts  # 能力文档拉取的后端代理兜底注入器（自签证书/CORS 直连失败时经 /proxy 重试）
 │   │   │   ├── wms/  # WMS/ArcGIS 协议适配分层（入口只做编排与缓存）
 │   │   │   │   ├── arcgisRest.ts  # ArcGIS REST 元数据/点查/切片与导出模板/WMS 端点探测
@@ -829,15 +850,11 @@ frontend/src/
 │       │   │   ├── useBasemapStateManagement.ts  # 底图状态管理
 │       │   │   └── useBasemapSwipe.ts  # 卷帘对比
 │       │   ├── constants/
-│       │   │   ├── basemapConfig.ts  # 底图配置唯一真相源（SSOT）：图源定义 + url/serviceType 字段 + getDescriptorById() 自动派生 Cesium 描述符
-│       │   │   ├── basemapCore.ts  # 底图配置内核（类型/主机常量/非标准适配器/URL 构建器）
-│       │   │   ├── definitions/  # 图源定义分片（按原始顺序切片，聚合顺序不变）
-│       │   │   │   ├── group-1.ts
-│       │   │   │   ├── group-2.ts
-│       │   │   │   ├── group-3.ts
-│       │   │   │   └── group-4.ts
-│       │   │   ├── basemapResolver.ts  # 解析逻辑（使用 ALL_BASEMAP_PRESETS；DEFAULT_BASEMAP_LAYER_INDEX/BASEMAP_OPTIONS/URL_LAYER_OPTIONS 纯数据常量 re-export 自 common/basemap）
-│       │   │   └── index.ts  # barrel export
+│       │   │   ├── basemapResolver.ts  # OL 图层配置工厂（createLayerConfigs：定义 → OL source，经 createOlSource；继续向 catalogProjection 发布投影）
+│       │   │   └── index.ts  # barrel export（新类型/聚合/getDescriptorById/resolveTileUrl/预设）
+│       │   ├── loaders/  # OL 瓦片源构建（按 TileLayerDefinition.method 分支）
+│       │   │   ├── createOlSource.ts  # OL 瓦片源工厂（XYZ/WMTS/TileWMS/VectorTile/OSM/custom + prioritize/withSkipHighResTile/非标准适配器）
+│       │   │   └── nonStandardAdapters.ts  # 非标准 XYZ 适配器表（Maps-for-Free 等，OL 引擎侧专属）
 │       │   └── resilience/
 │       │       └── useBasemapResilience.ts  # 底图熔断回退（超时/错误自动切换）
 │       ├── components/

@@ -5,12 +5,12 @@
  * - applyRuntimeMapTokens：应用后端下发的运行时 token（重建 LAYER_CONFIGS 并保留图层可见性/透明度状态）
  * - hydrateRuntimeMapTokens：启动时拉取运行时 token 并应用
  * - retryRuntimeTokenLayersWithNextToken：图层失败时按所属密钥池切换备用 token 并重试受影响图层
- *   （密钥池判定走 basemapConfig.resolveRuntimeTokenPoolKey 的 needsContext 声明，天地图/奥维通用）
+ *   （密钥池判定走 common/basemap/definitions.resolveRuntimeTokenPoolKey 的 needsContext 声明，天地图/奥维通用）
  *
  * 依赖全部注入（factory 模式）；monitorLayerTimeout / switchLayerById /
  * emitBaseLayersChangeBatched 在宿主组件中晚于本工厂创建，故以 getter 形式传入延迟解析。
  */
-import { resolveRuntimeTokenPoolKey } from '@ol/basemap/constants/basemapConfig';
+import { resolveRuntimeTokenPoolKey } from '@common/basemap/definitions';
 
 /** 密钥池显示名（toast 提示用） */
 const TOKEN_POOL_LABELS: Record<string, string> = {

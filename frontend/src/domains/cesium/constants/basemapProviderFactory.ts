@@ -1,9 +1,14 @@
 /**
  * Cesium ImageryProvider 工厂
- * 将引擎无关的 TileSourceDescriptor 转换为 Cesium.ImageryProvider 实例
+ * 将图层定义（TileLayerDefinition，全量透传）转换为 Cesium.ImageryProvider 实例
  * 支持快速底图切换——使用 AbortController 中断旧请求，与 OL 侧 fetch() 策略一致
+ *
+ * V3.7.16：改按定义 method 分支（旧 serviceType 已随 LayerSourceDefinition 删除），
+ * URL 一律走 common 的 resolveTileUrl（占位符 + 纠偏/代理），不再各处手拼代理前缀；
+ * getDescriptorById 现返回定义本身（不再是字段子集复制）。
  */
-import type { BasemapTileSourceDescriptor as TileSourceDescriptor } from '@common/basemap/catalogProjection';
+import type { TileLayerDefinition } from '@common/basemap/definitions/types';
+import { resolveTileUrl } from '@common/basemap/definitions/resolveTileUrl';
 import { getDescriptorById } from '@common/basemap/catalogProjection';
 import { useMessage } from '@common/shell/useMessage';
 import { notifyTileRateLimited } from '@common/utils/tileRateLimitNotify';
@@ -13,7 +18,7 @@ import {
     OSM_TILE_TEMPLATE,
     isOsmBlockedTileBlob,
 } from '@common/basemap/osmTileFallback';
-import { tileProxyUrl, TILE_PROXY_MODE } from '@/config/publicRuntime';
+import { tileProxyUrl, TILE_PROXY_BASE_URL, TILE_PROXY_MODE } from '@/config/publicRuntime';
 
 /** 创建 Provider 所需的运行时上下文 */
 export type CesiumProviderContext = {
@@ -358,26 +363,25 @@ function toCesiumUrlTemplate(url: string): string {
 }
 
 /**
- * 解析上下文占位符，替换 URL 中的 {tiandituTk}、{ovitalTdtkey}、{customUrl}、{normBase}
- * @param url URL 模板
+ * 解析 URL 模板中的运行时占位符 + 纠偏/代理（V3.7.16：统一走 common 的
+ * resolveTileUrl，与 OL 侧同一条 URL 管线；旧 resolveContextPlaceholders
+ * 只做占位符替换，纠偏/代理靠 url 字段里写死的代理包装，已随旧定义删除）
+ * @param descriptor 图层定义
  * @param ctx 运行时上下文
- * @returns 解析后的 URL
+ * @returns 解析后的 URL 模板（仍含 {x}/{y}/{z}/{s}，由 Cesium 展开）
  */
-function resolveContextPlaceholders(url: string, ctx: CesiumProviderContext): string {
-    let resolved = url;
-    if (ctx.tiandituTk) {
-        resolved = resolved.replace(/\{tiandituTk\}/g, ctx.tiandituTk);
-    }
-    if (ctx.ovitalTdtkey) {
-        resolved = resolved.replace(/\{ovitalTdtkey\}/g, ctx.ovitalTdtkey);
-    }
-    if (ctx.customUrl) {
-        resolved = resolved.replace(/\{customUrl\}/g, ctx.customUrl);
-    }
-    if (ctx.normBase) {
-        resolved = resolved.replace(/\{normBase\}/g, ctx.normBase);
-    }
-    return resolved;
+function resolveDescriptorTileUrl(
+    descriptor: TileLayerDefinition,
+    ctx: CesiumProviderContext,
+): string {
+    return resolveTileUrl(descriptor, {
+        tiandituTk: ctx.tiandituTk,
+        ovitalTdtkey: ctx.ovitalTdtkey,
+        customUrl: ctx.customUrl,
+        normBase: ctx.normBase,
+        tileProxyBaseUrl: TILE_PROXY_BASE_URL,
+        tileProxyMode: TILE_PROXY_MODE,
+    });
 }
 
 // ========== 非标准适配器转换 ==========
@@ -396,7 +400,7 @@ function resolveContextPlaceholders(url: string, ctx: CesiumProviderContext): st
  * 直接用 UrlTemplateImageryProvider + WebMercatorTilingScheme 可能有问题。
  * 实际上 MFF 的 URL 格式在 Cesium 中难以完全正确——标记为实验性支持。
  */
-function buildMffCesiumUrl(_descriptor: TileSourceDescriptor): string | null {
+function buildMffCesiumUrl(_descriptor: TileLayerDefinition): string | null {
     // MFF 使用非标准 URL 格式，暂时返回 null 跳过 Cesium 渲染
     // 后续可通过自定义 Cesium TileCoordinatesImageryProvider 实现
     return null;
@@ -408,7 +412,7 @@ function buildMffCesiumUrl(_descriptor: TileSourceDescriptor): string | null {
  * 根据描述符创建 Cesium ImageryProvider 实例
  *
  * @param Cesium Cesium 运行时对象
- * @param descriptor 引擎无关的图层源描述符
+ * @param descriptor 图层定义（TileLayerDefinition，全量透传）
  * @param ctx 运行时上下文（token、customUrl 等）
  * @returns Cesium.ImageryProvider 实例，不支持的返回 null
  *
@@ -417,12 +421,12 @@ function buildMffCesiumUrl(_descriptor: TileSourceDescriptor): string | null {
  * - osm: OpenStreetMapImageryProvider（如果有）或 UrlTemplateImageryProvider
  * - wms: WebMapServiceImageryProvider
  * - wmts: WebMapTileServiceImageryProvider
- * - vector-tile: 返回 null（Cesium 不支持 PBF 矢量瓦片）
+ * - mvt: 返回 null（Cesium 不支持 PBF 矢量瓦片；定义标 engines:['ol']）
  * - custom: 解析 ctx.customUrl，创建 UrlTemplateImageryProvider
  */
 export function createCesiumImageryProvider(
     Cesium: CesiumRuntime,
-    descriptor: TileSourceDescriptor,
+    descriptor: TileLayerDefinition,
     ctx: CesiumProviderContext,
 ): ImageryProviderInstance | null {
     if (!Cesium || !descriptor) return null;
@@ -431,13 +435,13 @@ export function createCesiumImageryProvider(
     const abortController = rotateAbortController(descriptor.id);
     const abortSignal = abortController.signal;
 
-    const { serviceType } = descriptor;
+    const { method } = descriptor;
 
-    // 解析 URL 中的上下文占位符
-    let url = resolveContextPlaceholders(descriptor.url, ctx);
+    // 解析 URL：占位符 + 纠偏/代理统一走 resolveTileUrl（与 OL 同一条管线）
+    let url = resolveDescriptorTileUrl(descriptor, ctx);
 
     // 自定义服务类型——使用 ctx.customUrl
-    if (serviceType === 'custom') {
+    if (method === 'custom') {
         if (!ctx.customUrl) return null;
         url = ctx.customUrl;
     }
@@ -458,7 +462,7 @@ export function createCesiumImageryProvider(
     }
 
     // Cesium 不支持的图源类型
-    if (serviceType === 'vector-tile') {
+    if (method === 'mvt') {
         console.warn(`[CesiumProvider] 图源 "${descriptor.id}" 是矢量瓦片(PBF)，Cesium 不支持，已跳过。`);
         return null;
     }
@@ -473,7 +477,7 @@ export function createCesiumImageryProvider(
 
         if (abortSignal.aborted) return null;
 
-        switch (serviceType) {
+        switch (method) {
             case 'wms': {
                 if (typeof Cesium.WebMapServiceImageryProvider !== 'function') {
                     console.warn(`[CesiumProvider] Cesium 运行时不支持 WebMapServiceImageryProvider`);

@@ -6,6 +6,24 @@
 
 ## 版本记录
 
+### V3.7.16 (2026-11-28) — 瓦片底图定义重构（层定义驱动，OL/Cesium 共享）（L3）
+
+> **版本号复用说明**：V3.7.16 曾作为 V3.7.15 整合批的内部迭代号（V3.7.16 ~ V3.7.30）被宣告废弃；本次按任务指令复用为瓦片底图定义重构的正式版本号，此后 V3.7.16 唯一指代本条重构。方案：`~/workspace/tile-basemap-refactor-plan.md`（工作区文件，未入仓）；日志：[2026-11-27-basemap-definition-refactor](../LLM_record/26-11/2026-11-27/2026-11-27-basemap-definition-refactor.md)。
+
+**问题**：174 条图源定义散落在 OL 域（`basemapConfig.ts` + 6 个 `category-*.ts` 分片），每条定义把 `url` 与 `createSource` 工厂各写一次（URL 拼两次、易漂移），且定义直接 import OL；Cesium 侧另有一套字段子集复制的描述符派生（`getDescriptorById`），两引擎对同一图源的理解可能不一致。
+
+**重构内容**：
+
+1. **新建 common 定义层**（`frontend/src/domains/common/basemap/definitions/`，零引擎依赖）：`types.ts`（`TileLayerDefinition`：`method`/`correction`/`proxy`/`engines`/`skipHighResTile`/`nonStandardAdapter`/`wms`/`wmts` 等）、`resolveTileUrl.ts`（纯函数：`{s}`/`{tk}`/`{key}` 占位符替换 + 纠偏/代理拼 URL，不读 `publicRuntime`）、`validate.ts`（加载时校验：id/order 唯一、order 连续 1..174、correction + direct 冲突报错等）、`index.ts`（聚合 `TILE_LAYER_DEFINITIONS` 按 order 排序 + `getDescriptorById` / `resolveRuntimeTokenPoolKey`，向 `catalog/layers` 登记）。
+2. **迁移 174 条定义**：去 `createSource`/引擎 import，原始 URL + method/correction/proxy 字段；纠偏 33 条（gcj2wgs 26、wgs2gcj 6、bd2wgs 1）、proxy 3 条、Maps-for-Free 12 条、MVT 3 条（仅 OL）、skipHighResTile 9 条；WMS/WMTS 参数（orders 37/38/39）与仅存于 `createSource` 的 `maxZoom`（orders 15/16）/`tilePixelRatio`（order 23）提升为顶层字段。orders 1–174 唯一无缺口，148 预设 stack 与 `l` 序号契约不变。
+3. **OL 切换**：新建 `ol/basemap/loaders/createOlSource.ts`（`switch(method)` 建 XYZ/WMTS→XYZ/TileWMS/VectorTile/OSM/custom，统一包 `prioritizeTileSourceRequest` / `withSkipHighResTile` / 非标准适配器；天地图 `t{s}` 钉为 `t0`），`basemapResolver.ts` 改为薄调用。
+4. **Cesium 切换**：`basemapProviderFactory` 改按 method 分支，全走 `resolveTileUrl`；`getDescriptorById` 改为定义本身全量透传（删字段子集复制）；MVT/MFF 在 Cesium 返回 null 保持不变（15 条标 `engines:['ol']`）。
+5. **删除旧文件**：`ol/basemap/constants/basemapConfig.ts`、`basemapCore.ts` 及旧 6 个 `category-*.ts`；`check-layer-definitions.mjs` 同步新路径；新增 `check-basemap-migration.mjs`（旧定义取自基线、新定义取自工作树，174 条逐条等价比对）。
+
+**验证**：迁移校验 174 条逐条等价（元数据/method/correction/proxy/OL URL/Cesium URL）+ 7 项抽查（天地图影像、高德电子、百度、WMS、WMTS、MVT、Sentinel 2020）全过；`vue-tsc --noEmit` 0 错误；`npm run build` 通过；`CheckStructureTree` / `CheckConfigRegistry` / `CheckDomainDeps` 全绿；§11.2 红线自查无命中（xray/hermes 等假阳性已逐条核对）。实机验证待用户执行（见日志「测试方案」）。
+
+**遗留**：url `'None'` 占位条目（orders 94/95）、coord 语义不一致（纠偏后输出坐标系）、WMTS 仍走 XYZ 形态（GetTile 模板，未拉 Capabilities）、天地图定义未声明 `needsContext`、label_minedata（order 5）maxZoom 18 本次起由加载器统一执行（旧 OL 未传）。详见日志「遗留与风险」。
+
 ### V3.7.15 (2026-11-27) — Agent 能力系统整合（本批统一版本）
 
 > **版本号归并（2026-11-27）**：V3.7.16 ~ V3.7.30 十五条记录所记为**同一批未提交工作**的逐次增量开发（内部迭代号）。按用户「暂存区的代码是多次不规范的 commit 信息，需要整合为一个统一的版本：V3.7.15」的指令，十五条合并为单条 **V3.7.15**，曾用中间版本号（V3.7.16 ~ V3.7.30）自本条起废弃；功能与修复内容、发布日期、结论均不变，仅版本号表述归一。分主题的原始过程记录保留在 `Docs/LLM_record/26-11/`，不迁移、不改写。
